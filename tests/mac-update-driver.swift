@@ -2,7 +2,8 @@ import AppKit
 import Sparkle
 final class ActionButton: NSButton {
     var handler: (() -> Void)?
-    convenience init(_ text: String, _ action: @escaping () -> Void) { self.init(title: text, target: nil, action: nil); handler = action }
+    @objc func invoke() { handler?() }
+    convenience init(_ text: String, _ action: @escaping () -> Void) { self.init(title: text, target: nil, action: nil); handler = action; target = self; self.action = #selector(invoke) }
 }
 let app = NSApplication.shared
 let driver = AppUpdater()
@@ -48,3 +49,22 @@ var acknowledged = false
 driver.showUpdateNotFoundWithError(NSError(domain: "fixture", code: 0)) { acknowledged = true }
 precondition(acknowledged && driver.message == "最新バージョンです")
 print("PASS: public release URL restrictions, no credentials, two update controls, clear up-to-date state")
+let automaticToggle = buttons(driver.settingsView()).first { $0.title == "自動更新" }!
+automaticToggle.state = .off; app.sendAction(automaticToggle.action!, to: automaticToggle.target, from: automaticToggle)
+precondition(!driver.automatic && driver.message == "自動更新はオフです")
+automaticToggle.state = .on; app.sendAction(automaticToggle.action!, to: automaticToggle.target, from: automaticToggle)
+precondition(driver.automatic && driver.message == "自動更新はオンです")
+print("PASS: switching automatic updates updates the visible on/off state")
+
+if CommandLine.arguments.contains("--preview") {
+    app.setActivationPolicy(.regular)
+    let menu = NSMenu(); let item = NSMenuItem(); menu.addItem(item)
+    let submenu = NSMenu(); submenu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); item.submenu = submenu; app.mainMenu = menu
+    driver.start()
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 200), styleMask: [.titled, .closable], backing: .buffered, defer: false)
+    window.title = "Dot Link — Updates"; window.isReleasedWhenClosed = false
+    let view = driver.settingsView(); view.translatesAutoresizingMaskIntoConstraints = false; window.contentView!.addSubview(view)
+    NSLayoutConstraint.activate([view.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24), view.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24), view.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24)])
+    window.center(); window.makeKeyAndOrderFront(nil); app.activate(ignoringOtherApps: true)
+    withExtendedLifetime(window) { app.run() }
+}

@@ -34,7 +34,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         updater.sendsSystemProfile = false
         do {
             try updater.start()
-            status("アップデートを確認できます", "Ready to check for updates")
+            if automatic { status("アップデートを確認できます", "Ready to check for updates") }
+            else { status("自動更新はオフです", "Automatic updates are off") }
         } catch { status("更新を開始できません", "Updates could not start") }
     }
     private func status(_ ja: String, _ en: String, working: Bool = false) {
@@ -54,6 +55,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     @objc private func toggleAutomatic(_ sender: NSButton) {
         updater.automaticallyChecksForUpdates = sender.state == .on
+        if automatic && !working && !preparing { status("自動更新はオンです", "Automatic updates are on") }
         if !automatic && !manuallyApproved && !preparing {
             retry?.invalidate(); retry = nil; cancelDownload?(); cancelDownload = nil
             let reply = readyReply; readyReply = nil; reply?(.skip)
