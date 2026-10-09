@@ -48,7 +48,7 @@ for(const [key,type,value] of [
  ['SUFeedURL','string',`https://raw.githubusercontent.com/${update.repository}/${update.branch}/${update.feedPath}`],
  ['SUPublicEDKey','string',update.publicKey],['SURequireSignedFeed','bool','YES'],['SUVerifyUpdateBeforeExtraction','bool','YES'],
  ['SUEnableAutomaticChecks','bool','YES'],['SUAutomaticallyUpdate','bool','NO'],['SUScheduledCheckInterval','integer','21600'],
- ['DotLinkUpdateRepository','string',update.repository]
+ ['DotLinkUpdateRepository','string',update.downloadRepository ?? update.repository]
 ])run('/usr/libexec/PlistBuddy',['-c',`Add :${key} ${type} ${value}`,info]);
 await cp('assets/brand/orbit/DotLink.icns',join(contents,'Resources/DotLink.icns'));
 await mkdir('.runtime/swift-module-cache',{recursive:true});

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "repository": "YusukeIt0/dot-link-app",
+  "repository": "YusukeIt0/dot-link",
   "private": false,
   "feedPath": "updates/mac/appcast.xml",
   "branch": "main",
@@ -8,5 +8,6 @@
   "sparkle": {
     "version": "2.10.0",
     "sha256": "c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
-  }
+  },
+  "downloadRepository": "YusukeIt0/dot-link-app"
 }

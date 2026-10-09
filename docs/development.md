@@ -25,7 +25,7 @@ node scripts/build-mac-app.mjs
 
 Output: `.runtime/mac-app/Dot Link.app`. Runtime downloads and Sparkle are pinned by version and SHA-256. No speech model, account credential, pairing, or conversation data is included. The speech model downloads during initial setup.
 
-The app uses one public update feed at `https://raw.githubusercontent.com/YusukeIt0/dot-link-app/main/updates/mac/appcast.xml`. Release ZIPs are downloaded from this repository's public GitHub Releases. Users need no GitHub account, token, or development-channel setting.
+The app uses one public update feed at `https://raw.githubusercontent.com/YusukeIt0/dot-link/main/updates/mac/appcast.xml`. Release ZIPs are downloaded from this repository's public GitHub Releases. Users need no GitHub account, token, or development-channel setting.
 
 ## Maintainer release
 
@@ -55,3 +55,7 @@ Even Hub publication is separate from Mac Releases. The internal package IDs rem
 ## 日本語
 
 通常の変更はCIでテストします。動作確認済みの版だけをReleasesへ公開し、署名した配信情報を更新します。利用者は「自動更新」または「アップデートを確認」を使うだけです。署名鍵は配布担当者だけがローカルに保管します。開発者がソースからビルドするために、配布担当者の鍵や利用者の認証情報を受け取る必要はありません。
+
+## Repository rename compatibility
+
+The public repository is `YusukeIt0/dot-link` (formerly `dot-link-app`); the private history is `dot-link-dev`. Local checkout directories stay unchanged. The signed feed and future release enclosures intentionally use the `dot-link-app` download alias, which GitHub redirects to `dot-link`. Installed 0.2.21 clients restrict downloads to that original path. `downloadRepository` keeps publisher and client URL validation consistent; do not reuse the old name or remove this compatibility without a client migration. New builds use the canonical `dot-link` feed URL. Existing signed releases are unchanged.

@@ -2,7 +2,7 @@
 
 ## Mac
 
-1. [最新版](https://github.com/YusukeIt0/dot-link-app/releases/latest)のMac ZIPを取得して展開します。
+1. [最新版](https://github.com/YusukeIt0/dot-link/releases/latest)のMac ZIPを取得して展開します。
 2. Dot Link.appを自分のホームフォルダのApplicationsへ移動して開きます。
 3. 表示される準備手順に沿って、Tailscale接続と音声認識モデルを用意します。初回は約488 MBのモデルを取得します。
 4. 接続設定で、自分のOpenAIトンネル接続を設定します。詳細は[Dotとの連携](dot-setup.md)を参照してください。

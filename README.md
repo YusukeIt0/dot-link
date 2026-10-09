@@ -1,13 +1,13 @@
 # Dot Link
 
-[Download for Mac](https://github.com/YusukeIt0/dot-link-app/releases/latest) · [日本語の導入ガイド](docs/setup.md) · [Build from source](docs/development.md)
+[Download for Mac](https://github.com/YusukeIt0/dot-link/releases/latest) · [日本語の導入ガイド](docs/setup.md) · [Build from source](docs/development.md)
 
 いつものChatGPT DotとEven G2を、自分のMacでつなぐオープンソースアプリです。
 An open-source Mac companion that connects your existing ChatGPT Dot with Even G2 through a relay you own.
 
 ## Download and updates / ダウンロードと更新
 
-[Releases](https://github.com/YusukeIt0/dot-link-app/releases/latest)からMac用ZIPをダウンロードし、展開した**Dot Link.app**をユーザーの**Applications**フォルダへ入れて開いてください。
+[Releases](https://github.com/YusukeIt0/dot-link/releases/latest)からMac用ZIPをダウンロードし、展開した**Dot Link.app**をユーザーの**Applications**フォルダへ入れて開いてください。
 
 - **対応:** Apple Silicon Mac、macOS 13以降。
 - **更新:** 設定の「自動更新」でオン／オフを選べます。「アップデートを確認」はいつでも使えます。GitHubへのログインや更新キーは不要です。

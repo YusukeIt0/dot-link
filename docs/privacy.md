@@ -47,7 +47,7 @@ The Even app's local storage retains the relay address, session credential, expi
 
 **Disconnect and deletion.** Disconnect requests session revocation on the Mac and removes local connection settings. If the Mac cannot be reached, the app reports that revocation is incomplete. Run `node scripts/beta-pair.mjs revoke-all` on the Mac to revoke all beta invitations and sessions. Legacy development keys are managed separately. To remove local data, first stop and unregister the services, decide what to keep, then remove the project's `.runtime/` directory. Content already sent to external services must be managed through those services.
 
-Questions and non-sensitive bug reports: https://github.com/YusukeIt0/dot-link-app/issues. Do not attach private runtime files, credentials, or conversations. Installed-device and cross-account validation remain ongoing.
+Questions and non-sensitive bug reports: https://github.com/YusukeIt0/dot-link/issues. Do not attach private runtime files, credentials, or conversations. Installed-device and cross-account validation remain ongoing.
 
 
 ## App updates / アプリの更新
