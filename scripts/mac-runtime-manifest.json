@@ -1,0 +1,22 @@
+{
+  "node": {
+    "version": "v22.23.3",
+    "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-darwin-arm64.tar.xz",
+    "sha256": "72d5d8832b41c9d9646197af614ffd751406ea4d215060eb91b98864e1919a3e"
+  },
+  "tunnel": {
+    "version": "v0.0.16",
+    "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-darwin-arm64.zip",
+    "sha256": "a160820d45089b5253d8d671fe2a689bde0f73d78c135d1497a7b33f28a3ac62"
+  },
+  "whisper": {
+    "version": "v1.9.5",
+    "url": "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.5.tar.gz",
+    "sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720"
+  },
+  "model": {
+    "url": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+    "sha256": "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b",
+    "bytes": 487601967
+  }
+}

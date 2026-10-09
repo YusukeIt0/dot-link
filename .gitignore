@@ -1,0 +1,33 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+*.ehpk
+
+# Local credentials and pairing data
+.env
+.env.*
+!.env.example
+.secrets/
+.runtime/
+.even-terminal/
+*token*.json
+*credentials*.json
+*cookie*.json
+*session*.json
+*pairing*.png
+*pairing*.svg
+*qr*.png
+*qr*.svg
+
+# Captured user conversations and recordings
+recordings/
+transcripts/
+*.pcm
+*.wav
+*.log
+
+# OS and editor state
+.DS_Store
+.idea/
+.vscode/

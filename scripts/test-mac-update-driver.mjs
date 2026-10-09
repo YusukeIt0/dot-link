@@ -1,0 +1,12 @@
+import {mkdir,readFile,writeFile,cp} from 'node:fs/promises';
+import {resolve,join} from 'node:path';
+import {spawnSync} from 'node:child_process';
+const {sparkle}=JSON.parse(await readFile('config/mac-update.json','utf8'));
+const base=resolve('.runtime/update-driver-test'),app=join(base,'Dot Link Driver Test.app'),contents=join(app,'Contents'),sdk=resolve('.runtime/vendor/sparkle-'+sparkle.version);
+await mkdir(join(contents,'MacOS'),{recursive:true});await mkdir(join(contents,'Frameworks'),{recursive:true});
+await cp(join(sdk,'Sparkle.framework'),join(contents,'Frameworks/Sparkle.framework'),{recursive:true,verbatimSymlinks:true});
+await cp('tests/mac-update-driver.swift',join(base,'main.swift'));
+await writeFile(join(contents,'Info.plist'),'<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>app.tripsurf.dotlink.driver-test</string><key>CFBundleName</key><string>Dot Link Driver Test</string><key>CFBundleExecutable</key><string>Test</string><key>CFBundleVersion</key><string>1</string></dict></plist>');
+const run=(cmd,args)=>{const result=spawnSync(cmd,args,{stdio:'inherit'});if(result.status!==0)throw new Error(`Native driver test failed: status=${result.status}, signal=${result.signal}; run with macOS AppKit access`);};
+run('/usr/bin/xcrun',['swiftc','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/AppUpdater.swift',join(base,'main.swift'),'-o',join(contents,'MacOS/Test')]);
+run(join(contents,'MacOS/Test'),[]);

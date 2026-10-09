@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dot — はじめの接続</title>
+<style>
+:root{color-scheme:light dark;font:16px/1.8 -apple-system,BlinkMacSystemFont,sans-serif;background:light-dark(#f5f5f3,#171817);color:light-dark(#232724,#e6e9e6)}
+body{max-width:700px;margin:60px auto;padding:0 24px}h1{font-size:32px;letter-spacing:-1px}h2{font-size:20px;margin-top:36px}p{margin:12px 0}.dot{display:inline-block;width:14px;height:14px;border-radius:50%;background:currentColor;margin-right:12px}a{color:light-dark(#246344,#88ceab)}.note{font-size:14px;opacity:.75}.card{border:1px solid #8885;border-radius:16px;padding:20px 24px;margin:20px 0}li{margin:10px 0}
+</style>
+<h1><span class="dot"></span>Dotを、いつもの端末へ。</h1>
+<p>Macで動く中継と、iPhoneのEvenアプリを接続します。接続先のIPアドレスやポート番号を入力する必要はありません。</p>
+<div class="card"><strong>最初に行うこと</strong><ol>
+<li><a href="https://tailscale.com/download/mac">MacにTailscaleをインストール</a>してログインします。macOSからネットワークの許可を求められたら、画面の案内に従います。すでに導入済みなら入れ直しは不要です。</li>
+<li><a href="https://tailscale.com/download/ios">iPhoneにもTailscaleをインストール</a>し、同じアカウントでログイン・接続します。</li>
+<li>Macのドット →「接続と設定」→「接続設定を自動で整える」を押します。</li>
+<li>「iPhone接続用QR」を表示し、Evenアプリの開発モードから読み込みます。</li>
+</ol><p class="note">初回のログイン・OSの許可・QRの読み込みは本人の操作が必要です。QRには接続情報が含まれるため、他の人に共有しないでください。</p></div>
+<h2>普段はどう使う？</h2>
+<p>Macへログインすると自動で起動します。通知の開始・一時停止と選択対象は保存されます。iPhoneは同じEvenアプリの保存領域を使う限り、前の接続を引き継ぎます。</p>
+<p>通知を使う場合は「権限設定を開く」からアクセシビリティを許可し、必要な対象を選んで「通知を開始」します。現在、自動転送に対応するのはテスト通知です。</p>
+<h2>ドットの見方</h2>
+<ul><li>塗りつぶした丸：Mac側の中継と通知監視は正常。</li><li>輪郭だけの丸：会話の中継は正常。通知は一時停止。</li><li>一部が開いた丸：接続を確認中。</li><li>小さな印付きの丸：確認が必要。クリックして「接続と設定」を開くと理由が分かります。</li></ul>
+<p class="note">Macの表示だけで、iPhoneの接続やG2の物理画面への到達を確認したことにはなりません。</p>
+<h2>うまく接続できないとき</h2>
+<p>Macのドットから「接続と設定」を開きます。Tailscaleが未導入ならインストール、未ログインならログイン、停止中なら接続の案内が出ます。準備が済むと自動で再確認します。</p>
+<p>他のアプリが同じ接続先を使っている場合は、勝手に上書きせず、そのことを表示します。Dot側の購読が切れている場合は、Dot側でG2連携を再開します。</p>
+<h2>この開発版の導入範囲</h2>
+<p>現在はmacOS用です。初めてこのプロジェクトを配置するMacには、Node.js・音声認識・Dot接続の初期準備が別途必要です。アプリだけですべての依存ソフトを導入する配布版は、まだ完成していません。</p>
+<p class="note">アプリ更新後にmacOSが通知読み取りの許可を再確認する場合があります。安定した配布用署名と公証は今後の対応です。</p>
+</html>

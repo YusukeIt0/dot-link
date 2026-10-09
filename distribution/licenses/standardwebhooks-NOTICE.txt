@@ -1,0 +1,9 @@
+standardwebhooks 1.1.1
+https://github.com/standard-webhooks/standard-webhooks
+The npm package declares MIT but omits a license file. The upstream repository
+provides Apache-2.0; that license is included here without relabeling the package.
+The timing-safe comparison implementation carries the following upstream notice:
+Copyright 2018-2022 the Deno authors. All rights reserved. MIT license.
+https://github.com/standard-webhooks/standard-webhooks/blob/main/libraries/javascript/src/timing_safe_equal.ts
+The Deno MIT license is included alongside the upstream Apache license.
+Library implementation files are unmodified.

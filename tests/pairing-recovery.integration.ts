@@ -1,0 +1,40 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { once } from 'node:events';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { request } from 'node:http';
+import { PairingAuthority } from '../server/pairing-authority.ts';
+import { deviceServer } from '../server/device.ts';
+
+test('recovery-only preflight requires a distinct secret, binds the new port and never opens data CORS globally', async t => {
+ const root=await mkdtemp(join(tmpdir(),'g2-recovery-http-'));
+ const authority=new PairingAuthority(join(root,'pairing'));
+ const server=deviceServer({token:'m'.repeat(43),origin:'https://mac.tailtest.ts.net',directory:root,pairing:authority,transcribe:async()=> 'synthetic'});
+ server.listen(0,'127.0.0.1'); await once(server,'listening');
+ t.after(async()=>{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));await rm(root,{recursive:true,force:true});});
+ const address=server.address();assert(address&&typeof address!=='string');
+ const old='http://127.0.0.1:55895', updated='http://127.0.0.1:57157';
+ const call=(path:string,origin:string,method='POST',body:unknown={},extra:Record<string,string>={})=>new Promise<{status:number;body:any;cors:unknown}>((resolve,reject)=>{
+  const q=request({host:'127.0.0.1',port:address.port,path,method,agent:false,headers:{Host:'mac.tailtest.ts.net',Origin:origin,'Content-Type':'application/json',...extra}},res=>{const chunks:Buffer[]=[];res.on('data',x=>chunks.push(x));res.on('end',()=>{const raw=Buffer.concat(chunks).toString();resolve({status:res.statusCode!,body:raw?JSON.parse(raw):null,cors:res.headers['access-control-allow-origin']});});});q.on('error',reject);q.end(method==='POST'?JSON.stringify(body):undefined);
+ });
+ const paired=await call('/api/pair',old,'POST',{code:authority.issue('https://mac.tailtest.ts.net').code});assert.equal(paired.status,200);
+ assert.equal((await call('/api/status',updated,'GET')).status,403);
+ assert.equal((await call('/api/pair/resume','https://evil.example','POST',{resumeToken:paired.body.resumeToken})).status,403);
+ const preflight=await call('/api/pair/resume',updated,'OPTIONS',{}, {'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'});
+ assert.equal(preflight.status,204);assert.equal(preflight.cors,updated);
+ assert.equal((await call('/api/pair/resume',updated,'OPTIONS',{}, {'Access-Control-Request-Method':'GET'})).status,403);
+ assert.equal((await call('/api/pair/resume',updated,'OPTIONS',{}, {'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'authorization'})).status,403);
+ assert.equal((await call('/api/pair/resume',updated,'POST',{resumeToken:paired.body.token})).status,401);
+ assert.equal((await call('/api/pair/resume',updated,'POST',{resumeToken:'x'.repeat(43)})).status,401);
+ assert.equal((await call('/api/pair/resume',updated,'POST',{resumeToken:paired.body.resumeToken,extra:true})).status,400);
+ const restored=await call('/api/pair/resume',updated,'POST',{resumeToken:paired.body.resumeToken});assert.equal(restored.status,200);
+ assert.equal(authority.authorized(restored.body.token,updated),true);
+ assert.equal(authority.authorized(paired.body.token,old),false);
+ assert.equal((await call('/api/status',old,'GET',{}, {Authorization:`Bearer ${paired.body.token}`})).status,403);
+ assert.equal((await call('/api/status',updated,'GET',{}, {Authorization:`Bearer ${paired.body.resumeToken}`})).status,401);
+ assert.equal((await call('/api/status','http://127.0.0.1:57158','GET',{}, {Authorization:`Bearer ${restored.body.token}`})).status,403);
+ assert.equal((await call('/api/pair/revoke',updated,'POST',{}, {Authorization:`Bearer ${restored.body.token}`})).status,204);
+ assert.equal((await call('/api/pair/resume',old,'POST',{resumeToken:paired.body.resumeToken})).status,401);
+});

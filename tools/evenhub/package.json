@@ -1,0 +1,6 @@
+{
+  "name": "dot-hub-packaging-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": { "@evenrealities/evenhub-cli": "0.1.14", "typescript": "5.9.3" }
+}

@@ -1,0 +1,23 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { installMenuApp, registerMenuApp } from '../scripts/lib/menu-install.mjs';
+test('menu app installation preserves an existing app and registers background login launch',async t=>{
+ const home=await mkdtemp(join(tmpdir(),'dot-menu-'));t.after(()=>rm(home,{recursive:true,force:true}));
+ const source=join(home,'source.app');await mkdir(join(source,'Contents/MacOS'),{recursive:true});
+ await writeFile(join(source,'Contents/Info.plist'),'fixture');await writeFile(join(source,'Contents/MacOS/DotLink'),'fixture');
+ const execute=async()=> 'app.tripsurf.dotlink.mac';
+ const app=await installMenuApp(source,{home,execute});
+ assert.equal(await readFile(join(app,'Contents/MacOS/DotLink'),'utf8'),'fixture');
+ await writeFile(join(source,'Contents/MacOS/DotLink'),'new fixture');
+ assert.equal(await installMenuApp(source,{home,execute}),app);
+ assert.equal(await readFile(join(app,'Contents/MacOS/DotLink'),'utf8'),'fixture');
+ await registerMenuApp(app,{home,execute});
+ const plist=await readFile(join(home,'Library/LaunchAgents/local.even-g2-dot.setup-ui.plist'),'utf8');
+ assert.match(plist,/--background/);assert.match(plist,/<key>RunAtLoad<\/key><true\/>/);
+ assert.doesNotMatch(plist,/StandardOutPath/);
+ await assert.rejects(registerMenuApp(app,{home,execute:async()=>JSON.stringify({Label:'foreign'})}),/MENU_SERVICE_CONFLICT/);
+ await assert.rejects(installMenuApp(source,{home,execute:async()=> 'foreign'}),/APP_BUNDLE_INVALID/);
+});

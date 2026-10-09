@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png"><title>Dot Link</title></head>
+  <body><main>
+    <header><p>EVEN G2</p><h1>Dot Link</h1><small id="app-version"></small><p id="connection" role="status" data-en="Waiting for the Even app">Evenアプリとの接続を待っています</p></header>
+    <section class="glass" aria-label="G2 display"><p id="hud-state" data-en="Waiting for connection">接続待ち</p><pre id="hud-content" data-en="Hold to speak">長押しで話してください</pre><small data-en="Hold to record · release to stop">長押しで録音 · 指を離すと停止</small></section>
+    <p id="notice" role="status" data-en="Open in Even Hub to use the G2 microphone and display.">Even Hubから開くとG2のマイクと表示を使用できます。</p>
+    <p id="dot-status" role="status" data-en="Checking your relay">接続先を確認中</p>
+    <details id="pairing-settings"><summary data-en="Connect your Mac">Macと接続</summary>
+      <div id="setup-intro">
+        <p data-en="Set up the relay on your Mac before pairing this iPhone. An iPhone alone cannot connect to Dot.">最初に、会話を中継するMacを準備します。iPhoneだけではDotに接続できません。</p>
+        <ol class="setup-steps">
+          <li><strong data-en="Install the Mac relay">Macに中継を導入</strong><p data-en="Use your everyday MacBook or a dedicated Mac. Install the relay and connect both your Mac and iPhone to Tailscale.">普段のMacBookでも専用Macでも使えます。中継を導入し、MacとiPhoneをTailscaleに接続します。</p></li>
+          <li><strong data-en="Connect your existing Dot">いつものDotと連携</strong><p data-en="Connect the relay to your existing Dot, then start the Mac services and check their status.">中継を既存のDotと連携させ、Mac側のサービスを起動・確認します。</p></li>
+          <li><strong data-en="Create a code on the Mac and pair">Macでコードを作って接続</strong><p data-en="Once the relay is ready, create a pairing code on the Mac and paste it into this app.">中継の準備ができてからMacで接続コードを発行し、このアプリに貼り付けます。</p></li>
+        </ol>
+        <p data-en="Open the supplied Dot Link app on your Mac and follow its setup steps. It checks for existing settings and prepares missing components.">Macで配布されたDot Linkアプリを開き、案内に沿って準備してください。以前の設定を確認し、足りないものを用意します。</p>
+        <button id="setup-ready" data-en="My Mac is ready — pair this iPhone">Macの準備ができたので接続する</button>
+      </div>
+      <div id="pairing-form" hidden>
+        <p data-en="Copy the pairing code in Dot Link on your Mac and paste the entire code here.">MacのDot Linkで接続コードをコピーし、全体をここへ貼り付けてください。</p>
+        <span id="pair-notice-slot"></span>
+        <label for="pair-code" data-en="Pairing code">接続コード</label><textarea id="pair-code" rows="3" autocapitalize="off" maxlength="1024" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+        <p id="pair-destination"></p><button id="pair" hidden data-en="Connect">接続</button><button id="forget-pairing" hidden class="secondary" data-en="Revoke this device">この端末の接続を解除</button>
+        <p data-en="In Dot Link on your Mac, choose Connect Even to display a code.">MacのDot Linkで「Evenを接続」を押すとコードが表示されます。</p>
+        <p class="note" data-en="The pairing code is valid for two minutes and one use.">接続コードは発行から2分・1回限りです。</p>
+        <details class="secondary-settings" hidden><summary data-en="QR pairing (under investigation)">QRで接続（不具合を調査中）</summary>
+          <p id="camera-help" data-en="Live scanning and photo reading have failed on the test iPhone. Use the code above to continue.">実機でライブスキャン・写真読取の失敗を確認しています。接続を進めるには上のコード入力を使ってください。</p>
+          <button id="scan-pair" aria-describedby="camera-help" class="secondary" data-en="Scan QR">QRをスキャン</button>
+          <button id="photo-pair" class="secondary" data-en="Take a QR photo">QRを撮影</button>
+        </details>
+        <button id="setup-back" class="secondary" data-en="Mac setup instructions">Macの準備に戻る</button>
+        <p class="note" data-en="Your relay Mac must be awake and online.">接続先のMacが起動・接続している間に使えます。</p>
+      </div>
+    </details>
+    <section id="conversation-controls">
+    <button id="record" disabled data-en="Start recording">録音を開始</button>
+    <button id="discard" disabled data-en="Discard recording">録音を破棄</button>
+    <label for="transcript" data-en="Message">発話内容</label><textarea id="transcript" rows="3" maxlength="4000" placeholder="音声認識の結果、または送信したい文章"></textarea>
+    <label><input id="auto-send" type="checkbox" checked> <span data-en="Send after transcription">認識後に自動送信</span></label><br>
+    <button id="send" disabled data-en="Send to Dot">Dotに送信</button><button id="tts" data-en="Read aloud OFF">読み上げ OFF</button><br>
+    <button id="previous" data-en="Previous conversation">前の会話</button><button id="next" data-en="Next conversation">次の会話</button>
+    </section>
+    <details id="display-settings" class="display-settings">
+      <summary data-en="Display settings">表示設定</summary>
+      <p class="note" data-en="These settings apply only to Dot Link, separately from Even's display settings. Hiding the display keeps Dot connected. The app never closes automatically.">Even本体の表示設定とは別に、Dot Link内だけに適用します。表示を消してもDotとの接続は継続し、アプリは自動終了しません。</p>
+      <form id="display-settings-form">
+        <label for="display-idle" data-en="Hide after inactivity (seconds; 0 = always visible)">無操作で表示を消すまで（秒・0は常時表示）</label>
+        <input id="display-idle" type="number" min="0" max="3600" step="1" required inputmode="numeric" value="30" aria-describedby="display-idle-help">
+        <p id="display-idle-help" class="note" data-en="Choose 5–3600 seconds, or 0. Recording, transcription and waiting for a reply keep the display visible.">5〜3600秒、または0を指定できます。録音・文字起こし・返信待ちの間は表示を消しません。</p>
+        <label for="display-wake-tap" data-en="Tap gesture to show the hidden display">表示が消えているときの復帰操作</label>
+        <select id="display-wake-tap"><option value="double" data-en="Double tap">ダブルタップ</option><option value="single" data-en="Single tap">シングルタップ</option></select>
+        <label class="display-checkbox"><input id="display-head-raise" type="checkbox" checked> <span data-en="Show when I raise my head">顔を上げると再表示</span></label>
+        <label for="display-head-angle" data-en="Head-up angle (5–60°)">顔上げの角度（5〜60°）</label>
+        <input id="display-head-angle" type="number" min="5" max="60" step="1" required inputmode="numeric" value="20">
+      </form>
+      <button id="display-calibrate" class="secondary" type="button" data-en="Set my forward gaze to 0°">正面を向いた状態を0°にする</button>
+      <p class="note" data-en="Face straight ahead while wearing G2, then press the button. After the display hides, lower your head before raising it again. New messages from Dot appear automatically.">G2を掛けて正面を向き、ボタンを押してください。表示が消えた後は一度顔を下げてから上げると再表示します。Dotから新着が届いたときは自動で表示します。</p>
+      <p id="head-raise-status" class="note" role="status"></p>
+      <div class="display-settings-actions">
+        <button id="display-save" type="submit" form="display-settings-form" data-en="Save display settings">表示設定を保存</button>
+        <p id="display-settings-status" class="note" role="status"></p>
+      </div>
+    </details>
+    <p id="standby-status" class="note" role="status" data-en="Visible">表示中</p>
+    <footer>
+      <label for="language">Language / 言語</label> <select id="language"><option value="ja">日本語</option><option value="en">English</option></select>
+      <button id="show-diagnostics" class="secondary" aria-expanded="false" aria-controls="connection-diagnostics" data-en="Connection details">接続情報を見る</button>
+      <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-en="App origin">この画面の接続元</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p><pre id="camera-diagnostic"></pre></section>
+    </footer>
+  </main>
+  <dialog id="scanner-dialog" aria-labelledby="scanner-title">
+    <h2 id="scanner-title" data-en="Scan QR">QRをスキャン</h2>
+    <div class="camera-view"><video id="scanner-video" muted playsinline></video><div class="qr-frame" aria-hidden="true"></div></div>
+    <p id="scanner-status" role="status"></p>
+    <button id="scanner-play" hidden data-en="Show camera">映像を表示</button>
+    <button id="scanner-close" class="secondary" data-en="Close">閉じる</button>
+  </dialog>
+  <script type="module" src="/src/main.ts"></script></body>
+</html>

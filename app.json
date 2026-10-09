@@ -1,0 +1,27 @@
+{
+  "package_id": "app.tripsurf.dotlink",
+  "edition": "202601",
+  "name": "Dot Link",
+  "version": "0.2.13",
+  "min_sdk_version": "0.0.16",
+  "entrypoint": "index.html",
+  "permissions": [
+    {
+      "name": "network",
+      "desc": "Connect to your own Mac relay for transcription and messages with your existing Dot. 自分のMac中継で音声認識し、既存のDotとメッセージをやり取りします。",
+      "whitelist": []
+    },
+    {
+      "name": "g2-microphone",
+      "desc": "Record speech when you start recording, for up to 30 seconds. 本人が録音を開始したときに音声を取得します。最大30秒です。"
+    },
+    {
+      "name": "camera",
+      "desc": "Read a short-lived pairing QR from your Mac. The image stays on your phone and is not uploaded. Macの期限付き接続QRを読み取ります。画像は送信しません。"
+    }
+  ],
+  "supported_languages": [
+    "ja",
+    "en"
+  ]
+}
