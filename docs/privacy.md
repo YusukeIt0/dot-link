@@ -1,6 +1,6 @@
 # Dot Linkのデータの扱い / Data handling
 
-Updated: 2026-10-09. This describes the open-source Mac release and Even companion. Even Hub general publication and cross-account setup validation remain incomplete.
+更新日 / Updated: 2026-10-09。Mac 0.2.21と、このリポジトリのEven側実装を対象にしています。Even Hubでの一般公開はまだです。This describes Mac 0.2.21 and the Even companion implementation in this repository; the companion is not yet generally available in Even Hub.
 
 ## 日本語
 
@@ -8,50 +8,84 @@ Dot Linkは、Even G2と本人の既存ChatGPT Dotを、本人が管理するMac
 
 ### 取得・送信する内容
 
-- **音声:** G2で録音を開始したときに取得します。長押しを離すか停止操作で終了し、最大30秒です。音声は選択したMacへHTTPSで送られ、MacのWhisperで文字起こしします。アプリは音声をOpenAIの音声認識サービスへ送りません。
-- **会話:** 文字起こしした文章、または入力して送信した文章を、個人用ChatGPT接続を通じて既存Dotへ渡します。Dotの返信・自発メッセージをMacからG2へ返します。OpenAI側の取り扱いは本人のアカウントと同サービスの規定に従います。
-- **QRの画像:** 本人が「QRをスキャン」を選ぶとライブカメラを要求し、映像を端末内だけで解析します。マイクは要求せず、画像の保存・送信・録画はしません。読み取り成功、閉じる、画面非表示、最長90秒で停止します。「QRを撮影」はEvenの静止画APIを使用する別の選択肢です。診断は処理段階、エラー名、WebViewの可否フラグのみで、端末画面に表示し外部送信しません。QRには短期の接続コードが含まれるため共有しないでください。通常手順は0.2.6の接続コード貼付です。QR経路は残存する任意の経路で、実機で読み取り成功を確認できていません。
-- **Macの通知:** 任意の別機能です。現在の試作は合成テスト通知が対象で、一般アプリへの対応は未完成です。通知機能を停止しても会話用サービスは別に動作します。
+- **音声と会話:** 本人が録音を開始したときにG2の音声を取得します。長押しを離すか停止操作で終了し、最大30秒です。音声を自分のMacへHTTPSで送り、Mac上のWhisperで文字起こしします。Dot Linkは録音をOpenAIの音声認識サービスへ送りません。文字起こしした文章、または本人が入力して送信した文章は、個人用ChatGPT接続を通じて既存Dotへ渡します。Dotの返信・自発メッセージはMacからG2へ返します。
+- **接続コードとカメラ:** 現在の接続方法は、Macで発行した接続コードをEven側へ貼り付ける方式です。この操作ではカメラを使いません。QRスキャン・写真読取の操作は現在の画面では非表示です。ただし、旧QR処理とEvenパッケージのカメラ権限宣言は残っています。カメラ機能を現在利用できる選択肢として案内していません。接続コードは認証情報なので他人と共有しないでください。
+- **頭の動き:** 「顔を上げると再表示」がオンのとき、G2の動きセンサーの値を取得し、端末内で表示を戻すか判断します。この設定は初期状態でオンで、表示設定からオフにできます。Dot Linkのコードには、このセンサー値をMacやDotへ送信したり、動きの履歴として保存したりする処理はありません。表示の基準角度などの設定値は保存します。
+- **Macの通知:** 任意の試作機能です。監視が動作すると、macOSのアクセシビリティ機能を通じて通知センターのタイトル・説明・値の文字列を読み取り、メモリ上で判定します。読取対象には一般アプリの通知文字列も含まれ得ます。現在、自動転送するのはアプリが生成・識別した合成テスト通知に限定され、その内容はMacの中継からDotへ渡ります。一般通知の本文を転送する機能は未完成です。通知機能だけを停止しても、会話用の中継は別に動作します。
+- **読み上げ:** 本人がオンにしたとき、Dotの返信を端末のWeb Speech APIへ渡します。音声処理が端末内で完結するかは、端末・音声エンジンに依存します。
 
 ### 保存するもの
 
-録音は認識中にMacの非公開作業ディレクトリへ一時保存し、処理の正常終了・処理エラー時に削除します。電源断やプロセス強制終了時の残存ファイルの自動掃除は未実装です。残存の可能性を含め、Macの作業ディレクトリを他人と共有しないでください。
+**Mac:** 音声認識中は録音と認識結果を作業ディレクトリへ一時保存し、通常終了・処理エラー時に削除します。電源断やプロセス強制終了で残ったファイルの自動掃除は未実装です。会話履歴は最大100件、通知履歴は最大100件、自発メッセージは最大1,000件を保存します。自発メッセージの上限では新規受付を停止します。これらの履歴を日数で自動削除する仕組みはありません。Macの履歴とDot側の記憶・履歴は別です。
 
-Macには会話履歴を最新100件、通知履歴を最新100件、自発メッセージを最大1000件保存します。自発メッセージの上限では新規受付を停止します。日数による自動削除はありません。履歴とDot側の記憶は別です。サービスの停止・自動起動解除だけでは履歴を削除しません。
+Macには、接続先・トンネル設定、OpenAIトンネル接続用の認証情報、中継用の認証キー、イベント配送先と配送用の秘密情報も保存します。これらはローカルファイルに保存し、秘密情報を含むファイルには所有者だけが読み書きできる権限を設定します。すべてをハッシュ化したり、Keychainに保存したりする方式ではありません。通知対象の選択、停止状態、言語、更新設定などはMacアプリの設定として保存します。
 
-Evenアプリ内の保存領域には、接続先、端末用セッション、期限、言語設定を保存します。送信結果が不明な発話の重複防止に、IDと文章のSHA-256値を保存します。発話本文はこの重複防止用の記録には保存しませんが、短い文章のハッシュは内容を推測される可能性があるため匿名情報とは扱いません。
+**Even側:** WebViewの保存領域とEven SDKのアプリ内保存機能を使い、接続先、端末用セッション、期限、接続元、更新後の再接続用認証情報を保存します。言語設定、表示を消すまでの時間、復帰操作、顔上げの有効・無効、角度・基準角度も保存します。Dot Link自身は、これらをOSのKeychainへ保存する処理を実装していません。
 
-ペアリング招待は2分間・一回限り、端末セッションは最大90日間です。Mac側のセッション記録はトークンのハッシュとオリジン・期限で、トークンそのものは記録しません。端末側の保存領域はOSのKeychainではありません。端末・Macのログイン保護が必要です。
+送信結果が不明な発話の重複防止には、IDと文章のSHA-256値を保存します。この記録に発話本文は保存しませんが、短い文章のハッシュは推測される可能性があり、匿名情報とは扱いません。
 
-診断は接続状態、時刻、処理時間、エラー種別を扱います。アプリ独自のアクセス解析・広告SDKは入れていません。アプリの診断に音声・会話・通知本文や鍵を意図的に記録しません。OS、Even、OpenAI、Tailscaleが扱う情報はそれぞれのサービスの範囲です。任意の読み上げはWeb Speech APIを利用し、実際の音声処理場所は端末・音声エンジンに依存します。
+**接続の期限:** 接続コードは発行から2分・1回限り、端末セッションは最大90日です。再接続しても元の90日の期限は延長しません。Mac側のペアリング記録には、セッション・再接続用認証情報のハッシュ、接続元、期限を保存し、元のトークンは保存しません。この扱いはペアリング記録についての説明で、前述のトンネル用などの認証情報とは異なります。
+
+### 診断と外部サービス
+
+処理時間の診断ログには、処理ID・段階・時刻・所要時間を記録します。通知の診断には、許可・監視状態、選択したアプリ名、件数、合成テスト通知の本文と検知・転送結果などを保存します。一般通知の文字列は判定・重複防止のためメモリ上で扱いますが、現在の通知診断ファイルにはその本文を保存しません。これらの診断ファイルを開発者へ自動送信する処理はありません。問い合わせ時にファイルを共有する場合は、内容を確認してください。
+
+Dot Link独自のアクセス解析・広告SDKは入れていません。初回の音声認識モデル取得はHugging Face、アプリ更新の配信情報・署名付きファイルの取得はGitHubへ接続します。配布先にはIPアドレスなど通常の接続情報が届きます。これらのダウンロード要求に会話・録音・ペアリング情報・トンネル認証情報を付加する処理はありません。更新用のGitHubキーは不要で、Sparkleのシステム情報送信は無効です。
+
+OpenAIへ送る会話や、OS・Even・Tailscaleが扱う情報は、それぞれのサービスの規定・設定にも従います。この文書はDot Linkの実装を説明するもので、外部サービス内部の保存・削除を保証するものではありません。
 
 ### 接続解除と削除
 
-端末の「接続解除」はMacへセッション失効を要求してから端末設定を削除します。通信できない場合、Mac側の失効は未完了と表示します。その場合はMacで `node scripts/beta-pair.mjs revoke-all` を実行し、ベータの招待と端末セッションを失効させます。従来の開発用キーは別管理です。
+- **Even側の「この端末の接続を解除」:** Macへセッション失効を要求し、Even側の接続情報を削除します。通信できない場合はMac側の失効が未完了と表示します。Macの会話履歴、Even側の言語・表示設定や重複防止用記録をすべて消す操作ではありません。Even SDKへの削除反映が失敗する可能性もあるため、接続権限を確実に止めるにはMac側の失効が必要です。
+- **Mac側で全端末の接続を失効させる場合:** 保守用コマンド `node scripts/beta-pair.mjs revoke-all` を中継の作業ディレクトリで実行すると、接続コード・端末セッション・再接続用情報を失効させます。会話履歴やトンネル用認証情報の削除は別です。
+- **Macアプリを取り除く場合:** アプリ内の「Dot Linkをアンインストール…」を使います。中継と通知を停止し、自動起動を解除して、アプリと専用の実行ファイル・音声認識モデルをゴミ箱へ移します。「接続設定と会話履歴も取り除く」は初期状態では未選択で、設定・履歴はMacに残ります。通常の導入先では保存用フォルダへ退避し、開発用配置では元の作業フォルダに残します。保管先は完了画面に表示します。
+- **設定・履歴も取り除く場合:** 上記の項目を選ぶと、対象の設定・履歴もゴミ箱へ移します。即時の完全消去ではありません。開発用配置では既知の対象ファイルを取り除くため、独自に作ったファイル・過去のバックアップ・一部の旧ログなどは残ることがあります。端末のバックアップ、Even側の保存情報、以前の開発版がKeychainに保存した更新キー、外部サービスのデータまで一括削除する処理ではありません。
 
-全体を削除する場合は、先にサービスの停止・自動起動解除を行い、必要なデータの保管を本人が判断してからプロジェクトの`.runtime/`を削除します。OpenAI等に既に送信した内容の削除は各サービスで行います。
+サービスの停止だけでは履歴は消えません。OpenAI等へ既に送信した内容は、各サービス側で別途管理・削除してください。
 
 ## English
 
-Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac you control. There is no shared conversation server operated by the developer. Your iPhone and Mac need your own Tailscale connection.
+Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac you control. There is no shared conversation server operated by the developer. Your Mac and iPhone need your own Tailscale connection.
 
-**Audio and messages.** Recording starts when you request it, stops on release or a stop action, and lasts at most 30 seconds. Audio goes over HTTPS to your selected Mac for local Whisper transcription. The app does not send audio to OpenAI's transcription service. Transcribed or typed messages are sent to your existing Dot through your personal ChatGPT connection. Replies and proactive messages return through the Mac. OpenAI's handling is governed by your account and its service policies.
+### What is collected and sent
 
-**Pairing camera.** “Scan QR” requests live camera frames for on-device decoding only, without audio, recording, image storage or upload. Capture stops on success, close, hidden page or after 90 seconds. “Take a QR photo” uses Even’s still-image API as a separate option. Diagnostics show only the operation stage, error name and WebView capability flags locally; they are not transmitted. Pairing codes are secrets and should not be shared. The normal flow in 0.2.6 pastes a complete pairing code. QR capture remains an optional legacy path without successful hardware verification. Optional Mac notification capture is integrated into the Mac client; forwarding from general applications is not yet supported.
+- **Audio and conversations:** G2 audio is captured when you start recording, ending on release or a stop action, with a 30-second limit. Audio goes over HTTPS to your Mac for local Whisper transcription. Dot Link does not send recordings to OpenAI's transcription service. Transcribed or manually submitted text goes to your existing Dot through your personal ChatGPT connection. Replies and proactive messages return through the Mac to G2.
+- **Pairing and camera:** The current pairing flow pastes a code generated on the Mac. It does not use the camera. QR scanning and photo-reading controls are hidden in the current UI. The legacy QR implementation and the Even package's camera permission declaration remain, but camera pairing is not offered as an available current option. Pairing codes are credentials; do not share them.
+- **Head movement:** With “Show when I raise my head” enabled, G2 motion sensor values are used locally to decide when to restore the display. This setting defaults to on and can be disabled in display settings. Dot Link has no code to send these sensor values to the Mac or Dot, or store a movement history. Settings such as the calibrated forward angle are saved.
+- **Mac notifications:** This optional prototype reads Notification Center title, description and value strings through macOS Accessibility while monitoring is active. Ordinary application notification strings may be read into memory for classification. Current automatic forwarding is limited to synthetic test notifications generated and identified by the app; their content goes through the Mac relay to Dot. General notification-body forwarding is unfinished. Pausing notifications alone does not stop the conversation relay.
+- **Read aloud:** When enabled, Dot replies are passed to the device's Web Speech API. Whether speech processing stays on the device depends on the device and voice engine.
 
-**Storage.** Audio is temporarily written to a private Mac working directory and removed when processing completes or returns an error. Cleanup after a power loss or forced process termination is not implemented. The Mac stores the latest 100 voice conversations, 100 notifications, and up to 1,000 proactive messages. New proactive messages are refused at that limit. There is no age-based deletion. Stopping or uninstalling login services preserves this history. This relay history is separate from Dot's memory.
+### What is stored
 
-The Even app's local storage retains the relay address, session credential, expiry, and language. An uncertain outgoing message is represented by an ID and a SHA-256 digest for duplicate prevention, without its text in that record. A digest of a short message may be guessable; it is not treated as anonymous data. Invitations expire in two minutes and can be used once; sessions last up to 90 days. The Mac stores session token hashes, origins and expiry times. The phone's local storage is not an OS keychain. Protect both devices with your normal device security.
+**On the Mac:** Recordings and transcription output are temporary working files, removed on normal completion or processing errors. Automatic cleanup after power loss or forced termination is not implemented. Up to 100 conversations, 100 notifications and 1,000 proactive messages are stored. At the proactive-message limit, new submissions are refused. These histories are not automatically deleted by age. Mac history and Dot's own memory and history are separate.
 
-**Diagnostics and other services.** App diagnostics use connection states, timestamps, durations, and error types. There are no app analytics or advertising SDKs. The app does not intentionally log audio, conversation or notification bodies, or keys. The OS, Even, OpenAI and Tailscale have their own data handling. Optional spoken replies use the Web Speech API; the actual processing location depends on the device and speech engine.
+The Mac also stores connection and tunnel settings, OpenAI tunnel credentials, relay authentication keys, and event delivery destinations and secrets. These are local files; files containing secrets are given owner-only read/write permissions. They are not all hashed or stored in Keychain. Notification selections, paused state, language and update preferences are stored as Mac app settings.
 
-**Disconnect and deletion.** Disconnect requests session revocation on the Mac and removes local connection settings. If the Mac cannot be reached, the app reports that revocation is incomplete. Run `node scripts/beta-pair.mjs revoke-all` on the Mac to revoke all beta invitations and sessions. Legacy development keys are managed separately. To remove local data, first stop and unregister the services, decide what to keep, then remove the project's `.runtime/` directory. Content already sent to external services must be managed through those services.
+**On the Even side:** WebView storage and the Even SDK's app storage retain the relay address, session credential, expiry, app origin and update-recovery credential. Language and display preferences are also saved: idle time, wake gesture, head-raise enablement, angle and calibrated forward angle. Dot Link does not itself implement Keychain storage for these records.
 
-Questions and non-sensitive bug reports: https://github.com/YusukeIt0/dot-link/issues. Do not attach private runtime files, credentials, or conversations. Installed-device and cross-account validation remain ongoing.
+An uncertain outgoing message has a saved ID and SHA-256 text digest for duplicate prevention. This record does not contain the message text. Short-text hashes may be guessable and are not treated as anonymous data.
 
+**Pairing expiry:** Codes last two minutes and can be used once. Sessions last at most 90 days; recovery does not extend the original expiry. Mac pairing records retain hashes of session and recovery credentials, origins and expiry times, without the original tokens. This describes pairing records, not the separate tunnel and other credentials listed above.
 
-## App updates / アプリの更新
+### Diagnostics and external services
 
-The app checks a public GitHub-hosted feed and downloads signed release archives. GitHub receives ordinary connection information such as the requesting IP address. No GitHub token, conversation, pairing code, or tunnel credential is sent for an update. Sparkle system-profile reporting is disabled.
+Timing logs contain processing IDs, stages, timestamps and durations. Notification diagnostics store permission and monitoring states, selected app names, counts, synthetic test notification bodies, and detection and forwarding results. Ordinary notification strings are handled in memory for classification and deduplication; their bodies are not stored in the current notification diagnostic file. These diagnostic files are not automatically sent to the developer. Review their contents before sharing them for support.
 
-更新はGitHub上の公開配信情報と署名付きアプリを取得します。更新用キーは不要で、会話・ペアリング・トンネル認証情報を更新先へ送りません。GitHubには通常の通信情報が届きます。Sparkleのシステム情報送信は無効です。
+Dot Link has no app analytics or advertising SDK. Initial speech-model downloads connect to Hugging Face; update feeds and signed archives come from GitHub. Those hosts receive ordinary connection information such as IP addresses. Dot Link does not attach conversations, recordings, pairing credentials or tunnel credentials to those download requests. Updates require no GitHub token, and Sparkle system-profile reporting is disabled.
+
+Conversations sent to OpenAI, and information handled by the OS, Even and Tailscale, are also subject to those services' rules and settings. This document describes Dot Link's implementation; it does not guarantee storage or deletion behavior inside external services.
+
+### Disconnecting and deleting
+
+- **“Revoke this device” on the Even side:** Requests session revocation on the Mac and removes local connection information. If communication fails, it reports that Mac-side revocation is incomplete. It does not erase Mac conversation history or all Even-side language, display and duplicate-prevention records. Deletion through the Even SDK can also fail; Mac-side revocation is needed to reliably invalidate access.
+- **Revoking all devices on the Mac:** The maintenance command `node scripts/beta-pair.mjs revoke-all`, run in the relay working directory, invalidates pairing codes, sessions and recovery credentials. It does not delete conversation history or tunnel credentials.
+- **Removing the Mac app:** Use “Uninstall Dot Link…” in the app. It stops the relay and notifications, removes login items, and moves the app, dedicated runtime and speech model to Trash. “Also remove connection settings and conversation history” defaults to unchecked. Settings and history then remain on the Mac: a standard installation moves them to a saved-data folder, while a development installation keeps them in its working folder. The completion dialog shows the retained-data location.
+- **Also removing settings and history:** Selecting that option moves the targeted settings and history to Trash, rather than immediately and permanently erasing them. Development installations remove known target files; custom files, previous backups and some older logs may remain. This does not erase device backups, Even-side storage, update credentials stored in Keychain by earlier development releases, or data held by external services.
+
+Stopping services alone does not delete history. Manage or delete information already sent to OpenAI or other services separately with those services.
+
+## 問い合わせ / Contact
+
+[GitHub Issues](https://github.com/YusukeIt0/dot-link/issues)で秘密情報を含まない不具合報告を受け付けます。認証情報、接続コード、録音、会話、未確認の診断ファイルを添付しないでください。
+
+Use GitHub Issues for non-sensitive reports. Do not attach credentials, pairing codes, recordings, conversations or unreviewed diagnostic files.
