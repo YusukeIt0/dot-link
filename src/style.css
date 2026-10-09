@@ -37,14 +37,6 @@ body[data-pair-state=unpaired] .glass { display: none; }
 body[data-pair-state=unpaired] #pairing-settings > summary { list-style: none; pointer-events: none; font-weight: 600; }
 body[data-pair-state=unpaired] #pairing-settings > summary::-webkit-details-marker { display: none; }
 
-#scanner-dialog { width: min(92vw, 480px); padding: 20px; border: 1px solid #435446; border-radius: 16px; background: #141817; color: #ebeee9; }
-#scanner-dialog::backdrop { background: #000b; }
-#scanner-title { font-size: 20px; }
-.camera-view { position: relative; aspect-ratio: 1; background: #070d09; overflow: hidden; border-radius: 12px; }
-#scanner-video { width: 100%; height: 100%; object-fit: cover; }
-.qr-frame { position: absolute; inset: 18%; border: 2px solid #9de591; border-radius: 12px; pointer-events: none; }
-#scanner-status { line-height: 1.6; }
-#camera-diagnostic { font-size: 12px; min-height: 0; }
 
 .setup-steps { padding-left: 22px; }
 .setup-steps li { margin: 16px 0; }

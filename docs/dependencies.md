@@ -9,7 +9,6 @@ Dot Link's own source is MIT-licensed. Dependencies retain their own licenses an
 | OpenAI tunnel-client | 0.0.16 | Apache-2.0, upstream NOTICE and bundled dependency notices |
 | Sparkle | 2.10.0 | Upstream Sparkle license |
 | Even Hub SDK | 0.0.16 | MIT |
-| jsQR | 1.4.0 | Apache-2.0 |
 | ipaddr.js | 2.5.0 | MIT |
 | zod | 4.6.5 | MIT |
 | standardwebhooks | 1.1.1 | See the qualification below |

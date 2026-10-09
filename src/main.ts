@@ -10,8 +10,6 @@ import { DisplayPreferenceStore } from './display-preferences.ts';
 import { t, getLanguage, setLanguage, chooseLanguage } from './i18n.ts';
 import { RelaySettings, PendingUtterance, apiAddress, type RelayCredentials } from './relay-connection.ts';
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
-import { LiveQrScanner } from './live-qr.ts';
-import { decodePairingQR, QrPhotoError } from './qr.ts';
 import './style.css';
 
 let savedLanguage: string | null = null;
@@ -171,8 +169,8 @@ async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, 
     await ensureRelayOrigin(true);
     return api<T>(path, method, body, trace, true);
   }
-  if (response.status === 401) forgetPairing(t('接続設定が無効になりました。Macから新しい接続用QRを作成してください。'));
-  if (!response.ok) throw new Error(response.status === 401 ? t('Macから接続用QRを読み直してください。') : t('処理できませんでした。接続または録音を確認してください。'));
+  if (response.status === 401) forgetPairing(t('接続設定が無効になりました。Macで新しい接続コードを発行してください。'));
+  if (!response.ok) throw new Error(response.status === 401 ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
   return (response.status === 204 ? undefined : response.json()) as Promise<T>;
 }
 
@@ -227,7 +225,7 @@ const updates = new LiveUpdates<Snapshot>(async (revision, signal) => {
     signal: AbortSignal.any([signal, AbortSignal.timeout(25000)]) });
   if (!signal.aborted && response.status === 401) {
     if (relay?.resumeToken) await ensureRelayOrigin(true);
-    else forgetPairing(t('接続設定が無効になりました。Macから新しい接続用QRを作成してください。'));
+    else forgetPairing(t('接続設定が無効になりました。Macで新しい接続コードを発行してください。'));
   }
   if (!response.ok) throw new Error('Update connection failed');
   return response.json() as Promise<Snapshot>;
@@ -244,81 +242,7 @@ function offerInvite(raw: string): void {
 }
 pairingInput.oninput = () => {
   offeredInvite = undefined; el('pair-destination').textContent = ''; el('pair').hidden = true;
-  try { offerInvite(pairingInput.value); } catch { notice.textContent = t('QRが無効か期限切れです。Macで作り直してください。'); }
-};
-const scannerDialog = el<HTMLDialogElement>('scanner-dialog');
-const scannerStatus = el('scanner-status');
-const scannerPlay = el<HTMLButtonElement>('scanner-play');
-const liveScanner = new LiveQrScanner(el<HTMLVideoElement>('scanner-video'));
-let scanning = false;
-let cameraResult = '';
-function closeScanner(): void {
-  liveScanner.stop();
-  if (!scanning) return;
-  scanning = false; busy = false;
-  scannerDialog.close(); scannerPlay.hidden = true;
-  flushPendingDisplay();
-}
-el('scanner-close').onclick = closeScanner;
-scannerDialog.addEventListener('cancel', event => { event.preventDefault(); closeScanner(); });
-scannerPlay.onclick = () => { scannerPlay.hidden = true; void liveScanner.resume(); };
-el('scan-pair').onclick = () => {
-  if (busy || recorder.state !== 'idle' || exited) return;
-  busy = true; scanning = true;
-  scannerPlay.hidden = true; cameraResult = '';
-  const policy = (document as Document & { permissionsPolicy?: { allowsFeature(name: string): boolean }; featurePolicy?: { allowsFeature(name: string): boolean } });
-  let policyCamera: boolean | string = 'unknown';
-  try { policyCamera = (policy.permissionsPolicy ?? policy.featurePolicy)?.allowsFeature('camera') ?? 'unknown'; } catch {}
-  const conditions = `secure=${window.isSecureContext} top=${window.top === window} api=${!!navigator.mediaDevices?.getUserMedia} gesture=${navigator.userActivation?.isActive ?? 'unknown'} visible=${!document.hidden} policy=${policyCamera}`;
-  scannerStatus.textContent = t('カメラを準備しています…');
-  scannerDialog.showModal();
-  void liveScanner.start(raw => {
-    try { offerInvite(raw); pairingInput.value = ''; closeScanner(); return true; }
-    catch { scannerStatus.textContent = t('QRが無効か期限切れです。Macで作り直してください。'); return false; }
-  }, reason => {
-    if (reason === 'playback') {
-      scannerStatus.textContent = t('カメラは取得できました。「映像を表示」を押してください。');
-      scannerPlay.hidden = false; return;
-    }
-    closeScanner();
-    notice.textContent = `${reason === 'denied'
-      ? t('カメラの取得要求が拒否されました。原因を確認するため、下の診断コードをお知らせください。')
-      : reason === 'timeout' ? t('カメラを終了しました。準備ができたら、もう一度スキャンしてください。')
-      : t('カメラを開始できませんでした。下の診断コードをお知らせください。')} ${cameraResult}`;
-  }, evidence => {
-    cameraResult = `CAMERA_${evidence.stage.toUpperCase()}${evidence.error ? ':' + evidence.error : ''}`;
-    el('camera-diagnostic').textContent = `${cameraResult}\n${conditions}`;
-    if (evidence.stage === 'scanning') scannerStatus.textContent = t('QRを枠に合わせてください。');
-  });
-};
-el('photo-pair').onclick = async () => {
-  if (busy || recorder.state !== 'idle' || exited) return;
-  if (!bridge) { notice.textContent = t('Evenアプリとの接続準備ができていません。アプリを閉じて開き直してください。'); return; }
-  busy = true;
-  let stage: 'camera' | 'decode' | 'invite' = 'camera';
-  notice.textContent = t('QR全体を撮影し、写真を確定してください。自動検出の枠は表示されません。');
-  try {
-    const image = await bridge.captureImageFromCamera();
-    if (exited) { if (image) image.base64 = ''; return; }
-    if (!image) { notice.textContent = t('写真を取得できませんでした。撮影を取り消した場合は、もう一度撮影してください。'); return; }
-    stage = 'decode';
-    notice.textContent = t('写真のQRを確認しています…');
-    let raw: string;
-    try { raw = await decodePairingQR(image); } finally { image.base64 = ''; }
-    if (exited) return;
-    stage = 'invite';
-    offerInvite(raw); pairingInput.value = '';
-  } catch (error) {
-    if (exited) return;
-    const photoCode = error instanceof QrPhotoError ? error.code : stage === 'camera' ? 'PHOTO_CAPTURE_FAILED' : stage === 'invite' ? 'QR_INVITE_INVALID' : 'QR_IMAGE_UNKNOWN';
-    el('camera-diagnostic').textContent = photoCode;
-    notice.textContent = (stage === 'camera'
-      ? t('カメラから写真を取得できませんでした。Evenアプリのカメラ権限を確認してください。')
-      : stage === 'decode'
-        ? t('写真からQRを読み取れませんでした。QR全体を明るく、正面から大きめに撮影してください。')
-        : t('QRが無効か期限切れです。Macで作り直してください。')) + ` (${photoCode})`;
-  }
-  finally { busy = false; flushPendingDisplay(); }
+  try { offerInvite(pairingInput.value); } catch { notice.textContent = t('接続コードが無効か期限切れです。Macで新しく発行してください。'); }
 };
 el('pair').onclick = async () => {
   if (busy || recorder.state !== 'idle' || exited) return;
@@ -345,7 +269,7 @@ el('pair').onclick = async () => {
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
     if (version !== connectionVersion || exited) return;
-    notice.textContent = nativeRetained && credentials.resumeToken ? t('接続しました。更新後の再接続情報も保存しました。') : retained ? t('接続しました。更新後の自動復元は未確認です。') : t('接続しました。この画面では設定を保存できないため、閉じた後はQRを読み直してください。');
+    notice.textContent = nativeRetained && credentials.resumeToken ? t('接続しました。更新後の再接続情報も保存しました。') : retained ? t('接続しました。更新後の自動復元は未確認です。') : t('接続しました。この画面では設定を保存できないため、閉じた後は新しい接続コードで接続してください。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? '接続確認成功' : 'Connection verified';
     showSetup(false);
   } catch (error) {
@@ -541,10 +465,10 @@ discardButton.onclick = () => {
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
-window.addEventListener('pagehide', () => { closeScanner(); pageActive = false; refreshStatus(false); });
+window.addEventListener('pagehide', () => { pageActive = false; refreshStatus(false); });
 function stopSession(): void {
   if (exited) return;
-  closeScanner(); exited = true; pageActive = false; connectionVersion++; connectionController.abort();
+  exited = true; pageActive = false; connectionVersion++; connectionController.abort();
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
   window.speechSynthesis?.cancel(); clearClip(); void recorder.stop(true);
@@ -717,7 +641,7 @@ refreshStatus(false);
 window.addEventListener('pageshow', event => { if (exited) return; pageActive = true; standby?.check(); refreshStatus(); if (event.persisted && token) updates.start(); });
 window.addEventListener('online', () => { if (token && !exited) updates.start(); });
 window.addEventListener('offline', () => { progress.connection = 'offline'; refreshStatus(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
-document.addEventListener('visibilitychange', () => { if (document.hidden) closeScanner(); if (exited) return; standby?.check(); refreshStatus(); if (!document.hidden && token) updates.start(); });
+document.addEventListener('visibilitychange', () => { if (exited) return; standby?.check(); refreshStatus(); if (!document.hidden && token) updates.start(); });
 
 void connect().catch(() => {
   const nativeReady = startupStage !== 'bridge';

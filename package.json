@@ -1,6 +1,6 @@
 {
   "name": "even-g2-dot",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,7 +22,6 @@
   "dependencies": {
     "@evenrealities/even_hub_sdk": "0.0.16",
     "ipaddr.js": "2.5.0",
-    "jsqr": "1.4.0",
     "standardwebhooks": "1.1.1",
     "zod": "4.6.5"
   },

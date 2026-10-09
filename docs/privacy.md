@@ -1,6 +1,6 @@
 # Dot Linkのデータの扱い / Data handling
 
-更新日 / Updated: 2026-10-09。Mac 0.2.21と、このリポジトリのEven側実装を対象にしています。Even Hubでの一般公開はまだです。This describes Mac 0.2.21 and the Even companion implementation in this repository; the companion is not yet generally available in Even Hub.
+更新日 / Updated: 2026-10-09。Mac 0.2.21と、Even側0.2.14候補の実装を対象にしています。Even Hubでの一般公開はまだです。This describes Mac 0.2.21 and the Even companion 0.2.14 candidate; the companion is not yet generally available in Even Hub.
 
 ## 日本語
 
@@ -9,7 +9,7 @@ Dot Linkは、Even G2と本人の既存ChatGPT Dotを、本人が管理するMac
 ### 取得・送信する内容
 
 - **音声と会話:** 本人が録音を開始したときにG2の音声を取得します。長押しを離すか停止操作で終了し、最大30秒です。音声を自分のMacへHTTPSで送り、Mac上のWhisperで文字起こしします。Dot Linkは録音をOpenAIの音声認識サービスへ送りません。文字起こしした文章、または本人が入力して送信した文章は、個人用ChatGPT接続を通じて既存Dotへ渡します。Dotの返信・自発メッセージはMacからG2へ返します。
-- **接続コードとカメラ:** 現在の接続方法は、Macで発行した接続コードをEven側へ貼り付ける方式です。この操作ではカメラを使いません。QRスキャン・写真読取の操作は現在の画面では非表示です。ただし、旧QR処理とEvenパッケージのカメラ権限宣言は残っています。カメラ機能を現在利用できる選択肢として案内していません。接続コードは認証情報なので他人と共有しないでください。
+- **接続コードとカメラ:** 現在の接続方法は、Macで発行した接続コードをEven側へ貼り付ける方式です。この操作ではカメラを使いません。Even側0.2.14候補ではQRスキャン・写真読取処理とカメラ権限宣言を削除しました。0.2.13以前のEvenパッケージとMac 0.2.21同梱の旧画面には、非表示のQR処理・旧カメラ関連コードが残ります。接続コードは認証情報なので他人と共有しないでください。
 - **頭の動き:** 「顔を上げると再表示」がオンのとき、G2の動きセンサーの値を取得し、端末内で表示を戻すか判断します。この設定は初期状態でオンで、表示設定からオフにできます。Dot Linkのコードには、このセンサー値をMacやDotへ送信したり、動きの履歴として保存したりする処理はありません。表示の基準角度などの設定値は保存します。
 - **Macの通知:** 任意の試作機能です。監視が動作すると、macOSのアクセシビリティ機能を通じて通知センターのタイトル・説明・値の文字列を読み取り、メモリ上で判定します。読取対象には一般アプリの通知文字列も含まれ得ます。現在、自動転送するのはアプリが生成・識別した合成テスト通知に限定され、その内容はMacの中継からDotへ渡ります。一般通知の本文を転送する機能は未完成です。通知機能だけを停止しても、会話用の中継は別に動作します。
 - **読み上げ:** 本人がオンにしたとき、Dotの返信を端末のWeb Speech APIへ渡します。音声処理が端末内で完結するかは、端末・音声エンジンに依存します。
@@ -50,7 +50,7 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 ### What is collected and sent
 
 - **Audio and conversations:** G2 audio is captured when you start recording, ending on release or a stop action, with a 30-second limit. Audio goes over HTTPS to your Mac for local Whisper transcription. Dot Link does not send recordings to OpenAI's transcription service. Transcribed or manually submitted text goes to your existing Dot through your personal ChatGPT connection. Replies and proactive messages return through the Mac to G2.
-- **Pairing and camera:** The current pairing flow pastes a code generated on the Mac. It does not use the camera. QR scanning and photo-reading controls are hidden in the current UI. The legacy QR implementation and the Even package's camera permission declaration remain, but camera pairing is not offered as an available current option. Pairing codes are credentials; do not share them.
+- **Pairing and camera:** The current pairing flow pastes a code generated on the Mac. It does not use the camera. The Even 0.2.14 candidate removes QR scanning, photo-reading code and the camera permission declaration. Earlier Even packages (0.2.13 and below) and the older web UI bundled with Mac 0.2.21 still contain hidden legacy QR/camera code. Pairing codes are credentials; do not share them.
 - **Head movement:** With “Show when I raise my head” enabled, G2 motion sensor values are used locally to decide when to restore the display. This setting defaults to on and can be disabled in display settings. Dot Link has no code to send these sensor values to the Mac or Dot, or store a movement history. Settings such as the calibrated forward angle are saved.
 - **Mac notifications:** This optional prototype reads Notification Center title, description and value strings through macOS Accessibility while monitoring is active. Ordinary application notification strings may be read into memory for classification. Current automatic forwarding is limited to synthetic test notifications generated and identified by the app; their content goes through the Mac relay to Dot. General notification-body forwarding is unfinished. Pausing notifications alone does not stop the conversation relay.
 - **Read aloud:** When enabled, Dot replies are passed to the device's Web Speech API. Whether speech processing stays on the device depends on the device and voice engine.
