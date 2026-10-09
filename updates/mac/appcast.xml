@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.2.21</title><sparkle:version>42</sparkle:version><sparkle:shortVersionString>0.2.21</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">更新を公開配布へ統一しました。GitHubキーの入力・保存・期限管理は不要です。設定の「自動更新」と「アップデートを確認」から最新版を取得できます。既存の接続設定とペアリングは引き継ぎます。
+
+Updates now use one public release channel. No GitHub account, update key, or token-expiration management is required. Choose Automatic updates or Check for updates. Existing connection settings and pairing are preserved.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/untagged-7a0405909f3b422f2f50/Dot-Link-0.2.21-42-arm64.zip" sparkle:installationType="application" sparkle:edSignature="dPS8WEU+NosguY+nGnrA0/TcxUUgQkIodmThwWoaGp2MM61NUn8KydTnf+MjvE5an672q3L++6rPs5r/sxykCg==" length="51503959" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: zCMbG8jHZ2zyJ48a7QY/RYIuQ4G0c5Byzv4dbLfUvEjvu3r2BKV8aBDMliV+CyDEGKnjsONTeJzgI2weI3NkAQ==
+length: 1542
+-->
