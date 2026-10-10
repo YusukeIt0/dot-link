@@ -1,9 +1,20 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.2.21</title><sparkle:version>42</sparkle:version><sparkle:shortVersionString>0.2.21</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">更新を公開配布へ統一しました。GitHubキーの入力・保存・期限管理は不要です。設定の「自動更新」と「アップデートを確認」から最新版を取得できます。既存の接続設定とペアリングは引き継ぎます。
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.2.31</title><sparkle:version>52</sparkle:version><sparkle:shortVersionString>0.2.31</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Mac通知を既存Dotへ共有する機能と、設定画面を更新しました。
 
-Updates now use one public release channel. No GitHub account, update key, or token-expiration management is required. Choose Automatic updates or Check for updates. Existing connection settings and pairing are preserved.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.2.21-42/Dot-Link-0.2.21-42-arm64.zip" sparkle:installationType="application" sparkle:edSignature="dPS8WEU+NosguY+nGnrA0/TcxUUgQkIodmThwWoaGp2MM61NUn8KydTnf+MjvE5an672q3L++6rPs5r/sxykCg==" length="51503959" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: Fdqg7A4do2xtRc4Gs4zq9XNHehEBdO7nE3/+MQGAD0wJ7sF6iA57q3cJHH4BgC3ErZZBt5Hw3HNxFjtYQEf3Dg==
-length: 1527
+- 「Macの全通知をDotに共有」で、読み取れる新着通知の送信者・見出し・本文を共有します。共有は初期状態ではオフです。Dotが何をいつ知らせるかを判断します。
+- 通知の重複処理、停止・再開、状態表示、アクセシビリティの追加・再登録手順を改善しました。
+- 自動更新を一時停止しています。「アップデートを確認」から手動で更新できます。
+- アンインストール時は、接続設定・会話履歴を含めてゴミ箱へ移します。設定を残す選択肢はありません。
+
+更新後に通知を共有できない場合は、システム設定のアクセシビリティ内にあるDot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。
+
+対応する通知形式は引き続き検証中です。すべての通知の読み取りや即時到着を保証するものではありません。通知元アプリへの返信操作は未対応です。Apple Silicon / macOS 13以降。Apple公証は未実施です。
+
+This release adds opt-in sharing of readable new Mac notifications with your existing Dot, improves notification status and permission guidance, and clarifies the settings screen. Dot decides what to announce and when. Automatic updates are temporarily disabled; use Check for updates. Uninstall now moves connection settings and conversation history to Trash along with the app.
+
+If sharing stops after an update, remove Dot Link from the Accessibility list in System Settings, add the installed Dot Link.app again, and turn access on. Not every notification format or immediate arrival is guaranteed; replying in the source app is not supported. Apple Silicon, macOS 13 or later. Not Apple-notarized.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.2.31-52/Dot-Link-0.2.31-52-arm64.zip" sparkle:installationType="application" sparkle:edSignature="qB7O26ikkoKPrhSYjHdXAe7aEUebgoXJsHLzfW7fj+y5X2MG+7qBUB5OqcAHvS5hoyLI5qNqgierd5XkiRIWBA==" length="51419319" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: A8X9PX/w9mr1r17SJSi4r1g/TmM4yZnHKE9VkOw1GgJK23sxTsqvkZi4JpLw8q6Vzjdm0vd0nd1f4YViPzS7Dw==
+length: 2941
 -->
