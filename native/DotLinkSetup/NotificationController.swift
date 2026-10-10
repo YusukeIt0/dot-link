@@ -5,16 +5,18 @@ import UserNotifications
 final class NotificationSourcesStack: NSStackView { override var isFlipped: Bool { true } }
 
 // This prototype reads only Notification Center accessibility elements. It never
-// opens chats or invokes AX actions. Selected synthetic probes go to the local bridge.
+// opens chats or invokes AX actions. Sharing readable notifications is explicitly opt-in.
 final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     let stateLabel = NSTextField(wrappingLabelWithString: "")
     let connectionLabel = NSTextField(wrappingLabelWithString: "接続を確認しています…")
+    let connectionStatusIcon = NSImageView()
     let summaryItem = NSMenuItem(title: "接続を確認しています…", action: nil, keyEquivalent: "")
     var tailscaleButton: NSButton!
     let pauseItem = NSMenuItem(title: "通知を開始", action: #selector(togglePause), keyEquivalent: "")
     let results = NSTextView()
     let apps = NotificationSourcesStack()
     var selected = Set<String>()
+    var shareAllNotifications = false
     var paused = true
     var relaySuspended = false
     var forwardingTasks: [String: URLSessionDataTask] = [:]
@@ -37,6 +39,11 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     var helperRunning = false
     var pendingHelper: (() -> Void)?
     var healthTimer: Timer?
+    lazy var lineDelivery = NotificationForwarder(runtime: projectURL.appendingPathComponent(".runtime"),
+        allowed: { [weak self] in
+            guard let self else { return false }
+            return !self.paused && !self.relaySuspended && !self.legacyRunning && self.shareAllNotifications && self.observer != nil && AXIsProcessTrusted()
+        }, changed: { [weak self] in self?.updateState() })
     var currentIcon = DotStatus.checking
     var setupMessage = ""
     struct Probe: Codable {
@@ -54,6 +61,17 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         var forwarding = "未送信"
     }
     var probes: [String: Probe] = [:]
+    var structureSnapshots: [NotificationStructureProbe.Snapshot] = []
+    var structureProbeConfiguration: [String: Any]? {
+        let url = projectURL.appendingPathComponent(".runtime/notification-menu-unified/structure-probe.json")
+        guard let data = try? Data(contentsOf: url), data.count < 8192,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let until = object["expiresAt"] as? Double,
+              NotificationStructureProbe.enabled(until: until, now: Date().timeIntervalSince1970)
+        else { return nil }
+        return object
+    }
+    var structureProbeEnabled: Bool { structureProbeConfiguration != nil }
     var batchUntil: Date = .distantPast
     let projectURL: URL
     var diagnosticURL: URL { projectURL.appendingPathComponent(".runtime/notification-menu-unified/diagnostics.json") }
@@ -88,6 +106,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             defaults.set(true, forKey: "notificationSettingsImported")
         }
         selected = Set(defaults.stringArray(forKey: "selectedApps") ?? ["Dot Notification Lab"])
+        shareAllNotifications = defaults.bool(forKey: "shareAllMacNotifications")
         paused = defaults.bool(forKey: "monitoringPaused")
         try? FileManager.default.createDirectory(at: diagnosticURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         UNUserNotificationCenter.current().delegate = self
@@ -96,7 +115,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         observers.append(nc.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.attach() })
         observers.append(nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.refresh() })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.refresh() })
-        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.attach(); self?.continueMigration() }
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.attach(); self?.continueMigration(); self?.lineDelivery.refreshStatus(); self?.continueDiagnosticProbe() }
         healthTimer?.tolerance = 2
         refresh()
     }
@@ -172,9 +191,19 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         let root = NSStackView(); root.orientation = .vertical; root.alignment = .leading; root.spacing = 14
         root.translatesAutoresizingMaskIntoConstraints = false
         let heading = text(tr("通知設定", "Notifications"), size: 22); heading.font = .systemFont(ofSize: 22, weight: .semibold); root.addArrangedSubview(heading)
-        let status = card(root, title: tr("通知の状態", "Notification status"), icon: "bell", help: tr("選んだMacの通知をDotへ渡す機能です。通知の許可とMacの中継が必要です。現在はDot Linkのテスト通知に対応しています。", "Send selected Mac notifications to Dot. Notification access and the Mac relay are required. Currently, only Dot Link test notifications are supported."))
-        connectionLabel.font = .systemFont(ofSize: 13); connectionLabel.maximumNumberOfLines = 0; connectionLabel.lineBreakMode = .byWordWrapping
-        status.addArrangedSubview(connectionLabel); connectionLabel.widthAnchor.constraint(equalTo: status.widthAnchor, constant: -36).isActive = true
+        let status = card(root, title: tr("通知の状態", "Notification status"), icon: "bell", help: tr("Macに表示される新着通知をDotへ共有します。送信者名・見出し・本文は通知に表示された範囲だけを扱い、省略された内容は取得しません。通知元や送信者を特定できない場合は推測しません。読み取り可能な通知形式を検証中です。", "Share new notifications displayed on this Mac with Dot. Only visible sender names, headings and message text are used; omitted content is not retrieved. Unknown sources and senders are not inferred. Notification formats are under validation."))
+        connectionLabel.font = .systemFont(ofSize: 12, weight: .semibold); connectionLabel.maximumNumberOfLines = 0; connectionLabel.lineBreakMode = .byWordWrapping
+        connectionStatusIcon.imageScaling = .scaleProportionallyDown
+        connectionStatusIcon.widthAnchor.constraint(equalToConstant: 21).isActive = true
+        connectionStatusIcon.heightAnchor.constraint(equalToConstant: 21).isActive = true
+        let notificationState = NSStackView(views: [connectionStatusIcon, connectionLabel])
+        notificationState.orientation = .horizontal; notificationState.alignment = .centerY; notificationState.spacing = 4
+        status.addArrangedSubview(notificationState)
+        notificationState.widthAnchor.constraint(equalTo: status.widthAnchor, constant: -36).isActive = true
+        let permissionHelp = text(tr("「権限設定」からアクセシビリティを開き、「＋」でインストール先のDot Link.appを追加してオンにしてください。\n更新後に通知を共有できない場合は、アクセシビリティ内にあるDot Linkを一度削除して追加し直してください。", "Open Accessibility with Permissions, click +, and add Dot Link.app from its installed location. Then turn it on.\nIf notifications stop being shared after an update, remove Dot Link from the Accessibility list and add it again."), size: 12, secondary: true)
+        permissionHelp.maximumNumberOfLines = 0; permissionHelp.lineBreakMode = .byWordWrapping; permissionHelp.isSelectable = true
+        status.addArrangedSubview(permissionHelp)
+        permissionHelp.widthAnchor.constraint(equalTo: status.widthAnchor, constant: -36).isActive = true
         let controls = NSStackView(); controls.spacing = 10
         if legacyRunning {
             controls.addArrangedSubview(button(tr("通知を引き継ぐ", "Move notifications"), #selector(beginMigration)))
@@ -184,12 +213,12 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
         controls.addArrangedSubview(button(tr("権限設定", "Permissions"), #selector(openPermission)))
         let refreshButton = button("", #selector(refresh)); refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil); refreshButton.isBordered = false; refreshButton.toolTip = tr("状態を確認", "Check status"); refreshButton.setAccessibilityLabel(refreshButton.toolTip!); controls.addArrangedSubview(refreshButton); status.addArrangedSubview(controls)
-        let sources = card(root, title: tr("通知の対象", "Notification sources"), icon: "square.grid.2x2", help: tr("チェックしたアプリを通知の対象として保存します。「準備中」のアプリは選択を保存できますが、通知の転送にはまだ対応していません。", "Checked apps are saved as notification sources. Apps marked Coming soon can be selected, but their notifications are not forwarded yet."))
-        sources.addArrangedSubview(text(tr("現在はテスト通知のみ対応", "Currently supports test notifications only"), size: 12, secondary: true))
-        apps.orientation = .vertical; apps.alignment = .leading; apps.spacing = 8
-        let appScroll = NSScrollView(); appScroll.hasVerticalScroller = true; appScroll.drawsBackground = false; appScroll.documentView = apps; apps.translatesAutoresizingMaskIntoConstraints = false
-        apps.widthAnchor.constraint(equalTo: appScroll.contentView.widthAnchor).isActive = true
-        appScroll.heightAnchor.constraint(equalToConstant: 116).isActive = true; sources.addArrangedSubview(appScroll); appScroll.widthAnchor.constraint(equalTo: sources.widthAnchor, constant: -36).isActive = true
+        let sources = card(root, title: tr("通知の共有", "Notification sharing"), icon: "bell.badge", help: tr("有効にすると、このMacに表示される新着通知の内容を既存Dotへ渡します。何をいつ知らせるかはDotが判断します。通知の表示範囲を超えてチャットやメールを開くことはありません。", "When enabled, new notifications displayed on this Mac are shared with your existing Dot. Dot decides what to announce and when. Chats and emails are never opened to retrieve more content."))
+        let share = NSButton(checkboxWithTitle: tr("Macの全通知をDotに共有", "Share all Mac notifications with Dot"), target: self, action: #selector(toggleShareAll(_:)))
+        share.state = shareAllNotifications ? .on : .off; share.isEnabled = !legacyRunning
+        sources.addArrangedSubview(share)
+        sources.addArrangedSubview(text(tr("通知に表示された送信者・見出し・本文を共有します。", "Shares sender names, headings and text shown in notifications."), size: 12, secondary: true))
+        sources.addArrangedSubview(text(tr("どんな通知を知らせてほしいかは、Dotに直接伝えてください。", "Tell Dot directly which notifications you’d like to hear about."), size: 12, secondary: true))
         let test = card(root, title: tr("動作確認", "Try a notification"), icon: "paperplane", help: tr("テスト通知をこのMacに表示し、検知とDotへの転送を確認します。OSの通知表示許可も必要です。Dotからの案内やG2での表示は、実際に届いた内容を確認してください。", "Display a test notification on this Mac to check detection and forwarding to Dot. macOS notification permission is also required. Check the actual message to confirm Dot's response and its display on G2."))
         test.addArrangedSubview(button(tr("テスト通知を送る", "Send test notification"), #selector(sendTest)))
         let details = button(detailsVisible ? tr("詳細を閉じる", "Hide details") : tr("検知結果と詳細", "Detection details"), #selector(toggleDetails)); details.isBordered = false; details.image = NSImage(systemSymbolName: detailsVisible ? "chevron.down" : "chevron.right", accessibilityDescription: nil); details.imagePosition = .imageLeading; details.setAccessibilityLabel(details.title); root.addArrangedSubview(details)
@@ -203,24 +232,12 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     }
     var rebuildView: (() -> Void)?
     @objc func toggleDetails() { detailsVisible.toggle(); rebuildView?() }
-    func reloadApps() {
-        appNames = Array(Set(NSWorkspace.shared.runningApplications.filter { $0.activationPolicy == .regular }.compactMap { $0.localizedName } + ["Dot Notification Lab", "LINE", "Mail", "Slack"])).sorted { a, b in a == b ? false : a == "Dot Notification Lab" ? true : b == "Dot Notification Lab" ? false : a < b }
-        for view in apps.arrangedSubviews { apps.removeArrangedSubview(view); view.removeFromSuperview() }
-        for name in appNames {
-            let check = NSButton(checkboxWithTitle: name == "Dot Notification Lab" ? tr("Dot Link（テスト通知）", "Dot Link (test notifications)") : name, target: self, action: #selector(selectApp(_:)))
-            check.identifier = NSUserInterfaceItemIdentifier(name)
-            check.state = selected.contains(name) ? .on : .off
-            check.isEnabled = !legacyRunning
-            let row = NSStackView(); row.spacing = 10; row.addArrangedSubview(check)
-            let spacer = NSView(); spacer.setContentHuggingPriority(.defaultLow, for: .horizontal); row.addArrangedSubview(spacer)
-            row.addArrangedSubview(text(name == "Dot Notification Lab" ? tr("対応", "Supported") : tr("準備中", "Coming soon"), size: 11, secondary: true))
-            apps.addArrangedSubview(row); row.widthAnchor.constraint(equalTo: apps.widthAnchor, constant: -8).isActive = true
-        }
-    }
-    @objc func selectApp(_ sender: NSButton) {
-        let name = sender.identifier?.rawValue ?? sender.title
-        if sender.state == .on { selected.insert(name) } else { selected.remove(name) }
-        defaults.set(Array(selected).sorted(), forKey: "selectedApps")
+    func reloadApps() { /* Common notification sharing has no per-app selection list. */ }
+    @objc func toggleShareAll(_ sender: NSButton) {
+        lineDelivery.cancel()
+        shareAllNotifications = sender.state == .on
+        defaults.set(shareAllNotifications, forKey: "shareAllMacNotifications")
+        if shareAllNotifications { baselineCurrentNotifications() }
         updateState()
     }
     @objc func openPermission() {
@@ -253,6 +270,10 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     func updateState() {
         stateLabel.stringValue = "アクセシビリティ: \(AXIsProcessTrusted() ? "許可済み" : "未許可")　検知: \(paused ? "一時停止" : observer == nil ? "接続待ち" : "監視中")\nイベント \(eventCount) 件 / 新規候補 \(candidateCount) 件 / テスト要求 \(testCount) 件\n監視登録: \(registrations.isEmpty ? "なし" : registrations.joined(separator: ", "))"
         var reasons = healthIssues
+        if shareAllNotifications {
+            if !lineDelivery.ledger.healthy { reasons.append(tr("通知の記録を確認してください。通知の共有を保留しています。", "Check the notification ledger. Notification sharing is on hold.")) }
+            if lineDelivery.statusAvailable && lineDelivery.subscriptionReady == false { reasons.append(tr("Dotへの通知接続が必要です。", "Connect Dot to notification events.")) }
+        }
         if !paused && !AXIsProcessTrusted() { reasons.append("通知を再開するにはアクセシビリティを許可してください。") }
         else if !paused && observer == nil { reasons.append("通知の監視に再接続しています。") }
         if probes.values.contains(where: { $0.forwarding.hasPrefix("送信未確認") || $0.forwarding == "通知用接続設定なし" }) {
@@ -260,6 +281,19 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
         currentIcon = !healthChecked ? .checking : !healthReady || !reasons.isEmpty ? .attention : paused ? .paused : .ready
         connectionLabel.stringValue = notificationSummary + (migrationRequested && !AXIsProcessTrusted() ? tr("\nシステム設定でDot Linkを許可してください。戻ると引き継ぎを続けます。", "\nAllow Dot Link in System Settings. Migration continues when you return.") : "")
+        let statusSymbol: String
+        let statusColor: NSColor
+        if relaySuspended || paused {
+            statusSymbol = "pause.circle"; statusColor = .secondaryLabelColor
+        } else if legacyRunning || !AXIsProcessTrusted() {
+            statusSymbol = "exclamationmark.circle"; statusColor = .systemOrange
+        } else if observer == nil {
+            statusSymbol = "arrow.triangle.2.circlepath"; statusColor = .secondaryLabelColor
+        } else {
+            statusSymbol = "checkmark.circle.fill"; statusColor = .systemGreen
+        }
+        connectionStatusIcon.image = NSImage(systemSymbolName: statusSymbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
+        connectionStatusIcon.contentTintColor = statusColor
         changed?()
         stateLabel.stringValue += "\nテスト通知の表示権限: \(notificationPermission)"
         saveDiagnostics()
@@ -274,13 +308,25 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             let selectedApps: [String], registrations: [String]
             let icon: String, connectionReady: Bool
             let probes: [Probe]
+            let shareAllNotifications: Bool
+            let structureProbeActive: Bool
+            let structureSnapshots: [NotificationStructureProbe.Snapshot]
+            let lineExtractions: [NotificationForwarder.ExtractionEvent]
+            let lineDeliveries: [NotificationDeliveryLedger.Entry]
+            let lineLedgerHealthy: Bool
+            let notificationSubscriptionReady: Bool?
+            let notificationStatusAvailable: Bool
         }
-        let record = Diagnostic(version: 1, pid: ProcessInfo.processInfo.processIdentifier,
+        let record = Diagnostic(version: 2, pid: ProcessInfo.processInfo.processIdentifier,
             updatedAt: Date().timeIntervalSince1970, trusted: AXIsProcessTrusted(), paused: paused,
             observing: observer != nil, relaySuspended: relaySuspended, notificationPermission: notificationPermission,
             eventCount: eventCount, candidateCount: candidateCount, selectedApps: selected.sorted(),
             registrations: registrations, icon: currentIcon.rawValue, connectionReady: healthReady,
-            probes: probes.values.sorted { $0.dueAt < $1.dueAt })
+            probes: probes.values.sorted { $0.dueAt < $1.dueAt },
+            shareAllNotifications: shareAllNotifications, structureProbeActive: structureProbeEnabled, structureSnapshots: structureSnapshots,
+            lineExtractions: lineDelivery.extractionEvents,
+            lineDeliveries: Array(lineDelivery.ledger.entries.suffix(100)), lineLedgerHealthy: lineDelivery.ledger.healthy,
+            notificationSubscriptionReady: lineDelivery.subscriptionReady, notificationStatusAvailable: lineDelivery.statusAvailable)
         do {
             let data = try JSONEncoder().encode(record)
             try data.write(to: diagnosticURL, options: [.atomic])
@@ -288,6 +334,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         } catch { /* Diagnostics must not stop notification observation. */ }
     }
     func detach() {
+        lineDelivery.cancel()
         if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) }
         observer = nil; observedPID = 0; registrations = []
     }
@@ -313,9 +360,10 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
         guard registeredCount > 0 else { add("監視イベントが未対応です。検知は開始できません。"); updateState(); return }
         observer = created; observedPID = target.processIdentifier
+        baselineCurrentNotifications()
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(created), .commonModes)
         updateState()
-        // No initial scan: existing private notifications are not test arrivals.
+        // Baseline reads identifiers/roles only, never prior notification text.
     }
     func onEvent() {
         guard !relaySuspended, validating || (!legacyRunning && !paused) else { return }
@@ -331,33 +379,96 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         var value: CFTypeRef?
         return AXUIElementCopyAttributeValue(element, name as CFString, &value) == .success ? value : nil
     }
+    func continueDiagnosticProbe() {
+        // Developer-only, expiring local request; no hidden permanent test loop.
+        guard !paused, !relaySuspended, !legacyRunning, observer != nil, AXIsProcessTrusted(),
+              let config = structureProbeConfiguration,
+              let requestID = config["syntheticRequestID"] as? String, UUID(uuidString: requestID) != nil,
+              defaults.string(forKey: "lastDiagnosticSyntheticRequest") != requestID,
+              let count = config["syntheticCount"] as? Int, (1...5).contains(count) else { return }
+        defaults.set(requestID, forKey: "lastDiagnosticSyntheticRequest")
+        scheduleTests(count: count)
+    }
+    struct WindowRead {
+        var root: NotificationAXNode
+        var strings: [String]
+        var nodes: Int
+        var truncated: Bool
+    }
+    func readWindow(_ window: AXUIElement, index: Int, metadataOnly: Bool = false) -> WindowRead {
+        let config = metadataOnly ? nil : structureProbeConfiguration
+        let capture = config != nil
+        let expected = config?["expectedTexts"] as? [String] ?? []
+        var structure: [NotificationStructureProbe.Node] = []
+        var strings: [String] = []
+        var nodes = 0
+        var truncated = false
+        let deadline = Date().addingTimeInterval(0.25)
+        func walk(_ element: AXUIElement, depth: Int, path: String) -> NotificationAXNode {
+            guard depth < 16, nodes < 400, Date() < deadline else { truncated = true; return .init(role: "truncated") }
+            AXUIElementSetMessagingTimeout(element, 0.05)
+            nodes += 1
+            let role = attribute(element, kAXRoleAttribute) as? String ?? ""
+            let subrole = attribute(element, kAXSubroleAttribute) as? String ?? ""
+            let identifier = attribute(element, kAXIdentifierAttribute) as? String ?? ""
+            let stacking = attribute(element, "AXStackingIdentifier") as? String ?? ""
+            var fields: [String] = []
+            var matched = Set<String>()
+            var value = ""
+            if !metadataOnly {
+                for key in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
+                    if let text = attribute(element, key) as? String, !text.isEmpty {
+                        if !strings.contains(text) { strings.append(String(text.prefix(4000))) }
+                        if key == kAXValueAttribute { value = text }
+                        if capture { fields.append(key as String); matched.formUnion(NotificationStructureProbe.matches(text, expected: expected)) }
+                    }
+                }
+            }
+            if capture {
+                var supported: CFArray?
+                _ = AXUIElementCopyAttributeNames(element, &supported)
+                let names = (supported as? [String] ?? []).filter { $0.range(of: "^AX[A-Za-z]{1,80}$", options: .regularExpression) != nil }.sorted()
+                structure.append(.init(path: path, role: NotificationStructureProbe.safeRole(role),
+                    fields: fields.sorted(), matches: matched.sorted(),
+                    subrole: NotificationReader.notificationSubroles.contains(subrole) ? subrole : "other",
+                    identifierPresent: !identifier.isEmpty, stackingPresent: !stacking.isEmpty,
+                    lineStackingMatch: NotificationReader.isLine(stacking),
+                    ownStackingMatch: stacking == "app.tripsurf.dotlink.mac" || stacking.hasPrefix("app.tripsurf.dotlink.mac;"),
+                    supportedAttributes: names))
+            }
+            let children = attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []
+            if children.count > 400 { truncated = true }
+            return .init(role: role, subrole: subrole, identifier: identifier, stackingIdentifier: stacking, value: value,
+                children: children.prefix(400).enumerated().map { walk($0.element, depth: depth + 1, path: "\(path).\($0.offset)") })
+        }
+        let root = walk(window, depth: 0, path: "w\(index)")
+        if capture, !structure.isEmpty {
+            structureSnapshots.append(.init(observedAt: Date().timeIntervalSince1970, window: index, nodes: structure, truncated: truncated))
+            structureSnapshots = Array(structureSnapshots.suffix(100))
+        }
+        return .init(root: root, strings: strings, nodes: nodes, truncated: truncated)
+    }
+    func baselineCurrentNotifications() {
+        guard observedPID != 0, AXIsProcessTrusted() else { return }
+        let root = AXUIElementCreateApplication(observedPID)
+        for (index, window) in ((attribute(root, kAXWindowsAttribute) as? [AXUIElement]) ?? []).prefix(10).enumerated() {
+            let read = readWindow(window, index: index, metadataOnly: true)
+            if !read.truncated { lineDelivery.baseline(NotificationReader.extract(read.root)) }
+        }
+    }
     func scan() {
         guard !relaySuspended, observedPID != 0, AXIsProcessTrusted() else { detach(); updateState(); return }
         let root = AXUIElementCreateApplication(observedPID)
         let windows = attribute(root, kAXWindowsAttribute) as? [AXUIElement] ?? []
         seen = seen.filter { Date().timeIntervalSince($0.value) < 120 }
-        for window in windows.prefix(10) {
-            var strings: [String] = []
-            var attributeNames = Set<String>()
-            var nodes = 0
-            func walk(_ element: AXUIElement, _ depth: Int) {
-                guard depth < 16, nodes < 400 else { return }; nodes += 1
-                var names: CFArray?
-                if AXUIElementCopyAttributeNames(element, &names) == .success,
-                   let names = names as? [String] { attributeNames.formUnion(names) }
-                for key in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute] {
-                    if let value = attribute(element, key) as? String, !value.isEmpty, !strings.contains(value) { strings.append(String(value.prefix(2000))) }
-                }
-                for child in (attribute(element, kAXChildrenAttribute) as? [AXUIElement] ?? []) { walk(child, depth + 1) }
-            }
-            walk(window, 0)
+        for (index, window) in windows.prefix(10).enumerated() {
+            let read = readWindow(window, index: index)
+            if !read.truncated { lineDelivery.observe(NotificationReader.extract(read.root), selected: shareAllNotifications) }
+            let strings = read.strings
             guard !strings.isEmpty else { continue }
             let fingerprint = strings.joined(separator: "\u{1f}")
             guard seen[fingerprint] == nil else { continue }
             seen[fingerprint] = Date(); candidateCount += 1
-            let matches = appNames.filter { name in strings.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) }
-            // In the first probe, only our synthetic marker may reveal its body.
-            // Unknown/mixed windows remain metadata-only to avoid misattribution.
             let markers = strings.filter { probes[$0] != nil }
             if !markers.isEmpty {
                 for marker in markers {
@@ -365,17 +476,20 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                     probe.observations += 1
                     probe.bodyMatched = probe.bodyMatched || strings.contains(probe.body)
                     probe.sourceLabelMatched = probe.sourceLabelMatched || strings.contains("Dot Link")
-                    probe.attributes = attributeNames.sorted()
                     if probe.detectedAt == nil {
                         probe.detectedAt = Date().timeIntervalSince1970
-                        probe.selectedAtDetection = validating || selected.contains("Dot Notification Lab")
-                        add("テスト通知をAXで検知: \(marker)\n本文一致: \(probe.bodyMatched ? "はい" : "いいえ") / 選択対象: \(probe.selectedAtDetection! ? "はい" : "対象外・除外") / 表示アプリ候補: \(matches.joined(separator: ", "))")
+                        probe.selectedAtDetection = shareAllNotifications || validating || selected.contains("Dot Notification Lab")
+                        add("テスト通知をAXで検知: \(marker) / 本文一致: \(probe.bodyMatched)")
+                    }
+                    if shareAllNotifications, let extraction = NotificationReader.extract(read.root).first(where: { $0.notification?.title == marker && $0.notification?.body == probe.body }),
+                       let identity = extraction.identity, let entry = lineDelivery.ledger.entry(identity) {
+                        probe.notificationID = entry.id; probe.forwarding = entry.stage
                     }
                     probes[marker] = probe
-                    if probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwarding == "未送信" { forwardProbe(marker) }
+                    if !shareAllNotifications && probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwarding == "未送信" { forwardProbe(marker) }
                 }
             } else {
-                add("通知候補: アプリ候補 \(matches.isEmpty ? "不明" : matches.joined(separator: ", ")) / 文字列 \(strings.count) / 要素 \(nodes) — 本文非表示・転送保留")
+                add("通知候補: 要素 \(read.nodes) / 本文は診断に保存しません")
             }
         }
         updateState()

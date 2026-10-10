@@ -82,5 +82,13 @@ test('notification ingestion requires its own key and only Dot announcements ent
   const reply = await post('/mcp', tokens.mcp, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'announce_notification_to_g2', arguments: { notification_id: n.id, text: '通知です' } } });
   assert.equal((await reply.json()).result.structuredContent.stored_for_g2, true);
   assert.equal((await history())[0].kind, 'notification');
+  for (const key of [tokens.mcp, tokens.device, 'incorrect']) assert.equal((await post('/api/notifications/status', key, { ids: [n.id] })).status, 401);
+  const status = await post('/api/notifications/status', tokens.notification, { ids: [n.id] }).then(r => r.json());
+  assert.equal(status.notifications[0].status, 'announced');
+  assert.ok(status.notifications[0].client_response_at);
+  assert.equal(JSON.stringify(status).includes('Synthetic'), false);
+  assert.equal(JSON.stringify(status).includes('Body'), false);
+  assert.equal((await post('/api/notifications/status', tokens.notification, { ids: [n.id], text: 'forbidden' })).status, 400);
+  assert.equal((await fetch(base + '/api/notifications/status', {method: 'POST', headers: {Authorization: `Bearer ${tokens.notification}`, Origin: 'https://example.test'}, body: JSON.stringify({ids:[n.id]})})).status, 403);
   assert.deepEqual(bridge.history(), []);
 });

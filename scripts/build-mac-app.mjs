@@ -1,5 +1,4 @@
 import { cp, mkdir, readFile, writeFile, rm, readdir, lstat } from 'node:fs/promises';
-import {existsSync} from 'node:fs';
 import { resolve, join, dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 const root=resolve('.'), output=resolve(process.argv[2] ?? '.runtime/mac-app/Dot Link.app'), contents=join(output,'Contents'), payload=join(contents,'Resources/payload');
@@ -20,9 +19,9 @@ await mkdir(join(payload,'.runtime'),{recursive:true});
 await cp(join(root,'.runtime/vendor/runtime/bin'),join(payload,'.runtime/bin'),{recursive:true});
 await cp(join(root,'.runtime/vendor/runtime/licenses'),join(contents,'Resources/licenses'),{recursive:true});
 await mkdir(join(payload,'docs'),{recursive:true});
-const publicDocs=existsSync(join(root,'distribution/public/docs'))?join(root,'distribution/public/docs'):join(root,'docs');
+const publicDocs=join(root,'docs');
 for(const name of ['operations.md','dot-setup.md','privacy.md'])await cp(join(publicDocs,name),join(payload,'docs',name));
-await cp(existsSync(join(root,'distribution/public/LICENSE'))?join(root,'distribution/public/LICENSE'):join(root,'LICENSE'),join(contents,'Resources/licenses/Dot-Link-LICENSE.txt'));
+await cp(join(root,'LICENSE'),join(contents,'Resources/licenses/Dot-Link-LICENSE.txt'));
 await cp(join(root,'distribution/licenses'),join(contents,'Resources/licenses/additional'),{recursive:true});
 const copied=new Set();
 async function copyDependency(name,from=root){
@@ -47,12 +46,13 @@ await cp('native/DotLinkSetup/Info.plist',info);
 for(const [key,type,value] of [
  ['SUFeedURL','string',`https://raw.githubusercontent.com/${update.repository}/${update.branch}/${update.feedPath}`],
  ['SUPublicEDKey','string',update.publicKey],['SURequireSignedFeed','bool','YES'],['SUVerifyUpdateBeforeExtraction','bool','YES'],
- ['SUEnableAutomaticChecks','bool','YES'],['SUAutomaticallyUpdate','bool','NO'],['SUScheduledCheckInterval','integer','21600'],
+ ['DotLinkAutomaticUpdatesEnabled','bool',update.automaticUpdatesEnabled === true ? 'YES' : 'NO'],
+ ['SUEnableAutomaticChecks','bool',update.automaticUpdatesEnabled === true ? 'YES' : 'NO'],['SUAutomaticallyUpdate','bool','NO'],['SUScheduledCheckInterval','integer','21600'],
  ['DotLinkUpdateRepository','string',update.downloadRepository ?? update.repository]
 ])run('/usr/libexec/PlistBuddy',['-c',`Add :${key} ${type} ${value}`,info]);
 await cp('assets/brand/orbit/DotLink.icns',join(contents,'Resources/DotLink.icns'));
 await mkdir('.runtime/swift-module-cache',{recursive:true});
-run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
+run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
 for(const name of ['node','tunnel-client','whisper-cli'])run('/usr/bin/codesign',['--force','--sign','-',join(payload,'.runtime/bin',name)]);
 run('/usr/bin/codesign',['--force','--sign','-','--identifier','app.tripsurf.dotlink.mac',output]);
 run('/usr/bin/codesign',['--verify','--deep','--strict',output]);

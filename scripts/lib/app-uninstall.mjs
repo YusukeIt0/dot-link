@@ -6,7 +6,7 @@ import { run } from './setup.mjs';
 import { ownedJobs, regularPath, suspendServices } from './app-lifecycle.mjs';
 import { projectIdentity } from './mac-install.mjs';
 
-const dataNames = ['bridge-state.json','notification-state.json','mcp-key','device-key','notification-key',
+const dataNames = ['bridge-state.json','notification-state.json','mcp-key','mcp-authorization-header','device-key','notification-key',
  'pairing','tunnel.yaml','tunnel-api-key','device-config.json','beta-pairing.txt','beta-pairing.png',
  'latency-bridge.jsonl','latency-device.jsonl','notification-menu-unified','lifecycle.json',
  'bridge-service.log','device-service.log','tunnel-service.log','menu-service.log'];
@@ -44,40 +44,33 @@ export async function uninstallPlan(directory, app, {home=homedir(),execute=run}
   // Do not include changing history contents or credential values in this token.
   const token=createHash('sha256').update(JSON.stringify({identities,registrations})).digest('hex');
   return {token,app,directory,runtime,installed,managed,jobs,binaries,data,
-    removes:[app,...(installed&&managed?[directory]:binaries),...jobs.map(j=>j.path)],
+    removes:[app,...(installed&&managed?[directory]:[...binaries,...data]),...jobs.map(j=>j.path)],
     retainsSource:installed&&!managed};
 }
-export async function uninstallApp(directory,app,{home=homedir(),execute=run,wait,uid=process.getuid(),token,deleteData=false}={}) {
+export async function uninstallApp(directory,app,{home=homedir(),execute=run,wait,uid=process.getuid(),token,deleteData=true}={}) {
   const plan=await uninstallPlan(directory,app,{home,execute});
   if(typeof token!=='string'||token!==plan.token)throw new Error('UNINSTALL_PLAN_CHANGED');
-  if(typeof deleteData!=='boolean')throw new Error('INVALID_UNINSTALL_OPTION');
+  if(deleteData!==true)throw new Error('INVALID_UNINSTALL_OPTION');
   // Revalidate before any stop or file mutation; shared services block the whole operation.
   const trashRoot=join(home,'.Trash');await mkdir(trashRoot,{recursive:true,mode:0o700});await regularPath(trashRoot);
   const trash=await mkdtemp(join(trashRoot,'Dot Link-'));
-  const moves=[];let savedData;
+  const moves=[];
   async function move(source,destination){await regularPath(source);await rename(source,destination);moves.push([source,destination]);}
   let index=0;
   const trashItem=async source=>{if(await has(source))await move(source,join(trash,`${++index}-${source.split('/').at(-1)}`));};
   try {
     if(plan.installed)await suspendServices(directory,{reason:'quit',home,execute,wait,uid,app});
     else for(const j of plan.jobs)await execute('/bin/launchctl',['disable',`gui/${uid}/${j.label}`]);
-    if(plan.installed&&plan.managed&&!deleteData&&await has(plan.runtime)) {
-      const savedRoot=join(home,'Library/Application Support/Dot Link Saved Data');
-      await mkdir(savedRoot,{recursive:true,mode:0o700});await regularPath(savedRoot);
-      savedData=await mkdtemp(join(savedRoot,'saved-'));
-      await move(plan.runtime,join(savedData,'.runtime'));
-      for(const name of ['bin','models'])await trashItem(join(savedData,'.runtime',name));
-    }
     if(plan.installed&&plan.managed)await trashItem(directory);
     else {
       for(const p of plan.binaries)await trashItem(p);
-      if(deleteData){for(const p of plan.data)await trashItem(p);await trashItem(join(plan.runtime,'lifecycle.json'));}
-      else if(plan.installed)savedData=plan.runtime;
+      for(const p of plan.data)await trashItem(p);
+      if(plan.installed)await trashItem(join(plan.runtime,'lifecycle.json'));
     }
     for(const j of plan.jobs)await trashItem(j.path);
     // The running helper is already loaded. Move its bundle last, then report completion.
     await trashItem(app);
-    return {uninstalled:true,trash,savedData:deleteData?undefined:savedData,deleteData};
+    return {uninstalled:true,trash,deleteData:true};
   } catch(error) {
     let restored=true;
     for(const [from,to] of moves.reverse())try{await rename(to,from);}catch{restored=false;}

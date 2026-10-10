@@ -216,12 +216,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let token = plan["token"] as? String else { return }
         let alert = NSAlert(); alert.alertStyle = .warning
         alert.messageText = tr("このMacからDot Linkをアンインストールしますか？", "Uninstall Dot Link from this Mac?")
-        alert.informativeText = tr("会話の中継と通知を停止し、自動起動を解除します。Dot Linkと専用の実行ファイル・音声認識モデルをゴミ箱へ移動します。TailscaleやChatGPT側のDot、別のMacは変更しません。", "This stops the relay and notifications, removes login items, and moves Dot Link and its dedicated runtime and speech model to Trash. Tailscale, your Dot in ChatGPT, and other Macs are unchanged.")
+        alert.informativeText = tr("会話の中継と通知を停止し、自動起動を解除します。Dot Link、音声認識モデル、接続設定、会話履歴をゴミ箱へ移動します。再び使うには初期設定が必要です。", "This stops the relay and notifications, removes login items, and moves Dot Link, its speech model, connection settings, and conversation history to Trash. You will need to set up Dot Link again to use it.")
         if plan["retainsSource"] as? Bool == true { alert.informativeText += tr(" 開発用のソースフォルダは残します。", " The development source folder is preserved.") }
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
-        let removeData = NSButton(checkboxWithTitle: tr("接続設定と会話履歴も取り除く", "Also remove connection settings and conversation history"), target: nil, action: nil)
-        removeData.state = .off; box.addArrangedSubview(removeData)
-        box.addArrangedSubview(label(tr("未選択なら、設定と履歴はこのMacに保管します。", "Leave unchecked to keep settings and history on this Mac."), size: 12))
         let paths = (plan["removes"] as? [String] ?? []).joined(separator: "\n")
         let list = NSTextView(frame: NSRect(x: 0, y: 0, width: 480, height: 100)); list.string = paths; list.isEditable = false; list.font = .systemFont(ofSize: 11)
         let scroll = NSScrollView(frame: list.frame); scroll.hasVerticalScroller = true; scroll.documentView = list; box.addArrangedSubview(scroll)
@@ -232,7 +229,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if appUpdater?.cancelForQuit() == false {
             let alert = NSAlert(); alert.messageText = tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish"); alert.runModal(); return
         }
-        perform("uninstall", input: ["token": token, "deleteData": removeData.state == .on ? "true" : "false"])
+        perform("uninstall", input: ["token": token, "deleteData": "true"])
     }
     func label(_ text: String, size: CGFloat = 14, bold: Bool = false) -> NSTextField {
         let l = NSTextField(wrappingLabelWithString: text); l.font = .systemFont(ofSize: size, weight: bold ? .semibold : .regular); l.maximumNumberOfLines = 0; l.setContentCompressionResistancePriority(.required, for: .vertical); return l
@@ -494,7 +491,6 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
                 let alert = NSAlert(); alert.messageText = tr("アンインストールしました", "Dot Link was uninstalled")
                 alert.informativeText = tr("このMacのDot Linkは停止しました。取り除いたファイルはゴミ箱にあります。", "Dot Link has stopped on this Mac. Removed files are in Trash.")
-                if let saved = value["savedData"] as? String { alert.informativeText += "\n" + tr("設定と履歴の保管先：", "Settings and history: ") + saved }
                 if preferencesRetained { alert.informativeText += "\n" + tr("Macアプリの表示・通知設定は、バックアップできなかったため保持しています。", "Mac display and notification preferences were kept because their backup could not be created.") }
                 alert.runModal(); allowTermination = true; NSApp.terminate(nil); return
             }

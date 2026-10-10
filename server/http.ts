@@ -3,7 +3,7 @@ import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessageTool } from './bridge.ts';
 import { CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
-import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool } from './notifications.ts';
+import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
 
@@ -21,7 +21,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
       case 'events/list': result = { events: [eventDefinition, ...(notifications ? [notificationEvent] : [])] }; break;
       case 'events/subscribe': result = notifications && (params as { name?: string })?.name === 'notification.created' ? await notifications.subscribe(params) : await bridge.subscribe(params); break;
       case 'events/unsubscribe': result = notifications && (params as { name?: string })?.name === 'notification.created' ? await notifications.unsubscribe(params) : await bridge.unsubscribe(params); break;
-      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool] : [])] }; break;
+      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : [])] }; break;
       case 'tools/call': {
         if ((params as { name?: string })?.name === 'send_message_to_g2') {
           const input = z.object({ name: z.literal('send_message_to_g2'), arguments: z.unknown() }).parse(params);
@@ -29,8 +29,13 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
         if (notifications && (params as { name?: string })?.name === 'get_pending_notifications') {
-          z.object({ name: z.literal('get_pending_notifications'), arguments: z.object({}).strict().optional() }).parse(params);
-          const value = notifications.pending();
+          const input = z.object({ name: z.literal('get_pending_notifications'), arguments: z.unknown().optional() }).parse(params);
+          const value = notifications.pending(input.arguments);
+          result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
+        }
+        if (notifications && (params as { name?: string })?.name === 'set_notification_disposition') {
+          const input = z.object({ name: z.literal('set_notification_disposition'), arguments: z.unknown() }).parse(params);
+          const value = await notifications.decide(input.arguments);
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
         if (notifications && (params as { name?: string })?.name === 'announce_notification_to_g2') {
@@ -98,14 +103,21 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     if (request.headers.origin) { send(403, { error: 'Browser origin not enabled' }); return; }
     // This bridge uses static credentials, not OAuth. Missing metadata and
     // other unknown routes must be 404 rather than an authentication challenge.
-    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications'] : [])].includes(request.url ?? '')) {
+    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications', '/api/notifications/status'] : [])].includes(request.url ?? '')) {
       send(404, { error: 'Not found' }); return;
     }
-    const token = request.url === '/mcp' ? tokens.mcp : request.url === '/api/notifications' ? tokens.notification! : tokens.device;
+    const token = request.url === '/mcp' ? tokens.mcp : ['/api/notifications', '/api/notifications/status'].includes(request.url ?? '') ? tokens.notification! : tokens.device;
     if (!authorized(request.headers.authorization, token)) { send(401, { error: 'Unauthorized' }); return; }
     try {
       if (request.url === '/api/status' && request.method === 'GET') { send(200, { ...bridge.status(), ...(notifications?.status() ?? {}) }); return; }
-      if (request.url === '/api/messages' && request.method === 'GET') { send(200, history()); return; }
+      if (request.url === '/api/messages' && request.method === 'GET') {
+        const messages = history();
+        response.once('finish', () => notifications?.markClientResponse(messages.map(n => n.id)));
+        send(200, messages); return;
+      }
+      if (notifications && request.url === '/api/notifications/status' && request.method === 'POST') {
+        send(200, notifications.deliveryStatus(await body(request))); return;
+      }
       if (request.url === '/api/updates' && request.method === 'GET') {
         const after = request.headers['x-g2-revision'];
         if (after !== undefined && (typeof after !== 'string' || !/^[0-9a-f-]{36}:\d{1,12}$/.test(after))) { send(400, { error: 'Invalid revision' }); return; }
@@ -118,7 +130,11 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
             if (after !== cursor() || response.destroyed) finish();
           });
         }
-        if (!response.destroyed) send(200, snapshot());
+        if (!response.destroyed) {
+          const value = snapshot();
+          response.once('finish', () => notifications?.markClientResponse(value.messages.map(n => n.id)));
+          send(200, value);
+        }
         return;
       }
       if (request.url === '/api/timings' && request.method === 'POST') { bridge.latency.client(await body(request)); send(204); return; }

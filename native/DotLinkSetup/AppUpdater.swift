@@ -3,6 +3,8 @@ import Sparkle
 
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     var updater: SPUUpdater!
+    let automaticUpdatesEnabled: Bool
+    private let savedAutomaticPreferenceKey = "DotLinkAutomaticChecksBeforePolicyPause"
     var changed: (() -> Void)?
     var tr: (String, String) -> String = { ja, _ in ja }
     var canCheck: () -> Bool = { false }
@@ -24,17 +26,34 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private(set) var preparing = false
     private let repository = Bundle.main.object(forInfoDictionaryKey: "DotLinkUpdateRepository") as? String ?? ""
     var silentRelaunch: Bool { !manuallyApproved }
-    var automatic: Bool { updater?.automaticallyChecksForUpdates ?? true }
-    override init() {
+    var automatic: Bool { automaticUpdatesEnabled && (updater?.automaticallyChecksForUpdates ?? false) }
+    init(automaticUpdatesEnabled: Bool? = nil) {
+        self.automaticUpdatesEnabled = automaticUpdatesEnabled ?? (Bundle.main.object(forInfoDictionaryKey: "DotLinkAutomaticUpdatesEnabled") as? Bool ?? false)
         super.init()
         updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: self, delegate: self)
     }
+    // Keep the previous user preference so a future build can lift the policy
+    // pause without deleting the updater or losing the user's setting.
+    func applyAutomaticUpdatePolicy() {
+        let defaults = UserDefaults.standard
+        if !automaticUpdatesEnabled {
+            if defaults.object(forKey: savedAutomaticPreferenceKey) == nil {
+                defaults.set(updater.automaticallyChecksForUpdates, forKey: savedAutomaticPreferenceKey)
+            }
+            updater.automaticallyChecksForUpdates = false
+        } else if defaults.object(forKey: savedAutomaticPreferenceKey) != nil {
+            updater.automaticallyChecksForUpdates = defaults.bool(forKey: savedAutomaticPreferenceKey)
+            defaults.removeObject(forKey: savedAutomaticPreferenceKey)
+        }
+    }
     func start() {
+        applyAutomaticUpdatePolicy()
         updater.automaticallyDownloadsUpdates = false // All installation goes through our service preparation.
         updater.sendsSystemProfile = false
         do {
             try updater.start()
-            if automatic { status("アップデートを確認できます", "Ready to check for updates") }
+            if !automaticUpdatesEnabled { status("手動でアップデートを確認できます", "Check for updates manually") }
+            else if automatic { status("アップデートを確認できます", "Ready to check for updates") }
             else { status("自動更新はオフです", "Automatic updates are off") }
         } catch { status("更新を開始できません", "Updates could not start") }
     }
@@ -47,13 +66,24 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     func settingsView() -> NSView {
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-        let title = NSTextField(labelWithString: tr("アプリの更新", "App updates") + " · " + version); title.font = .systemFont(ofSize: 15, weight: .semibold); box.addArrangedSubview(title)
-        let toggle = NSButton(checkboxWithTitle: tr("自動更新", "Automatic updates"), target: self, action: #selector(toggleAutomatic(_:))); toggle.state = automatic ? .on : .off; box.addArrangedSubview(toggle)
+        let title = NSTextField(labelWithString: tr("バージョン：", "Version: ") + version); title.font = .systemFont(ofSize: 15, weight: .semibold); box.addArrangedSubview(title)
+        let toggle = NSButton(checkboxWithTitle: tr("自動更新", "Automatic updates"), target: self, action: #selector(toggleAutomatic(_:))); toggle.state = automatic ? .on : .off; toggle.isEnabled = automaticUpdatesEnabled; toggle.toolTip = automaticUpdatesEnabled ? nil : tr("自動更新は一時的に利用できません。手動で更新できます。", "Automatic updates are temporarily unavailable. You can update manually."); box.addArrangedSubview(toggle)
         box.addArrangedSubview(ActionButton(tr("アップデートを確認", "Check for updates")) { [weak self] in self?.check() })
         let detail = NSTextField(wrappingLabelWithString: message.isEmpty ? tr("自動更新は、Evenを使っていない間に適用します。", "Automatic updates install while Even is not in use.") : message); detail.font = .systemFont(ofSize: 12); detail.textColor = .secondaryLabelColor; box.addArrangedSubview(detail); statusLabel = detail
+        let guidance = NSTextField(wrappingLabelWithString: tr(
+            "自動更新は一時停止中です。更新する場合は「アップデートを確認」を押してください。\n更新後、通知を共有できなくなった場合：\nシステム設定 → プライバシーとセキュリティ → アクセシビリティで、Dot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。",
+            "Automatic updates are temporarily disabled. To update, click Check for updates.\nIf notification sharing stops after an update:\nOpen System Settings → Privacy & Security → Accessibility. Remove Dot Link, add Dot Link.app again from its installation folder, then turn access on."))
+        guidance.font = .systemFont(ofSize: 12); guidance.textColor = .secondaryLabelColor
+        guidance.isSelectable = true; guidance.maximumNumberOfLines = 0
+        guidance.setContentCompressionResistancePriority(.required, for: .vertical)
+        if !automaticUpdatesEnabled {
+            box.addArrangedSubview(guidance)
+            guidance.widthAnchor.constraint(equalTo: box.widthAnchor).isActive = true
+        }
         return box
     }
     @objc private func toggleAutomatic(_ sender: NSButton) {
+        guard automaticUpdatesEnabled else { sender.state = .off; return }
         updater.automaticallyChecksForUpdates = sender.state == .on
         if automatic && !working && !preparing { status("自動更新はオンです", "Automatic updates are on") }
         if !automatic && !manuallyApproved && !preparing {
@@ -72,6 +102,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         return true
     }
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        guard automaticUpdatesEnabled || updateCheck == .updates else {
+            throw NSError(domain: "DotLinkUpdate", code: 4, userInfo: [NSLocalizedDescriptionKey: tr("自動更新は一時停止中です。手動で確認してください。", "Automatic updates are temporarily disabled. Check manually.")])
+        }
         guard canCheck() else { throw NSError(domain: "DotLinkUpdate", code: 1, userInfo: [NSLocalizedDescriptionKey: tr("Macの準備が終わってから確認してください。", "Finish Mac setup before checking for updates.")]) }
     }
     static func validDownloadURL(_ url: URL, repository: String) -> Bool {
@@ -89,7 +122,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
     }
-    func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) { reply(SUUpdatePermissionResponse(automaticUpdateChecks: true, sendSystemProfile: false)) }
+    func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) { reply(SUUpdatePermissionResponse(automaticUpdateChecks: automaticUpdatesEnabled, sendSystemProfile: false)) }
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) { cancelDownload = cancellation; status("更新を確認中…", "Checking for updates…") }
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
         cancelDownload = nil; manuallyApproved = false

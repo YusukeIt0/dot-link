@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, access, realpath, symlink, chmod } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, access, realpath, symlink, chmod, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay } from '../scripts/lib/app-lifecycle.mjs';
@@ -69,26 +69,29 @@ test('changed confirmation token and symlink roots refuse uninstall without stop
  const other=join(f.home,'alias.app');await symlink(f.app,other);
  await assert.rejects(uninstallPlan(f.directory,other,f),/UNSAFE_INSTALL_PATH/);
 });
-test('legacy uninstall moves only dedicated app/runtime to Trash; source and default data survive',async t=>{
- const f=await fixture(t);await writeFile(join(f.runtime,'unrelated-backup'),'preserve');
- const p=await uninstallPlan(f.directory,f.app,f);const r=await uninstallApp(f.directory,f.app,{...f,token:p.token});
- assert.equal(r.uninstalled,true);assert.equal(r.savedData,f.runtime);assert.equal(await exists(f.app),false);
- assert.equal(await exists(join(f.runtime,'models')),false);assert.equal(await readFile(join(f.runtime,'bridge-state.json'),'utf8'),'private fixture history');
- assert.equal(await readFile(join(f.directory,'keep-source.txt'),'utf8'),'source');assert.equal(await readFile(join(f.runtime,'unrelated-backup'),'utf8'),'preserve');
- assert.equal(await exists(f.plists.bridge),false);assert.equal(await exists(f.plists['setup-ui']),false);
-});
-test('legacy remove-data choice moves known history/credentials but preserves unrelated development state',async t=>{
+test('legacy uninstall removes known data and models while preserving source and unrelated development state',async t=>{
  const f=await fixture(t);await writeFile(join(f.runtime,'deploy-key'),'do not touch');
- const p=await uninstallPlan(f.directory,f.app,f);await uninstallApp(f.directory,f.app,{...f,token:p.token,deleteData:true});
- assert.equal(await exists(join(f.runtime,'bridge-state.json')),false);assert.equal(await exists(join(f.runtime,'device-key')),false);assert.equal(await readFile(join(f.runtime,'deploy-key'),'utf8'),'do not touch');
+ await writeFile(join(f.runtime,'mcp-authorization-header'),'fixture header');
+ const p=await uninstallPlan(f.directory,f.app,f);
+ assert.ok(p.removes.includes(join(f.runtime,'bridge-state.json')));
+ const r=await uninstallApp(f.directory,f.app,{...f,token:p.token});
+ assert.equal(r.uninstalled,true);assert.equal(r.deleteData,true);assert.equal(r.savedData,undefined);
+ for(const path of [f.app,join(f.runtime,'models'),join(f.runtime,'bridge-state.json'),join(f.runtime,'device-key'),join(f.runtime,'mcp-authorization-header'),f.plists.bridge,f.plists['setup-ui']])assert.equal(await exists(path),false,path);
+ assert.equal(await readFile(join(f.directory,'keep-source.txt'),'utf8'),'source');assert.equal(await readFile(join(f.runtime,'deploy-key'),'utf8'),'do not touch');
+ const history=(await readdir(r.trash)).find(n=>n.endsWith('-bridge-state.json'));
+ assert.equal(await readFile(join(r.trash,history),'utf8'),'private fixture history');
 });
-test('managed uninstall preserves settings separately, removes model and complete payload, allowing fresh install',async t=>{
+test('managed uninstall defaults to removing all data with recoverable contents in Trash',async t=>{
  const f=await fixture(t,{managed:true});const p=await uninstallPlan(f.directory,f.app,f);const r=await uninstallApp(f.directory,f.app,{...f,token:p.token});
- assert.equal(await exists(f.directory),false);assert.equal(await readFile(join(r.savedData,'.runtime/bridge-state.json'),'utf8'),'private fixture history');assert.equal(await exists(join(r.savedData,'.runtime/models')),false);
+ assert.equal(await exists(f.directory),false);assert.equal(await exists(f.app),false);assert.equal(r.savedData,undefined);
+ assert.equal(await exists(join(f.home,'Library/Application Support/Dot Link Saved Data')),false);
+ const payload=(await readdir(r.trash)).find(n=>n.endsWith('-Dot Link'));
+ for(const [path,contents] of [['bridge-state.json','private fixture history'],['device-key','test-only-key'],['models/model.bin','fixture model']])assert.equal(await readFile(join(r.trash,payload,'.runtime',path),'utf8'),contents);
 });
-test('managed remove-data option retains no live data folder; all removed files remain recoverable in Trash',async t=>{
- const f=await fixture(t,{managed:true});const p=await uninstallPlan(f.directory,f.app,f);const r=await uninstallApp(f.directory,f.app,{...f,token:p.token,deleteData:true});
- assert.equal(await exists(f.directory),false);assert.equal(r.savedData,undefined);assert.equal(await exists(r.trash),true);
+test('obsolete retain-data requests fail before stopping services or moving files',async t=>{
+ const f=await fixture(t,{managed:true});const p=await uninstallPlan(f.directory,f.app,f);
+ for(const deleteData of [false,'true',null])await assert.rejects(uninstallApp(f.directory,f.app,{...f,token:p.token,deleteData}),/INVALID_UNINSTALL_OPTION/);
+ assert.equal(f.disabled.size,0);assert.equal(await exists(f.app),true);assert.equal(await exists(join(f.runtime,'bridge-state.json')),true);assert.equal(await exists(join(f.home,'.Trash')),false);
 });
 test('stop failure prevents file removal and reports failure rather than successful uninstall',async t=>{
  const f=await fixture(t);const p=await uninstallPlan(f.directory,f.app,f);
@@ -104,6 +107,7 @@ test('a late filesystem failure restores earlier moved runtime and login items',
   await assert.rejects(uninstallApp(f.directory,f.app,{...f,token:p.token}),/UNINSTALL_FAILED_RESTORED/);
   assert.equal(await exists(f.app),true);assert.equal(await exists(join(f.runtime,'models/model.bin')),true);
   assert.equal(await exists(f.plists.bridge),true);assert.equal(await exists(f.plists['setup-ui']),true);
+  assert.equal(await readFile(join(f.runtime,'bridge-state.json'),'utf8'),'private fixture history');
  } finally { await chmod(apps,0o700); }
 });
 

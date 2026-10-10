@@ -9,6 +9,7 @@ npm ci
 npm test
 npm run test:http
 npm run build
+sh scripts/test-notification-native.sh
 ```
 
 Pushes and pull requests run these checks in GitHub Actions. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
@@ -19,6 +20,7 @@ Apple Silicon macOS, Xcode Command Line Tools, Python 3 and CMake are required.
 
 ```sh
 python3 scripts/prepare-mac-runtime.py
+node scripts/prepare-sparkle.mjs
 node scripts/test-mac-update-driver.mjs
 node scripts/build-mac-app.mjs
 ```
@@ -54,8 +56,8 @@ Even Hub publication is separate from Mac Releases. The internal package IDs rem
 
 ## 日本語
 
-通常の変更はCIでテストします。動作確認済みの版だけをReleasesへ公開し、署名した配信情報を更新します。利用者は「自動更新」または「アップデートを確認」を使うだけです。署名鍵は配布担当者だけがローカルに保管します。開発者がソースからビルドするために、配布担当者の鍵や利用者の認証情報を受け取る必要はありません。
+通常の変更はCIでテストします。動作確認済みの版だけをReleasesへ公開し、署名した配信情報を更新します。現在は自動更新を一時停止しています。利用者は「アップデートを確認」から手動で更新できます。署名鍵は配布担当者だけがローカルに保管します。開発者がソースからビルドするために、配布担当者の鍵や利用者の認証情報を受け取る必要はありません。
 
 ## Repository rename compatibility
 
-The public repository is `YusukeIt0/dot-link` (formerly `dot-link-app`); the private history is `dot-link-dev`. Local checkout directories stay unchanged. The signed feed and future release enclosures intentionally use the `dot-link-app` download alias, which GitHub redirects to `dot-link`. Installed 0.2.21 clients restrict downloads to that original path. `downloadRepository` keeps publisher and client URL validation consistent; do not reuse the old name or remove this compatibility without a client migration. New builds use the canonical `dot-link` feed URL. Existing signed releases are unchanged.
+The repository is `YusukeIt0/dot-link` (formerly `dot-link-app`). The signed feed and future release enclosures intentionally use the `dot-link-app` download alias, which GitHub redirects to `dot-link`. Installed 0.2.21 clients restrict downloads to that original path. `downloadRepository` keeps publisher and client URL validation consistent; do not reuse the old name or remove this compatibility without a client migration. New builds use the canonical `dot-link` feed URL. Existing signed releases are unchanged.

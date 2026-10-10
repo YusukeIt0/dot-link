@@ -80,3 +80,64 @@ test('notification RPC exposes untrusted data without interpreting it or mixing 
   assert.equal(s.events[0].data.notification_id, n.id);
   assert.equal(Object.hasOwn(s.events[0].data, 'body'), false);
 });
+
+test('delivery diagnostics distinguish receipt, Dot read, announcement and client response without text', async t => {
+  const s = setup(t); await s.inbox.subscribe(request);
+  const n = input(); await s.inbox.submit(n);
+  let info = s.inbox.deliveryStatus({ ids: [n.id, randomUUID()] });
+  assert.equal(info.notifications[0].status, 'accepted');
+  assert.ok(info.notifications[0].received_at);
+  assert.equal(info.notifications[0].dot_read_at, undefined);
+  assert.equal(info.notifications[1].status, 'unknown');
+  assert.equal(JSON.stringify(info).includes(n.title), false);
+  assert.equal(JSON.stringify(info).includes(n.body), false);
+  assert.equal(JSON.stringify(info).includes(request.delivery.secret), false);
+  s.inbox.pending();
+  assert.ok(s.inbox.deliveryStatus({ ids: [n.id] }).notifications[0].dot_read_at);
+  s.inbox.markClientResponse([`notification:${n.id}`]);
+  assert.equal(s.inbox.deliveryStatus({ ids: [n.id] }).notifications[0].client_response_at, undefined);
+  await s.inbox.announce({ notification_id: n.id, text: 'fixture announcement' });
+  s.inbox.markClientResponse([`notification:${n.id}`]);
+  info = s.inbox.deliveryStatus({ ids: [n.id] });
+  assert.ok(info.notifications[0].announced_at);
+  assert.ok(info.notifications[0].client_response_at);
+  await s.inbox.submit(n); // Diagnostic timestamps must not create an ID conflict.
+  assert.equal(s.events.length, 1);
+  assert.throws(() => s.inbox.deliveryStatus({ ids: [n.id], body: 'must not enter diagnostics' }));
+  assert.throws(() => s.inbox.deliveryStatus({ ids: Array(101).fill(n.id) }));
+});
+
+test('two separate notifications with identical content each create one event and survive reload', async t => {
+  const s = setup(t); await s.inbox.subscribe(request);
+  const first = input(), second = { ...first, id: randomUUID() };
+  await Promise.all([s.inbox.submit(first), s.inbox.submit(second), s.inbox.submit(first)]);
+  assert.equal(s.events.length, 2);
+  assert.equal(s.inbox.pending().notifications.length, 2);
+  const restored = new NotificationInbox(s.path, s.sender, s.hosts);
+  await restored.submit(first); await restored.submit(second);
+  assert.equal(s.events.length, 2);
+});
+
+
+test('Dot can defer or silence notifications without G2 output and revisit retained deferred items', async t => {
+  const s = setup(t); await s.inbox.subscribe(request);
+  const later = input(), silent = input(), fresh = input();
+  await s.inbox.submit(later); await s.inbox.submit(silent); await s.inbox.submit(fresh);
+  const call = async (name: string, args: unknown) => rpc(s.voice, { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }, s.inbox) as Promise<any>;
+  const decision = await call('set_notification_disposition', { notification_id: later.id, disposition: 'later' });
+  assert.equal(decision.result.structuredContent.wakeup_scheduled, false);
+  await s.inbox.decide({ notification_id: silent.id, disposition: 'silent' });
+  assert.deepEqual(s.inbox.pending().notifications.map(n => n.notification_id), [fresh.id]);
+  const all = await call('get_pending_notifications', { include_deferred: true });
+  assert.deepEqual(all.result.structuredContent.notifications.map((n: any) => n.notification_id), [later.id, fresh.id]);
+  assert.deepEqual(s.inbox.history(), []);
+  const restored = new NotificationInbox(s.path, s.sender, s.hosts);
+  await restored.submit(later); // Decisions must not break transport retry idempotency.
+  assert.equal(restored.deliveryStatus({ ids: [silent.id] }).notifications[0].disposition, 'silent');
+  await assert.rejects(restored.announce({ notification_id: silent.id, text: 'must stay silent' }));
+  await restored.announce({ notification_id: later.id, text: 'Dot chose to announce now' });
+  assert.equal(restored.history().length, 1);
+  await assert.rejects(restored.decide({ notification_id: later.id, disposition: 'silent' }));
+  await assert.rejects(restored.decide({ notification_id: randomUUID(), disposition: 'later' }));
+  assert.equal(restored.deliveryStatus({ ids: [later.id] }).notifications[0].disposition, undefined);
+});

@@ -10,10 +10,10 @@ An open-source Mac companion that connects your existing ChatGPT Dot with Even G
 [Releases](https://github.com/YusukeIt0/dot-link/releases/latest)からMac用ZIPをダウンロードし、展開した**Dot Link.app**をユーザーの**Applications**フォルダへ入れて開いてください。
 
 - **対応:** Apple Silicon Mac、macOS 13以降。
-- **更新:** 設定の「自動更新」でオン／オフを選べます。「アップデートを確認」はいつでも使えます。GitHubへのログインや更新キーは不要です。
-- **配布署名:** 更新ファイルと配信情報はEd25519で検証します。現在のMacアプリはアドホック署名で、Apple公証済みではありません。初回起動や通知権限にmacOS側の確認が必要な場合があります。
+- **更新:** 自動更新は一時停止中です。設定の「アップデートを確認」から手動で更新できます。GitHubへのログインや更新キーは不要です。
+- **配布署名:** 更新ファイルと配信情報はEd25519で検証します。現在のMacアプリはアドホック署名で、Apple公証済みではありません。初回起動にmacOS側の確認が必要な場合があります。更新後に通知を共有できない場合は、アクセシビリティ内にあるDot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。
 
-Download the Mac ZIP from Releases, move **Dot Link.app** to your user's **Applications** folder, and open it. Updates are public and require no GitHub account or token. Choose automatic updates or use **Check for updates**. This build is for Apple Silicon on macOS 13 or later and is not Apple-notarized.
+Download the Mac ZIP from Releases, move **Dot Link.app** to your user's **Applications** folder, and open it. Updates are public and require no GitHub account or token. Automatic updates are temporarily disabled. Use **Check for updates** to update manually. This build is for Apple Silicon on macOS 13 or later and is not Apple-notarized. If notification sharing stops after an update, remove Dot Link from the Accessibility list, add the installed Dot Link.app again, and turn access on.
 
 ## What you need / 必要なもの
 
@@ -30,8 +30,8 @@ You also need the Dot Link companion, now available in [Even Hub](https://hub.ev
 
 - Macで音声認識し、既存Dotへ発話を届け、返信をEvenへ返します。開発者が運営する共用の会話サーバーは使いません。会話相手は本人の既存Dotです。
 - Macで発行した接続コードをEven側へ貼り付けます。接続設定を保存し、アプリ更新後も引き継ぎます。
-- 自動更新はEvenの接続・処理が落ち着くまで待ちます。会話中に更新を強制しません。
-- Mac通知の取り込みは試作段階です。一般アプリの通知転送・返信は未完成です。
+- 更新はEvenの接続・処理が落ち着くまで待ちます。会話中に更新を強制しません。
+- 「Macの全通知をDotに共有」を有効にすると、読み取れる新着通知の送信者・見出し・本文を既存Dotへ共有します。何をいつ知らせるかはDotが判断します。対応する通知形式は検証中で、すべての通知の取得や即時到着を保証するものではありません。通知元アプリへの返信操作には対応していません。
 - スリープ復帰、ネットワーク切断、長時間利用、全利用者環境での動作は引き続き検証中です。
 
 ## Development

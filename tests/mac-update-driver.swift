@@ -6,7 +6,7 @@ final class ActionButton: NSButton {
     convenience init(_ text: String, _ action: @escaping () -> Void) { self.init(title: text, target: nil, action: nil); handler = action; target = self; self.action = #selector(invoke) }
 }
 let app = NSApplication.shared
-let driver = AppUpdater()
+let driver = AppUpdater(automaticUpdatesEnabled: true)
 func buttons(_ view: NSView) -> [NSButton] { (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons) }
 precondition(!buttons(driver.settingsView()).contains { $0.title.contains("キー") || $0.title.contains("access") }, "Public channel must not show credential controls")
 driver.canCheck = { true }
@@ -55,6 +55,35 @@ precondition(!driver.automatic && driver.message == "自動更新はオフです
 automaticToggle.state = .on; app.sendAction(automaticToggle.action!, to: automaticToggle.target, from: automaticToggle)
 precondition(driver.automatic && driver.message == "自動更新はオンです")
 print("PASS: switching automatic updates updates the visible on/off state")
+
+let locked = AppUpdater(automaticUpdatesEnabled: false)
+locked.canCheck = { true }
+locked.updater.automaticallyChecksForUpdates = true
+locked.applyAutomaticUpdatePolicy()
+precondition(!locked.automatic && !locked.updater.automaticallyChecksForUpdates)
+let lockedToggle = buttons(locked.settingsView()).first { $0.title == "自動更新" }!
+precondition(!lockedToggle.isEnabled && lockedToggle.state == .off)
+lockedToggle.state = .on; app.sendAction(lockedToggle.action!, to: lockedToggle.target, from: lockedToggle)
+precondition(!locked.automatic && lockedToggle.state == .off)
+precondition(buttons(locked.settingsView()).first { $0.title == "アップデートを確認" }!.isEnabled)
+try! locked.updater(locked.updater, mayPerform: .updates)
+do { try locked.updater(locked.updater, mayPerform: .updatesInBackground); preconditionFailure("Background check must be blocked") } catch {}
+locked.updater.automaticallyChecksForUpdates = true // Stale preferences cannot override the release policy.
+precondition(!locked.automatic)
+var lockedChoice: SPUUserUpdateChoice?
+var preparedWhileLocked = false
+locked.prepare = { _ in preparedWhileLocked = true }
+locked.showReady(toInstallAndRelaunch: { lockedChoice = $0 })
+precondition(lockedChoice == .skip && !preparedWhileLocked)
+func labels(_ view: NSView) -> [String] { (view as? NSTextField).map { [$0.stringValue] } ?? view.subviews.flatMap(labels) }
+locked.showUpdateNotFoundWithError(NSError(domain: "fixture", code: 0)) {}
+let messages = labels(locked.settingsView())
+precondition(messages.contains("最新バージョンです") && messages.contains(where: { $0.contains("アクセシビリティ") && $0.contains("追加し直して") }))
+locked.tr = { _, en in en }; locked.refreshLanguage()
+precondition(labels(locked.settingsView()).contains(where: { $0.contains("Accessibility") && $0.contains("add Dot Link.app again") }))
+driver.applyAutomaticUpdatePolicy()
+precondition(driver.updater.automaticallyChecksForUpdates, "Lifting the policy restores the saved preference")
+print("PASS: disabled control, background veto, stale-preference install veto, manual check, bilingual recovery guidance, reversible preference")
 
 if CommandLine.arguments.contains("--preview") {
     app.setActivationPolicy(.regular)

@@ -141,7 +141,7 @@ try {
     result = { uninstallPlan: { token: plan.token, removes: plan.removes, dataDirectory: plan.runtime, retainsSource: plan.retainsSource, managed: plan.managed } };
   } else if (action === 'uninstall') {
     const found = await discoverInstallation();
-    if (!['true','false'].includes(input.deleteData)) throw new Error('INVALID_UNINSTALL_OPTION');
+    if (input.deleteData !== 'true') throw new Error('INVALID_UNINSTALL_OPTION');
     result = await uninstallApp(found.directory, appBundle, {token:input.token,deleteData:input.deleteData === 'true'});
   } else if (action === 'pair') {
     const state = await inspect();
