@@ -11,7 +11,7 @@
 
 ## Even
 
-Dot LinkはEven Hubで公開中です。Evenアプリの「Even Hub」で「Dot Link」を検索し、インストールして開いてください。Mac版も別途必要です。
+[Dot LinkをEven Hubで開く](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)。パソコンで開いた場合は、ページのQRコードをiPhoneで読み取ってください。Evenアプリの「Even Hub」で「Dot Link」を検索して開くこともできます。Dot Linkをインストールしてから、以下の接続手順へ進んでください。Mac版も別途必要です。
 
 1. Macの「Evenを接続」から接続コードを発行します。
 2. Even側にコード全体を貼り付けて保存します。コードは2分間・1回限りです。
@@ -32,4 +32,4 @@ Dot LinkはEven Hubで公開中です。Evenアプリの「Even Hub」で「Dot 
 
 Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and open it. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. On the Mac, create an Even connection code; paste the entire code into the Even companion and save it. Codes expire after two minutes and work once.
 
-The Dot Link companion is available in Even Hub. Search for “Dot Link” in the Even Realities app, install it, and open it before pairing. The Mac companion is also required. Use **Automatic updates** or **Check for updates**; neither requires GitHub credentials. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
+[Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. The Mac companion is also required. Use **Automatic updates** or **Check for updates**; neither requires GitHub credentials. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
