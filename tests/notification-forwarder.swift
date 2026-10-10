@@ -2,8 +2,14 @@ import Foundation
 
 final class FixtureProtocol: URLProtocol {
     static let lock = NSLock()
-    static var posts: [[String: Any]] = []
-    static var failFirst = false
+    private static var recordedPosts: [[String: Any]] = []
+    private static var failFirst = false
+    static var posts: [[String: Any]] {
+        lock.lock(); defer { lock.unlock() }; return recordedPosts
+    }
+    static func failNextPost() {
+        lock.lock(); defer { lock.unlock() }; failFirst = true
+    }
     override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "127.0.0.1" }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -16,7 +22,7 @@ final class FixtureProtocol: URLProtocol {
         let value = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any] ?? [:]
         let data: Data
         if request.url!.path == "/api/notifications" {
-            Self.lock.lock(); Self.posts.append(value); let shouldFail = Self.failFirst; Self.failFirst = false; Self.lock.unlock()
+            Self.lock.lock(); Self.recordedPosts.append(value); let shouldFail = Self.failFirst; Self.failFirst = false; Self.lock.unlock()
             if shouldFail { client?.urlProtocol(self, didFailWithError: URLError(.timedOut)); return }
             data = try! JSONSerialization.data(withJSONObject: ["notification_id": value["id"]!, "status": "accepted"])
         } else {
@@ -30,11 +36,11 @@ final class FixtureProtocol: URLProtocol {
 @main enum NotificationForwarderTests {
 static func main() throws {
 var count = 0
-func check(_ condition: @autoclosure () -> Bool) { precondition(condition()); count += 1 }
-func wait(_ condition: () -> Bool) {
+func check(_ condition: @autoclosure () -> Bool, file: StaticString = #fileID, line: UInt = #line) { precondition(condition(), "Check \(count + 1) failed", file: file, line: line); count += 1 }
+func wait(file: StaticString = #fileID, line: UInt = #line, _ condition: () -> Bool) {
     let until = Date().addingTimeInterval(3)
     while !condition() && Date() < until { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
-    check(condition())
+    check(condition(), file: file, line: line)
 }
 func fixture(_ id: String, source: String = NotificationReader.lineBundleID) -> [NotificationExtraction] {
     NotificationReader.extract(.init(role: "AXGroup", subrole: "AXNotificationCenterBanner", identifier: id,
@@ -47,8 +53,10 @@ defer { try? FileManager.default.removeItem(at: root) }
 try Data(String(repeating: "x", count: 64).utf8).write(to: root.appendingPathComponent("notification-key"))
 let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [FixtureProtocol.self]
 let session = URLSession(configuration: config)
+defer { session.invalidateAndCancel() }
 var allowed = true
-let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, allowed: { allowed }, changed: {})
+var onChange: () -> Void = {}
+let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, allowed: { allowed }, changed: { onChange() })
 forwarder.observe(fixture("excluded"), selected: false)
 check(FixtureProtocol.posts.isEmpty)
 forwarder.observe(fixture("excluded"), selected: true)
@@ -58,7 +66,7 @@ check(FixtureProtocol.posts.isEmpty)
 allowed = true
 forwarder.baseline(fixture("baseline")); forwarder.observe(fixture("baseline"), selected: true)
 check(FixtureProtocol.posts.isEmpty)
-FixtureProtocol.failFirst = true
+FixtureProtocol.failNextPost()
 forwarder.observe(fixture("first", source: ""), selected: true)
 wait { forwarder.ledger.entries.first { $0.identity == NotificationReader.opaqueIdentity("first") }?.stage == "dot_notified" }
 check(FixtureProtocol.posts.count == 2)
@@ -71,10 +79,18 @@ wait { forwarder.ledger.entries.first { $0.identity == NotificationReader.opaque
 check(FixtureProtocol.posts.count == 3)
 check(FixtureProtocol.posts[1]["body"] as? String == FixtureProtocol.posts[2]["body"] as? String)
 check(FixtureProtocol.posts[1]["id"] as? String != FixtureProtocol.posts[2]["id"] as? String)
-FixtureProtocol.failFirst = true
+// Cancel from the failure callback itself. Polling the transient failure stage
+// raced the 40 ms retry on a busy CI runner and could miss that stage entirely.
+var cancelledAtFailure = false
+onChange = {
+    guard !cancelledAtFailure,
+          forwarder.ledger.entry(NotificationReader.opaqueIdentity("cancelled"))?.stage == "send_unconfirmed" else { return }
+    cancelledAtFailure = true
+    allowed = false; forwarder.cancel()
+}
+FixtureProtocol.failNextPost()
 forwarder.observe(fixture("cancelled"), selected: true)
-wait { forwarder.ledger.entries.first { $0.identity == NotificationReader.opaqueIdentity("cancelled") }?.stage == "send_unconfirmed" }
-allowed = false; forwarder.cancel()
+wait { cancelledAtFailure }
 RunLoop.main.run(until: Date().addingTimeInterval(0.15))
 check(FixtureProtocol.posts.count == 4)
 let encoded = try JSONEncoder().encode(forwarder.ledger.entries)
