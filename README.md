@@ -17,6 +17,9 @@ Download the Mac ZIP from Releases, move **Dot Link.app** to your user's **Appli
 
 ## What you need / 必要なもの
 
+Macは起動し、ネットワークに接続しておく必要があります。スリープ中は利用できません。iPhone単体では動作しません。
+The Mac must remain awake and online. An iPhone alone is not enough.
+
 - Even G2、Evenアプリ、Even Hubで公開中の[**Dot Link**](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)。Evenアプリの「Even Hub」で「Dot Link」を検索してインストールしてください。Mac版も別途必要です。
 - 自分の既存ChatGPT Dotと、利用可能なOpenAIのトンネル／プラグイン接続。対応する機能がアカウントに必要です。
 - MacとiPhoneのTailscale接続。ログインと機器の許可は本人が行います。
@@ -25,7 +28,7 @@ You also need the Dot Link companion, now available in [Even Hub](https://hub.ev
 
 ## Current capabilities / 現在の機能
 
-- Macで音声認識し、既存Dotへ発話を届け、返信をEvenへ返します。Mac側に共有の会話サーバーや代替チャットモデルを追加しません。
+- Macで音声認識し、既存Dotへ発話を届け、返信をEvenへ返します。開発者が運営する共用の会話サーバーは使いません。会話相手は本人の既存Dotです。
 - Macで発行した接続コードをEven側へ貼り付けます。接続設定を保存し、アプリ更新後も引き継ぎます。
 - 自動更新はEvenの接続・処理が落ち着くまで待ちます。会話中に更新を強制しません。
 - Mac通知の取り込みは試作段階です。一般アプリの通知転送・返信は未完成です。
