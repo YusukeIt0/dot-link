@@ -17,11 +17,11 @@ Download the Mac ZIP from Releases, move **Dot Link.app** to your user's **Appli
 
 ## What you need / 必要なもの
 
-- Even G2、Evenアプリ、Dot LinkのEven側パッケージ。**Even Hubでの一般公開はまだ行っていません。Mac版の公開だけでEven側へインストールされるわけではありません。**
+- Even G2、Evenアプリ、Even Hubで公開中の**Dot Link**。Evenアプリの「Even Hub」で「Dot Link」を検索してインストールしてください。Mac版も別途必要です。
 - 自分の既存ChatGPT Dotと、利用可能なOpenAIのトンネル／プラグイン接続。対応する機能がアカウントに必要です。
 - MacとiPhoneのTailscale接続。ログインと機器の許可は本人が行います。
 
-You also need the Even companion (not yet generally available in Even Hub), your own existing ChatGPT Dot with access to the required OpenAI tunnel/plugin features, and Tailscale on your Mac and iPhone. A dedicated Mac mini is not required.
+You also need the Dot Link companion, now available in Even Hub (search for “Dot Link” in the Even Realities app), your own existing ChatGPT Dot with access to the required OpenAI tunnel/plugin features, and Tailscale on your Mac and iPhone. A dedicated Mac mini is not required.
 
 ## Current capabilities / 現在の機能
 
