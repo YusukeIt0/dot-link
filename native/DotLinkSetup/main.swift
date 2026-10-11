@@ -46,7 +46,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var showingPairing = false
     var showingDetails = false
     var showingSpeech = false
+    var showingSpeechOutput = false
     var speechChoice = "whisper"
+    var speechEndpointField: NSTextField?
+    var speechEndpointDraft = ""
     var speechKeyField: NSTextField?
     var speechMetadata: [String: String] = [:]
     var speechMetadataGeneration = 0
@@ -144,11 +147,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func showHome() {
-        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false; pairingCode = nil; pairingExpiry = 0
+        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false; showingSpeechOutput = false; pairingCode = nil; pairingExpiry = 0
         render(); showWindow(); inspect()
     }
-    @objc func menuPair() { showingSpeech = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
-    @objc func menuNotifications() { showingSpeech = false; showingNotifications = true; render(); showWindow() }
+    @objc func menuPair() { showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
+    @objc func menuNotifications() { showingSpeech = false; showingSpeechOutput = false; showingNotifications = true; render(); showWindow() }
     @objc func menuNotificationPause() { notifications?.togglePause() }
     func connectNotifications() {
         guard notifications == nil, let directory = state["directory"] as? String, state["installed"] as? Bool == true else { return }
@@ -184,6 +187,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.autoenablesItems = false
         item(tr("Dot Linkを開く", "Open Dot Link"), #selector(showHome))
         item(tr("音声入力…", "Speech input…"), #selector(menuSpeech), enabled: yes("installed"))
+        item(tr("音声出力…", "Speech output…"), #selector(menuSpeechOutput), enabled: yes("installed"))
         item(tr("Macの通知…", "Mac notifications…"), #selector(menuNotifications), enabled: notifications != nil)
         if let n = notifications {
             let detail = NSMenuItem(title: n.notificationSummary, action: nil, keyEquivalent: ""); detail.isEnabled = false; menu.addItem(detail)
@@ -236,7 +240,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if appUpdater?.cancelForQuit() == false {
             let alert = NSAlert(); alert.messageText = tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish"); alert.runModal(); return
         }
-        performSpeechCredential("delete") { [weak self] in self?.perform("uninstall", input: ["token": token, "deleteData": "true"]) }
+        performSpeechCredential("delete-all") { [weak self] in self?.perform("uninstall", input: ["token": token, "deleteData": "true"]) }
     }
     func label(_ text: String, size: CGFloat = 14, bold: Bool = false) -> NSTextField {
         let l = NSTextField(wrappingLabelWithString: text); l.font = .systemFont(ofSize: size, weight: bold ? .semibold : .regular); l.maximumNumberOfLines = 0; l.setContentCompressionResistancePriority(.required, for: .vertical); return l
@@ -294,6 +298,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let languages = NSPopUpButton(); languages.addItems(withTitles: ["日本語", "English"]); languages.selectItem(at: language == "ja" ? 0 : 1); languages.target = self; languages.action = #selector(changeLanguage(_:)); languages.isEnabled = !busy; languages.setAccessibilityLabel(tr("表示言語", "Language")); top.addArrangedSubview(languages); stack.addArrangedSubview(top)
         top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         if showingSpeech { renderSpeech(); return }
+        if showingSpeechOutput { renderSpeechOutput(); return }
         if showingDetails && !busy {
             add(tr("詳細設定", "Advanced settings"), size: 23, bold: true)
             button(tr("戻る", "Back")) { [weak self] in self?.showHome() }
@@ -394,6 +399,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let speechSettings = ActionButton(tr("音声入力", "Speech input")) { [weak self] in self?.menuSpeech() }
                 speechSettings.controlSize = .large; speechSettings.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil); speechSettings.imagePosition = .imageLeading
                 actions.addArrangedSubview(speechSettings)
+                let outputSettings = ActionButton(tr("音声出力", "Speech output")) { [weak self] in self?.menuSpeechOutput() }
+                outputSettings.controlSize = .large; outputSettings.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil); outputSettings.imagePosition = .imageLeading
+                actions.addArrangedSubview(outputSettings)
                 stack.addArrangedSubview(actions)
             }
         case "updateRecovery":
@@ -422,7 +430,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let details = ActionButton("") { [weak self] in self?.showingDetails = true; self?.message = ""; self?.render() }; details.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: tr("詳細設定", "Advanced settings")); details.isBordered = false; details.toolTip = tr("詳細設定", "Advanced settings"); details.setAccessibilityLabel(details.toolTip!); footer.addArrangedSubview(details)
         stack.addArrangedSubview(footer); footer.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
     }
-    @objc func changeLanguage(_ sender: NSPopUpButton) { language = sender.indexOfSelectedItem == 0 ? "ja" : "en"; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); render() }
+    @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = sender.indexOfSelectedItem == 0 ? "ja" : "en"; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); render() }
     func inspect() { perform("inspect") }
     func openTailscale() {
         for path in ["/Applications/Tailscale.app", NSHomeDirectory() + "/Applications/Tailscale.app"] {

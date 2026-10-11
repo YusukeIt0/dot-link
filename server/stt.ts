@@ -1,8 +1,9 @@
 import { validateWav } from './asr.ts';
 
-export type STTProvider = 'whisper' | 'soniox';
+import { STT_PROVIDERS, readSTTProvider, type STTProvider } from '../src/stt-providers.ts';
+export type { STTProvider } from '../src/stt-providers.ts';
 export type STTErrorCode = 'STT_BUSY' | 'STT_KEY_REQUIRED' | 'STT_AUTH' | 'STT_QUOTA' |
-  'STT_UNAVAILABLE' | 'STT_TIMEOUT' | 'STT_CANCELLED' | 'STT_INVALID_RESPONSE' | 'STT_NO_TEXT';
+  'STT_CONFIG_REQUIRED' | 'STT_UNAVAILABLE' | 'STT_TIMEOUT' | 'STT_CANCELLED' | 'STT_INVALID_RESPONSE' | 'STT_NO_TEXT';
 
 // Only these messages may leave the adapter. Never expose provider bodies, keys or audio.
 export class STTError extends Error {
@@ -10,11 +11,12 @@ export class STTError extends Error {
   constructor(code: STTErrorCode) { super(code); this.name = 'STTError'; this.code = code; }
 }
 
-type Transcriber = (wav: Buffer, signal?: AbortSignal) => Promise<string>;
+export type Transcriber = (wav: Buffer, signal?: AbortSignal) => Promise<string>;
 export function selectableTranscriber(options: {
   selection: () => Promise<STTProvider>;
   whisper: Transcriber;
   soniox: Transcriber;
+  providers?: Partial<Record<STTProvider, Transcriber>>;
 }): Transcriber {
   let busy = false;
   return async (wav, signal) => {
@@ -28,6 +30,8 @@ export function selectableTranscriber(options: {
       // Explicit selection only: an error must not silently send audio elsewhere.
       if (provider === 'whisper') return await options.whisper(wav, signal);
       if (provider === 'soniox') return await options.soniox(wav, signal);
+      const additional = readSTTProvider(provider) && options.providers?.[provider];
+      if (additional) return await additional(wav, signal);
       throw new STTError('STT_UNAVAILABLE');
     } finally { busy = false; }
   };
@@ -80,7 +84,7 @@ export function sonioxTranscriber(options: {
       const open = () => {
         if (done) return;
         try {
-          socket.send(JSON.stringify({ model: 'stt-rt-v5', audio_format: 'auto' }));
+          socket.send(JSON.stringify({ model: STT_PROVIDERS.soniox.model, audio_format: 'auto' }));
           for (let offset = 0; offset < wav.length; offset += 32000) socket.send(new Uint8Array(wav.subarray(offset, offset + 32000)));
           socket.send('');
         } catch { fail('STT_UNAVAILABLE'); }

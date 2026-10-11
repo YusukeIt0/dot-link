@@ -1,4 +1,4 @@
-import { sttSelection, saveSTTSelection } from '../server/stt-settings.ts';
+import { sttSelection, saveSTTSelection, sttMicrosoftEndpoint, saveSTTMicrosoftEndpoint } from '../server/stt-settings.ts';
 import { readFile, writeFile, mkdir, open, rename, chmod, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -47,6 +47,7 @@ async function inspect() {
     bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, subscribed: health.subscribed === true };
   state.legacyNotificationRegistered = installation.installed ? (await legacyNotificationState(directory)).registered : false;
   try { state.sttProvider = await sttSelection(join(directory, '.runtime')); } catch { state.sttProvider = 'unknown'; }
+  try { state.sttMicrosoftEndpoint = await sttMicrosoftEndpoint(join(directory, '.runtime')); } catch { state.sttMicrosoftEndpoint = ''; }
   state.step = nextSetupStep(state);
   return state;
 }
@@ -114,6 +115,7 @@ try {
   else if (action === 'stt-select') {
     const found = await discoverInstallation();
     if (!found.installed) throw new Error('INSTALL_FIRST');
+    if (input.provider === 'microsoft') await saveSTTMicrosoftEndpoint(join(found.directory, '.runtime'), input.endpoint);
     await saveSTTSelection(join(found.directory, '.runtime'), input.provider);
     result = await inspect();
   }

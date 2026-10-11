@@ -37,6 +37,17 @@ import Security
         Thread.sleep(forTimeInterval: 1.1)
         assert(store.perform("save", key: "dummy-stt-replaced-key")["status"] == "ok")
         assert(store.perform("read")["key"] == "dummy-stt-replaced-key")
+        for provider in ["elevenlabs", "microsoft", "openai", "assemblyai"] {
+            assert(store.perform("metadata", provider: provider)["count"] == "0")
+            assert(store.perform("save", key: "dummy-" + provider, provider: provider)["status"] == "ok")
+            assert(store.perform("read", provider: provider)["key"] == "dummy-" + provider)
+            assert(store.perform("metadata", provider: provider)["key"] == nil)
+            assert(store.perform("read")["key"] == "dummy-stt-replaced-key")
+            assert(store.perform("delete", provider: provider)["status"] == "ok")
+            assert(store.perform("metadata", provider: provider)["count"] == "0")
+        }
+        assert(store.perform("read", provider: "unknown")["status"] == "invalid")
+        assert(store.perform("read")["key"] == "dummy-stt-replaced-key")
         let replaced = store.perform("metadata")
         assert(replaced["count"] == "1" && replaced["savedAt"] != metadata["savedAt"])
         func probe(_ executable: String) throws -> String {
@@ -62,6 +73,14 @@ import Security
         assert(store.perform("read")["status"] == "missing")
         assert(store.perform("metadata") == ["status": "ok", "count": "0"])
         assert(store.perform("delete")["status"] == "ok")
+        for provider in ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"] {
+            assert(store.perform("save", key: "dummy/base64+value=", provider: provider)["status"] == "ok")
+            assert(store.perform("save", key: "invalid\nheader", provider: provider)["status"] == "invalid")
+        }
+        assert(store.perform("delete-all")["status"] == "ok")
+        for provider in ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"] {
+            assert(store.perform("metadata", provider: provider)["count"] == "0")
+        }
         print("PASS isolated STT Keychain: save, replace, invalid, read, authorize, restart, changed signature denied, metadata without secret access, timestamps, lock, unlock, delete")
     }
 }

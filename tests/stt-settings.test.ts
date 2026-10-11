@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile, stat, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { sttSelection, saveSTTSelection, keychainSTTKey } from '../server/stt-settings.ts';
+import { sttSelection, saveSTTSelection, keychainSTTKey, sttMicrosoftEndpoint, saveSTTMicrosoftEndpoint } from '../server/stt-settings.ts';
 import { setLanguage } from '../src/i18n.ts';
 import { sttErrorMessage } from '../src/stt-errors.ts';
 
@@ -37,4 +37,23 @@ test('STT errors are translated from allowlisted codes only', () => {
     assert.equal(sttErrorMessage('toString'), undefined);
   }
   setLanguage('ja');
+});
+
+
+test('all providers persist independently of credentials and Azure endpoint survives switching', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'stt-all-settings-'));
+  try {
+    assert.equal(await sttMicrosoftEndpoint(directory), '');
+    await saveSTTMicrosoftEndpoint(directory, 'https://test.cognitiveservices.azure.com/');
+    for (const provider of ['elevenlabs', 'microsoft', 'openai', 'assemblyai', 'soniox', 'whisper']) {
+      await saveSTTSelection(directory, provider);
+      assert.equal(await sttSelection(directory), provider);
+      assert.equal(await sttMicrosoftEndpoint(directory), 'https://test.cognitiveservices.azure.com');
+    }
+    assert.equal((await stat(join(directory,'stt-endpoints.json'))).mode & 0o777,0o600);
+    await assert.rejects(saveSTTMicrosoftEndpoint(directory,'https://example.com'),/STT_CONFIG_REQUIRED/);
+    assert.equal(await sttMicrosoftEndpoint(directory),'https://test.cognitiveservices.azure.com');
+    await writeFile(join(directory,'stt-endpoints.json'),'broken');
+    await assert.rejects(sttMicrosoftEndpoint(directory),/STT_CONFIG_REQUIRED/);
+  } finally { await rm(directory,{recursive:true,force:true}); }
 });

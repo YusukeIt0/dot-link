@@ -9,9 +9,17 @@ final class STTCredentials {
     init(keychain: SecKeychain? = nil, service: String = "app.tripsurf.dotlink.stt") {
         self.keychain = keychain; self.service = service
     }
-    func perform(_ operation: String, key: String = "", interactive: Bool = false) -> [String: String] {
+    func perform(_ operation: String, key: String = "", interactive: Bool = false, provider: String = "soniox") -> [String: String] {
+        if operation == "delete-all" {
+            for account in ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"] {
+                let deleted = perform("delete", interactive: interactive, provider: account)
+                if deleted["status"] != "ok" { return deleted }
+            }
+            return ["status": "ok"]
+        }
+        guard ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"].contains(provider) else { return ["status": "invalid"] }
         guard ["read", "authorize", "save", "delete", "metadata"].contains(operation) else { return ["status": "invalid"] }
-        if operation == "save" && (key.isEmpty || key.utf8.count > 4096 || key.unicodeScalars.contains(where: { !CharacterSet(charactersIn: "!#$%&'*+.^_`|~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-").contains($0) })) { return ["status": "invalid"] }
+        if operation == "save" && (key.isEmpty || key.utf8.count > 4096 || key.unicodeScalars.contains(where: { $0.value < 0x21 || $0.value > 0x7e })) { return ["status": "invalid"] }
         var selected = keychain
         if selected == nil {
             let status = SecKeychainCopyDefault(&selected)
@@ -28,7 +36,7 @@ final class STTCredentials {
         if operation == "metadata" {
             // Attributes only: never read the secret or trigger a permission prompt.
             let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service, kSecAttrAccount as String: "soniox",
+                kSecAttrService as String: service, kSecAttrAccount as String: provider,
                 kSecMatchSearchList as String: [selected], kSecMatchLimit as String: kSecMatchLimitOne,
                 kSecReturnAttributes as String: true, kSecReturnData as String: false]
             var attributes: CFTypeRef?
@@ -41,7 +49,7 @@ final class STTCredentials {
             }
             return metadata
         }
-        let account = "soniox"
+        let account = provider
         var item: SecKeychainItem?
         var length: UInt32 = 0
         var bytes: UnsafeMutableRawPointer?
@@ -84,14 +92,15 @@ final class STTCredentials {
 }
 
 func runSTTCredentialHelper() -> Never {
-    let operation = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "invalid"
+    let operation = [3, 4].contains(CommandLine.arguments.count) ? CommandLine.arguments[2] : "invalid"
+    let provider = CommandLine.arguments.count == 4 ? CommandLine.arguments[3] : "soniox"
     var key = ""
     if operation == "save" {
         // A fixed bound avoids blocking or allocating unbounded stdin data.
         let data = FileHandle.standardInput.readData(ofLength: 8193)
         if data.count <= 8192, let input = try? JSONSerialization.jsonObject(with: data) as? [String: String] { key = input["key"] ?? "" }
     }
-    let result = STTCredentials().perform(operation, key: key, interactive: ["save", "authorize", "delete"].contains(operation))
+    let result = STTCredentials().perform(operation, key: key, interactive: ["save", "authorize", "delete", "delete-all"].contains(operation), provider: provider)
     key = ""
     if let data = try? JSONSerialization.data(withJSONObject: result) { FileHandle.standardOutput.write(data) }
     exit(0)

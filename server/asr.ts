@@ -3,6 +3,7 @@ import { promisify } from 'node:util';
 import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
+import { STT_PROVIDERS } from '../src/stt-providers.ts';
 
 const execute = promisify(execFile);
 export function validateWav(wav: Buffer): void {
@@ -33,7 +34,7 @@ export function localTranscriber() {
       await writeFile(input, wav, { mode: 0o600 });
       const whisper = process.env.G2_WHISPER_PATH ?? [resolve('.runtime/bin/whisper-cli'), '/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli'].find(path => existsSync(path));
       if (!whisper) throw new Error('Whisper is not installed');
-      await execute(whisper, ['-m', resolve('.runtime/models/ggml-small.bin'),
+      await execute(whisper, ['-m', resolve(`.runtime/models/ggml-${STT_PROVIDERS.whisper.model}.bin`),
         '-f', input, '-l', 'auto', '-nt', '-np', '-otxt', '-of', output],
       { timeout: 90000, maxBuffer: 256000, signal });
       const text = (await readFile(`${output}.txt`, 'utf8')).trim();

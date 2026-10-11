@@ -1,8 +1,5 @@
-export type STTProvider = 'whisper' | 'soniox';
-
-export function readSTTProvider(value: unknown): STTProvider | undefined {
-  return value === 'whisper' || value === 'soniox' ? value : undefined;
-}
+import { STT_PROVIDERS, sttLabel, type STTProvider } from './stt-providers.ts';
+export { readSTTProvider, type STTProvider } from './stt-providers.ts';
 
 // SpeechSynthesis uses this client device. It does not expose a model ID.
 export function speechDevice(userAgent: string, touchPoints = 0): 'iPhone' | 'Mac' | 'Device' {
@@ -11,8 +8,9 @@ export function speechDevice(userAgent: string, touchPoints = 0): 'iPhone' | 'Ma
 }
 
 export function speechStatus(provider: STTProvider | undefined, online: boolean, ttsEnabled: boolean,
-  ttsAvailable: boolean, device: ReturnType<typeof speechDevice>): string {
-  const stt = !online ? '—' : provider === 'whisper' ? 'Whisper' : provider === 'soniox' ? 'Soniox' : '—';
+  ttsAvailable: boolean, device: ReturnType<typeof speechDevice>, model?: unknown): string {
+  const actualModel = typeof model === 'string' && /^[A-Za-z0-9._-]{1,64}$/.test(model) ? model : undefined;
+  const stt = !online || !provider ? '—' : actualModel ? `${STT_PROVIDERS[provider].name} ${actualModel}` : sttLabel(provider);
   const tts = !ttsAvailable ? '—' : ttsEnabled ? device : 'OFF';
   return `STT:${stt} / TTS:${tts}`;
 }

@@ -5,7 +5,8 @@ import { UpdateActivity } from './update-activity.ts';
 import { deviceServer } from './device.ts';
 import { localTranscriber } from './asr.ts';
 import { selectableTranscriber, sonioxTranscriber } from './stt.ts';
-import { sttSelection, keychainSTTKey } from './stt-settings.ts';
+import { httpTranscriber } from './stt-http.ts';
+import { sttSelection, sttMicrosoftEndpoint, keychainSTTKey } from './stt-settings.ts';
 import { LatencyLog } from './latency.ts';
 import { deviceName } from './device-name.ts';
 import { PairingAuthority } from './pairing-authority.ts';
@@ -17,6 +18,9 @@ const credentialApp = process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(n
 const transcribe = selectableTranscriber({
   selection: () => sttSelection(resolve('.runtime')), whisper: localTranscriber(),
   soniox: sonioxTranscriber({key: keychainSTTKey(credentialApp)}),
+  providers: Object.fromEntries((['elevenlabs', 'microsoft', 'openai', 'assemblyai'] as const).map(provider =>
+    [provider, httpTranscriber(provider, {key: keychainSTTKey(credentialApp, provider),
+      endpoint: () => sttMicrosoftEndpoint(resolve('.runtime'))})])),
 });
 const server = deviceServer({ origin, directory: process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../dist', import.meta.url)) : resolve('dist'), deviceName: await deviceName(),
   updateActivity, sttProvider: () => sttSelection(resolve('.runtime')),

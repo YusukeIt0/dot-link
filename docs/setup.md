@@ -28,11 +28,15 @@ Macは起動・ネットワーク接続を維持してください。スリー�
 
 ## 音声入力
 
-Macの「音声入力」からサービスを選べます。標準のWhisperはMac内で無料で認識します。Sonioxを使う場合は、ご自身のAPIキーを保存してください。録音はMacからSonioxへ直接送られ、同社のAPI料金・利用枠が適用されます。変更は次の音声入力から反映され、失敗時に別のサービスへ自動では切り替わりません。
+Macの「音声入力」からサービスを選べます。標準のWhisper smallはMac内で無料で認識します。外部サービス（Soniox、ElevenLabs、Microsoft、OpenAI、AssemblyAI）を使う場合は、ご自身のAPIキーを保存してください。録音はMacから選択先へ直接送られ、各社のAPI料金・利用枠が適用されます。MicrosoftのみAzure Speechの接続先も必要です。画面下部の「接続先について」から公式の取得方法を参照できます。変更は次の音声入力から反映され、失敗時に別のサービスへ自動では切り替わりません。
 
-キーチェーンの確認画面が表示されたら「常に許可」を選択してください。アプリ更新後に再許可が必要な場合があります。キーを変更する場合は「キーを削除」してから新しいキーを保存します。キーを削除するとWhisperへ戻ります。
+キーチェーンの確認画面が表示されたら「常に許可」を選択してください。アプリ更新後に再許可が必要な場合があります。キーを変更する場合は「キーを削除」してから新しいキーを保存します。使用中サービスのキーを削除するとWhisperへ戻ります。
 
-公開中のEven 0.2.14でも音声入力を利用できます。サービス名の表示や詳しいエラー案内はEven 0.2.19以降に含まれます。スマートフォンからの文字入力には音声認識サービスを使いません。
+公開中のEven 0.2.14でも音声入力を利用できます。サービス名の表示や詳しいエラー案内はEven 0.2.19以降に含まれます。全6種類のサービス・モデル表示はEven 0.2.21が必要です。スマートフォンからの文字入力には音声認識サービスを使いません。
+
+## 音声出力
+
+Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認できます。読み上げのON／OFFは、Evenアプリ内のDot Linkで切り替えます。外部の音声出力サービスはまだ選択できません。
 
 ## 通知の共有
 
@@ -54,8 +58,12 @@ Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and
 
 [Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into the Even companion, and save it. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
 
-In **Speech input** on the Mac, choose free local Whisper or save your own Soniox API key. With Soniox selected, recordings go directly from your Mac to Soniox; its API charges and limits apply. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting it switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later. Typed messages do not use speech recognition.
+In **Speech input** on the Mac, choose free local Whisper small or save your own key for Soniox, ElevenLabs, Microsoft, OpenAI or AssemblyAI. Recordings go directly from your Mac to the selected service; its API charges and limits apply. Microsoft also requires your Azure Speech endpoint; see About the endpoint below the settings card. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting the active service key switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later; labels for all six services and their models require Even 0.2.21. Typed messages do not use speech recognition.
 
 For notifications, click **Permissions**, open Accessibility, add the installed Dot Link.app with **+**, and turn access on. Enable **Share all Mac notifications with Dot** to share visible sender names, headings and text from readable new notifications. Tell Dot which notifications you want to hear about. Some notification formats may not be readable, and announcements may be delayed. If sharing stops after an update, remove Dot Link from the Accessibility list and add it again. Pause stops notification collection.
 
 **Uninstall Dot Link…** moves the app, speech model, connection settings and conversation history to Trash. There is no option to keep settings. You will need to set up the app again to use it. See [Data handling](privacy.md) for the deletion scope.
+
+### Speech output
+
+**Speech output** on the Mac shows the current method, iPhone. Turn read aloud on or off in Dot Link inside the Even app. External speech output services are not yet available.

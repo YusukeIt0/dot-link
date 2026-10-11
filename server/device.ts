@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { STTError } from './stt.ts';
+import { readSTTProvider, STT_PROVIDERS, type STTProvider } from '../src/stt-providers.ts';
 import { authorized } from './http.ts';
 import { LatencyLog, traceId } from './latency.ts';
 import { PairingAuthority } from './pairing-authority.ts';
@@ -21,7 +22,7 @@ async function boundedBody(request: IncomingMessage, maximum: number): Promise<B
 export function deviceServer(options: { token: string; origin: string; directory: string;
   transcribe: (wav: Buffer, signal?: AbortSignal) => Promise<string>; bridgeURL?: string; latency?: LatencyLog; deviceName?: string;
   pairing?: PairingAuthority; appOrigins?: string[]; updateActivity?: UpdateActivity;
-  sttProvider?: () => Promise<'whisper' | 'soniox'> }) {
+  sttProvider?: () => Promise<STTProvider> }) {
   const origin = new URL(options.origin);
   if (origin.origin !== options.origin || options.token.length < 32) throw new Error('Invalid device configuration');
   const root = resolve(options.directory);
@@ -137,9 +138,11 @@ export function deviceServer(options: { token: string; origin: string; directory
           }
           if (result.ok && options.sttProvider && ['/api/status', '/api/updates'].includes(path)) {
             // Read the choice only. Status/typed messages must never read keys or contact an STT service.
-            let provider: 'whisper' | 'soniox' | null = null;
-            try { const selected = await options.sttProvider(); if (selected === 'whisper' || selected === 'soniox') provider = selected; } catch { /* Show unknown, never guess. */ }
-            (path === '/api/status' ? data : data.status).sttProvider = provider;
+            let provider: STTProvider | null = null;
+            try { const selected = await options.sttProvider(); if (readSTTProvider(selected)) provider = selected; } catch { /* Show unknown, never guess. */ }
+            const target = path === '/api/status' ? data : data.status;
+            target.sttProvider = provider;
+            target.sttModel = provider ? STT_PROVIDERS[provider].model : null;
           }
           json(result.status, data); return;
         } finally { response.off('close', disconnected); }

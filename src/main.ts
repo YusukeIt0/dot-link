@@ -101,8 +101,9 @@ let statusDirty = false;
 let lastSentStatus = '';
 let lastSentSpeechStatus = '';
 let selectedSTT: STTProvider | undefined;
+let selectedSTTModel: unknown;
 const ttsDevice = speechDevice(navigator.userAgent, navigator.maxTouchPoints);
-const speechCaption = () => speechStatus(selectedSTT, progress.connection === 'online', tts, 'speechSynthesis' in window, ttsDevice);
+const speechCaption = () => speechStatus(selectedSTT, progress.connection === 'online', tts, 'speechSynthesis' in window, ttsDevice, selectedSTTModel);
 // Keep the divider in the text frame so standby clears and restores it with the status.
 const speechDisplayCaption = () => `${'─'.repeat(24)}\n${speechCaption()}`;
 let pageActive = true;
@@ -196,11 +197,12 @@ function showMessage(): void {
   if (message?.kind === 'proactive') { display(`Dot · ${historyIndex + 1}/${messages.length}`, message.reply ?? ''); return; }
   if (message) display(message.reply ? `Dot · ${historyIndex + 1}/${messages.length}` : message.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち'), `${message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた')}: ${message.text}\n\nDot: ${message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') : t('返信を待っています…'))}`, message.reply ? message.id : undefined);
 }
-interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown }; messages: Message[]; }
+interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown }; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
   subscribed = snapshot.status.subscribed;
   selectedSTT = readSTTProvider(snapshot.status.sttProvider);
+  selectedSTTModel = snapshot.status.sttModel;
   progress.connection = 'online'; progress.dotConnected = subscribed;
   if (snapshot.status.deviceName) hostName = snapshot.status.deviceName;
   const next = snapshot.messages;

@@ -2,6 +2,7 @@ import { getLanguage } from './i18n.ts';
 const messages: Record<string, [string, string]> = {
   STT_BUSY: ['音声認識中です。少し待ってから話してください。', 'Speech recognition is busy. Wait a moment before speaking again.'],
   STT_KEY_REQUIRED: ['Macの音声入力設定でAPIキーを登録、またはアクセスを許可してください。', 'Open Speech input on your Mac to save an API key or allow access to it.'],
+  STT_CONFIG_REQUIRED: ['Macの音声入力設定で接続先を確認してください。', 'Check the endpoint in Speech input on your Mac.'],
   STT_AUTH: ['APIキーを利用できません。Macの音声入力設定で確認してください。', 'The API key was rejected. Check Speech input on your Mac.'],
   STT_QUOTA: ['音声認識サービスの残高・利用枠を確認するか、MacでWhisperへ切り替えてください。', 'Check your speech service balance or limits, or switch to Whisper on your Mac.'],
   STT_UNAVAILABLE: ['音声認識サービスに接続できません。接続とMacの音声入力設定を確認してください。', 'Speech recognition is unavailable. Check your connection and Speech input on your Mac.'],

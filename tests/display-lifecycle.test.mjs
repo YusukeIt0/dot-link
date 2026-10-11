@@ -240,8 +240,8 @@ test('head raises while already visible do not keep postponing the initial 30-se
 
 test('actual text-entry handler only sends text; current STT and client TTS labels update without audio calls', async t => {
   const app = await launch({typedInput: true, provider: 'soniox'}); t.after(app.close);
-  assert.equal(app.element('speech-status').textContent, 'STT:Soniox / TTS:OFF');
-  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Soniox / TTS:OFF');
+  assert.equal(app.element('speech-status').textContent, 'STT:Soniox stt-rt-v5 / TTS:OFF');
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Soniox stt-rt-v5 / TTS:OFF');
   app.element('transcript').value = 'Synthetic typed input';
   app.element('transcript').oninput();
   await app.element('send').click(); await flush();
@@ -249,13 +249,29 @@ test('actual text-entry handler only sends text; current STT and client TTS labe
   assert.equal(app.networkCalls.filter(path => path.endsWith('/api/transcribe')).length, 0);
   assert.equal(app.calls.filter(call => call[0] === 'mic').length, 0);
   await app.element('tts').click(); await flush();
-  assert.equal(app.element('speech-status').textContent, 'STT:Soniox / TTS:iPhone');
-  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Soniox / TTS:iPhone');
+  assert.equal(app.element('speech-status').textContent, 'STT:Soniox stt-rt-v5 / TTS:iPhone');
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Soniox stt-rt-v5 / TTS:iPhone');
   const state = app.snapshot(); state.status.sttProvider = 'whisper';
   await app.deliver(state);
-  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Whisper / TTS:iPhone');
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Whisper small / TTS:iPhone');
   delete state.status.sttProvider; await app.deliver(state);
   assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:— / TTS:iPhone');
   await app.evaluate("progress.connection = 'offline'; refreshStatus()");
   assert.equal(app.element('speech-status').textContent, 'STT:— / TTS:iPhone');
+});
+
+
+test('all provider and actual model labels reach both phone and G2 through status updates', async t => {
+  const app = await launch({provider: 'whisper'}); t.after(app.close);
+  for (const [provider, label] of Object.entries({whisper:'Whisper small',soniox:'Soniox stt-rt-v5',elevenlabs:'ElevenLabs scribe_v2',microsoft:'Microsoft MAI-Transcribe-2',openai:'OpenAI gpt-transcribe',assemblyai:'AssemblyAI universal-3-5-pro'})) {
+    const state = app.snapshot(); state.status.sttProvider = provider;
+    await app.deliver(state);
+    assert.equal(app.element('speech-status').textContent, `STT:${label} / TTS:OFF`);
+    assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + `STT:${label} / TTS:OFF`);
+  }
+  const state = app.snapshot(); state.status.sttProvider = 'openai'; state.status.sttModel = 'fixture-model';
+  await app.deliver(state);
+  assert.equal(app.element('speech-status').textContent, 'STT:OpenAI fixture-model / TTS:OFF');
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\nSTT:OpenAI fixture-model / TTS:OFF');
+  assert.equal(app.calls.filter(call => call[0] === 'mic').length, 0);
 });

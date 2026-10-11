@@ -1,0 +1,8 @@
+{
+  "whisper": { "name": "Whisper", "model": "small", "pricing": "", "privacy": "" },
+  "soniox": { "name": "Soniox", "model": "stt-rt-v5", "pricing": "https://soniox.com/pricing", "privacy": "https://soniox.com/docs/security-and-privacy" },
+  "elevenlabs": { "name": "ElevenLabs", "model": "scribe_v2", "pricing": "https://elevenlabs.io/pricing/api", "privacy": "https://elevenlabs.io/privacy-policy" },
+  "microsoft": { "name": "Microsoft", "model": "MAI-Transcribe-2", "pricing": "https://azure.microsoft.com/pricing/details/cognitive-services/speech-services/", "privacy": "https://privacy.microsoft.com/privacystatement" },
+  "openai": { "name": "OpenAI", "model": "gpt-transcribe", "pricing": "https://developers.openai.com/api/docs/pricing", "privacy": "https://developers.openai.com/api/docs/guides/your-data" },
+  "assemblyai": { "name": "AssemblyAI", "model": "universal-3-5-pro", "pricing": "https://www.assemblyai.com/pricing", "privacy": "https://www.assemblyai.com/legal/privacy-policy" }
+}

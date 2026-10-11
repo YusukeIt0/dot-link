@@ -11,6 +11,7 @@ import { bridgeServer } from '../server/http.ts';
 import { deviceServer } from '../server/device.ts';
 import { WebhookSender } from '../server/webhook.ts';
 import { selectableTranscriber, sonioxTranscriber } from '../server/stt.ts';
+import { STT_PROVIDERS, type STTProvider } from '../src/stt-providers.ts';
 import { PcmRecording } from '../src/audio.ts';
 
 test('typed messages bypass STT, credentials and provider connections even with Soniox selected', async t => {
@@ -33,7 +34,7 @@ test('typed messages bypass STT, credentials and provider connections even with 
       connect: () => { connections++; throw new Error('Unexpected network connection'); },
     }),
   });
-  let reportedProvider: 'whisper' | 'soniox' = 'soniox', statusUnavailable = false;
+  let reportedProvider: STTProvider = 'soniox', statusUnavailable = false;
   const outer = deviceServer({origin: 'https://device.example', directory, token: tokens.device,
     bridgeURL: `http://127.0.0.1:${innerAddress.port}`, transcribe,
     sttProvider: async () => { if (statusUnavailable) throw new Error('Unavailable'); return reportedProvider; }});
@@ -63,6 +64,12 @@ test('typed messages bypass STT, credentials and provider connections even with 
   assert.equal((await call('/api/updates')).body.status.sttProvider, 'soniox');
   reportedProvider = 'whisper';
   assert.equal((await call('/api/updates')).body.status.sttProvider, 'whisper');
+  for (const provider of Object.keys(STT_PROVIDERS) as STTProvider[]) {
+    reportedProvider = provider;
+    const status = (await call('/api/status')).body;
+    assert.equal(status.sttProvider,provider); assert.equal(status.sttModel,STT_PROVIDERS[provider].model);
+    assert.equal((await call('/api/utterances', 'POST', JSON.stringify({id:randomUUID(),text:'Synthetic typed bypass check'}))).status,200);
+  }
   statusUnavailable = true;
   assert.equal((await call('/api/status')).body.sttProvider, null);
   assert.deepEqual({selections, whisperCalls, keyReads, connections}, {selections: 0, whisperCalls: 0, keyReads: 0, connections: 0});
