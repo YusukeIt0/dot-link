@@ -2,7 +2,7 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.2.22",
+  "version": "0.2.23",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
@@ -14,6 +14,10 @@
     {
       "name": "g2-microphone",
       "desc": "Record speech when you start recording, for up to 30 seconds. 本人が録音を開始したときに音声を取得します。最大30秒です。"
+    },
+    {
+      "name": "location",
+      "desc": "When you turn on location sharing, share your phone's current location with your own Dot through your Mac for relevant suggestions. 位置情報の共有をオンにしたとき、スマートフォンの現在地を自分のMac経由でいつものDotに共有し、場所に応じた案内に使います。"
     }
   ],
   "supported_languages": [

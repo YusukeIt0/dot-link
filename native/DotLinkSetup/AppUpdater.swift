@@ -65,7 +65,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     func refreshLanguage() { if let (ja, en) = statusText { message = tr(ja, en); statusLabel?.stringValue = message; changed?() } }
     func settingsView() -> NSView {
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+        let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") + ((Bundle.main.object(forInfoDictionaryKey: "DotLinkBeta") as? Bool == true) ? " Beta" : "")
         let title = NSTextField(labelWithString: tr("バージョン：", "Version: ") + version); title.font = .systemFont(ofSize: 15, weight: .semibold); box.addArrangedSubview(title)
         let toggle = NSButton(checkboxWithTitle: tr("自動更新", "Automatic updates"), target: self, action: #selector(toggleAutomatic(_:))); toggle.state = automatic ? .on : .off; toggle.isEnabled = automaticUpdatesEnabled; toggle.toolTip = automaticUpdatesEnabled ? nil : tr("自動更新は一時的に利用できません。手動で更新できます。", "Automatic updates are temporarily unavailable. You can update manually."); box.addArrangedSubview(toggle)
         box.addArrangedSubview(ActionButton(tr("アップデートを確認", "Check for updates")) { [weak self] in self?.check() })

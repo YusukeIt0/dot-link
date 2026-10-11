@@ -13,6 +13,7 @@ import { t, getLanguage, setLanguage, chooseLanguage, translateLabel } from './i
 import { RelaySettings, PendingUtterance, apiAddress, type RelayCredentials } from './relay-connection.ts';
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
 import { LanguagePreferences } from './language-preferences.ts';
+import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
 import './style.css';
 
 const languagePreferences = new LanguagePreferences(() => localStorage);
@@ -113,7 +114,43 @@ const speechCaption = () => speechStatus(selectedSTT, progress.connection === 'o
 // Keep the divider in the text frame so standby clears and restores it with the status.
 const speechDisplayCaption = () => `${'─'.repeat(24)}\n${speechCaption()}`;
 let pageActive = true;
+const locationSharing = new LocationSharing({
+  storage: () => localStorage,
+  target: () => token ? relay?.origin ?? location.origin : undefined,
+  api: async (path, body) => {
+    // A stop must still be allowed while the rest of the glasses session exits.
+    const stopping = path === '/api/location/control' && (body as {enabled?: boolean}).enabled === false;
+    if (!stopping) await ensureRelayOrigin();
+    const target = relay?.origin, credential = token;
+    if (!credential) throw new Error('Pairing required');
+    const response = await fetch(apiAddress(path, target), {method: 'POST', credentials: 'omit', redirect: 'error',
+      headers: {Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json'}, body: JSON.stringify(body),
+      signal: AbortSignal.timeout(12000)});
+    if (!response.ok) throw new Error('Location sharing unavailable');
+    return response.json();
+  },
+  changed: () => renderLocationStatus(),
+});
+function renderLocationStatus(): void {
+  const s = locationSharing.status(), ja = getLanguage() === 'ja';
+  el<HTMLInputElement>('location-share').checked = s.enabled;
+  const labels = {
+    off: ['共有していません', 'Not sharing'], starting: ['位置情報を準備しています…', 'Starting location sharing…'],
+    waiting: ['現在地を取得しています…', 'Waiting for a current location…'], sharing: ['現在地を共有中', 'Sharing your current location'],
+    stale: ['現在地の更新を待っています', 'Waiting for a fresh location'],
+    unavailable: ['位置情報を取得できません。Evenアプリの位置情報の許可を確認し、共有をオフ・オンしてください。', 'Location is unavailable. Check location permission for the Even app, then turn sharing off and on.'],
+    offline: ['Macへの位置共有を再接続しています…', 'Reconnecting location sharing to your Mac…'],
+    stopping: ['この端末の共有は停止しました。Mac側の停止確認を待っています。', 'Sharing has stopped on this device. Waiting to confirm the stop on your Mac.'],
+  };
+  el('location-status').textContent = labels[s.state][ja ? 0 : 1] + (!s.saved ? (ja ? ' 設定の保存を確認できません。' : ' Settings could not be saved.') : '');
+  el('location-dot-status').textContent = !s.enabled ? '' : s.dotSubscribed ?
+    (ja ? 'Dotが位置の変化を受け取れる状態です。知らせる内容とタイミングはDotが判断します。' : 'Dot is ready to receive location changes and decide whether and when to reach out.') :
+    (ja ? 'Dot側の位置共有の接続を待っています。' : 'Waiting for Dot to connect to location sharing.');
+  el('location-diagnostic').textContent = `${ja ? '位置共有' : 'Location'}: ${s.state} · ${ja ? '受信' : 'received'} ${s.receivedCount ?? 0} · ${ja ? '案内' : 'announcements'} ${s.announcementCount ?? 0}${s.accuracy === undefined ? '' : ` · ±${Math.round(s.accuracy)}m`}${s.receivedAt ? ` · ${new Date(s.receivedAt).toLocaleTimeString()}` : ''}`;
+}
+el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabled(el<HTMLInputElement>('location-share').checked);
 function forgetPairing(message: string): void {
+  locationSharing.setEnabled(false);
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
   token = ''; relay = undefined; relaySettings.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
@@ -132,7 +169,7 @@ const spoken = new Set<string>();
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
 const reportedDisplay = new Set<string>();
-interface Message { id: string; text: string; reply?: string; status: string; kind?: 'notification' | 'proactive'; source_app?: string; }
+interface Message { id: string; text: string; reply?: string; status: string; kind?: 'notification' | 'proactive'; source_app?: string; location_sharing_id?: string; location_expires_at?: string; }
 
 let resumeFlight: Promise<void> | undefined;
 async function ensureRelayOrigin(force = false): Promise<void> {
@@ -203,15 +240,19 @@ function showMessage(): void {
   if (message?.kind === 'proactive') { display(`Dot · ${historyIndex + 1}/${messages.length}`, message.reply ?? ''); return; }
   if (message) display(() => message.reply ? `Dot · ${historyIndex + 1}/${messages.length}` : message.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち'), () => `${message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた')}: ${message.text}\n\nDot: ${message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') : t('返信を待っています…'))}`, message.reply ? message.id : undefined);
 }
-interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown }; messages: Message[]; }
+interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
+  locationSharing.receive(snapshot.status);
   subscribed = snapshot.status.subscribed;
   selectedSTT = readSTTProvider(snapshot.status.sttProvider);
   selectedSTTModel = snapshot.status.sttModel;
   progress.connection = 'online'; progress.dotConnected = subscribed;
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
-  const next = snapshot.messages;
+  // Already seen history remains readable; a delayed location announcement must
+  // not wake the glasses after OFF, expiry, or a different sharing session.
+  const known = new Set(messages.map(message => message.id));
+  const next = snapshot.messages.filter(message => known.has(message.id) || locationSharing.acceptsAnnouncement(message));
   for (const message of next) {
     if (!message.reply || spoken.has(message.id)) continue;
     progress.complete(message.id);
@@ -450,6 +491,7 @@ function applyLanguage(): void {
   const next = chooseLanguage(navigator.language, languagePreferences.value);
   if (next === getLanguage()) return;
   setLanguage(next); document.documentElement.lang = next;
+  renderLocationStatus();
   for (const { element, ja, en } of staticLabels) {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
@@ -529,6 +571,7 @@ discardButton.onclick = () => {
 window.addEventListener('pagehide', () => { pageActive = false; refreshStatus(false); });
 function stopSession(): void {
   if (exited) return;
+  void locationSharing.stop();
   exited = true; pageActive = false; connectionVersion++; connectionController.abort();
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
@@ -537,7 +580,7 @@ function stopSession(): void {
 
 async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
-  void restoreRelay(appBridge);
+  void restoreRelay(appBridge).then(() => locationSharing.attach(appBridge));
   void languagePreferences.attach(appBridge).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;
   startupStage = 'page';
@@ -698,6 +741,7 @@ standby = new DisplayStandby(displayPreferences.value, hidden => {
   queueDisplayFrame();
 });
 initializeDisplaySettings();
+renderLocationStatus();
 showSetup(!token);
 if (token && !relay?.resumeToken) updates.start(true);
 refreshStatus(false);

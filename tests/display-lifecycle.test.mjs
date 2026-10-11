@@ -51,6 +51,10 @@ async function launch(options = {}) {
     async shutDownPageContainer(mode) { calls.push(['exit', mode]); return true; },
     async getLocalStorage(k) { return nativeSaved.get(k) ?? ''; },
     async setLocalStorage(k, v) { nativeSaved.set(k, v); return true; },
+    onAppLocationChanged() { return () => {}; },
+    async startAppLocationUpdates() { calls.push(['location-start']); return true; },
+    async stopAppLocationUpdates() { calls.push(['location-stop']); return true; },
+    async getAppLocation() { return {latitude: 10, longitude: 20, accuracy: 5, timestamp: Date.now()}; },
   };
   const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
@@ -68,6 +72,10 @@ async function launch(options = {}) {
     setInterval: (fn, ms) => schedule(fn, ms, true), clearInterval: id => timers.delete(id),
     fetch: (url, init) => {
       networkCalls.push(String(url));
+      if (String(url).includes('/api/location/')) {
+        calls.push(['location-api', String(url), JSON.parse(init.body)]);
+        return Promise.resolve({status: 200, ok: true, json: async () => ({locationSharing: true, locationFresh: true})});
+      }
       if (options.typedInput && String(url).endsWith('/api/utterances')) {
         const value = JSON.parse(init.body);
         return Promise.resolve({status: 200, ok: true, json: async () => ({...value, status: 'pending'})});
@@ -341,4 +349,26 @@ test('native language is restored into a new WebView without replacing G2 startu
   assert.equal(app.context.document.documentElement.lang, 'ja');
   assert.equal(app.element('language').value, 'ja');
   assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
+});
+
+test('location toggle reaches native/relay and an OFF blocks late announcements in the whole app', async t => {
+  const app = await launch(); t.after(app.close);
+  assert.equal(app.calls.some(c => c[0] === 'location-start'), false);
+  app.element('location-share').checked = true;
+  app.element('location-share').onchange(); await flush();
+  assert.equal(app.calls.filter(c => c[0] === 'location-start').length, 1);
+  const control = app.calls.find(c => c[0] === 'location-api' && c[2].enabled === true);
+  assert.ok(control, JSON.stringify({calls: app.calls, network: app.networkCalls, state: app.element("location-status").textContent}));
+  const message = {...proactive('location-first'), location_sharing_id: control[2].sharing_id,
+    location_expires_at: new Date(Date.now() + 90_000).toISOString()};
+  await app.deliver(app.snapshot([message]));
+  assert.match(app.physical.get(2), /location-first/);
+  app.element('location-share').checked = false;
+  app.element('location-share').onchange(); await flush();
+  assert.ok(app.calls.some(c => c[0] === 'location-stop'));
+  assert.ok(app.calls.some(c => c[0] === 'location-api' && c[2].enabled === false));
+  await app.advance(30_000); assert.equal(app.hidden(), true);
+  await app.deliver(app.snapshot([message, {...message, id: 'late', reply: 'Late location announcement'}]));
+  assert.equal(app.hidden(), true);
+  assert.equal([...app.physical.values()].some(text => text.includes('Late location')), false);
 });

@@ -89,6 +89,14 @@ export class PairingAuthority {
       unlinkSync(this.path('sessions', token)); return true;
     } catch { return false; }
   }
+  /** Internal stable subject for consent across packaged-app token rotation. Never expose the hash to a client. */
+  subject(token: string, origin: string): string | undefined {
+    if (!this.authorized(token, origin)) return;
+    try {
+      const session = JSON.parse(readFileSync(this.path('sessions', token), 'utf8'));
+      return session.recoveryHash ?? digest(token);
+    } catch { return; }
+  }
   /** Recovery is a distinct 256-bit capability, not an existing data token.
    * Retrying after a lost response issues a fresh session and revokes the prior
    * one. The original 90-day expiry never extends. Atomic pointer replacement

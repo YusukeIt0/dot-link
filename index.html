@@ -37,6 +37,14 @@
     <button id="send" disabled data-en="Send to Dot">Dotに送信</button><button id="tts" data-en="Read aloud OFF">読み上げ OFF</button><br>
     <button id="previous" data-en="Previous conversation">前の会話</button><button id="next" data-en="Next conversation">次の会話</button>
     </section>
+    <details id="location-settings" class="display-settings">
+      <summary data-en="Location sharing">位置情報の共有</summary>
+      <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-en="Share my location">位置情報を共有する</span></label>
+      <p class="note" data-en="Share your phone's current location with your existing Dot through your Mac. Dot can use your location and preferences to offer relevant suggestions on G2. You can stop sharing here at any time.">スマートフォンの現在地を、自分のMac経由でいつものDotに共有します。Dotが好みや場所を踏まえた案内に使います。共有はここからいつでも停止できます。</p>
+      <p id="location-status" role="status" class="note"></p>
+      <p id="location-dot-status" class="note"></p>
+      <p class="note" data-en="Your Mac must be awake and connected. Location sharing pauses when you exit Dot Link on the glasses and resumes when you reopen it with this setting on.">Macが起動・接続している間に使えます。G2でDot Linkを終了すると共有は停止し、この設定がオンのまま開き直すと再開します。</p>
+    </details>
     <details id="display-settings" class="display-settings">
       <summary data-en="Display settings">表示設定</summary>
       <p class="note" data-en="These settings apply only to Dot Link, separately from Even's display settings. Hiding the display keeps Dot connected. The app never closes automatically.">Even本体の表示設定とは別に、Dot Link内だけに適用します。表示を消してもDotとの接続は継続し、アプリは自動終了しません。</p>
@@ -62,7 +70,7 @@
     <footer>
       <label for="language">Language / 言語</label> <select id="language"><option value="auto" data-en="Automatic">自動</option><option value="ja">日本語</option><option value="en">English</option></select>
       <button id="show-diagnostics" class="secondary" aria-expanded="false" aria-controls="connection-diagnostics" data-en="Connection details">接続情報を見る</button>
-      <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-en="App origin">この画面の接続元</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p></section>
+      <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-en="App origin">この画面の接続元</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p><p id="location-diagnostic" role="status"></p></section>
     </footer>
   </main>
   <script type="module" src="/src/main.ts"></script></body>

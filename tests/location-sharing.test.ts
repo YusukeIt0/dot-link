@@ -1,0 +1,139 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { LocationSharing } from '../src/location-sharing.ts';
+import type { AppLocation } from '@evenrealities/even_hub_sdk';
+
+const flush = async () => { for (let i = 0; i < 8; i++) await new Promise<void>(resolve => setImmediate(resolve)); };
+function fixture() {
+  let now = Date.now();
+  let target: string | undefined = 'https://relay.example.test';
+  const local = new Map<string, string>(), nativeStore = new Map<string, string>();
+  const requests: {path: string; body: any}[] = [];
+  let listener: ((fix: AppLocation) => void) | undefined;
+  let starts = 0, stops = 0, reads = 0, failed = false;
+  const fix = (): AppLocation => ({latitude: 10, longitude: 20, accuracy: 5, timestamp: now});
+  const native = {
+    getLocalStorage: async (key: string) => nativeStore.get(key) ?? '',
+    setLocalStorage: async (key: string, raw: string) => {nativeStore.set(key, raw); return true;},
+    onAppLocationChanged: (callback: (fix: AppLocation) => void) => {listener = callback; return () => {listener = undefined;};},
+    startAppLocationUpdates: async () => {starts++; return true;},
+    stopAppLocationUpdates: async () => {stops++; return true;},
+    getAppLocation: async (): Promise<AppLocation | null> => {reads++; return fix();},
+  };
+  const controller = new LocationSharing({automatic: false, now: () => now, storage: () => ({getItem: key => local.get(key) ?? null, setItem: (key, raw) => {local.set(key, raw);}}),
+    target: () => target, changed: () => {}, api: async (path, body) => {
+      requests.push({path, body}); if (failed) throw new Error('Offline');
+      const p = body as any;
+      return path.endsWith('/control') ? {enabled: p.enabled} : {locationSharing: true, locationSubscribed: true, locationFresh: !!p.fix, locationMeasuredAt: p.fix?.measured_at, locationAccuracy: p.fix?.accuracy, locationReceivedAt: new Date(now).toISOString()};
+    }});
+  return {controller, native, local, nativeStore, requests, fix, emit: () => listener?.(fix()), starts: () => starts, stops: () => stops, reads: () => reads,
+    advance: (ms: number) => {now += ms;}, setTarget: (value?: string) => {target = value;}, fail: (value: boolean) => {failed = value;}};
+}
+
+test('no permission request, position acquisition or upload happens before explicit ON', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  await f.controller.attach(f.native); await f.controller.pump();
+  assert.equal(f.starts(), 0); assert.equal(f.reads(), 0); assert.equal(f.requests.length, 0);
+  f.emit(); await f.controller.pump(); assert.equal(f.requests.length, 0);
+  f.controller.setEnabled(true); await flush();
+  assert.equal(f.starts(), 1); assert.equal(f.controller.status().state, 'sharing');
+  assert.deepEqual(f.requests.map(r => r.path), ['/api/location/control', '/api/location/update']);
+  assert.equal(f.requests[1].body.fix.latitude, 10);
+  for (const saved of [...f.local.values(), ...f.nativeStore.values()]) {
+    assert.equal(saved.includes('latitude'), false); assert.equal(saved.includes('measured_at'), false);
+  }
+});
+
+test('OFF stops the native source, revokes the relay, and ignores later native callbacks', async t => {
+  const f = fixture(); t.after(() => f.controller.stop()); await f.controller.attach(f.native);
+  f.controller.setEnabled(true); await flush();
+  f.controller.setEnabled(false); await flush();
+  assert.equal(f.stops(), 1); assert.equal(f.controller.status().state, 'off');
+  assert.equal(f.requests.at(-1)?.body.enabled, false);
+  const count = f.requests.length;
+  f.emit(); await f.controller.pump(); assert.equal(f.requests.length, count);
+});
+
+test('OFF during a one-shot location request reaches the relay before the measurement resolves', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  let resolveFix!: (fix: AppLocation) => void;
+  f.native.getAppLocation = () => new Promise(resolve => {resolveFix = resolve;});
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  assert.equal(typeof resolveFix, 'function');
+  f.controller.setEnabled(false); await flush();
+  assert.equal(f.requests.at(-1)?.body.enabled, false);
+  resolveFix(f.fix()); await flush();
+  assert.equal(f.requests.filter(r => r.path.endsWith('/update')).length, 0);
+});
+
+test('failed native stop stays visibly pending and retries without uploading more locations', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  let attempts = 0;
+  f.native.stopAppLocationUpdates = async () => ++attempts > 2;
+  f.controller.setEnabled(false); await flush();
+  assert.equal(f.controller.status().state, 'stopping');
+  const updates = f.requests.filter(r => r.path.endsWith('/update')).length;
+  f.emit(); await f.controller.pump(); await flush();
+  assert.equal(f.controller.status().state, 'off');
+  assert.equal(f.requests.filter(r => r.path.endsWith('/update')).length, updates);
+});
+
+test('offline OFF remains pending and is delivered before a new sharing session', async t => {
+  const f = fixture(); t.after(() => f.controller.stop()); await f.controller.attach(f.native);
+  f.controller.setEnabled(true); await flush(); const first = f.requests[0].body.sharing_id;
+  f.fail(true); f.controller.setEnabled(false); await flush();
+  assert.equal(f.controller.status().state, 'stopping');
+  f.controller.setEnabled(true); await flush();
+  f.fail(false); await f.controller.pump();
+  const successfulOrder = f.requests.slice(-3);
+  assert.equal(successfulOrder[0].body.sharing_id, first); assert.equal(successfulOrder[0].body.enabled, false);
+  assert.equal(successfulOrder[1].body.enabled, true); assert.notEqual(successfulOrder[1].body.sharing_id, first);
+  assert.equal(successfulOrder[2].path, '/api/location/update');
+});
+
+test('native saved consent restores only for the same relay; late restore cannot override an OFF click', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  let resolveStore!: (raw: string) => void;
+  f.native.getLocalStorage = () => new Promise(resolve => {resolveStore = resolve;});
+  const attaching = f.controller.attach(f.native);
+  f.controller.setEnabled(false);
+  resolveStore(JSON.stringify({enabled: true, origin: 'https://relay.example.test', stops: []}));
+  await attaching; assert.equal(f.controller.status().enabled, false); assert.equal(f.starts(), 0);
+  const g = fixture(); t.after(() => g.controller.stop());
+  g.nativeStore.set('dot-location-sharing-v1', JSON.stringify({enabled: true, origin: 'https://different.example.test', stops: []}));
+  await g.controller.attach(g.native); assert.equal(g.controller.status().enabled, false); assert.equal(g.starts(), 0); assert.deepEqual(g.requests, []);
+});
+
+test('failed native permission does not repeatedly prompt; toggling allows a deliberate retry', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  let attempts = 0; f.native.startAppLocationUpdates = async () => {attempts++; return false;};
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  assert.equal(f.controller.status().state, 'unavailable');
+  await f.controller.pump(); await f.controller.pump(); assert.equal(attempts, 1);
+  assert.equal(f.requests.length, 0);
+  f.controller.setEnabled(false); await flush(); f.controller.setEnabled(true); await flush(); assert.equal(attempts, 2);
+});
+
+test('stale measurements are not uploaded as fresh, and explicit exit retains preference but stops source', async t => {
+  const f = fixture(); await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  f.advance(100_000); f.native.getAppLocation = async () => null;
+  await f.controller.pump();
+  assert.equal(f.requests.at(-1)?.body.fix, undefined); assert.equal(f.controller.status().state, 'stale');
+  await f.controller.stop(); await flush(); assert.equal(f.stops(), 1);
+  assert.equal(JSON.parse(f.nativeStore.get('dot-location-sharing-v1')!).enabled, true);
+  assert.equal(f.requests.at(-1)?.body.enabled, false);
+});
+
+test('a late G2 announcement is suppressed after OFF, expiry or a previous sharing session', async t => {
+  const f = fixture(); t.after(() => f.controller.stop()); await f.controller.attach(f.native);
+  f.controller.setEnabled(true); await flush();
+  const message = {location_sharing_id: f.requests[0].body.sharing_id, location_expires_at: new Date(Date.now() + 90_000).toISOString()};
+  assert.equal(f.controller.acceptsAnnouncement(message), true);
+  assert.equal(f.controller.acceptsAnnouncement({}), true);
+  f.controller.setEnabled(false); await flush(); assert.equal(f.controller.acceptsAnnouncement(message), false);
+  f.controller.setEnabled(true); await flush(); assert.equal(f.controller.acceptsAnnouncement(message), false);
+  const latest = {...message, location_sharing_id: f.requests.at(-1)?.body.sharing_id};
+  assert.equal(f.controller.acceptsAnnouncement(latest), true);
+  f.advance(100_000); assert.equal(f.controller.acceptsAnnouncement(latest), false);
+});

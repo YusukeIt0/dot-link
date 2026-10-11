@@ -22,3 +22,17 @@ Free Whisper small is the default. Speech input on the Mac also offers Soniox st
 Mac・iPhone・G2は選択したサービスとモデルを表示します。外部サービスへの接続は実際の音声入力時に確認し、保存だけでAPI接続成功とは扱いません。利用権限・課金・対応リージョン等は本人の各社アカウントに従います。
 
 Mac, iPhone and G2 show the selected service and model. API access is checked when you use speech input; saving a key does not verify access. Your service account determines permissions, billing and supported regions.
+
+## Optional location sharing (development builds)
+
+位置共有に対応したEven/Macの両ビルドを使う場合は、ChatGPTの設定 → プラグイン → 接続済みのDot Linkプラグイン →「ツールを更新」で機能を更新します。既存の接続名は作成時の名前のままの場合があります。get_location_context、respond_to_location、およびlocation.updatedが認識されることを確認してください。
+
+Even側の「位置情報を共有する」は初期オフです。本人がオンにしてOSの位置許可を与えると、スマホの位置が接続したMacへ送られ、Dotが専用ツールで読めるようになります。次に、いつものDotへ「位置更新を受け取り、私の好みや希望を踏まえて、役立つ情報があるときだけG2へ知らせて」と依頼します。Dotがイベント購読を作成する必要があり、ツールの更新だけでは自動案内は始まりません。
+
+チェックを外すと新しい位置共有を止め、中継の現在地をクリアします。通信断でオフ操作を伝えられない場合は、最後の中継更新から90秒で共有が失効します。イベント購読の設定は再開用に残りますが、オフ中の位置は読めません。既にDotへ渡した情報や保存された案内を削除する操作ではありません。
+
+With matching development builds on Even and Mac, open ChatGPT Settings → Plugins → your existing Dot Link connection → **Update tools**. Its name may still be the name chosen at creation. Confirm that get_location_context, respond_to_location and location.updated are recognized.
+
+Location sharing starts off. Enabling it in the Even app and granting the OS location permission sends your phone's location to your connected Mac for Dot to read. Then ask your existing Dot to monitor location changes and reach out on G2 only when useful information matches your preferences and requests. Dot needs to create an event subscription; updating tools alone does not enable proactive announcements.
+
+Turning sharing off stops new location sharing and clears the relay's current location. If the stop cannot reach the relay, sharing expires 90 seconds after the last relay update. The event subscription remains available for a later restart, but cannot read a location while sharing is off. This does not delete information already read by Dot or stored announcements.

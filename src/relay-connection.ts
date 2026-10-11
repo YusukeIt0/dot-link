@@ -71,7 +71,7 @@ export class RelaySettings {
 }
 
 export function apiAddress(path: string, origin?: string): string {
-  if (!['/api/status', '/api/messages', '/api/updates', '/api/transcribe', '/api/utterances', '/api/timings', '/api/pair', '/api/pair/resume', '/api/pair/revoke'].includes(path)) throw new Error('Unknown API route');
+  if (!['/api/status', '/api/messages', '/api/updates', '/api/transcribe', '/api/utterances', '/api/timings', '/api/location/control', '/api/location/update', '/api/pair', '/api/pair/resume', '/api/pair/revoke'].includes(path)) throw new Error('Unknown API route');
   return origin ? `${relayOrigin(origin)}${path}` : path;
 }
 

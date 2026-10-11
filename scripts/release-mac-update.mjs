@@ -12,6 +12,8 @@ if((await stat(key)).mode&0o077)throw new Error('Signing key permissions must be
 const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',maxBuffer:10e6});if(r.status!==0)throw new Error(`${cmd} failed (${r.status})`);return r.stdout.trim();};
 const info=join(app,'Contents/Info.plist'),field=k=>run('/usr/libexec/PlistBuddy',['-c','Print :'+k,info]);
 const version=field('CFBundleShortVersionString'),build=field('CFBundleVersion');
+const metadata=JSON.parse(run('/usr/bin/plutil',['-convert','json','-o','-',info]));
+if(metadata.DotLinkBeta===true)throw new Error('Private Beta builds cannot be published; prepare and review a stable release build first');
 if(!/^\d+\.\d+\.\d+$/.test(version)||!/^\d+$/.test(build)||field('SUPublicEDKey')!==config.publicKey||field('CFBundleIdentifier')!=='app.tripsurf.dotlink.mac')throw new Error('Unexpected bundle identity or key');
 run('/usr/bin/codesign',['--verify','--deep','--strict',app]);
 const repository=JSON.parse(run('gh',['api','repos/'+config.repository]));

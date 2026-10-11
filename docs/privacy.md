@@ -99,3 +99,13 @@ Use GitHub Issues for non-sensitive reports. Do not attach credentials, pairing 
 Microsoftの接続先は、このMacのローカル設定へ保存します。各社での音声データの扱いと料金は、音声入力画面下部の公式リンクと本人の契約を確認してください。Dot Linkは各社での保持・削除を保証しません。
 
 The Microsoft endpoint is stored in local Mac settings. Review the official pricing and data handling links in Speech input and your agreement with the selected service. Dot Link does not guarantee provider-side retention or deletion.
+
+## 任意の位置共有 / Optional location sharing
+
+Even側の「位置情報を共有する」は初期状態ではオフです。オンにすると、Evenアプリが取得したスマホの位置・測定時刻・精度（取得できる場合は速度・方角）を、接続した本人のMacへ送ります。既存Dotが専用ツールで最新位置を読み、案内するか判断します。位置共有をオフにすると、新たな共有と位置に基づく案内を止めます。通信断の場合、中継側の共有は最終更新から90秒で失効します。OSやEvenアプリの位置アクセス許可は本人が管理します。
+
+Dot Linkは座標の移動履歴をディスクへ保存しません。最新位置と短期間の判断用データはMacのメモリで扱い、設定・購読・失効識別子だけを保存します。Dotが作成した案内は通常の会話履歴へ保存され、案内文に地名が含まれる場合があります。Dotが取得した位置情報のOpenAI側での取り扱いは、本人の契約・設定に従います。共有停止は既に送信した情報の削除ではありません。背景動作・実際の更新間隔・電池影響は端末とOSに依存します。
+
+Location sharing starts off. When enabled in the Even app, the phone location, measurement time and accuracy (and speed/heading when available) are sent to your connected Mac. Your existing Dot can read the latest location and decide whether to offer useful information. Turning sharing off stops new sharing and location-based announcements. If disconnected, the relay expires sharing 90 seconds after its last update. You control the OS and Even app location permissions.
+
+Dot Link does not save a coordinate trail to disk. The latest location and short-lived decision context remain in Mac memory; preferences, subscriptions and revoked identifiers are saved. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.

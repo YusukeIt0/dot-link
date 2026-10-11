@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage } from 'node:http';
+import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { STTError } from './stt.ts';
@@ -55,7 +56,7 @@ export function deviceServer(options: { token: string; origin: string; directory
     }
     try {
       if (path.startsWith('/api/')) {
-        const routes = ['/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', '/api/transcribe', '/api/pair', '/api/pair/resume', '/api/pair/revoke'];
+        const routes = ['/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', '/api/transcribe', '/api/pair', '/api/pair/resume', '/api/pair/revoke', '/api/location/control', '/api/location/update'];
         if (request.method === 'OPTIONS' && crossOrigin) {
           const method = request.headers['access-control-request-method'];
           const headers = String(request.headers['access-control-request-headers'] ?? '').toLowerCase().split(',').map(item => item.trim()).filter(Boolean);
@@ -93,6 +94,12 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (finished) response.once('close', finished);
         }
         if (path === '/api/pair/revoke' && request.method === 'POST' && options.pairing && !legacy) {
+          const subject = options.pairing.subject(credential, requestOrigin!);
+          if (subject) {
+            try { await fetch(`${bridgeURL}/api/location/revoke`, {method: 'POST', redirect: 'error',
+              headers: {Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json', 'X-G2-Location-Owner': subject},
+              body: '{}', signal: AbortSignal.timeout(3000)}); } catch { /* The short location lease also fails closed. */ }
+          }
           options.pairing.revoke(credential, requestOrigin!); response.writeHead(204); response.end(); return;
         }
         if (path === '/api/transcribe' && request.method === 'POST') {
@@ -116,7 +123,7 @@ export function deviceServer(options: { token: string; origin: string; directory
           } finally { response.removeListener('close', cancel); }
         }
         const allowed = (request.method === 'GET' && ['/api/status', '/api/messages', '/api/updates'].includes(path)) ||
-          (request.method === 'POST' && ['/api/utterances', '/api/timings'].includes(path));
+          (request.method === 'POST' && ['/api/utterances', '/api/timings', '/api/location/control', '/api/location/update'].includes(path));
         if (!allowed) { json(404, { error: 'Not found' }); return; }
         if (request.method === 'POST' && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
         const body = request.method === 'POST' ? await boundedBody(request, 32768) : undefined;
@@ -124,8 +131,11 @@ export function deviceServer(options: { token: string; origin: string; directory
         const disconnected = () => controller.abort();
         response.once('close', disconnected);
         try {
+          const locationOwner = path.startsWith('/api/location/') ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
+          if (path.startsWith('/api/location/') && !locationOwner) { json(401, {error: 'Pairing required'}); return; }
           const result = await fetch(`${bridgeURL}${path}`, { method: request.method,
             headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json',
+              ...(locationOwner ? {'X-G2-Location-Owner': locationOwner} : {}),
               ...(typeof request.headers['x-g2-revision'] === 'string' ? { 'X-G2-Revision': request.headers['x-g2-revision'] } : {}) },
             body: body?.toString('utf8'), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]), redirect: 'error' });
           if (response.destroyed) return;
