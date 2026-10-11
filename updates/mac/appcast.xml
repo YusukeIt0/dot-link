@@ -1,25 +1,29 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.3.0</title><sparkle:version>53</sparkle:version><sparkle:shortVersionString>0.3.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">音声入力サービスを選べるようになりました。
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.3.1</title><sparkle:version>59</sparkle:version><sparkle:shortVersionString>0.3.1</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">音声入力の選択肢と、音声出力の設定画面を追加しました。
 
-- Macの「音声入力」で無料のWhisper、またはご自身のAPIキーを使うSonioxを選択できます。SonioxのAPI料金・利用枠が適用されます。キーはMacのキーチェーンに保存し、録音はMacからSonioxへ直接送ります。
-- 公開中のEven 0.2.14と互換性があります。サービス名表示などのEven側の変更は0.2.19に含まれ、Even Hubで別途審査されます。
-- サービス選択とヘルプを整理しました。TTSサービスの選択機能は今回の更新には含まれません。
+- 音声入力にElevenLabs、Microsoft、OpenAI、AssemblyAIを追加。Whisper smallとSonioxも引き続き利用できます。
+- 外部サービスはご自身のAPIキーと利用枠を使います。MicrosoftはAzure Speechの接続先も必要です。失敗時に別サービスへ自動送信しません。
+- 接続状況に「音声出力」を追加。現在はiPhoneの標準音声に対応し、読み上げのON／OFFはEven側で切り替えます。
+- 公開中のEven 0.2.14でも音声入力の通信方式は共通です。全6サービスとモデル名の表示にはEven 0.2.21が必要です。Even 0.2.21は別途審査・公開されます。
 
-更新後にキーチェーンの確認が出た場合は「常に許可」を選択してください。通知共有が止まった場合は、システム設定のアクセシビリティ内のDot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。自動更新は引き続き一時停止中です。
+更新はMacアプリの「アップデートを確認」から行えます。接続設定を作り直す必要はありません。自動更新は引き続き停止中です。更新後、APIキーへのアクセスや通知のアクセシビリティ権限の再許可が必要な場合があります。Apple公証は未実施です。
 
-Apple Silicon / macOS 13以降。Apple公証は未実施です。
+検証: 単体121件、HTTP統合9件、通知ネイティブ66項目、更新ドライバ4グループ、隔離Keychainの試験に成功。Whisper・Soniox・ElevenLabsは実際の音声認識を確認済みです。OpenAIは利用枠エラーまでの確認で、Microsoft・AssemblyAIは実アカウントでの認識成功をまだ確認していません。
 
-Speech input now supports provider selection.
+---
 
-- Choose free local Whisper or Soniox with your own API key in Speech input on the Mac. Soniox API charges and limits apply. Keys stay in macOS Keychain; recordings go directly from your Mac to Soniox.
-- Compatible with the currently published Even 0.2.14. Provider labels and related companion changes are included in Even 0.2.19 and go through a separate Even Hub review.
-- Simplified speech settings and help. TTS provider selection is not part of this update.
+Added more speech input options and a speech output settings screen.
 
-If Keychain asks after updating, choose Always Allow. If notification sharing stops, remove Dot Link from the Accessibility list in System Settings, add the installed Dot Link.app again, and turn access on. Automatic updates remain temporarily disabled.
+- Added ElevenLabs, Microsoft, OpenAI and AssemblyAI alongside local Whisper small and Soniox.
+- External services use your own API key and quota. Microsoft also requires an Azure Speech endpoint. Failures do not send audio to another service automatically.
+- Added Speech output to Connections. iPhone system speech is the current option; read-aloud remains controlled in the Even companion.
+- The published Even 0.2.14 uses the same speech input API. Labels for all six services and their models require Even 0.2.21, which will be reviewed and published separately.
 
-Apple Silicon / macOS 13 or later. Not Apple-notarized.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.3.0-53/Dot-Link-0.3.0-53-arm64.zip" sparkle:installationType="application" sparkle:edSignature="2R8kE7LqOpKcXRGlMGnEvWDQyHG1t1vLVnYyxSTbBimuPeWNWwtGlIw4M4Q4Woh5hnf3HXwE2FyeCHPH4KTjDA==" length="51454791" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: +CFM2H75cScIVrhnj9jcmtTcThwj0iPHU2M1laRkLQRqzQCWLuu70ZfTVDQV6WriZ5e3ufrH0WwAq6SvYy39BQ==
-length: 2910
+Use Check for updates in the Mac app. Existing connection settings are retained. Automatic updates remain disabled. After updating, you may need to allow Keychain access or reauthorize notification Accessibility access. The app is not Apple-notarized.
+
+Validation: 121 unit tests, 9 HTTP integration tests, 66 native notification checks, 4 update-driver groups and isolated Keychain checks passed. Live transcription was verified with Whisper, Soniox and ElevenLabs. OpenAI reached a quota error; successful live transcription with Microsoft and AssemblyAI has not yet been verified.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.3.1-59/Dot-Link-0.3.1-59-arm64.zip" sparkle:installationType="application" sparkle:edSignature="IdyMvpKdlXe735BdSyfVSl9uHrDEYEahYG6KL3sInKOAkqjml7FUvyH76FSALnU1RjetrxQWDWbeGJzca+VFCA==" length="50850346" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: kZ0ndgsvR/53YVmh1VnHitzxiP+I8ldwpiGP165Ai13YKqdoFvhk7o19VXuAXrJ5EQYlh9IB+HV4rmTP3XvCCg==
+length: 3713
 -->
