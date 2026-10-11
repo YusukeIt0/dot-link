@@ -55,3 +55,5 @@ main:has(.display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 .display-settings-actions #display-save { display: block; width: 100%; margin: 0; }
 .display-settings-actions .note { margin: 8px 0 0; }
 .display-settings-actions .note:empty { display: none; }
+
+.speech-status { font-size: 13px; color: #9de591; margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid #344637; }

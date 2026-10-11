@@ -7,7 +7,7 @@ import { ownedJobs, regularPath, suspendServices } from './app-lifecycle.mjs';
 import { projectIdentity } from './mac-install.mjs';
 
 const dataNames = ['bridge-state.json','notification-state.json','mcp-key','mcp-authorization-header','device-key','notification-key',
- 'pairing','tunnel.yaml','tunnel-api-key','device-config.json','beta-pairing.txt','beta-pairing.png',
+ 'stt.json','pairing','tunnel.yaml','tunnel-api-key','device-config.json','beta-pairing.txt','beta-pairing.png',
  'latency-bridge.jsonl','latency-device.jsonl','notification-menu-unified','lifecycle.json',
  'bridge-service.log','device-service.log','tunnel-service.log','menu-service.log'];
 const has = async p => lstat(p).then(()=>true,e=>{if(e.code==='ENOENT')return false;throw e;});

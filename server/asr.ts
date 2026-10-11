@@ -21,7 +21,7 @@ export function validateWav(wav: Buffer): void {
 
 export function localTranscriber() {
   let busy = false;
-  return async (wav: Buffer): Promise<string> => {
+  return async (wav: Buffer, signal?: AbortSignal): Promise<string> => {
     validateWav(wav);
     if (busy) throw new Error('Transcription in progress');
     busy = true;
@@ -35,7 +35,7 @@ export function localTranscriber() {
       if (!whisper) throw new Error('Whisper is not installed');
       await execute(whisper, ['-m', resolve('.runtime/models/ggml-small.bin'),
         '-f', input, '-l', 'auto', '-nt', '-np', '-otxt', '-of', output],
-      { timeout: 90000, maxBuffer: 256000 });
+      { timeout: 90000, maxBuffer: 256000, signal });
       const text = (await readFile(`${output}.txt`, 'utf8')).trim();
       if (!text || text.length > 4000) throw new Error('No usable transcription');
       return text;

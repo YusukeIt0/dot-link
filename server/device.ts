@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
+import { STTError } from './stt.ts';
 import { authorized } from './http.ts';
 import { LatencyLog, traceId } from './latency.ts';
 import { PairingAuthority } from './pairing-authority.ts';
@@ -18,8 +19,9 @@ async function boundedBody(request: IncomingMessage, maximum: number): Promise<B
 }
 
 export function deviceServer(options: { token: string; origin: string; directory: string;
-  transcribe: (wav: Buffer) => Promise<string>; bridgeURL?: string; latency?: LatencyLog; deviceName?: string;
-  pairing?: PairingAuthority; appOrigins?: string[]; updateActivity?: UpdateActivity }) {
+  transcribe: (wav: Buffer, signal?: AbortSignal) => Promise<string>; bridgeURL?: string; latency?: LatencyLog; deviceName?: string;
+  pairing?: PairingAuthority; appOrigins?: string[]; updateActivity?: UpdateActivity;
+  sttProvider?: () => Promise<'whisper' | 'soniox'> }) {
   const origin = new URL(options.origin);
   if (origin.origin !== options.origin || options.token.length < 32) throw new Error('Invalid device configuration');
   const root = resolve(options.directory);
@@ -98,12 +100,19 @@ export function deviceServer(options: { token: string; origin: string; directory
           const id = rawTrace === undefined ? undefined : traceId.parse(rawTrace);
           const wav = await boundedBody(request, 960044);
           if (id) options.latency?.mark(id, 'asr_received');
+          const cancelled = new AbortController();
+          const cancel = () => cancelled.abort();
+          response.once('close', cancel);
           try {
-            const text = await options.transcribe(wav);
+            const text = await options.transcribe(wav, cancelled.signal);
             if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
             if (id) options.latency?.mark(id, 'asr_complete');
             json(200, { text }); return;
-          } catch (error) { if (id) options.latency?.mark(id, 'asr_failed'); throw error; }
+          } catch (error) {
+            if (id) options.latency?.mark(id, 'asr_failed');
+            if (error instanceof STTError && !response.destroyed) { json(422, {code: error.code}); return; }
+            throw error;
+          } finally { response.removeListener('close', cancel); }
         }
         const allowed = (request.method === 'GET' && ['/api/status', '/api/messages', '/api/updates'].includes(path)) ||
           (request.method === 'POST' && ['/api/utterances', '/api/timings'].includes(path));
@@ -125,6 +134,12 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (result.ok && options.deviceName) {
             if (path === '/api/status') data.deviceName = options.deviceName;
             if (path === '/api/updates') data.status.deviceName = options.deviceName;
+          }
+          if (result.ok && options.sttProvider && ['/api/status', '/api/updates'].includes(path)) {
+            // Read the choice only. Status/typed messages must never read keys or contact an STT service.
+            let provider: 'whisper' | 'soniox' | null = null;
+            try { const selected = await options.sttProvider(); if (selected === 'whisper' || selected === 'soniox') provider = selected; } catch { /* Show unknown, never guess. */ }
+            (path === '/api/status' ? data : data.status).sttProvider = provider;
           }
           json(result.status, data); return;
         } finally { response.off('close', disconnected); }

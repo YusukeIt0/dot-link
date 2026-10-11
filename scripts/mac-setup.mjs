@@ -1,3 +1,4 @@
+import { sttSelection, saveSTTSelection } from '../server/stt-settings.ts';
 import { readFile, writeFile, mkdir, open, rename, chmod, stat } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -45,6 +46,7 @@ async function inspect() {
     networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured,
     bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, subscribed: health.subscribed === true };
   state.legacyNotificationRegistered = installation.installed ? (await legacyNotificationState(directory)).registered : false;
+  try { state.sttProvider = await sttSelection(join(directory, '.runtime')); } catch { state.sttProvider = 'unknown'; }
   state.step = nextSetupStep(state);
   return state;
 }
@@ -109,6 +111,12 @@ try {
   else if (action === 'update-recover') { const found = await discoverInstallation(); await finishUpdate(found.directory); result = await inspect(); }
   else if (action === 'update-abort') { const found = await discoverInstallation(); result = await finishUpdate(found.directory, {rollback:true}); }
   else if (action === 'inspect') result = await inspect();
+  else if (action === 'stt-select') {
+    const found = await discoverInstallation();
+    if (!found.installed) throw new Error('INSTALL_FIRST');
+    await saveSTTSelection(join(found.directory, '.runtime'), input.provider);
+    result = await inspect();
+  }
   else if (action === 'prepare') result = await prepare();
   else if (action === 'save-tunnel') result = await saveTunnel();
   else if (action === 'resume') {

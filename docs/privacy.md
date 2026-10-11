@@ -1,6 +1,6 @@
 # Dot Linkのデータの扱い / Data handling
 
-更新日 / Updated: 2026-10-10。Mac 0.2.31と、Even Hubで公開中の[Even側0.2.14](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)の実装を対象にしています。This describes Mac 0.2.31 and the Even companion 0.2.14, now published in Even Hub.
+更新日 / Updated: 2026-10-11。Mac 0.3.0の音声入力サービス選択と、Even側0.2.14〜0.2.19の実装を対象にしています。This describes speech-provider selection in Mac 0.3.0 and the Even companion versions 0.2.14–0.2.19.
 
 ## 日本語
 
@@ -8,7 +8,7 @@ Dot Linkは、Even G2と本人の既存ChatGPT Dotを、本人が管理するMac
 
 ### 取得・送信する内容
 
-- **音声と会話:** 本人が録音を開始したときにG2の音声を取得します。長押しを離すか停止操作で終了し、最大30秒です。音声を自分のMacへHTTPSで送り、Mac上のWhisperで文字起こしします。Dot Linkは録音をOpenAIの音声認識サービスへ送りません。文字起こしした文章、または本人が入力して送信した文章は、個人用ChatGPT接続を通じて既存Dotへ渡します。Dotの返信・自発メッセージはMacからG2へ返します。
+- **音声と会話:** 本人が録音を開始したときにG2の音声を取得します。長押しを離すか停止操作で終了し、最大30秒です。音声を自分のMacへHTTPSで送り、標準ではMac上の無料Whisperで文字起こしします。Macの「音声入力」でSonioxを明示的に選ぶと、その後の録音を本人のAPIキーでMacからSonioxへ直接送信します。本人のSonioxアカウントの料金・利用枠が適用されます。未選択のサービスへの送信や失敗時の自動切替は行いません。Dot Linkは録音をOpenAIの音声認識サービスへ送りません。文字起こしした文章、または本人が入力して送信した文章は、個人用ChatGPT接続を通じて既存Dotへ渡します。Dotの返信・自発メッセージはMacからG2へ返します。
 - **接続コードとカメラ:** 現在の接続方法は、Macで発行した接続コードをEven側へ貼り付ける方式です。この操作ではカメラを使いません。Even側0.2.14ではQRスキャン・写真読取処理とカメラ権限宣言を削除しました。0.2.13以前のEvenパッケージとMac 0.2.21同梱の旧画面には、非表示のQR処理・旧カメラ関連コードが残ります。接続コードは認証情報なので他人と共有しないでください。
 - **頭の動き:** 「顔を上げると再表示」がオンのとき、G2の動きセンサーの値を取得し、端末内で表示を戻すか判断します。この設定は初期状態でオンで、表示設定からオフにできます。Dot Linkのコードには、このセンサー値をMacやDotへ送信したり、動きの履歴として保存したりする処理はありません。表示の基準角度などの設定値は保存します。
 - **Macの通知:** 任意の試作機能です。監視が動作すると、macOSのアクセシビリティ機能を通じて通知センターのタイトル・説明・値の文字列を読み取り、メモリ上で判定します。読取対象には一般アプリの通知文字列も含まれ得ます。「Macの全通知をDotに共有」を有効にした場合、読み取れる新着通知の送信者・見出し・本文をMacの中継から既存Dotへ渡します。この共有は初期状態ではオフです。通知元を識別できない場合も共有しますが、通知元や送信者を推測で補いません。通知の表示範囲を超えてチャットやメールを開くことはありません。Dotが案内の要否とタイミングを判断します。すべての通知形式や即時到着を保証するものではなく、通知元アプリへの返信操作には対応していません。通知機能だけを停止しても、会話用の中継は別に動作します。
@@ -16,7 +16,9 @@ Dot Linkは、Even G2と本人の既存ChatGPT Dotを、本人が管理するMac
 
 ### 保存するもの
 
-**Mac:** 音声認識中は録音と認識結果を作業ディレクトリへ一時保存し、通常終了・処理エラー時に削除します。電源断やプロセス強制終了で残ったファイルの自動掃除は未実装です。会話履歴は最大100件、通知履歴は最大100件、自発メッセージは最大1,000件を保存します。自発メッセージの上限では新規受付を停止します。これらの履歴を日数で自動削除する仕組みはありません。Macの履歴とDot側の記憶・履歴は別です。
+**Mac:** Whisperでの音声認識中は録音と認識結果を作業ディレクトリへ一時保存し、通常終了・処理エラー時に削除します。電源断やプロセス強制終了で残ったファイルの自動掃除は未実装です。会話履歴は最大100件、通知履歴は最大100件、自発メッセージは最大1,000件を保存します。自発メッセージの上限では新規受付を停止します。これらの履歴を日数で自動削除する仕組みはありません。Macの履歴とDot側の記憶・履歴は別です。
+
+Sonioxへの音声送信と認識結果の受信はメモリ上で行い、この経路では録音ファイルを作りません。サービスの選択はMacのローカル設定へ、SonioxのAPIキーはmacOSキーチェーンへ保存します。キーは設定画面から登録・差し替え・削除できます。音声入力中はキーチェーンの認証画面を出さず、読めない場合は設定画面での明示的な許可を案内します。アプリ更新によって許可が必要になる場合があります。
 
 Macには、接続先・トンネル設定、OpenAIトンネル接続用の認証情報、中継用の認証キー、イベント配送先と配送用の秘密情報も保存します。これらはローカルファイルに保存し、秘密情報を含むファイルには所有者だけが読み書きできる権限を設定します。すべてをハッシュ化したり、Keychainに保存したりする方式ではありません。全通知共有の選択、停止状態、言語、更新設定などはMacアプリの設定として保存します。
 
@@ -38,7 +40,7 @@ OpenAIへ送る会話や、OS・Even・Tailscaleが扱う情報は、それぞ�
 
 - **Even側の「この端末の接続を解除」:** Macへセッション失効を要求し、Even側の接続情報を削除します。通信できない場合はMac側の失効が未完了と表示します。Macの会話履歴、Even側の言語・表示設定や重複防止用記録をすべて消す操作ではありません。Even SDKへの削除反映が失敗する可能性もあるため、接続権限を確実に止めるにはMac側の失効が必要です。
 - **Mac側で全端末の接続を失効させる場合:** 保守用コマンド `node scripts/beta-pair.mjs revoke-all` を中継の作業ディレクトリで実行すると、接続コード・端末セッション・再接続用情報を失効させます。会話履歴やトンネル用認証情報の削除は別です。
-- **Macアプリを取り除く場合:** アプリ内の「Dot Linkをアンインストール…」を使います。中継と通知を停止し、自動起動を解除して、アプリ、専用の実行ファイル・音声認識モデル、接続設定、会話履歴をまとめてゴミ箱へ移します。設定を残す選択肢はありません。再び使うには初期設定が必要です。旧Mac 0.2.21には、設定・履歴を残す選択肢があります。
+- **Macアプリを取り除く場合:** アプリ内の「Dot Linkをアンインストール…」を使います。中継と通知を停止し、自動起動を解除して、アプリ、専用の実行ファイル・音声認識モデル、接続設定、会話履歴をまとめてゴミ箱へ移します。今回の音声入力設定で保存したSonioxキーはキーチェーンから削除します。キーの削除に失敗した場合はアンインストールを進めません。設定を残す選択肢はありません。再び使うには初期設定が必要です。旧Mac 0.2.21には、設定・履歴を残す選択肢があります。
 - **取り除く範囲:** 即時の完全消去ではありません。開発用配置では既知の対象ファイルを取り除くため、独自に作ったファイル・過去のバックアップ・一部の旧ログなどは残ることがあります。端末のバックアップ、Even側の保存情報、以前の開発版がKeychainに保存した更新キー、外部サービスのデータまで一括削除する処理ではありません。Macの表示・通知設定はゴミ箱への退避後に削除し、退避できない場合は保持したことを完了画面に表示します。
 
 サービスの停止だけでは履歴は消えません。OpenAI等へ既に送信した内容は、各サービス側で別途管理・削除してください。
@@ -49,7 +51,7 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 
 ### What is collected and sent
 
-- **Audio and conversations:** G2 audio is captured when you start recording, ending on release or a stop action, with a 30-second limit. Audio goes over HTTPS to your Mac for local Whisper transcription. Dot Link does not send recordings to OpenAI's transcription service. Transcribed or manually submitted text goes to your existing Dot through your personal ChatGPT connection. Replies and proactive messages return through the Mac to G2.
+- **Audio and conversations:** G2 audio is captured when you start recording, ending on release or a stop action, with a 30-second limit. Audio goes over HTTPS to your Mac. Free local Whisper transcription is the default. If you explicitly select Soniox in Speech input on your Mac, subsequent recordings go directly from your Mac to Soniox using your API key. Your Soniox account charges and limits apply. Unselected services are not contacted, and failures do not trigger an automatic provider switch. Dot Link does not send recordings to OpenAI's transcription service. Transcribed or manually submitted text goes to your existing Dot through your personal ChatGPT connection. Replies and proactive messages return through the Mac to G2.
 - **Pairing and camera:** The current pairing flow pastes a code generated on the Mac. It does not use the camera. Even 0.2.14 removes QR scanning, photo-reading code and the camera permission declaration. Earlier Even packages (0.2.13 and below) and the older web UI bundled with Mac 0.2.21 still contain hidden legacy QR/camera code. Pairing codes are credentials; do not share them.
 - **Head movement:** With “Show when I raise my head” enabled, G2 motion sensor values are used locally to decide when to restore the display. This setting defaults to on and can be disabled in display settings. Dot Link has no code to send these sensor values to the Mac or Dot, or store a movement history. Settings such as the calibrated forward angle are saved.
 - **Mac notifications:** This optional prototype reads Notification Center title, description and value strings through macOS Accessibility while monitoring is active. Ordinary application notification strings may be read into memory for classification. With “Share all Mac notifications with Dot” enabled, visible sender names, headings and text from readable new notifications go through the Mac relay to your existing Dot. Sharing defaults to off. Notifications may be shared without an identified source; unknown sources and senders are not inferred. Chats and emails are not opened to retrieve content beyond the notification. Dot decides whether and when to announce it. Not every notification format or immediate arrival is guaranteed, and replying in the source app is not supported. Pausing notifications alone does not stop the conversation relay.
@@ -57,7 +59,9 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 
 ### What is stored
 
-**On the Mac:** Recordings and transcription output are temporary working files, removed on normal completion or processing errors. Automatic cleanup after power loss or forced termination is not implemented. Up to 100 conversations, 100 notifications and 1,000 proactive messages are stored. At the proactive-message limit, new submissions are refused. These histories are not automatically deleted by age. Mac history and Dot's own memory and history are separate.
+**On the Mac:** With Whisper, recordings and transcription output are temporary working files, removed on normal completion or processing errors. Automatic cleanup after power loss or forced termination is not implemented. Up to 100 conversations, 100 notifications and 1,000 proactive messages are stored. At the proactive-message limit, new submissions are refused. These histories are not automatically deleted by age. Mac history and Dot's own memory and history are separate.
+
+The Soniox path sends audio and receives transcription in memory without creating recording files. The provider choice is stored in local Mac settings; the Soniox API key is stored in macOS Keychain. You can save, replace and delete it in Speech input. Keychain permission dialogs are never shown during transcription. If access fails, you are directed to explicitly allow access in settings. App updates may require permission again.
 
 The Mac also stores connection and tunnel settings, OpenAI tunnel credentials, relay authentication keys, and event delivery destinations and secrets. These are local files; files containing secrets are given owner-only read/write permissions. They are not all hashed or stored in Keychain. The all-notification sharing choice, paused state, language and update preferences are stored as Mac app settings.
 
@@ -79,10 +83,12 @@ Conversations sent to OpenAI, and information handled by the OS, Even and Tailsc
 
 - **“Revoke this device” on the Even side:** Requests session revocation on the Mac and removes local connection information. If communication fails, it reports that Mac-side revocation is incomplete. It does not erase Mac conversation history or all Even-side language, display and duplicate-prevention records. Deletion through the Even SDK can also fail; Mac-side revocation is needed to reliably invalidate access.
 - **Revoking all devices on the Mac:** The maintenance command `node scripts/beta-pair.mjs revoke-all`, run in the relay working directory, invalidates pairing codes, sessions and recovery credentials. It does not delete conversation history or tunnel credentials.
-- **Removing the Mac app:** Use “Uninstall Dot Link…” in the app. It stops the relay and notifications, removes login items, and moves the app, dedicated runtime, speech model, connection settings and conversation history to Trash. There is no option to retain settings; using the app again requires setup. The older Mac 0.2.21 offered an option to retain settings and history.
+- **Removing the Mac app:** Use “Uninstall Dot Link…” in the app. It stops the relay and notifications, removes login items, and moves the app, dedicated runtime, speech model, connection settings and conversation history to Trash. The Soniox key saved by Speech input is deleted from Keychain. If key deletion fails, removal does not proceed. There is no option to retain settings; using the app again requires setup. The older Mac 0.2.21 offered an option to retain settings and history.
 - **Removal scope:** Files are moved to Trash, rather than immediately and permanently erased. Development installations remove known target files; custom files, previous backups and some older logs may remain. This does not erase device backups, Even-side storage, update credentials stored in Keychain by earlier development releases, or data held by external services. Mac display and notification preferences are removed after a backup is moved to Trash; if that backup fails, the completion dialog says the preferences were kept.
 
 Stopping services alone does not delete history. Manage or delete information already sent to OpenAI or other services separately with those services.
+
+Sonioxを選んだ場合、音声データは同社の[データの取り扱い](https://soniox.com/docs/security-and-privacy)と本人の契約に従います。Dot LinkからSoniox側のデータ保持・削除を保証することはできません。When Soniox is selected, its [data handling policy](https://soniox.com/docs/security-and-privacy) and your agreement apply. Dot Link cannot guarantee storage or deletion within Soniox.
 
 ## 問い合わせ / Contact
 

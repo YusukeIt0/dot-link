@@ -1,5 +1,7 @@
 import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
+import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from './speech-status.ts';
+import { sttErrorMessage } from './stt-errors.ts';
 import { Recorder } from './audio.ts';
 import { TimingTracker } from './timing.ts';
 import { LiveUpdates } from './live-updates.ts';
@@ -97,6 +99,12 @@ let statusTimer: ReturnType<typeof setInterval> | undefined;
 let statusQueued = false;
 let statusDirty = false;
 let lastSentStatus = '';
+let lastSentSpeechStatus = '';
+let selectedSTT: STTProvider | undefined;
+const ttsDevice = speechDevice(navigator.userAgent, navigator.maxTouchPoints);
+const speechCaption = () => speechStatus(selectedSTT, progress.connection === 'online', tts, 'speechSynthesis' in window, ttsDevice);
+// Keep the divider in the text frame so standby clears and restores it with the status.
+const speechDisplayCaption = () => `${'─'.repeat(24)}\n${speechCaption()}`;
 let pageActive = true;
 function forgetPairing(message: string): void {
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
@@ -170,6 +178,10 @@ async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, 
     return api<T>(path, method, body, trace, true);
   }
   if (response.status === 401) forgetPairing(t('接続設定が無効になりました。Macで新しい接続コードを発行してください。'));
+  if (!response.ok && path === '/api/transcribe' && response.status === 422) {
+    const failure = await response.json().catch(() => ({}));
+    throw new Error(sttErrorMessage(failure.code) ?? t('処理できませんでした。接続または録音を確認してください。'));
+  }
   if (!response.ok) throw new Error(response.status === 401 ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
   return (response.status === 204 ? undefined : response.json()) as Promise<T>;
 }
@@ -184,10 +196,11 @@ function showMessage(): void {
   if (message?.kind === 'proactive') { display(`Dot · ${historyIndex + 1}/${messages.length}`, message.reply ?? ''); return; }
   if (message) display(message.reply ? `Dot · ${historyIndex + 1}/${messages.length}` : message.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち'), `${message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた')}: ${message.text}\n\nDot: ${message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') : t('返信を待っています…'))}`, message.reply ? message.id : undefined);
 }
-interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string }; messages: Message[]; }
+interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown }; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
   subscribed = snapshot.status.subscribed;
+  selectedSTT = readSTTProvider(snapshot.status.sttProvider);
   progress.connection = 'online'; progress.dotConnected = subscribed;
   if (snapshot.status.deviceName) hostName = snapshot.status.deviceName;
   const next = snapshot.messages;
@@ -293,6 +306,7 @@ el('tts').onclick = () => {
   tts = !tts; el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
   if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; window.speechSynthesis.speak(speech); }
   else window.speechSynthesis?.cancel();
+  refreshStatus();
 };
 el('previous').onclick = () => { standby?.activity(); historyIndex = Math.max(0, historyIndex - 1); showMessage(); };
 el('next').onclick = () => { standby?.activity(); historyIndex = Math.min(messages.length - 1, historyIndex + 1); showMessage(); };
@@ -341,24 +355,35 @@ function refreshStatus(sendToG2 = true): void {
   if (exited) return;
   standby?.protect(busy || recorder.state !== 'idle' || ['recognizing', 'sending', 'waiting'].includes(progress.phase));
   const caption = progress.caption(baseStatus, visibleMessageId);
+  const speech = speechCaption();
+  el('speech-status').textContent = speech;
   el('hud-state').textContent = caption;
   el('hud-state').dataset.state = progress.state;
   const ticking = progress.ticking && pageActive && !document.hidden;
   if (ticking && !statusTimer) statusTimer = setInterval(() => refreshStatus(), 1000);
   else if (!ticking && statusTimer) { clearInterval(statusTimer); statusTimer = undefined; }
-  if (!sendToG2 || standby?.hidden || !bridge || !glassesReady || caption === lastSentStatus) return;
+  if (!sendToG2 || standby?.hidden || !bridge || !glassesReady || (caption === lastSentStatus && speechDisplayCaption() === lastSentSpeechStatus)) return;
   if (statusQueued) { statusDirty = true; return; }
   statusQueued = true;
   const activeBridge = bridge;
   displayChain = displayChain.then(async () => {
     if (exited || standby?.hidden) return;
     const content = progress.caption(baseStatus, visibleMessageId);
-    if (content === lastSentStatus) return;
-    const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
-      containerID: 1, containerName: 'status', contentOffset: 0, contentLength: content.length, content,
-    }));
-    if (!ok) throw new Error('Status update failed');
-    lastSentStatus = content;
+    if (content !== lastSentStatus) {
+      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 1, containerName: 'status', contentOffset: 0, contentLength: content.length, content,
+      }));
+      if (!ok) throw new Error('Status update failed');
+      lastSentStatus = content;
+    }
+    const speech = speechDisplayCaption();
+    if (speech !== lastSentSpeechStatus) {
+      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
+        containerID: 4, containerName: 'speech', contentOffset: 0, contentLength: speech.length, content: speech,
+      }));
+      if (!ok) throw new Error('Speech status update failed');
+      lastSentSpeechStatus = speech;
+    }
   }).catch(() => {
     connection.textContent = t('G2の表示更新を確認できません');
   }).finally(() => {
@@ -390,13 +415,14 @@ function queueDisplayFrame(trace?: string): void {
     const caption = hidden ? ' ' : progress.caption(baseStatus, visibleMessageId);
     const text = hidden ? ' ' : lastDisplayText;
     const help = hidden ? ' ' : t('長押しで録音 · 指を離すと停止');
-    for (const [containerID, containerName, content] of [[1, 'status', caption], [2, 'conversation', text || ' '], [3, 'help', help]] as const) {
+    for (const [containerID, containerName, content] of [[1, 'status', caption], [2, 'conversation', text || ' '], [3, 'help', help], [4, 'speech', hidden ? ' ' : speechDisplayCaption()]] as const) {
       if (exited || generation !== displayGeneration) return;
       const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
         containerID, containerName, contentOffset: 0, contentLength: content.length, content,
       }));
       if (!ok) throw new Error('G2表示の更新を確認できませんでした');
       if (containerID === 1) lastSentStatus = content;
+      if (containerID === 4) lastSentSpeechStatus = content;
     }
     if (!hidden && trace && generation === displayGeneration && !reportedDisplay.has(trace)) {
       timing.mark(trace, 'g2_update_ack'); reportedDisplay.add(trace); reportTiming(trace);
@@ -434,7 +460,7 @@ const recorder = new Recorder(
       if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       refreshStatus();
-    }).catch(error => { busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(t('音声を認識できませんでした'), t('もう一度話してください')); flushPendingDisplay(); });
+    }).catch(error => { busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(t('音声を認識できませんでした'), error.message); flushPendingDisplay(); });
   },
   state => {
     if (state === 'stopping') { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
@@ -481,14 +507,16 @@ async function connect(): Promise<void> {
   startupStage = 'page';
   el('g2-diagnostic').textContent = 'G2_STARTUP_PENDING';
   const result = await appBridge.createStartUpPageContainer(new CreateStartUpPageContainer({
-    containerTotalNum: 3,
+    containerTotalNum: 4,
     textObject: [
       new TextContainerProperty({ containerID: 1, containerName: 'status', xPosition: 8, yPosition: 8,
         width: 560, height: 36, content: 'Dot Link' }),
       new TextContainerProperty({ containerID: 2, containerName: 'conversation', xPosition: 8, yPosition: 50,
-        width: 560, height: 180, isEventCapture: 1, content: t('長押しで話してください') }),
+        width: 560, height: 130, isEventCapture: 1, content: t('長押しで話してください') }),
       new TextContainerProperty({ containerID: 3, containerName: 'help', xPosition: 8, yPosition: 244,
         width: 560, height: 36, content: t('長押しで録音 · 指を離すと停止') }),
+      new TextContainerProperty({ containerID: 4, containerName: 'speech', xPosition: 8, yPosition: 188,
+        width: 560, height: 52, content: speechDisplayCaption() }),
     ],
   }));
   startupResult = result;
@@ -502,7 +530,7 @@ async function connect(): Promise<void> {
     else void syncHeadRaise();
   });
   el('g2-diagnostic').textContent = 'G2_READY';
-  lastSentStatus = '';
+  lastSentStatus = ''; lastSentSpeechStatus = '';
   connection.textContent = t('Even Hub接続済み');
   notice.textContent = '';
   recordButton.disabled = false;
@@ -631,7 +659,6 @@ function initializeDisplaySettings(): void {
 
 standby = new DisplayStandby(displayPreferences.value, hidden => {
   document.body.dataset.displayHidden = String(hidden);
-  el('standby-status').textContent = hidden ? t('表示を消して待ち受け中') : t('表示中');
   queueDisplayFrame();
 });
 initializeDisplaySettings();

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deviceServer } from '../server/device.ts';
 import { request } from 'node:http';
+import { STTError } from '../server/stt.ts';
 
 async function fetch(url: string, options: {headers?:Record<string,string>;method?:string;body?:string} = {}) {
   return new Promise<{status:number;json:()=>Promise<unknown>}>((resolve, reject) => {
@@ -41,4 +42,27 @@ test('device HTTP permits paired same-origin audio but excludes MCP, foreign ori
   assert.equal(good.status, 200); assert.deepEqual(await good.json(), {text:'テスト'}); assert.equal(count, 1);
   assert.equal((await fetch(base + '/api/transcribe', {headers,method:'POST',body:'x'.repeat(960045)})).status, 400);
   assert.equal(count, 1);
+});
+
+test('STT authentication failure stays separate from pairing; client disconnect cancels work', async t => {
+  let transcribe: (wav: Buffer, signal?: AbortSignal) => Promise<string> = async () => { throw new STTError('STT_AUTH'); };
+  const server = deviceServer({token: 'a'.repeat(64), origin: 'https://g2.example', directory: tmpdir(), transcribe: (wav, signal) => transcribe(wav, signal)});
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const address = server.address(); assert(address && typeof address !== 'string');
+  const base = `http://127.0.0.1:${address.port}/api/transcribe`;
+  const headers = {Host: 'g2.example', Origin: 'https://g2.example', Authorization: `Bearer ${'a'.repeat(64)}`, 'Content-Type': 'audio/wav'};
+  const response = await fetch(base, {headers, method: 'POST', body: 'test'});
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), {code: 'STT_AUTH'});
+  let started!: () => void, stopped!: () => void;
+  const start = new Promise<void>(r => { started = r; }), stop = new Promise<void>(r => { stopped = r; });
+  transcribe = async (_wav, signal) => {
+    assert.ok(signal);
+    started();
+    return await new Promise((_resolve, reject) => signal.addEventListener('abort', () => { stopped(); reject(new STTError('STT_CANCELLED')); }, {once: true}));
+  };
+  const req = request(base, {headers, method: 'POST'}); req.on('error', () => {}); req.end('test');
+  await start; req.destroy();
+  await Promise.race([stop, new Promise((_r, reject) => { const timer = setTimeout(() => reject(new Error('cancellation timeout')), 1000); timer.unref(); })]);
 });

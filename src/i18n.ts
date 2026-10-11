@@ -4,8 +4,6 @@ const translations = {
   'Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。': 'Could not confirm saving pairing in Even. You may need to pair again after an update.',
   '接続しました。更新後の再接続情報も保存しました。': 'Connected. Update recovery details are saved too.',
   '接続しました。更新後の自動復元は未確認です。': 'Connected. Automatic recovery after an update is not verified.',
-  '表示を消して待ち受け中': 'Display hidden · still listening for Dot',
-  '表示中': 'Visible',
   '表示設定を保存しました': 'Display settings saved',
   'この画面では設定を保存できません。閉じると設定が戻る場合があります。': 'Settings could not be saved here. They may reset when you close the app.',
   '表示時間は0、または5〜3600秒で指定してください。': 'Choose 0, or 5–3600 seconds.',

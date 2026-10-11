@@ -26,6 +26,14 @@ Macは起動・ネットワーク接続を維持してください。スリー�
 - 更新の確認・ダウンロード・検証・適用の状態を表示します。「Evenを閉じると更新を適用します」と表示されたら、Even側のDot Linkを終了してください。
 - アプリ更新にGitHubアカウントやキーは不要です。OpenAI接続用の認証情報とは別の話です。
 
+## 音声入力
+
+Macの「音声入力」からサービスを選べます。標準のWhisperはMac内で無料で認識します。Sonioxを使う場合は、ご自身のAPIキーを保存してください。録音はMacからSonioxへ直接送られ、同社のAPI料金・利用枠が適用されます。変更は次の音声入力から反映され、失敗時に別のサービスへ自動では切り替わりません。
+
+キーチェーンの確認画面が表示されたら「常に許可」を選択してください。アプリ更新後に再許可が必要な場合があります。キーを変更する場合は「キーを削除」してから新しいキーを保存します。キーを削除するとWhisperへ戻ります。
+
+公開中のEven 0.2.14でも音声入力を利用できます。サービス名の表示や詳しいエラー案内はEven 0.2.19以降に含まれます。スマートフォンからの文字入力には音声認識サービスを使いません。
+
 ## 通知の共有
 
 通知設定の「権限設定」からアクセシビリティを開き、「＋」でインストール先のDot Link.appを追加してオンにしてください。「Macの全通知をDotに共有」を有効にすると、読み取れる新着通知の送信者・見出し・本文を既存Dotへ渡します。どんな通知を知らせてほしいかは、Dotに直接伝えてください。
@@ -45,6 +53,8 @@ Macは起動・ネットワーク接続を維持してください。スリー�
 Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and open it. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
 
 [Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into the Even companion, and save it. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
+
+In **Speech input** on the Mac, choose free local Whisper or save your own Soniox API key. With Soniox selected, recordings go directly from your Mac to Soniox; its API charges and limits apply. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting it switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later. Typed messages do not use speech recognition.
 
 For notifications, click **Permissions**, open Accessibility, add the installed Dot Link.app with **+**, and turn access on. Enable **Share all Mac notifications with Dot** to share visible sender names, headings and text from readable new notifications. Tell Dot which notifications you want to hear about. Some notification formats may not be readable, and announcements may be delayed. If sharing stops after an update, remove Dot Link from the Accessibility list and add it again. Pause stops notification collection.
 

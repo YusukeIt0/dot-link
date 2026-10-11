@@ -20,7 +20,7 @@ const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve()
 async function launch(options = {}) {
   let now = 0, timerId = 0, receiver;
   const timers = new Map(); const elements = new Map(); const listeners = new Map();
-  const calls = []; const requests = []; const physical = new Map();
+  const calls = []; const networkCalls = []; const requests = []; const physical = new Map();
   const saved = new Map(options.nativePairing ? [] : [['g2-device-token', 'x'.repeat(43)]]);
   const nativeSaved = new Map(options.nativePairing ? [['dot-relay-native-v1', JSON.stringify(options.nativePairing)]] : []);
   let resumeAttempts = 0;
@@ -56,12 +56,19 @@ async function launch(options = {}) {
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
       querySelector: element, querySelectorAll: () => [], createComment: element, addEventListener: listen},
-    window: {addEventListener: listen, speechSynthesis: {cancel() {}}}, navigator: {language: 'ja'},
+    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak() {}}},
+    SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
+    navigator: {language: 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
     localStorage: local, sessionStorage: local, location: {origin: options.nativePairing ? 'http://127.0.0.1:57157' : 'https://test.invalid', hash: '', pathname: '/', search: ''},
     history: {replaceState() {}}, performance: {now: () => now}, crypto, console, URLSearchParams, AbortController, AbortSignal, Uint8Array, Blob, TextEncoder,
     setTimeout: (fn, ms) => schedule(fn, ms), clearTimeout: id => timers.delete(id),
     setInterval: (fn, ms) => schedule(fn, ms, true), clearInterval: id => timers.delete(id),
     fetch: (url, init) => {
+      networkCalls.push(String(url));
+      if (options.typedInput && String(url).endsWith('/api/utterances')) {
+        const value = JSON.parse(init.body);
+        return Promise.resolve({status: 200, ok: true, json: async () => ({...value, status: 'pending'})});
+      }
       if (String(url).endsWith('/api/pair/resume')) {
         resumeAttempts++;
         assert.equal(JSON.parse(init.body).resumeToken, options.nativePairing.resumeToken);
@@ -77,7 +84,7 @@ async function launch(options = {}) {
   });
   vm.runInContext(script, context); await flush();
   assert.equal(element('g2-diagnostic').textContent, 'G2_READY');
-  const snapshot = (messages = []) => ({revision: 'same', status: {subscribed: true, deviceName: 'Test Mac'}, messages});
+  const snapshot = (messages = []) => ({revision: 'same', status: {subscribed: true, deviceName: 'Test Mac', sttProvider: options.provider}, messages});
   const deliver = async value => {
     assert.ok(requests.length, 'receiver must still be waiting');
     requests.shift()({ok: true, status: 200, json: async () => structuredClone(value)}); await flush();
@@ -94,7 +101,7 @@ async function launch(options = {}) {
     }
     now = end; await flush();
   };
-  return {calls, physical, element, saved, nativeSaved, timers, snapshot, deliver, advance, context,
+  return {calls, networkCalls, physical, element, saved, nativeSaved, timers, snapshot, deliver, advance, context,
     emit: async event => {receiver(event); await flush();},
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
@@ -107,10 +114,10 @@ const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
 
-test('full app hides all 3 containers, keeps receiving, and wakes on a new autonomous message', async t => {
+test('full app hides all 4 containers, keeps receiving, and wakes on a new autonomous message', async t => {
   const app = await launch(); t.after(app.close);
   await app.advance(30_000); assert.equal(app.hidden(), true);
-  assert.deepEqual([...app.physical.values()], [' ', ' ', ' ']);
+  assert.deepEqual([...app.physical.values()], [' ', ' ', ' ', ' ']);
   const count = app.calls.length;
   for (let i = 0; i < 100; i++) await app.deliver(app.snapshot());
   assert.equal(app.calls.length, count, 'unchanged polls must not relight the display');
@@ -211,7 +218,7 @@ test('IMU reports without coordinates and unknown system events are not user act
     await app.advance(1000);
   }
   assert.equal(app.hidden(),true,'sensor/status reports must not keep resetting the 30-second idle deadline');
-  assert.deepEqual([...app.physical.values()],[' ',' ',' ']);
+  assert.deepEqual([...app.physical.values()],[' ',' ',' ',' ']);
 });
 
 
@@ -228,4 +235,27 @@ test('head raises while already visible do not keep postponing the initial 30-se
   await app.emit(imu(0)); await app.advance(400);
   await app.emit(imu(25)); await app.advance(200); await app.emit(imu(25));
   assert.equal(app.hidden(),false,'the same gesture still wakes when hidden');
+});
+
+
+test('actual text-entry handler only sends text; current STT and client TTS labels update without audio calls', async t => {
+  const app = await launch({typedInput: true, provider: 'soniox'}); t.after(app.close);
+  assert.equal(app.element('speech-status').textContent, 'STT:Soniox / TTS:OFF');
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Soniox / TTS:OFF');
+  app.element('transcript').value = 'Synthetic typed input';
+  app.element('transcript').oninput();
+  await app.element('send').click(); await flush();
+  assert.equal(app.networkCalls.filter(path => path.endsWith('/api/utterances')).length, 1);
+  assert.equal(app.networkCalls.filter(path => path.endsWith('/api/transcribe')).length, 0);
+  assert.equal(app.calls.filter(call => call[0] === 'mic').length, 0);
+  await app.element('tts').click(); await flush();
+  assert.equal(app.element('speech-status').textContent, 'STT:Soniox / TTS:iPhone');
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Soniox / TTS:iPhone');
+  const state = app.snapshot(); state.status.sttProvider = 'whisper';
+  await app.deliver(state);
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Whisper / TTS:iPhone');
+  delete state.status.sttProvider; await app.deliver(state);
+  assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:— / TTS:iPhone');
+  await app.evaluate("progress.connection = 'offline'; refreshStatus()");
+  assert.equal(app.element('speech-status').textContent, 'STT:— / TTS:iPhone');
 });

@@ -45,6 +45,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var showingNotifications = false
     var showingPairing = false
     var showingDetails = false
+    var showingSpeech = false
+    var speechChoice = "whisper"
+    var speechKeyField: NSTextField?
+    var speechMetadata: [String: String] = [:]
+    var speechMetadataGeneration = 0
+    var speechMetadataLabel: NSTextField?
     var allowTermination = false
     var quitting = false
     var automaticResumePending = false
@@ -138,11 +144,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func showHome() {
-        showingNotifications = false; showingPairing = false; showingDetails = false; pairingCode = nil; pairingExpiry = 0
+        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false; pairingCode = nil; pairingExpiry = 0
         render(); showWindow(); inspect()
     }
-    @objc func menuPair() { showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
-    @objc func menuNotifications() { showingNotifications = true; render(); showWindow() }
+    @objc func menuPair() { showingSpeech = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
+    @objc func menuNotifications() { showingSpeech = false; showingNotifications = true; render(); showWindow() }
     @objc func menuNotificationPause() { notifications?.togglePause() }
     func connectNotifications() {
         guard notifications == nil, let directory = state["directory"] as? String, state["installed"] as? Bool == true else { return }
@@ -177,6 +183,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         func item(_ title: String, _ action: Selector, enabled: Bool = true) { let i = NSMenuItem(title: title, action: action, keyEquivalent: ""); i.target = self; i.isEnabled = enabled && !busy && appUpdater?.preparing != true; menu.addItem(i) }
         menu.autoenablesItems = false
         item(tr("Dot Linkを開く", "Open Dot Link"), #selector(showHome))
+        item(tr("音声入力…", "Speech input…"), #selector(menuSpeech), enabled: yes("installed"))
         item(tr("Macの通知…", "Mac notifications…"), #selector(menuNotifications), enabled: notifications != nil)
         if let n = notifications {
             let detail = NSMenuItem(title: n.notificationSummary, action: nil, keyEquivalent: ""); detail.isEnabled = false; menu.addItem(detail)
@@ -216,7 +223,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let token = plan["token"] as? String else { return }
         let alert = NSAlert(); alert.alertStyle = .warning
         alert.messageText = tr("このMacからDot Linkをアンインストールしますか？", "Uninstall Dot Link from this Mac?")
-        alert.informativeText = tr("会話の中継と通知を停止し、自動起動を解除します。Dot Link、音声認識モデル、接続設定、会話履歴をゴミ箱へ移動します。再び使うには初期設定が必要です。", "This stops the relay and notifications, removes login items, and moves Dot Link, its speech model, connection settings, and conversation history to Trash. You will need to set up Dot Link again to use it.")
+        alert.informativeText = tr("会話の中継と通知を停止し、自動起動を解除します。Dot Link、音声認識モデル、接続設定、会話履歴をゴミ箱へ移動します。保存した音声認識APIキーはキーチェーンから削除します。再び使うには初期設定が必要です。", "This stops the relay and notifications, removes login items, and moves Dot Link, its speech model, connection settings, and conversation history to Trash. Saved speech API keys are deleted from Keychain. You will need to set up Dot Link again to use it.")
         if plan["retainsSource"] as? Bool == true { alert.informativeText += tr(" 開発用のソースフォルダは残します。", " The development source folder is preserved.") }
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
         let paths = (plan["removes"] as? [String] ?? []).joined(separator: "\n")
@@ -229,7 +236,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if appUpdater?.cancelForQuit() == false {
             let alert = NSAlert(); alert.messageText = tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish"); alert.runModal(); return
         }
-        perform("uninstall", input: ["token": token, "deleteData": "true"])
+        performSpeechCredential("delete") { [weak self] in self?.perform("uninstall", input: ["token": token, "deleteData": "true"]) }
     }
     func label(_ text: String, size: CGFloat = 14, bold: Bool = false) -> NSTextField {
         let l = NSTextField(wrappingLabelWithString: text); l.font = .systemFont(ofSize: size, weight: bold ? .semibold : .regular); l.maximumNumberOfLines = 0; l.setContentCompressionResistancePriority(.required, for: .vertical); return l
@@ -286,6 +293,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let topSpace = NSView(); topSpace.setContentHuggingPriority(.defaultLow, for: .horizontal); top.addArrangedSubview(topSpace)
         let languages = NSPopUpButton(); languages.addItems(withTitles: ["日本語", "English"]); languages.selectItem(at: language == "ja" ? 0 : 1); languages.target = self; languages.action = #selector(changeLanguage(_:)); languages.isEnabled = !busy; languages.setAccessibilityLabel(tr("表示言語", "Language")); top.addArrangedSubview(languages); stack.addArrangedSubview(top)
         top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+        if showingSpeech { renderSpeech(); return }
         if showingDetails && !busy {
             add(tr("詳細設定", "Advanced settings"), size: 23, bold: true)
             button(tr("戻る", "Back")) { [weak self] in self?.showHome() }
@@ -383,6 +391,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let notificationSettings = ActionButton(tr("通知設定", "Notifications")) { [weak self] in self?.menuNotifications() }
                 notificationSettings.controlSize = .large; notificationSettings.image = NSImage(systemSymbolName: "bell", accessibilityDescription: nil); notificationSettings.imagePosition = .imageLeading
                 notificationSettings.isEnabled = notifications != nil; actions.addArrangedSubview(notificationSettings)
+                let speechSettings = ActionButton(tr("音声入力", "Speech input")) { [weak self] in self?.menuSpeech() }
+                speechSettings.controlSize = .large; speechSettings.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil); speechSettings.imagePosition = .imageLeading
+                actions.addArrangedSubview(speechSettings)
                 stack.addArrangedSubview(actions)
             }
         case "updateRecovery":
@@ -496,6 +507,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
+            if currentAction == "stt-select" {
+                message = "" // The active provider is already shown at the top of Speech input.
+            }
             if currentAction == "inspect" { message = "" } // The timestamp and cards show the refreshed result.
             connectNotifications()
             notifications?.setRelaySuspended(yes("lifecycleStopped") || !yes("bridge"))
@@ -517,6 +531,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if code == "UPDATE_RECOVERY_REQUIRED" { state["step"] = "updateRecovery" }
             if ["MULTIPLE_INSTALLATIONS", "EXISTING_SERVICE_CONFLICT", "EXISTING_SERVICE_UNREADABLE", "INSTALL_FOLDER_OCCUPIED"].contains(code) { state["step"] = "conflict" }
             message = tr("準備を完了できませんでした。既存の設定は保持しています。もう一度状態を確認してください。", "Setup could not complete. Existing settings have been preserved. Check the status again.") + " (\(code))"
+            if currentAction == "stt-select" { message = tr("切り替えに失敗しました。もう一度お試しください。", "Could not switch services. Please try again.") }
             if ["shutdown", "pause", "uninstall"].contains(currentAction) {
                 message = tr("処理を完了できませんでした。Dot Linkは開いたままです。停止・削除の状況を確認してから再試行してください。", "The operation could not complete. Dot Link remains open. Check the stop or removal status before retrying.") + " (\(code))"
             }
@@ -525,6 +540,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 }
+if CommandLine.arguments.contains("--stt-credential") { runSTTCredentialHelper() }
 if NSRunningApplication.runningApplications(withBundleIdentifier: "app.tripsurf.dotlink.mac").contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) { exit(0) }
 let app = NSApplication.shared
 let delegate = SetupApp(); app.delegate = delegate; app.run()
