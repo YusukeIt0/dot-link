@@ -21,7 +21,7 @@ const commit=run('gh',['api',`repos/${config.repository}/commits/${config.branch
 const directory=resolve('.runtime/release/mac-updates');await mkdir(directory,{recursive:true});
 const name=`Dot-Link-${version}-${build}-arm64.zip`,archive=join(directory,name),tag=`mac-v${version}-${build}`;
 try{await stat(archive);throw new Error('Archive already exists; use a new build');}catch(e){if(e.code!=='ENOENT')throw e;}
-run('/usr/bin/ditto',['-c','-k','--sequesterRsrc','--keepParent',app,archive]);
+run('/usr/bin/ditto',['-c','-k','--norsrc','--noextattr','--noqtn','--keepParent',app,archive]);
 const signature=run(signer,['--ed-key-file',key,'-p',archive]);
 run(signer,['--verify','--ed-key-file',key,archive,signature]);
 run('gh',['release','create',tag,archive,'--repo',config.repository,'--target',commit,'--title',`Dot Link for Mac ${version}`,'--notes-file',resolve(notesFile),'--draft']);
