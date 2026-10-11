@@ -6,13 +6,14 @@ import {join} from 'node:path';
 import {run} from '../scripts/lib/setup.mjs';
 import {ownedService} from '../scripts/lib/service-management.mjs';
 import {prepareUpdate,finishUpdate,updateReadiness} from '../scripts/lib/app-update.mjs';
-async function fixture(t){
+async function fixture(t,{initialSetup=false}={}){
  const home=await realpath(await mkdtemp(join(tmpdir(),'dot-update-')));t.after(()=>rm(home,{recursive:true,force:true}));
- const directory=join(home,'even-g2-dot'),runtime=join(directory,'.runtime'),app=join(home,'Applications/Dot Link.app'),agents=join(home,'Library/LaunchAgents');
+ const directory=join(home,initialSetup?'Library/Application Support/Dot Link':'even-g2-dot'),runtime=join(directory,'.runtime'),app=join(home,'Applications/Dot Link.app'),agents=join(home,'Library/LaunchAgents');
  for(const p of [runtime,join(app,'Contents'),agents])await mkdir(p,{recursive:true});
  await writeFile(join(app,'Contents/Info.plist'),'fixture');
- await writeFile(join(runtime,'bridge-state.json'),JSON.stringify({messages:[]}));
- const plists={};for(const name of ['bridge','device','tunnel','setup-ui']){
+ if(initialSetup)await writeFile(join(runtime,'install.json'),JSON.stringify({product:'Dot Link',format:1}));
+ else await writeFile(join(runtime,'bridge-state.json'),JSON.stringify({messages:[]}));
+ const plists={};for(const name of initialSetup?[]:['bridge','device','tunnel','setup-ui']){
   const label='local.even-g2-dot.'+name,p={Label:label,WorkingDirectory:name==='setup-ui'?join(app,'Contents'):directory,ProgramArguments:name==='setup-ui'?[join(app,'Contents/MacOS/DotLink')]:name==='tunnel'?['tunnel','run','--profile-file',join(runtime,'tunnel.yaml')]:['node',join(directory,'server',name==='bridge'?'main.ts':'device-main.ts')],EnvironmentVariables:{G2_DEVICE_ORIGIN:'https://example.ts.net'}};
   plists[name]=join(agents,label+'.plist');await writeFile(plists[name],JSON.stringify(p));
  }
@@ -21,7 +22,7 @@ async function fixture(t){
   calls.push([cmd,...args]);
   if(cmd==='/usr/bin/codesign')return '';
   if(cmd==='/usr/bin/plutil'){if(args[0]==='-extract')return args[1]==='CFBundleVersion'?'1':'app.tripsurf.dotlink.mac';return run(cmd,args);}
-  if(cmd==='/bin/launchctl'){const name=args[1].split('.').at(-1);if(args[0]==='print'){if(!loaded.has(name))throw new Error('not loaded');return 'state = running';}if(args[0]==='disable')disabled.add(name);if(args[0]==='enable')disabled.delete(name);if(args[0]==='bootout')loaded.delete(name);if(args[0]==='bootstrap'){const p=JSON.parse(await run('/usr/bin/plutil',['-convert','json','-o','-',args[2]]));loaded.add(p.Label.split('.').at(-1));}return '';}
+  if(cmd==='/bin/launchctl'){const name=args[1].split('.').at(-1);if(args[0]==='print'){if(!loaded.has(name))throw Object.assign(new Error('not loaded'),{code:113});return 'state = running';}if(args[0]==='disable')disabled.add(name);if(args[0]==='enable')disabled.delete(name);if(args[0]==='bootout')loaded.delete(name);if(args[0]==='bootstrap'){const p=JSON.parse(await run('/usr/bin/plutil',['-convert','json','-o','-',args[2]]));loaded.add(p.Label.split('.').at(-1));}return '';}
   throw new Error('unexpected command');
  };
  return {home,directory,runtime,app,plists,loaded,disabled,calls,execute,uid:501,wait:async()=>{},verify:async()=>true};
@@ -55,4 +56,52 @@ test('failed post-update health retains recovery journal for the next launch',as
  await assert.rejects(finishUpdate(f.directory,{...f,verify:async()=>false}),/UPDATE_RECOVERY_REQUIRED/);
  assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).stopped,false);
  assert.equal((await finishUpdate(f.directory,f)).recovered,true);
+});
+
+test('prepared setup updates and recovers without creating services or changing keys and preferences',async t=>{
+ for(const rollback of [false,true]){
+  const f=await fixture(t,{initialSetup:true});
+  const saved={'device-key':'fixture-secret','stt-provider.json':'{"provider":"soniox"}','lifecycle.json':'{"stopped":true,"reason":"quit"}'};
+  for(const [name,value] of Object.entries(saved))await writeFile(join(f.runtime,name),value);
+  assert.deepEqual(await prepareUpdate(f.directory,f),{prepared:true});
+  assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).initialSetup,true);
+  assert.deepEqual(await finishUpdate(f.directory,{...f,rollback}),{recovered:true,stopped:true});
+  for(const [name,value] of Object.entries(saved))assert.equal(await readFile(join(f.runtime,name),'utf8'),value);
+  assert.equal(f.calls.some(([cmd,action])=>cmd==='/bin/launchctl'&&action!=='print'),false);
+  await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
+ }
+});
+
+test('never-started setup retains absent lifecycle state across a successful update',async t=>{
+ const f=await fixture(t,{initialSetup:true});
+ await prepareUpdate(f.directory,f);assert.deepEqual(await finishUpdate(f.directory,f),{recovered:true,stopped:false});
+ await assert.rejects(readFile(join(f.runtime,'lifecycle.json')),/ENOENT/);
+});
+
+test('missing service files do not bypass a loaded job, prior activity, or unreadable launchd',async t=>{
+ for(const scenario of ['loaded','activity','state','launchd','marker']){
+  const f=await fixture(t,{initialSetup:true});
+  if(scenario==='loaded')f.loaded.add('bridge');
+  if(scenario==='activity')await writeFile(join(f.runtime,'update-activity.json'),'{}');
+  if(scenario==='state')await writeFile(join(f.runtime,'bridge-state.json'),'{}');
+  if(scenario==='marker')await writeFile(join(f.runtime,'install.json'),'{}');
+  if(scenario==='launchd')f.execute=async()=>{throw Object.assign(new Error('denied'),{code:1});};
+  await assert.rejects(prepareUpdate(f.directory,f));
+  await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
+  assert.equal(f.disabled.size,0);
+ }
+});
+
+test('partial configured services fail without stopping the remaining jobs',async t=>{
+ const f=await fixture(t);await rm(f.plists.tunnel);
+ await assert.rejects(prepareUpdate(f.directory,{...f,bootstrap:true}),/SERVICE_SETUP_REQUIRED/);
+ assert.equal(f.loaded.size,4);assert.equal(f.disabled.size,0);
+});
+
+test('initial setup changed before recovery retains its journal and never starts new services',async t=>{
+ const f=await fixture(t,{initialSetup:true});await prepareUpdate(f.directory,f);
+ f.loaded.add('bridge');
+ await assert.rejects(finishUpdate(f.directory,f),/UPDATE_SETUP_CHANGED/);
+ assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).initialSetup,true);
+ assert.equal(f.calls.some(([cmd,action])=>cmd==='/bin/launchctl'&&action!=='print'),false);
 });

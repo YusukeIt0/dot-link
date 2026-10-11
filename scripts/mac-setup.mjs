@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { discoverInstallation, installPayload, exists, nextSetupStep } from './lib/mac-install.mjs';
 import { installMenuApp, registerMenuApp } from './lib/menu-install.mjs';
 import { prepareUpdate, finishUpdate } from './lib/app-update.mjs';
-import { lifecycleState, suspendServices, resumeServices, waitForRelay } from './lib/app-lifecycle.mjs';
+import { lifecycleState, suspendServices, resumeServices, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
 import { pairingStatus } from './lib/pairing-status.mjs';
 import { legacyNotificationState, retireLegacyNotifications } from './lib/notification-migration.mjs';
@@ -42,7 +42,9 @@ async function inspect() {
   }
   const pairing = installation.installed ? await pairingStatus(directory) : { evenPairingKnown: true, evenPaired: false };
   const lifecycle = installation.installed ? await lifecycleState(directory) : {};
-  const state = { ...installation, ...pairing, ...lifecycle, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,
+  const jobs = installation.installed ? await ownedJobs(directory, {app:join(homedir(), 'Applications/Dot Link.app')}) : [];
+  const servicesConfigured = ['bridge','device','tunnel'].every(name => jobs.some(job => job.name === name));
+  const state = { ...installation, ...pairing, ...lifecycle, servicesConfigured, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,
     networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured,
     bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, subscribed: health.subscribed === true };
   state.legacyNotificationRegistered = installation.installed ? (await legacyNotificationState(directory)).registered : false;

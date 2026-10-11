@@ -24,6 +24,7 @@ Macは起動・ネットワーク接続を維持してください。スリー�
 - **自動更新**は一時停止中のため、オフで操作できない表示になります。
 - **アップデートを確認**から手動で更新してください。
 - 更新の確認・ダウンロード・検証・適用の状態を表示します。「Evenを閉じると更新を適用します」と表示されたら、Even側のDot Linkを終了してください。
+- Mac 0.3.2以降は、Macの準備だけ済ませたDot未接続の状態でも更新できます。更新時はアプリが自動で終了・再起動します。0.3.0／0.3.1で、Dot未接続なのに上の待機表示が続く場合は、Dot Linkを終了し、最新版をダウンロードしてホームフォルダのApplications内のアプリだけを置き換えてください。アンインストールはせず、Application Support内の設定データを残してください。
 - アプリ更新にGitHubアカウントやキーは不要です。OpenAI接続用の認証情報とは別の話です。
 
 ## 音声入力
@@ -57,6 +58,8 @@ Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認�
 Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and open it. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
 
 [Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into the Even companion, and save it. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
+
+Mac 0.3.2 and later can update after initial Mac preparation, before connecting Dot. The app quits and relaunches automatically during installation. If 0.3.0 or 0.3.1 keeps waiting for Even to close even though Dot has never been connected, quit Dot Link, download the latest version and replace only the app in your home Applications folder. Do not uninstall or remove the settings in Application Support.
 
 In **Speech input** on the Mac, choose free local Whisper small or save your own key for Soniox, ElevenLabs, Microsoft, OpenAI or AssemblyAI. Recordings go directly from your Mac to the selected service; its API charges and limits apply. Microsoft also requires your Azure Speech endpoint; see About the endpoint below the settings card. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting the active service key switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later; labels for all six services and their models require Even 0.2.21. Typed messages do not use speech recognition.
 

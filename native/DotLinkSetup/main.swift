@@ -173,7 +173,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         perform("migrate-notifications")
     }
     @objc func menuPause() { perform("pause") }
-    @objc func menuResume() { perform(yes("lifecycleStopped") ? "resume" : "activate") }
+    @objc func menuResume() { perform(yes("lifecycleStopped") && yes("servicesConfigured") ? "resume" : "activate") }
     func updateMenu() {
         guard statusItem != nil else { return }
         let ready = step == "pair"
@@ -194,7 +194,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         menu.addItem(.separator())
         item(tr("一時停止", "Pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
-        item(tr("再開", "Resume"), #selector(menuResume), enabled: step == "start" || yes("lifecycleStopped"))
+        item(tr("再開", "Resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
         menu.addItem(.separator())
         item(tr("アップデートを確認…", "Check for updates…"), #selector(menuCheckUpdate))
         if let updater = appUpdater, !updater.message.isEmpty { let update = NSMenuItem(title: updater.message, action: nil, keyEquivalent: ""); update.isEnabled = false; menu.addItem(update) }
@@ -529,7 +529,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             render()
             if automaticResumePending {
                 automaticResumePending = false
-                if yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
+                if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
             }
         case "error":
             busy = false; helper = nil; automaticResumePending = false

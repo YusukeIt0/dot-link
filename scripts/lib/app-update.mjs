@@ -1,8 +1,9 @@
-import {readFile,writeFile,rename,unlink,cp,mkdir} from 'node:fs/promises';
+import {readFile,writeFile,rename,unlink,cp,mkdir,lstat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {ownedJobs,lifecycleState,suspendServices,resumeServices,regularPath} from './app-lifecycle.mjs';
 import {run,launchAgent} from './setup.mjs';
+import {serviceNames} from './service-management.mjs';
 const journalPath=d=>join(d,'.runtime/app-update.json');
 async function save(path,value){const temp=path+'.tmp';await writeFile(temp,JSON.stringify(value),{mode:0o600});await rename(temp,path);}
 export function bundledJob(p,name,app,directory){
@@ -20,22 +21,46 @@ export async function updateReadiness(directory,{now=Date.now()}={}){
   return true;
  }catch{return false;}
 }
+// A prepared, never-started installation has no activity heartbeat to wait for.
+// Missing service files alone are not proof: reject partial/previous service
+// state and check launchd too, so an orphaned running job cannot be overlooked.
+async function initialSetupReady(directory,{home,execute,app,uid=process.getuid()}){
+ if(directory!==join(home,'Library/Application Support/Dot Link'))return false;
+ await regularPath(directory);
+ const marker=JSON.parse(await readFile(join(directory,'.runtime/install.json'),'utf8'));
+ if(marker.product!=='Dot Link'||marker.format!==1)return false;
+ if((await ownedJobs(directory,{home,execute,app,includeUI:true})).length)return false;
+ for(const name of ['update-activity.json','bridge-state.json']){
+  try{await lstat(join(directory,'.runtime',name));return false;}catch(e){if(e.code!=='ENOENT')throw e;}
+ }
+ for(const name of [...serviceNames,'setup-ui']){
+  try{await execute('/bin/launchctl',['print',`gui/${uid}/local.even-g2-dot.${name}`]);return false;}
+  catch(e){if(e.code!==113)throw e;}
+ }
+ return true;
+}
 export async function prepareUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),bootstrap=false,...options}={}){
- if(!bootstrap&&!await updateReadiness(directory))return {waiting:true};
+ const context={home,execute,app,...options};
+ const jobs=await ownedJobs(directory,{home,execute,app,includeUI:true});
+ const initialSetup=jobs.length===0&&await initialSetupReady(directory,context);
+ if(!initialSetup&&!['bridge','device','tunnel'].every(n=>jobs.some(j=>j.name===n)))throw new Error('SERVICE_SETUP_REQUIRED');
+ if(!initialSetup&&!bootstrap&&!await updateReadiness(directory))return {waiting:true};
  await regularPath(app);
  if((await execute('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(app,'Contents/Info.plist')]))!=='app.tripsurf.dotlink.mac')throw new Error('UPDATE_APP_INVALID');
  await execute('/usr/bin/codesign',['--verify','--deep','--strict',app]);
- const jobs=await ownedJobs(directory,{home,execute,app,includeUI:true});
- if(!['bridge','device','tunnel'].every(n=>jobs.some(j=>j.name===n)))throw new Error('SERVICE_SETUP_REQUIRED');
  try{await readFile(journalPath(directory));throw new Error('UPDATE_ALREADY_PREPARED');}catch(e){if(e.code!=='ENOENT')throw e;}
  const lifecycle=await lifecycleState(directory),version=await execute('/usr/bin/plutil',['-extract','CFBundleVersion','raw','-o','-',join(app,'Contents/Info.plist')]);
  const originals=[];for(const job of jobs)originals.push({...job,content:await readFile(job.path,'utf8')});
  const backup=join(directory,'.runtime/update-backups',String(Date.now()),'Dot Link.app');await mkdir(join(backup,'..'),{recursive:true,mode:0o700});
  await cp(app,backup,{recursive:true,verbatimSymlinks:true});
- const journal={schema:1,version,stopped:lifecycle.lifecycleStopped,reason:lifecycle.lifecycleReason,originals,backup};
+ const journal={schema:1,version,stopped:lifecycle.lifecycleStopped,reason:lifecycle.lifecycleReason,originals,backup,...(initialSetup?{initialSetup:true}:{})};
  await writeFile(journalPath(directory),JSON.stringify(journal),{mode:0o600,flag:'wx'});
- if(!bootstrap&&!await updateReadiness(directory)){await unlink(journalPath(directory));return {waiting:true};}
  try{
+  if(initialSetup){
+   if(!await initialSetupReady(directory,context))throw new Error('UPDATE_SETUP_CHANGED');
+   return {prepared:true};
+  }
+  if(!bootstrap&&!await updateReadiness(directory)){await unlink(journalPath(directory));return {waiting:true};}
   await suspendServices(directory,{home,execute,app,...options});
   for(const job of jobs.filter(j=>['bridge','device','tunnel'].includes(j.name))){
    const p=JSON.parse(await execute('/usr/bin/plutil',['-convert','json','-o','-',job.path]));
@@ -49,6 +74,11 @@ export async function finishUpdate(directory,{home=homedir(),execute=run,app=joi
  // Revalidate every destination before restoring a journal; never trust its paths.
  const jobs=await ownedJobs(directory,{home,execute,app,includeUI:true});
  if(journal.schema!==1||!Array.isArray(journal.originals)||journal.originals.some(j=>!jobs.some(p=>p.path===j.path)))throw new Error('UPDATE_JOURNAL_INVALID');
+ if(journal.initialSetup===true){
+  if(journal.originals.length!==0||!await initialSetupReady(directory,{home,execute,app,...options}))throw new Error('UPDATE_SETUP_CHANGED');
+  await unlink(journalPath(directory));
+  return {recovered:true,stopped:journal.stopped};
+ }
  if(rollback)for(const j of journal.originals)await writeFile(j.path,j.content,{mode:0o600});
  if(!journal.stopped){
   await resumeServices(directory,{home,execute,app,...options});
