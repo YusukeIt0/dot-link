@@ -87,3 +87,11 @@ export function seconds(value: string | number): string { return language === 'j
 export function chooseLanguage(preferred: string, saved?: string | null): Language {
   return saved === 'ja' || saved === 'en' ? saved : preferred.toLowerCase().startsWith('ja') ? 'ja' : 'en';
 }
+
+/** Re-render an exact UI label, without translating arbitrary conversation text. */
+export function translateLabel(value: string): string {
+  for (const [ja, en] of Object.entries(translations)) {
+    if (value === ja || value === en) return language === 'ja' ? ja : en;
+  }
+  return value;
+}

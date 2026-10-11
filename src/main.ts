@@ -9,18 +9,19 @@ import { Pairing } from './pairing.ts';
 import { InteractionStatus } from './interaction-status.ts';
 import { DisplayStandby, HeadRaiseDetector, type DisplayPreferences } from './display-standby.ts';
 import { DisplayPreferenceStore } from './display-preferences.ts';
-import { t, getLanguage, setLanguage, chooseLanguage } from './i18n.ts';
+import { t, getLanguage, setLanguage, chooseLanguage, translateLabel } from './i18n.ts';
 import { RelaySettings, PendingUtterance, apiAddress, type RelayCredentials } from './relay-connection.ts';
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
+import { LanguagePreferences } from './language-preferences.ts';
 import './style.css';
 
-let savedLanguage: string | null = null;
-try { savedLanguage = localStorage.getItem('dot-language'); } catch {}
-setLanguage(chooseLanguage(navigator.language, savedLanguage));
+const languagePreferences = new LanguagePreferences(() => localStorage);
+const staticLabels = [...document.querySelectorAll<HTMLElement>('[data-en]')].map(element => ({
+  element, ja: element.textContent ?? '', en: element.dataset.en!,
+}));
+setLanguage(chooseLanguage(navigator.language, languagePreferences.value));
 document.documentElement.lang = getLanguage();
-if (getLanguage() === 'en') {
-  for (const element of document.querySelectorAll<HTMLElement>('[data-en]')) element.textContent = element.dataset.en!;
-}
+for (const { element, ja, en } of staticLabels) element.textContent = getLanguage() === 'ja' ? ja : en;
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const displayPreferences = new DisplayPreferenceStore(() => localStorage);
@@ -83,17 +84,22 @@ el('show-diagnostics').onclick = () => {
   const details = el('connection-diagnostics'); details.hidden = !details.hidden;
   el('show-diagnostics').setAttribute('aria-expanded', String(!details.hidden));
 };
-const language = el<HTMLSelectElement>('language'); language.value = getLanguage();
+const language = el<HTMLSelectElement>('language'); language.value = languagePreferences.value;
 if (getLanguage() === 'en') transcript.placeholder = 'Transcribed speech, or a message to send';
 language.onchange = () => {
-  if (busy || recorder.state !== 'idle') { language.value = getLanguage(); notice.textContent = t('処理が終わるまでお待ちください。'); return; }
-  try { localStorage.setItem('dot-language', language.value); } catch {}
-  location.reload();
+  if (busy || recorder.state !== 'idle') { language.value = languagePreferences.value; notice.textContent = t('処理が終わるまでお待ちください。'); return; }
+  if (!['auto', 'ja', 'en'].includes(language.value)) return;
+  void languagePreferences.save(language.value as 'auto' | 'ja' | 'en').then(saved => {
+    if (!saved && !exited) notice.textContent = t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  });
+  applyLanguage();
 };
 const progress = new InteractionStatus();
 progress.connection = token ? 'connecting' : 'unpaired';
 let hostName = t('接続先');
+let namedHost = false;
 let baseStatus = t('長押しで話してください');
+let renderBaseStatus: () => string = () => t('長押しで話してください');
 let visibleMessageId: string | undefined;
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 let statusQueued = false;
@@ -195,7 +201,7 @@ function reportTiming(id: string): void {
 function showMessage(): void {
   const message = messages[historyIndex];
   if (message?.kind === 'proactive') { display(`Dot · ${historyIndex + 1}/${messages.length}`, message.reply ?? ''); return; }
-  if (message) display(message.reply ? `Dot · ${historyIndex + 1}/${messages.length}` : message.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち'), `${message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた')}: ${message.text}\n\nDot: ${message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') : t('返信を待っています…'))}`, message.reply ? message.id : undefined);
+  if (message) display(() => message.reply ? `Dot · ${historyIndex + 1}/${messages.length}` : message.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち'), () => `${message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた')}: ${message.text}\n\nDot: ${message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') : t('返信を待っています…'))}`, message.reply ? message.id : undefined);
 }
 interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown }; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
@@ -204,7 +210,7 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   selectedSTT = readSTTProvider(snapshot.status.sttProvider);
   selectedSTTModel = snapshot.status.sttModel;
   progress.connection = 'online'; progress.dotConnected = subscribed;
-  if (snapshot.status.deviceName) hostName = snapshot.status.deviceName;
+  if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
   const next = snapshot.messages;
   for (const message of next) {
     if (!message.reply || spoken.has(message.id)) continue;
@@ -301,7 +307,7 @@ el('forget-pairing').onclick = async () => {
   try { if (relay) { await api('/api/pair/revoke', 'POST'); revoked = true; } }
   catch {} finally {
     forgetPairing(revoked ? t('接続を解除しました。') : t('端末の設定を削除しました。Macに接続できなかったため、Mac側でも接続を解除してください。'));
-    busy = false; display(t('接続設定が必要'), t('スマートフォンで接続設定を開いてください'));
+    busy = false; display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
   }
 };
 el('tts').onclick = () => {
@@ -333,13 +339,13 @@ sendButton.onclick = async () => {
     pendingDelivery.clear();
     transcript.value = ''; pendingId = undefined; pendingText = undefined;
     const reply = message.reply ?? messages.find(item => item.id === message.id)?.reply;
-    if (reply) { progress.complete(message.id); display('Dot', `${t('あなた')}: ${text}\n\nDot: ${reply}`, message.id); }
-    else display(t('Dotの返信待ち'), t('返信を待っています…'));
+    if (reply) { progress.complete(message.id); display('Dot', () => `${t('あなた')}: ${text}\n\nDot: ${reply}`, message.id); }
+    else display(() => t('Dotの返信待ち'), () => t('返信を待っています…'));
     notice.textContent = '';
   } catch (error) {
     if (version !== connectionVersion || exited) return;
     progress.setPhase('error'); notice.textContent = (error as Error).message;
-    display(t('送信を確認できませんでした'), (error as Error).message);
+    display(() => t('送信を確認できませんでした'), (error as Error).message);
   }
   finally { busy = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); }
 };
@@ -350,6 +356,7 @@ let clip: Uint8Array | undefined;
 let displayChain = Promise.resolve();
 let displayGeneration = 0;
 let lastDisplayText = t('長押しで話してください');
+let renderDisplayText: () => string = () => t('長押しで話してください');
 
 // A timer updates only the short status line. Keep at most one queued update
 // and read its latest value when it runs, so slow BLE never queues old seconds.
@@ -394,13 +401,15 @@ function refreshStatus(sendToG2 = true): void {
   });
 }
 
-function display(state: string, text: string, trace?: string): void {
+function display(state: string | (() => string), text: string | (() => string), trace?: string): void {
   if (exited) return;
-  baseStatus = state; visibleMessageId = trace;
+  renderBaseStatus = typeof state === 'function' ? state : () => state;
+  renderDisplayText = typeof text === 'function' ? text : () => text;
+  baseStatus = renderBaseStatus(); visibleMessageId = trace;
   if (trace && !timing.report(trace)) trace = undefined;
   refreshStatus(false);
-  el('hud-content').textContent = text;
-  lastDisplayText = text;
+  lastDisplayText = renderDisplayText();
+  el('hud-content').textContent = lastDisplayText;
   queueDisplayFrame(trace);
 }
 
@@ -436,6 +445,30 @@ function queueDisplayFrame(trace?: string): void {
   });
 }
 
+function applyLanguage(): void {
+  language.value = languagePreferences.value;
+  const next = chooseLanguage(navigator.language, languagePreferences.value);
+  if (next === getLanguage()) return;
+  setLanguage(next); document.documentElement.lang = next;
+  for (const { element, ja, en } of staticLabels) {
+    // Runtime status/controls may have replaced the initial label.
+    if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
+  }
+  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status']) {
+    const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
+  }
+  transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
+  recordButton.textContent = recorder.state === 'idle' ? t('録音を開始') : recorder.state === 'stop-error' ? t('マイク停止を再試行') : t('録音を停止');
+  el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+  if (!namedHost) hostName = t('接続先');
+  el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
+  baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
+  el('hud-content').textContent = lastDisplayText;
+  lastSentStatus = ''; lastSentSpeechStatus = '';
+  refreshStatus(false); queueDisplayFrame();
+}
+window.addEventListener('languagechange', () => { if (!exited && languagePreferences.value === 'auto') applyLanguage(); });
+
 function clearClip(): void {
   clip?.fill(0); clip = undefined; discardButton.disabled = true;
 }
@@ -449,7 +482,7 @@ const recorder = new Recorder(
     clearClip(); clip = wav; discardButton.disabled = false;
     notice.textContent = '';
     progress.begin(audioTraceId, 'recognizing');
-    busy = true; display(t('認識中'), getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
+    busy = true; display(() => t('認識中'), () => getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
     const trace = audioTraceId;
     timing.mark(trace, 'asr_sent');
     void api<{text:string}>('/api/transcribe', 'POST', wav, trace).then(result => {
@@ -457,24 +490,24 @@ const recorder = new Recorder(
       timing.mark(trace, 'asr_received');
       transcript.value = result.text; sendButton.disabled = false;
       progress.review(); notice.textContent = '';
-      display(t('認識完了'), result.text);
+      display(() => t('認識完了'), result.text);
       busy = false; clearClip();
       if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       refreshStatus();
-    }).catch(error => { busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(t('音声を認識できませんでした'), error.message); flushPendingDisplay(); });
+    }).catch(error => { busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); });
   },
   state => {
     if (state === 'stopping') { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
     recordButton.disabled = !glassesReady || state === 'stopping';
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
-    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(t('G2接続済み'), t('音声を取得できませんでした。もう一度長押ししてください。')); }
+    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => t('音声を取得できませんでした。もう一度長押ししてください。')); }
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
-    if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(t('マイク準備中'), t('指を離すと停止します')); }
-    if (state === 'recording') { progress.setPhase('recording'); display(t('録音中'), `${t('指を離すと停止します')}\n${t('最長30秒')}`); }
+    if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => t('指を離すと停止します')); }
+    if (state === 'recording') { progress.setPhase('recording'); display(() => t('録音中'), () => `${t('指を離すと停止します')}\n${t('最長30秒')}`); }
   },
-  message => { progress.setPhase('error'); notice.textContent = message; display(t('確認が必要'), message); },
+  message => { progress.setPhase('error'); notice.textContent = message; display(() => t('確認が必要'), message); },
 );
 
 function startRecording(): void {
@@ -489,7 +522,7 @@ recordButton.onclick = () => recorder.state === 'idle' ? startRecording() : void
 discardButton.onclick = () => {
   clearClip(); notice.textContent = t('録音を破棄しました。');
   progress.setPhase('idle');
-  display(t('G2接続済み'), t('長押しで話してください')); flushPendingDisplay();
+  display(() => t('G2接続済み'), () => t('長押しで話してください')); flushPendingDisplay();
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
@@ -505,6 +538,7 @@ function stopSession(): void {
 async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
   void restoreRelay(appBridge);
+  void languagePreferences.attach(appBridge).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;
   startupStage = 'page';
   el('g2-diagnostic').textContent = 'G2_STARTUP_PENDING';
@@ -542,7 +576,7 @@ async function connect(): Promise<void> {
     historyIndex = messages.length - 1;
     showMessage();
   } else {
-    display(token ? t('G2接続済み') : t('接続設定が必要'), token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
+    display(() => token ? t('G2接続済み') : t('接続設定が必要'), () => token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
   }
   appBridge.onEvenHubEvent(event => {
     if (exited) return;

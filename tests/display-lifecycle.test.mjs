@@ -23,6 +23,8 @@ async function launch(options = {}) {
   const calls = []; const networkCalls = []; const requests = []; const physical = new Map();
   const saved = new Map(options.nativePairing ? [] : [['g2-device-token', 'x'.repeat(43)]]);
   const nativeSaved = new Map(options.nativePairing ? [['dot-relay-native-v1', JSON.stringify(options.nativePairing)]] : []);
+  if (options.savedLanguage) saved.set('dot-language', options.savedLanguage);
+  if (options.nativeLanguage) nativeSaved.set('dot-language-preference-v1', options.nativeLanguage);
   let resumeAttempts = 0;
   let writeGate;
   const schedule = (callback, ms, repeat = false) => {
@@ -50,15 +52,16 @@ async function launch(options = {}) {
     async getLocalStorage(k) { return nativeSaved.get(k) ?? ''; },
     async setLocalStorage(k, v) { nativeSaved.set(k, v); return true; },
   };
+  const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
-      querySelector: element, querySelectorAll: () => [], createComment: element, addEventListener: listen},
+      querySelector: element, querySelectorAll: () => [staticLabel], createComment: element, addEventListener: listen},
     window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak() {}}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
-    navigator: {language: 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
+    navigator: {language: options.language ?? 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
     localStorage: local, sessionStorage: local, location: {origin: options.nativePairing ? 'http://127.0.0.1:57157' : 'https://test.invalid', hash: '', pathname: '/', search: ''},
     history: {replaceState() {}}, performance: {now: () => now}, crypto, console, URLSearchParams, AbortController, AbortSignal, Uint8Array, Blob, TextEncoder,
     setTimeout: (fn, ms) => schedule(fn, ms), clearTimeout: id => timers.delete(id),
@@ -106,6 +109,7 @@ async function launch(options = {}) {
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
     close: async () => {vm.runInContext('stopSession()', context); await flush();},
+    locale: async value => {context.navigator.language = value; listeners.get('languagechange')?.(); await flush();},
     hidden: () => vm.runInContext('standby.hidden', context),
   };
 }
@@ -274,4 +278,67 @@ test('all provider and actual model labels reach both phone and G2 through statu
   assert.equal(app.element('speech-status').textContent, 'STT:OpenAI fixture-model / TTS:OFF');
   assert.equal(app.physical.get(4), '─'.repeat(24) + '\nSTT:OpenAI fixture-model / TTS:OFF');
   assert.equal(app.calls.filter(call => call[0] === 'mic').length, 0);
+});
+
+
+test('language switches preserve the live session, draft, TTS, history position and future delivery', async t => {
+  const app = await launch({provider: 'elevenlabs'}); t.after(app.close);
+  const first = {id: 'first', kind: 'voice', text: 'Display settings', reply: '長押しで話してください', status: 'replied'};
+  await app.deliver(app.snapshot([first, proactive('second')]));
+  await app.element('previous').click(); await flush();
+  app.element('transcript').value = 'Unsent draft';
+  await app.element('tts').click(); await flush();
+  const credentials = app.saved.get('g2-device-token');
+  const beforeRequests = app.networkCalls.length;
+  for (const locale of ['en', 'ja', 'en']) {
+    app.element('language').value = locale; app.element('language').onchange(); await flush();
+    assert.equal(app.context.document.documentElement.lang, locale);
+    assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : '表示設定');
+    assert.match(app.element('tts').textContent, /ON$/);
+    assert.equal(app.element('record').disabled, false);
+    assert.equal(app.element('transcript').value, 'Unsent draft');
+    assert.match(app.physical.get(2), /Display settings\n\nDot: 長押しで話してください$/);
+    assert.ok(app.physical.get(2).startsWith(locale === 'en' ? 'You: ' : 'あなた: '));
+    assert.match(app.physical.get(1), /1\/2/);
+    assert.equal(app.element('g2-diagnostic').textContent, 'G2_READY');
+  }
+  assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
+  assert.equal(app.calls.filter(c => c[0] === 'exit').length, 0);
+  assert.equal(app.networkCalls.length, beforeRequests, 'language change never restarts the receiver or sends data');
+  assert.equal(app.saved.get('g2-device-token'), credentials);
+  assert.equal(app.nativeSaved.get('dot-language-preference-v1'), 'en');
+  await app.deliver(app.snapshot([first, proactive('second'), proactive('third')]));
+  assert.equal(app.physical.get(2), 'Synthetic message third');
+});
+
+test('automatic locale uses Japanese only for Japanese and follows host changes without restart', async t => {
+  const app = await launch({language: 'fr-FR'}); t.after(app.close);
+  assert.equal(app.element('language').value, 'auto');
+  assert.equal(app.context.document.documentElement.lang, 'en');
+  await app.locale('ja-JP'); assert.equal(app.context.document.documentElement.lang, 'ja');
+  app.element('language').value = 'en'; app.element('language').onchange(); await flush();
+  await app.locale('ja-JP'); assert.equal(app.context.document.documentElement.lang, 'en');
+  app.element('language').value = 'auto'; app.element('language').onchange(); await flush();
+  assert.equal(app.context.document.documentElement.lang, 'ja');
+  await app.locale('zh-CN'); assert.equal(app.context.document.documentElement.lang, 'en');
+  assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
+});
+
+test('language change keeps a hidden display blank and recording guard preserves preference', async t => {
+  const app = await launch(); t.after(app.close);
+  await app.advance(30_000);
+  app.element('language').value = 'en'; app.element('language').onchange(); await flush();
+  assert.equal(app.hidden(), true); assert.deepEqual([...app.physical.values()], [' ', ' ', ' ', ' ']);
+  await app.emit(doubleTap);
+  await app.emit({textEvent: {eventType: sdk.OsEventTypeList.LONG_PRESS_EVENT}});
+  app.element('language').value = 'ja'; app.element('language').onchange(); await flush();
+  assert.equal(app.element('language').value, 'en');
+  assert.equal(app.context.document.documentElement.lang, 'en');
+});
+
+test('native language is restored into a new WebView without replacing G2 startup', async t => {
+  const app = await launch({language: 'en-US', nativeLanguage: 'ja'}); t.after(app.close);
+  assert.equal(app.context.document.documentElement.lang, 'ja');
+  assert.equal(app.element('language').value, 'ja');
+  assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
 });
