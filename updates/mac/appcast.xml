@@ -1,20 +1,25 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.2.31</title><sparkle:version>52</sparkle:version><sparkle:shortVersionString>0.2.31</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Mac通知を既存Dotへ共有する機能と、設定画面を更新しました。
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.3.0</title><sparkle:version>53</sparkle:version><sparkle:shortVersionString>0.3.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">音声入力サービスを選べるようになりました。
 
-- 「Macの全通知をDotに共有」で、読み取れる新着通知の送信者・見出し・本文を共有します。共有は初期状態ではオフです。Dotが何をいつ知らせるかを判断します。
-- 通知の重複処理、停止・再開、状態表示、アクセシビリティの追加・再登録手順を改善しました。
-- 自動更新を一時停止しています。「アップデートを確認」から手動で更新できます。
-- アンインストール時は、接続設定・会話履歴を含めてゴミ箱へ移します。設定を残す選択肢はありません。
+- Macの「音声入力」で無料のWhisper、またはご自身のAPIキーを使うSonioxを選択できます。SonioxのAPI料金・利用枠が適用されます。キーはMacのキーチェーンに保存し、録音はMacからSonioxへ直接送ります。
+- 公開中のEven 0.2.14と互換性があります。サービス名表示などのEven側の変更は0.2.19に含まれ、Even Hubで別途審査されます。
+- サービス選択とヘルプを整理しました。TTSサービスの選択機能は今回の更新には含まれません。
 
-更新後に通知を共有できない場合は、システム設定のアクセシビリティ内にあるDot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。
+更新後にキーチェーンの確認が出た場合は「常に許可」を選択してください。通知共有が止まった場合は、システム設定のアクセシビリティ内のDot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。自動更新は引き続き一時停止中です。
 
-対応する通知形式は引き続き検証中です。すべての通知の読み取りや即時到着を保証するものではありません。通知元アプリへの返信操作は未対応です。Apple Silicon / macOS 13以降。Apple公証は未実施です。
+Apple Silicon / macOS 13以降。Apple公証は未実施です。
 
-This release adds opt-in sharing of readable new Mac notifications with your existing Dot, improves notification status and permission guidance, and clarifies the settings screen. Dot decides what to announce and when. Automatic updates are temporarily disabled; use Check for updates. Uninstall now moves connection settings and conversation history to Trash along with the app.
+Speech input now supports provider selection.
 
-If sharing stops after an update, remove Dot Link from the Accessibility list in System Settings, add the installed Dot Link.app again, and turn access on. Not every notification format or immediate arrival is guaranteed; replying in the source app is not supported. Apple Silicon, macOS 13 or later. Not Apple-notarized.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.2.31-52/Dot-Link-0.2.31-52-arm64.zip" sparkle:installationType="application" sparkle:edSignature="qB7O26ikkoKPrhSYjHdXAe7aEUebgoXJsHLzfW7fj+y5X2MG+7qBUB5OqcAHvS5hoyLI5qNqgierd5XkiRIWBA==" length="51419319" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: A8X9PX/w9mr1r17SJSi4r1g/TmM4yZnHKE9VkOw1GgJK23sxTsqvkZi4JpLw8q6Vzjdm0vd0nd1f4YViPzS7Dw==
-length: 2941
+- Choose free local Whisper or Soniox with your own API key in Speech input on the Mac. Soniox API charges and limits apply. Keys stay in macOS Keychain; recordings go directly from your Mac to Soniox.
+- Compatible with the currently published Even 0.2.14. Provider labels and related companion changes are included in Even 0.2.19 and go through a separate Even Hub review.
+- Simplified speech settings and help. TTS provider selection is not part of this update.
+
+If Keychain asks after updating, choose Always Allow. If notification sharing stops, remove Dot Link from the Accessibility list in System Settings, add the installed Dot Link.app again, and turn access on. Automatic updates remain temporarily disabled.
+
+Apple Silicon / macOS 13 or later. Not Apple-notarized.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.3.0-53/Dot-Link-0.3.0-53-arm64.zip" sparkle:installationType="application" sparkle:edSignature="2R8kE7LqOpKcXRGlMGnEvWDQyHG1t1vLVnYyxSTbBimuPeWNWwtGlIw4M4Q4Woh5hnf3HXwE2FyeCHPH4KTjDA==" length="51454791" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: +CFM2H75cScIVrhnj9jcmtTcThwj0iPHU2M1laRkLQRqzQCWLuu70ZfTVDQV6WriZ5e3ufrH0WwAq6SvYy39BQ==
+length: 2910
 -->
