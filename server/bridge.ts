@@ -18,7 +18,7 @@ const subscriptionSchema = z.object({ id: z.string(), url: z.string(), secret: z
 const utteranceSchema = z.object({
   id: z.string().uuid(), text: z.string(), createdAt: z.string(),
   status: z.enum(['pending', 'accepted', 'failed', 'replied']),
-  reply: z.string().optional(), repliedAt: z.string().optional(),
+  reply: z.string().optional(), repliedAt: z.string().optional(), readAt: z.string().optional(),
 });
 const outboundInput = z.object({
   message_id: z.string().uuid(), text: z.string().trim().min(1).max(8000),
@@ -93,8 +93,17 @@ export class Bridge {
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
   history() { return structuredClone(this.state.messages); }
   pending() {
-    for (const item of this.state.messages.filter(item => item.status !== 'replied').slice(0, 10)) this.latency.mark(item.id, 'dot_pending_read');
-    return { session_id: SESSION, utterances: this.state.messages.filter(item => item.status !== 'replied').slice(0, 10)
+    const messages = this.state.messages.filter(item => item.status !== 'replied').slice(0, 10);
+    const at = new Date().toISOString();
+    let changed = false;
+    for (const item of messages) {
+      this.latency.mark(item.id, 'dot_pending_read');
+      if (!item.readAt) { item.readAt = at; changed = true; }
+    }
+    // Receipt means this authenticated Dot tool returned the body. Webhook
+    // acceptance and device history reads alone never mark an utterance read.
+    if (changed) this.save();
+    return { session_id: SESSION, utterances: messages
       .map(item => ({ utterance_id: item.id, text: item.text, created_at: item.createdAt })) };
   }
 

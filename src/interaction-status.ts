@@ -1,7 +1,7 @@
 import { t, seconds } from './i18n.ts';
 export type InteractionPhase = 'idle' | 'microphone' | 'recording' | 'recognizing' | 'sending' | 'waiting' | 'review' | 'error';
 export type ConnectionState = 'connecting' | 'online' | 'offline' | 'unpaired';
-interface Measurement { started: number; paused?: number; pausedMs: number; completedMs?: number; }
+interface Measurement { started: number; paused?: number; pausedMs: number; waitingStarted?: number; completedMs?: number; }
 
 /** Observed elapsed time, not an ETA. Notification arrivals cannot finish a voice request. */
 export class InteractionStatus {
@@ -33,8 +33,25 @@ export class InteractionStatus {
     if (measurement) measurement.paused = this.clock();
     this.phase = 'review';
   }
-  waiting(id: string): void {
-    if (this.activeId === id && this.measurements.get(id)?.completedMs === undefined) this.phase = 'waiting';
+  waiting(id: string, createdAt?: string, wallNow = Date.now()): void {
+    const measurement = this.measurements.get(id);
+    if (this.activeId === id && measurement && measurement.completedMs === undefined) {
+      const created = Date.parse(createdAt ?? '');
+      measurement.waitingStarted ??= this.clock() - (Number.isFinite(created) ? Math.max(0, wallNow - created) : 0);
+      this.phase = 'waiting';
+    }
+  }
+  restoreWaiting(id: string, createdAt?: string, wallNow = Date.now()): void {
+    const created = Date.parse(createdAt ?? '');
+    if (!Number.isFinite(created)) return;
+    const started = this.clock() - Math.max(0, wallNow - created);
+    if (!this.measurements.has(id)) this.measurements.set(id, { started, waitingStarted: started, pausedMs: 0 });
+    this.activeId = id; this.phase = 'waiting';
+  }
+  get protectWaiting(): boolean {
+    if (this.phase !== 'waiting' || !this.activeId) return false;
+    const started = this.measurements.get(this.activeId)?.waitingStarted;
+    return started !== undefined && this.clock() - started < 60_000;
   }
   complete(id: string): void {
     const measurement = this.measurements.get(id);
@@ -57,8 +74,11 @@ export class InteractionStatus {
     if (!this.dotConnected && ['idle', 'waiting'].includes(this.phase)) return t('Dot未接続');
     const label = { recognizing: t('認識中'), sending: t('送信中'), waiting: t('Dotの返信待ち') }[this.phase as 'recognizing' | 'sending' | 'waiting'];
     const measurement = this.activeId ? this.measurements.get(this.activeId) : undefined;
-    if (label && measurement) return `${label} · ${seconds(Math.floor(Math.max(0, this.clock() - measurement.started - measurement.pausedMs) / 1000))}`;
+    if (label && measurement && (this.phase !== 'waiting' || !visibleId || visibleId === this.activeId)) {
+      const elapsed = seconds(Math.floor(Math.max(0, this.clock() - measurement.started - measurement.pausedMs) / 1000));
+      return this.phase === 'waiting' ? `${label} (${elapsed})` : `${label} · ${elapsed}`;
+    }
     const complete = visibleId ? this.measurements.get(visibleId)?.completedMs : undefined;
-    return complete === undefined ? fallback : `${fallback} · ${seconds((complete / 1000).toFixed(1))}`;
+    return complete === undefined ? fallback : `${fallback} ${seconds((complete / 1000).toFixed(1))}`;
   }
 }

@@ -4,6 +4,9 @@ import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from '.
 import { sttErrorMessage } from './stt-errors.ts';
 import { Recorder } from './audio.ts';
 import { TimingTracker } from './timing.ts';
+import { reconcileHistory, NewReplyQueue } from './message-history.ts';
+import { conversationText, receiptCaption, newReplyCaption, type DisplayMessage } from './conversation-display.ts';
+import { wrapHudText } from './hud-text.ts';
 import { LiveUpdates } from './live-updates.ts';
 import { Pairing } from './pairing.ts';
 import { InteractionStatus } from './interaction-status.ts';
@@ -107,6 +110,8 @@ let statusQueued = false;
 let statusDirty = false;
 let lastSentStatus = '';
 let lastSentSpeechStatus = '';
+let lastSentReceipt = '';
+let lastSentNewReplies = '';
 let selectedSTT: STTProvider | undefined;
 let selectedSTTModel: unknown;
 const ttsDevice = speechDevice(navigator.userAgent, navigator.maxTouchPoints);
@@ -154,7 +159,7 @@ function forgetPairing(message: string): void {
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
   token = ''; relay = undefined; relaySettings.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
-  messages = []; spoken.clear(); historyIndex = -1; pendingHistoryDisplay = false;
+  messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
   progress.connection = 'unpaired'; refreshStatus();
   el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
   el<HTMLDetailsElement>('pairing-settings').open = true;
@@ -165,11 +170,17 @@ let tts = false;
 let messages: Message[] = [];
 let historyIndex = -1;
 let pendingHistoryDisplay = false;
+let pendingDisplayId: string | undefined;
+let restoringHistory = false;
 const spoken = new Set<string>();
+const newReplies = new NewReplyQueue();
+let browsingHistory = false;
+let replyWakePending = false;
+let showingReply = false;
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
 const reportedDisplay = new Set<string>();
-interface Message { id: string; text: string; reply?: string; status: string; kind?: 'notification' | 'proactive'; source_app?: string; location_sharing_id?: string; location_expires_at?: string; }
+interface Message extends DisplayMessage { location_sharing_id?: string; location_expires_at?: string; }
 
 let resumeFlight: Promise<void> | undefined;
 async function ensureRelayOrigin(force = false): Promise<void> {
@@ -237,9 +248,18 @@ function reportTiming(id: string): void {
 
 function showMessage(): void {
   const message = messages[historyIndex];
-  if (message?.kind === 'proactive') { display(`Dot · ${historyIndex + 1}/${messages.length}`, message.reply ?? ''); return; }
-  if (message) display(() => message.reply ? `Dot · ${historyIndex + 1}/${messages.length}` : message.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち'), () => `${message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた')}: ${message.text}\n\nDot: ${message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') : t('返信を待っています…'))}`, message.reply ? message.id : undefined);
+  if (!message) return;
+  newReplies.seen(message.id);
+  const current = () => messages.find(item => item.id === message.id) ?? message;
+  display(() => {
+    const item = current();
+    return item.reply ? `${messages.findIndex(m => m.id === item.id) + 1}/${messages.length}` :
+      item.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち');
+  }, () => conversationText(current(), Date.now()), message.id);
 }
+function currentReceipt(): string { return receiptCaption(messages.find(message => message.id === visibleMessageId)); }
+function currentNewReplies(): string { return newReplyCaption(newReplies.count); }
+
 interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
@@ -249,15 +269,14 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   selectedSTTModel = snapshot.status.sttModel;
   progress.connection = 'online'; progress.dotConnected = subscribed;
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
-  // Already seen history remains readable; a delayed location announcement must
-  // not wake the glasses after OFF, expiry, or a different sharing session.
-  const known = new Set(messages.map(message => message.id));
-  const next = snapshot.messages.filter(message => known.has(message.id) || locationSharing.acceptsAnnouncement(message));
-  for (const message of next) {
+  // Restore saved history independently from new announcement eligibility.
+  const selectedId = messages[historyIndex]?.id;
+  const update = reconcileHistory(messages, snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
+  for (const message of update.replies) {
     if (!message.reply || spoken.has(message.id)) continue;
     progress.complete(message.id);
     spoken.add(message.id);
-    if (!initial) standby?.activity();
+    if (!initial) replyWakePending = true;
     if (!initial) timing.mark(message.id, 'reply_received');
     if (!initial && tts && 'speechSynthesis' in window) {
       const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US';
@@ -265,19 +284,39 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
       window.speechSynthesis.speak(speech);
     }
   }
-  const changed = JSON.stringify(messages) !== JSON.stringify(next);
-  messages = next;
+  messages = update.messages;
+  newReplies.retain(messages);
+  if (initial) newReplies.clear(); else newReplies.receive(update.replies);
+  if (selectedId) historyIndex = messages.findIndex(message => message.id === selectedId);
+  const latest = messages.at(-1);
+  if (initial && latest && !latest.reply && !latest.kind && latest.status !== 'failed') progress.restoreWaiting(latest.id, latest.createdAt, Date.now());
   while (spoken.size > 200) spoken.delete(spoken.values().next().value!);
   el('dot-status').textContent = `${hostName} · ${subscribed ? t('Dot接続済み') : t('Dot未接続')}`;
-  if (changed) pendingHistoryDisplay = true;
+  if (initial && update.displayId) { pendingDisplayId = update.displayId; restoringHistory = true; browsingHistory = false; }
+  pendingHistoryDisplay = true;
   flushPendingDisplay();
   refreshStatus();
 }
 function flushPendingDisplay(): void {
-  if (pendingHistoryDisplay && !busy && recorder.state === 'idle') {
-    pendingHistoryDisplay = false; historyIndex = messages.length - 1; showMessage();
+  if (pendingHistoryDisplay && !busy && recorder.state === 'idle' && !['review', 'error'].includes(progress.phase)) {
+    pendingHistoryDisplay = false;
+    const target = restoringHistory ? pendingDisplayId : newReplies.next(messages,
+      showingReply ? messages.find(message => message.id === visibleMessageId) : undefined, {
+        hidden: standby?.hidden ?? false, browsingHistory,
+        mayAnnounce: message => locationSharing.acceptsAnnouncement(message),
+      });
+    pendingDisplayId = undefined;
+    if (target) historyIndex = messages.findIndex(message => message.id === target);
+    // Metadata and replies can change the selected message without selecting a
+    // different history item. Preserve its ID when sorting late arrivals.
+    if (target) showMessage();
+    else if (visibleMessageId && messages.find(message => message.id === visibleMessageId)?.reply) {
+      newReplies.seen(visibleMessageId); showingReply = true;
+    }
+    restoringHistory = false;
+    if (replyWakePending) { replyWakePending = false; standby?.activity(); }
   }
-  refreshStatus(false);
+  refreshStatus();
 }
 
 const updates = new LiveUpdates<Snapshot>(async (revision, signal) => {
@@ -357,8 +396,8 @@ el('tts').onclick = () => {
   else window.speechSynthesis?.cancel();
   refreshStatus();
 };
-el('previous').onclick = () => { standby?.activity(); historyIndex = Math.max(0, historyIndex - 1); showMessage(); };
-el('next').onclick = () => { standby?.activity(); historyIndex = Math.min(messages.length - 1, historyIndex + 1); showMessage(); };
+el('previous').onclick = () => { standby?.activity(); historyIndex = Math.max(0, historyIndex - 1); browsingHistory = historyIndex < messages.length - 1; showMessage(); };
+el('next').onclick = () => { standby?.activity(); historyIndex = Math.min(messages.length - 1, historyIndex + 1); browsingHistory = historyIndex < messages.length - 1; showMessage(); };
 let pendingId: string | undefined;
 let pendingText: string | undefined;
 sendButton.onclick = async () => {
@@ -376,12 +415,16 @@ sendButton.onclick = async () => {
     timing.mark(pendingId!, 'utterance_accepted');
     reportTiming(pendingId!);
     if (message.status === 'failed') throw new Error(t('配送を確認できませんでした。同じ発話は重複送信しません。'));
-    progress.waiting(message.id);
+    progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();
     transcript.value = ''; pendingId = undefined; pendingText = undefined;
-    const reply = message.reply ?? messages.find(item => item.id === message.id)?.reply;
-    if (reply) { progress.complete(message.id); display('Dot', () => `${t('あなた')}: ${text}\n\nDot: ${reply}`, message.id); }
-    else display(() => t('Dotの返信待ち'), () => t('返信を待っています…'));
+    const saved = messages.find(item => item.id === message.id);
+    if (!saved) messages = reconcileHistory(messages, [...messages, message], true, () => true).messages;
+    else if (!saved.reply) Object.assign(saved, message);
+    historyIndex = messages.findIndex(item => item.id === message.id);
+    browsingHistory = false;
+    if (messages[historyIndex].reply) progress.complete(message.id);
+    showMessage();
     notice.textContent = '';
   } catch (error) {
     if (version !== connectionVersion || exited) return;
@@ -403,16 +446,22 @@ let renderDisplayText: () => string = () => t('長押しで話してください
 // and read its latest value when it runs, so slow BLE never queues old seconds.
 function refreshStatus(sendToG2 = true): void {
   if (exited) return;
-  standby?.protect(busy || recorder.state !== 'idle' || ['recognizing', 'sending', 'waiting'].includes(progress.phase));
+  standby?.protect(busy || recorder.state !== 'idle' || ['recognizing', 'sending'].includes(progress.phase) || progress.protectWaiting);
+  baseStatus = renderBaseStatus();
+  const nextText = renderDisplayText();
+  if (nextText !== lastDisplayText) {
+    lastDisplayText = nextText; el('hud-content').textContent = nextText;
+    if (sendToG2) queueDisplayFrame();
+  }
   const caption = progress.caption(baseStatus, visibleMessageId);
   const speech = speechCaption();
   el('speech-status').textContent = speech;
   el('hud-state').textContent = caption;
   el('hud-state').dataset.state = progress.state;
-  const ticking = progress.ticking && pageActive && !document.hidden;
+  const ticking = (progress.ticking || progress.protectWaiting) && !standby?.hidden;
   if (ticking && !statusTimer) statusTimer = setInterval(() => refreshStatus(), 1000);
   else if (!ticking && statusTimer) { clearInterval(statusTimer); statusTimer = undefined; }
-  if (!sendToG2 || standby?.hidden || !bridge || !glassesReady || (caption === lastSentStatus && speechDisplayCaption() === lastSentSpeechStatus)) return;
+  if (!sendToG2 || standby?.hidden || !bridge || !glassesReady || (caption === lastSentStatus && speechDisplayCaption() === lastSentSpeechStatus && currentReceipt() === lastSentReceipt && currentNewReplies() === lastSentNewReplies)) return;
   if (statusQueued) { statusDirty = true; return; }
   statusQueued = true;
   const activeBridge = bridge;
@@ -434,6 +483,15 @@ function refreshStatus(sendToG2 = true): void {
       if (!ok) throw new Error('Speech status update failed');
       lastSentSpeechStatus = speech;
     }
+    for (const [containerID, containerName, value] of [[5, 'receipt', currentReceipt()], [6, 'new', currentNewReplies()]] as const) {
+      const previous = containerID === 5 ? lastSentReceipt : lastSentNewReplies;
+      if (value === previous) continue;
+      const content = value || ' ';
+      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({ containerID, containerName,
+        contentOffset: 0, contentLength: content.length, content }));
+      if (!ok) throw new Error('Header update failed');
+      if (containerID === 5) lastSentReceipt = value; else lastSentNewReplies = value;
+    }
   }).catch(() => {
     connection.textContent = t('G2の表示更新を確認できません');
   }).finally(() => {
@@ -447,6 +505,7 @@ function display(state: string | (() => string), text: string | (() => string), 
   renderBaseStatus = typeof state === 'function' ? state : () => state;
   renderDisplayText = typeof text === 'function' ? text : () => text;
   baseStatus = renderBaseStatus(); visibleMessageId = trace;
+  showingReply = !!messages.find(message => message.id === trace)?.reply;
   if (trace && !timing.report(trace)) trace = undefined;
   refreshStatus(false);
   lastDisplayText = renderDisplayText();
@@ -465,9 +524,9 @@ function queueDisplayFrame(trace?: string): void {
     if (trace) timing.mark(trace, 'g2_update_started');
     const hidden = standby?.hidden ?? false;
     const caption = hidden ? ' ' : progress.caption(baseStatus, visibleMessageId);
-    const text = hidden ? ' ' : lastDisplayText;
+    const text = hidden ? ' ' : wrapHudText(lastDisplayText);
     const help = hidden ? ' ' : t('長押しで録音 · 指を離すと停止');
-    for (const [containerID, containerName, content] of [[1, 'status', caption], [2, 'conversation', text || ' '], [3, 'help', help], [4, 'speech', hidden ? ' ' : speechDisplayCaption()]] as const) {
+    for (const [containerID, containerName, content] of [[1, 'status', caption], [2, 'conversation', text || ' '], [3, 'help', help], [4, 'speech', hidden ? ' ' : speechDisplayCaption()], [5, 'receipt', hidden ? ' ' : currentReceipt() || ' '], [6, 'new', hidden ? ' ' : currentNewReplies() || ' ']] as const) {
       if (exited || generation !== displayGeneration) return;
       const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
         containerID, containerName, contentOffset: 0, contentLength: content.length, content,
@@ -475,6 +534,8 @@ function queueDisplayFrame(trace?: string): void {
       if (!ok) throw new Error('G2表示の更新を確認できませんでした');
       if (containerID === 1) lastSentStatus = content;
       if (containerID === 4) lastSentSpeechStatus = content;
+      if (containerID === 5) lastSentReceipt = content.trim();
+      if (containerID === 6) lastSentNewReplies = content.trim();
     }
     if (!hidden && trace && generation === displayGeneration && !reportedDisplay.has(trace)) {
       timing.mark(trace, 'g2_update_ack'); reportedDisplay.add(trace); reportTiming(trace);
@@ -506,7 +567,7 @@ function applyLanguage(): void {
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
   el('hud-content').textContent = lastDisplayText;
-  lastSentStatus = ''; lastSentSpeechStatus = '';
+  lastSentStatus = ''; lastSentSpeechStatus = ''; lastSentReceipt = ''; lastSentNewReplies = '';
   refreshStatus(false); queueDisplayFrame();
 }
 window.addEventListener('languagechange', () => { if (!exited && languagePreferences.value === 'auto') applyLanguage(); });
@@ -586,16 +647,20 @@ async function connect(): Promise<void> {
   startupStage = 'page';
   el('g2-diagnostic').textContent = 'G2_STARTUP_PENDING';
   const result = await appBridge.createStartUpPageContainer(new CreateStartUpPageContainer({
-    containerTotalNum: 4,
+    containerTotalNum: 6,
     textObject: [
       new TextContainerProperty({ containerID: 1, containerName: 'status', xPosition: 8, yPosition: 8,
-        width: 560, height: 36, content: 'Dot Link' }),
+        width: 215, height: 36, content: 'Dot Link' }),
       new TextContainerProperty({ containerID: 2, containerName: 'conversation', xPosition: 8, yPosition: 50,
         width: 560, height: 130, isEventCapture: 1, content: t('長押しで話してください') }),
       new TextContainerProperty({ containerID: 3, containerName: 'help', xPosition: 8, yPosition: 244,
         width: 560, height: 36, content: t('長押しで録音 · 指を離すと停止') }),
       new TextContainerProperty({ containerID: 4, containerName: 'speech', xPosition: 8, yPosition: 188,
         width: 560, height: 52, content: speechDisplayCaption() }),
+      new TextContainerProperty({ containerID: 5, containerName: 'receipt', xPosition: 422, yPosition: 8,
+        width: 146, height: 36, content: ' ' }),
+      new TextContainerProperty({ containerID: 6, containerName: 'new', xPosition: 245, yPosition: 8,
+        width: 145, height: 36, content: ' ' }),
     ],
   }));
   startupResult = result;
@@ -609,14 +674,13 @@ async function connect(): Promise<void> {
     else void syncHeadRaise();
   });
   el('g2-diagnostic').textContent = 'G2_READY';
-  lastSentStatus = ''; lastSentSpeechStatus = '';
+  lastSentStatus = ''; lastSentSpeechStatus = ''; lastSentReceipt = ''; lastSentNewReplies = '';
   connection.textContent = t('Even Hub接続済み');
   notice.textContent = '';
   recordButton.disabled = false;
   // History may finish loading before the Even bridge is ready. Repaint it
   // now: later polls with unchanged history otherwise never update the G2.
-  if (messages.length > 0) {
-    historyIndex = messages.length - 1;
+  if (historyIndex >= 0 && messages[historyIndex]) {
     showMessage();
   } else {
     display(() => token ? t('G2接続済み') : t('接続設定が必要'), () => token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
@@ -738,7 +802,7 @@ function initializeDisplaySettings(): void {
 
 standby = new DisplayStandby(displayPreferences.value, hidden => {
   document.body.dataset.displayHidden = String(hidden);
-  queueDisplayFrame();
+  refreshStatus(false); queueDisplayFrame();
 });
 initializeDisplaySettings();
 renderLocationStatus();

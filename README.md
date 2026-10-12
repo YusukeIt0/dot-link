@@ -50,6 +50,10 @@ Mac版0.4.0から、スマートフォンの位置情報をDotへ共有できま
 
 詳しい手順は[導入ガイド](docs/setup.md)を参照してください。
 
+### Mac 0.4.5とEven 0.2.27の改善
+
+Mac 0.4.5では通知の権限設定を一つの画面から開けるようにし、Even 0.2.27の未読・既読表示に対応しました。Even 0.2.27には、会話履歴の復元、新着返信件数、返信待ちが長い場合の案内と消灯、G2右端の文字表示の改善を含みます。Even 0.2.27は一般公開待ちです。
+
 ### 更新と、知っておいてほしいこと
 
 - **更新:** 現在、自動更新は一時停止中です。Macアプリの「アップデートを確認」から手動で更新できます。GitHubアカウントや更新用のキーは不要です。
@@ -101,6 +105,10 @@ Development testing has covered brief location updates while the phone is locked
 3. **Connect Mac and Even** — Choose **Connect Even** in the Mac app, generate a code, and paste it into the Even companion to save the connection.
 
 See the [setup guide](docs/setup.md) for the full steps.
+
+### Improvements in Mac 0.4.5 and Even 0.2.27
+
+Mac 0.4.5 opens notification permission settings through one screen and supports the unread/read indicators in Even 0.2.27. Even 0.2.27 also improves history restoration, new-reply counts, delayed-reply guidance and display timeout behavior, and text readability near the right edge of G2. Even 0.2.27 is awaiting public release.
 
 ### Updates and things to know
 

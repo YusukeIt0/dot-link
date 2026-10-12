@@ -19,6 +19,7 @@ const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve()
 
 async function launch(options = {}) {
   let now = 0, timerId = 0, receiver;
+  const epoch = Date.now();
   const timers = new Map(); const elements = new Map(); const listeners = new Map();
   const calls = []; const networkCalls = []; const requests = []; const physical = new Map();
   const saved = new Map(options.nativePairing ? [] : [['g2-device-token', 'x'.repeat(43)]]);
@@ -59,6 +60,8 @@ async function launch(options = {}) {
   const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
+    InteractionStatus: class extends dependencies.InteractionStatus { constructor() { super(() => now); } },
+    Date: class extends Date { static now() { return epoch + now; } },
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
@@ -78,7 +81,7 @@ async function launch(options = {}) {
       }
       if (options.typedInput && String(url).endsWith('/api/utterances')) {
         const value = JSON.parse(init.body);
-        return Promise.resolve({status: 200, ok: true, json: async () => ({...value, status: 'pending'})});
+        return Promise.resolve({status: 200, ok: true, json: async () => ({...value, status: 'accepted', createdAt:new Date(epoch + now).toISOString()})});
       }
       if (String(url).endsWith('/api/pair/resume')) {
         resumeAttempts++;
@@ -100,7 +103,7 @@ async function launch(options = {}) {
     assert.ok(requests.length, 'receiver must still be waiting');
     requests.shift()({ok: true, status: 200, json: async () => structuredClone(value)}); await flush();
   };
-  if (!options.failResumeOnce) await deliver(snapshot());
+  if (!options.failResumeOnce) await deliver(snapshot(options.initialMessages ?? []));
   const advance = async ms => {
     const end = now + ms;
     while (true) {
@@ -112,7 +115,7 @@ async function launch(options = {}) {
     }
     now = end; await flush();
   };
-  return {calls, networkCalls, physical, element, saved, nativeSaved, timers, snapshot, deliver, advance, context,
+  return {now: () => epoch + now, calls, networkCalls, physical, element, saved, nativeSaved, timers, snapshot, deliver, advance, context,
     emit: async event => {receiver(event); await flush();},
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
@@ -126,10 +129,10 @@ const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
 
-test('full app hides all 4 containers, keeps receiving, and wakes on a new autonomous message', async t => {
+test('full app hides all 6 containers, keeps receiving, and wakes on a new autonomous message', async t => {
   const app = await launch(); t.after(app.close);
   await app.advance(30_000); assert.equal(app.hidden(), true);
-  assert.deepEqual([...app.physical.values()], [' ', ' ', ' ', ' ']);
+  assert.deepEqual([...app.physical.values()], Array(6).fill(' '));
   const count = app.calls.length;
   for (let i = 0; i < 100; i++) await app.deliver(app.snapshot());
   assert.equal(app.calls.length, count, 'unchanged polls must not relight the display');
@@ -158,16 +161,19 @@ test('default double wake consumes the gesture; configurable single wake also sw
   assert.equal(app.calls.filter(c => c[0] === 'exit').length, 1);
 });
 
-test('recording, recognition and offline reply-wait do not blank; result receives a full interval', async t => {
+test('recording and recognition stay protected; offline reply-wait releases protection after sixty seconds', async t => {
   const app = await launch(); t.after(app.close);
   await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.LONG_PRESS_EVENT}});
   await app.advance(60_000); assert.equal(app.hidden(), false);
   assert.ok(app.calls.some(c => c[0] === 'mic' && c[1] === true));
   await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.LONG_PRESS_RELEASE_EVENT}});
-  for (const phase of ['recognizing', 'sending', 'waiting']) {
+  for (const phase of ['recognizing', 'sending']) {
     await app.evaluate(`progress.begin('job', 'recognizing'); progress.setPhase('${phase}'); progress.connection='offline'; refreshStatus();`);
     await app.advance(90_000); assert.equal(app.hidden(), false);
   }
+  await app.evaluate("progress.waiting('job'); refreshStatus();");
+  await app.advance(59_999); assert.equal(app.hidden(),false);
+  await app.advance(30_001); assert.equal(app.hidden(),true);
   await app.deliver(app.snapshot([{id: 'job', text: 'Synthetic request', reply: 'Synthetic reply', status: 'replied'}]));
   await app.advance(29_999); assert.equal(app.hidden(), false);
   await app.advance(1); assert.equal(app.hidden(), true);
@@ -230,7 +236,7 @@ test('IMU reports without coordinates and unknown system events are not user act
     await app.advance(1000);
   }
   assert.equal(app.hidden(),true,'sensor/status reports must not keep resetting the 30-second idle deadline');
-  assert.deepEqual([...app.physical.values()],[' ',' ',' ',' ']);
+  assert.deepEqual([...app.physical.values()],Array(6).fill(' '));
 });
 
 
@@ -316,6 +322,11 @@ test('language switches preserve the live session, draft, TTS, history position 
   assert.equal(app.saved.get('g2-device-token'), credentials);
   assert.equal(app.nativeSaved.get('dot-language-preference-v1'), 'en');
   await app.deliver(app.snapshot([first, proactive('second'), proactive('third')]));
+  assert.match(app.physical.get(2), /Display settings/);
+  assert.equal(app.physical.get(6), '2 new');
+  await app.element('next').click(); await flush();
+  assert.equal(app.physical.get(2), 'Synthetic message second');
+  await app.element('next').click(); await flush();
   assert.equal(app.physical.get(2), 'Synthetic message third');
 });
 
@@ -336,7 +347,7 @@ test('language change keeps a hidden display blank and recording guard preserves
   const app = await launch(); t.after(app.close);
   await app.advance(30_000);
   app.element('language').value = 'en'; app.element('language').onchange(); await flush();
-  assert.equal(app.hidden(), true); assert.deepEqual([...app.physical.values()], [' ', ' ', ' ', ' ']);
+  assert.equal(app.hidden(), true); assert.deepEqual([...app.physical.values()], Array(6).fill(' '));
   await app.emit(doubleTap);
   await app.emit({textEvent: {eventType: sdk.OsEventTypeList.LONG_PRESS_EVENT}});
   app.element('language').value = 'ja'; app.element('language').onchange(); await flush();
@@ -371,4 +382,73 @@ test('location toggle reaches native/relay and an OFF blocks late announcements 
   await app.deliver(app.snapshot([message, {...message, id: 'late', reply: 'Late location announcement'}]));
   assert.equal(app.hidden(), true);
   assert.equal([...app.physical.values()].some(text => text.includes('Late location')), false);
+});
+
+test('whole app waits sixty seconds then uses configured idle interval, preserving late replies and all header fields', async t => {
+  const app = await launch({typedInput:true,provider:'soniox'}); t.after(app.close);
+  app.element('transcript').value = 'Synthetic waiting question'; await app.element('send').click(); await flush();
+  const stored = vm.runInContext('JSON.parse(JSON.stringify(messages))',app.context);
+  const message = stored[0];
+  assert.match(app.physical.get(1), /^Dotの返信待ち \(0秒\)$/);
+  assert.match(app.physical.get(5), /^未読 \d{2}:\d{2}$/);
+  const time = app.physical.get(5).slice(3);
+  const stt = app.physical.get(4);
+  await app.advance(30_000); assert.equal(app.hidden(),false);
+  await app.deliver(app.snapshot([{...message,readAt:new Date(app.now()).toISOString()}]));
+  assert.equal(app.physical.get(5),`既読 ${time}`);
+  assert.equal(app.physical.get(6),' ');
+  await app.advance(29_999); assert.equal(app.hidden(),false);
+  assert.match(app.physical.get(2), /Dot: 返信を待っています…$/);
+  await app.advance(1);
+  assert.match(app.physical.get(2), /Dot: 通常より返信に時間がかかっています…$/);
+  assert.equal(app.physical.get(4),stt);
+  await app.advance(29_999); assert.equal(app.hidden(),false);
+  await app.advance(1); assert.equal(app.hidden(),true);
+  assert.deepEqual([...app.physical.values()],Array(6).fill(' '));
+  await app.deliver(app.snapshot([{...message,reply:'Synthetic late answer',repliedAt:new Date(app.now()).toISOString(),status:'replied'}]));
+  assert.equal(app.hidden(),false);
+  assert.match(app.physical.get(2), /Dot: Synthetic late answer$/);
+  assert.match(app.physical.get(1), /^1\/1 90\.0秒$/);
+  assert.equal(app.calls.some(c=>c[0]==='exit'),false);
+});
+
+test('operation after the delayed notice restarts idle time, including with the phone page hidden', async t => {
+  const app = await launch({typedInput:true}); t.after(app.close);
+  app.element('transcript').value='Synthetic question'; await app.element('send').click(); await flush();
+  await app.evaluate('document.hidden = true; pageActive = false; refreshStatus();');
+  await app.advance(75_000); assert.equal(app.hidden(),false);
+  await app.emit(singleTap);
+  await app.advance(29_999); assert.equal(app.hidden(),false);
+  await app.advance(1); assert.equal(app.hidden(),true);
+});
+
+test('a burst displays the first arrival once, counts later replies, and keeps the current body untouched on metadata polls', async t => {
+  const app = await launch(); t.after(app.close);
+  const first = {...proactive('one'),createdAt:'2026-10-12T12:00:00Z'};
+  const second = {...proactive('two'),createdAt:'2026-10-12T12:00:01Z'};
+  const third = {...proactive('three'),createdAt:'2026-10-12T12:00:02Z'};
+  await app.deliver(app.snapshot([first,second]));
+  assert.equal(app.physical.get(2),first.reply);
+  assert.equal(app.physical.get(6),'新着1件');
+  assert.equal(app.physical.get(5),' ');
+  const bodyWrites = app.calls.filter(c=>c[0]==='text' && c[1]===2).length;
+  await app.deliver(app.snapshot([first,second,third]));
+  assert.equal(app.physical.get(2),first.reply);
+  assert.equal(app.physical.get(6),'新着2件');
+  assert.equal(app.calls.filter(c=>c[0]==='text' && c[1]===2).length,bodyWrites);
+  for(let i=0;i<3;i++) await app.deliver(app.snapshot([first,second,third]));
+  assert.equal(app.calls.filter(c=>c[0]==='text' && c[1]===2).length,bodyWrites);
+  await app.element('next').click(); await flush();
+  assert.equal(app.physical.get(2),second.reply); assert.equal(app.physical.get(6),'新着1件');
+  await app.element('next').click(); await flush();
+  assert.equal(app.physical.get(2),third.reply); assert.equal(app.physical.get(6),' ');
+});
+
+test('reopening an old pending message restores its receipt and delayed notice without restarting sixty-second protection', async t => {
+  const message={id:'old-pending',text:'Synthetic old question',status:'accepted',createdAt:new Date(Date.now()-65_000).toISOString(),readAt:new Date(Date.now()-60_000).toISOString()};
+  const app=await launch({initialMessages:[message]});t.after(app.close);
+  assert.match(app.physical.get(5),/^既読 /);
+  assert.match(app.physical.get(2),/Dot: 通常より返信に時間がかかっています…$/);
+  await app.advance(29_999);assert.equal(app.hidden(),false);
+  await app.advance(1);assert.equal(app.hidden(),true);
 });

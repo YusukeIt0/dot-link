@@ -241,8 +241,8 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         updateState()
     }
     @objc func openPermission() {
-        // Trigger only on this explicit user action; never grant permission itself.
-        _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
+        // Open one permission surface. The asynchronous macOS prompt would otherwise
+        // remain behind System Settings. This also works when macOS suppresses repeat prompts.
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
     }
     @objc func togglePause() {

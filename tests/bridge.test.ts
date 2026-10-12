@@ -143,3 +143,23 @@ test('Dot sends independent follow-ups without a pending utterance or subscripti
   assert.equal(viaRpc.result.structuredContent.stored_for_g2, true);
   assert.equal(reloaded.outboundHistory().length, 3);
 });
+
+test('Dot body retrieval persists a receipt only for returned utterances, without changing send time', async t => {
+  const s = setup(); t.after(s.close); await s.bridge.subscribe(subscription);
+  const ids = Array.from({length: 11}, () => randomUUID());
+  for (const id of ids) await s.bridge.submit({id, text: 'Synthetic follow-up'});
+  const sent = s.bridge.history();
+  assert.ok(sent.every(item => item.readAt === undefined), 'webhook acceptance and history reads are not receipts');
+  let changes = 0; const off = s.bridge.changes.subscribe(() => changes++); t.after(off);
+  assert.equal(s.bridge.pending().utterances.length, 10);
+  const seen = s.bridge.history();
+  assert.ok(seen.slice(0, 10).every(item => item.readAt));
+  assert.equal(seen[10].readAt, undefined);
+  assert.deepEqual(seen.map(item => item.createdAt), sent.map(item => item.createdAt));
+  assert.equal(changes, 1);
+  s.bridge.pending(); assert.equal(changes, 1, 'repeated tool reads do not replace the first receipt');
+  assert.deepEqual(new Bridge(s.path, s.sender, s.hosts).history(), seen);
+  await s.bridge.reply({utterance_id: ids[0], text: 'A reply covering several follow-ups'});
+  await s.bridge.submit({id: randomUUID(), text: 'Another follow-up'});
+  assert.equal(s.bridge.history().length, 12, 'there is no unresolved-count send cap');
+});

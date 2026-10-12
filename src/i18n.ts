@@ -77,6 +77,9 @@ const translations = {
   'Evenアプリとの接続準備ができませんでした': 'Could not initialize the Even app connection',
   'Evenアプリとの接続準備ができていません。アプリを閉じて開き直してください。': 'The Even app connection is not ready. Close and reopen Dot Link.',
   'G2との接続と起動状態を確認し、Dot Linkを開き直してください。': 'Check that G2 is connected and available, then reopen Dot Link.',
+  '未読': 'Unread',
+  '既読': 'Read',
+  '通常より返信に時間がかかっています…': 'The reply is taking longer than usual…',
 } as const;
 export type TranslationKey = keyof typeof translations;
 let language: Language = 'ja';
