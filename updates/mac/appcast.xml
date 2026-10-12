@@ -1,29 +1,19 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.3.2</title><sparkle:version>61</sparkle:version><sparkle:shortVersionString>0.3.2</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Macの初回準備後、Dot未接続でも更新できるよう修正しました。
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.0</title><sparkle:version>65</sparkle:version><sparkle:shortVersionString>0.4.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Dot Link for Mac 0.4.0
 
-- 未作成の常駐サービスを待ち続ける問題を修正。更新時はアプリが自動で終了し、差し替え後に再起動します。
-- 接続済みのMacでは、従来どおり会話・クライアントの使用状態を確認してから適用します。一部だけ設定されたサービスや、登録ファイルのない実行中サービスは安全側で停止します。
-- 未接続のままアプリを終了・再起動した際、まだ作成していないサービスの再開を試みないよう修正しました。
-- 準備済みのキー・設定・モデルは保持します。自動更新は引き続き停止中です。「アップデートを確認」から実行してください。
+日本語
+任意の位置共有に対応しました。Even側の「位置情報を共有する」をオンにすると、自分のMacを通じて既存のDotへ現在地を共有できます。初期状態はオフです。
+位置共有にはEven 0.2.23以降も必要です。現在公開中のEven 0.2.22では利用できません。
+長時間の移動、電池への影響、再接続、案内の頻度と有用性は引き続き検証中です。
+自動更新は一時停止中です。Macの「アップデートを確認」から手動で確認してください。
 
-旧版からの注意: 0.3.0／0.3.1でDot未接続のまま更新待機が続く場合、新しい配布物だけでは旧版の処理を修正できません。Dot Linkを終了し、最新版をダウンロードしてホームフォルダのApplications内のアプリだけを置き換えてください。アンインストールや設定データの削除は不要です。
-
-検証: 単体126件、HTTP統合9件、更新ドライバ4グループ。未接続の実機で更新準備・中断・復旧、準備済み設定の保持を確認しました。接続済みDot・G2の更新後復帰は今回の実機試験に含みません。Apple公証は未実施です。
-
----
-
-Fixed updates after initial Mac preparation, before connecting Dot.
-
-- The updater no longer waits for relay services that have never been created. The app quits automatically and relaunches after installation.
-- Configured installations still wait until conversations and clients are idle. Partial service setups and running jobs without their registration files block installation safely.
-- Relaunching an unconnected setup no longer attempts to resume services that do not exist yet.
-- Prepared keys, settings and the speech model are retained. Automatic updates remain disabled; use Check for updates.
-
-For older versions: If 0.3.0 or 0.3.1 keeps waiting before Dot has been connected, a new download cannot repair the old updater itself. Quit Dot Link, download the latest version and replace only the app in your home Applications folder. Do not uninstall or delete the settings data.
-
-Validation: 126 unit tests, 9 HTTP integration tests and 4 update-driver groups. Update preparation, cancellation/recovery and retention of prepared settings were verified on an unconnected Mac. Recovery of connected Dot/G2 sessions was not part of this device test. The app is not Apple-notarized.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.3.2-61/Dot-Link-0.3.2-61-arm64.zip" sparkle:installationType="application" sparkle:edSignature="r07JmUb3G0G01JnLb/RlhHn9X58tR2yvQac/hgt1cFBqtCWEvBpE85Zl5RKPgnTZZzczWMlIL7jtIjFy1eFpBQ==" length="50850964" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 0vfWZVi3KiBG3vLdlKBbxs9PFuRzCNG5ixJ63lSpDyEsi7+CQwtD3fJtadR5smZkaQc1/LJRHQRbRdoOsEQZBQ==
-length: 3722
+English
+Adds optional phone location sharing with your existing Dot through your own Mac. Sharing starts off and is controlled in the Even companion app.
+Location sharing also requires Even 0.2.23 or later. The currently public Even 0.2.22 does not provide this feature.
+Long journeys, battery impact, reconnect behavior, and the frequency and usefulness of announcements remain under evaluation.
+Automatic updates remain temporarily disabled. Use Check for updates on the Mac to check manually.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.0-65/Dot-Link-0.4.0-65-arm64.zip" sparkle:installationType="application" sparkle:edSignature="f0I4Ke/fi51CCOlX+zj66DaGA+2zdtZOrx0RSgmhxSAHtP9a0nraYrqgWoHX4DF7pQQ5Vanrwi+jtfLbdkgoAA==" length="50871782" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: nfaUp3NBH3dmgPPpBHxb5UuQiYOYheqvneCqAj7phXRnpAHpFqEM4RtWTW4LE8gCVP2LHCL7Jeir1mdkjFMNDQ==
+length: 2121
 -->
