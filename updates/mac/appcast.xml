@@ -1,19 +1,21 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.0</title><sparkle:version>65</sparkle:version><sparkle:shortVersionString>0.4.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Dot Link for Mac 0.4.0
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.5</title><sparkle:version>73</sparkle:version><sparkle:shortVersionString>0.4.5</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Dot Link for Mac 0.4.5
 
 日本語
-任意の位置共有に対応しました。Even側の「位置情報を共有する」をオンにすると、自分のMacを通じて既存のDotへ現在地を共有できます。初期状態はオフです。
-位置共有にはEven 0.2.23以降も必要です。現在公開中のEven 0.2.22では利用できません。
-長時間の移動、電池への影響、再接続、案内の頻度と有用性は引き続き検証中です。
+Dotが発話を読み取った時刻を保存し、Even側で待機状態を区別して表示できるようにしました。アクセシビリティ権限を設定する操作は、システム設定を直接開く方式に統一しました。
+Even 0.2.27では履歴の復元、HUDの新着件数・表示タイミング、右端の文字切れを改善しています。Even 0.2.27は審査提出予定で、現時点の一般公開版は0.2.22です。
+任意の位置共有は初期状態オフです。利用にはEven 0.2.23以降が必要です。
+Dotの返答に時間がかかることがあります。今回の更新は応答遅延の解消を保証するものではありません。
 自動更新は一時停止中です。Macの「アップデートを確認」から手動で確認してください。
 
 English
-Adds optional phone location sharing with your existing Dot through your own Mac. Sharing starts off and is controlled in the Even companion app.
-Location sharing also requires Even 0.2.23 or later. The currently public Even 0.2.22 does not provide this feature.
-Long journeys, battery impact, reconnect behavior, and the frequency and usefulness of announcements remain under evaluation.
+Records when Dot retrieves an utterance so the Even companion app can distinguish waiting states. The accessibility permission action now opens System Settings directly.
+Even 0.2.27 improves history restoration, HUD new-message counts and display timing, and text wrapping at the right edge. Even 0.2.27 is being prepared for review; the currently public version is 0.2.22.
+Optional location sharing starts off and requires Even 0.2.23 or later.
+Replies from Dot may take some time. This update does not guarantee a fix for reply delays.
 Automatic updates remain temporarily disabled. Use Check for updates on the Mac to check manually.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.0-65/Dot-Link-0.4.0-65-arm64.zip" sparkle:installationType="application" sparkle:edSignature="f0I4Ke/fi51CCOlX+zj66DaGA+2zdtZOrx0RSgmhxSAHtP9a0nraYrqgWoHX4DF7pQQ5Vanrwi+jtfLbdkgoAA==" length="50871782" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: nfaUp3NBH3dmgPPpBHxb5UuQiYOYheqvneCqAj7phXRnpAHpFqEM4RtWTW4LE8gCVP2LHCL7Jeir1mdkjFMNDQ==
-length: 2121
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip" sparkle:installationType="application" sparkle:edSignature="l3FYYbm4pGOjoulx0saVyslffLPxD9E8ha9cVmeobP3mK0LFJWBhbpJOGaBSjyuNghvNCRWdsIpW/G5Q2j71CQ==" length="50954282" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: fvfoDUPkseTKLF0o1ky9HZGl1jhXTXPE8zD3Vxst1CwldUJUZtHSehqjf5GOoJpg5ItK3hKh5VL17o2nqTjrCA==
+length: 2528
 -->
