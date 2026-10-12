@@ -26,7 +26,9 @@ Macの通知共有は任意です。「Macの全通知をDotに共有」をオ�
 
 ### 位置共有（Even 0.2.23以降が必要）
 
-Even側で「位置情報を共有する」をオンにすると、既存Dotが現在地を読み、案内する必要性を判断できます。**初期状態はオフ**です。位置共有にはMac 0.4.0とEven 0.2.23以降の両方が必要です。現在のEven一般公開版0.2.22には位置共有が含まれません。Macを更新するだけでは有効にならず、対応するEven版の公開・更新も必要です。ソースからのMacビルドは0.4.0です。ソース公開とアプリ配布は別で、配布版は[Releases](https://github.com/YusukeIt0/dot-link/releases/latest)で確認できます。
+Mac版0.4.0から、スマートフォンの位置情報をDotへ共有できます。Even側で「位置情報を共有する」をオンにすると、Dotが現在地を読み、場所に応じた案内をするか判断します。**初期状態はオフ**です。
+
+**Mac版0.4.0以降とEven版0.2.23以降の両方が必要です。** Even側の対応版は一般公開待ちのため、現在のEven Hub配布版ではまだ位置共有を利用できません。
 
 短時間のロック中の位置更新、G2への案内表示、共有オフ後の停止は開発テストで確認しています。長時間の移動、電池への影響、案内の有用性・頻度、再接続は引き続き検証中です。導入・更新時の接続は[Dotの設定](docs/dot-setup.md#optional-location-sharing-development-builds)を、データの扱いは[プライバシー説明](docs/privacy.md)を参照してください。
 
@@ -76,7 +78,9 @@ Mac notification sharing is optional. Turn on **Share all Mac notifications with
 
 ### Location sharing (requires Even 0.2.23 or later)
 
-Optional phone location sharing lets your existing Dot read the current location and decide whether useful information merits an announcement. **Sharing starts off.** It requires both Mac 0.4.0 and Even 0.2.23 or later. The currently public Even 0.2.22 does not include location sharing. Updating the Mac alone does not enable it; a compatible Even release must also be available and installed. Building the Mac app from this source produces 0.4.0. Source publication and app distribution are separate; check [Releases](https://github.com/YusukeIt0/dot-link/releases/latest) for distributed builds.
+Mac version 0.4.0 adds optional phone location sharing. Turn on **Share location** in the Even companion to let your Dot read the current location and decide whether to offer a location-based announcement. **Sharing starts off.**
+
+**Requires Mac 0.4.0 or later and Even companion 0.2.23 or later.** The compatible Even companion is awaiting public release, so location sharing is not yet available with the version currently distributed through Even Hub.
 
 Development testing has covered brief location updates while the phone is locked, an announcement displayed on G2, and stopping sharing after opt-out. Longer movement, battery impact, usefulness and frequency of announcements, and reconnection remain under evaluation. See [Dot setup](docs/dot-setup.md#optional-location-sharing-development-builds) and [data handling](docs/privacy.md).
 
