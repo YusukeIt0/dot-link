@@ -7,9 +7,9 @@
 <key>CFBundleExecutable</key><string>DotLink</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleIconFile</key><string>DotLink</string>
-<key>CFBundleShortVersionString</key><string>0.3.4</string>
-<key>CFBundleVersion</key><string>63</string>
-<key>DotLinkBeta</key><true/>
+<key>CFBundleShortVersionString</key><string>0.4.0</string>
+<key>CFBundleVersion</key><string>65</string>
+<key>DotLinkBeta</key><false/>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>

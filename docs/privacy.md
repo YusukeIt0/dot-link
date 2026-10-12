@@ -1,6 +1,6 @@
 # Dot Linkのデータの扱い / Data handling
 
-更新日 / Updated: 2026-10-11。Mac 0.3.1の音声入力サービス選択と、Even側0.2.14〜0.2.21の実装を対象にしています。This describes speech-provider selection in Mac 0.3.1 and the Even companion versions 0.2.14–0.2.21.
+更新日 / Updated: 2026-10-12。Mac 0.4.0の実装と、Even側0.2.23までの実装を対象にしています。位置共有には対応するMac版とEven版の両方が必要です。This describes the Mac 0.4.0 implementation and Even companion implementations through 0.2.23. Location sharing requires compatible versions on both devices.
 
 ## 日本語
 
