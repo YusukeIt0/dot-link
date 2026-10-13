@@ -97,7 +97,7 @@ function render(s) {
     return `### ${f.severity}: ${safeText(f.title)}\n\n${safeText(f.file)}${f.line ? ':' + f.line : ''}\n\n${safeText(f.reason)}`;
   });
   return [
-    '## Opus review · Complete',
+    '## dotsweeper review · Complete',
     `Reviewed ${s.data.kind === 'issue' ? 'main' : 'PR head'}: \`${(s.data.head || s.data.main).slice(0, 12)}\` · [Run](${runUrl})`,
     safeText(result.summary), ...blocks,
     `### Next steps\n\n${safeText(result.next_steps)}`,
@@ -118,10 +118,10 @@ if (mode === 'intake') {
   output('fingerprint', s.fingerprint);
   output('main_sha', s.data.main);
   try { boundedInput(s); } catch {
-    publish(s.rows, `## Opus review · Needs a smaller scope\n\nThe discussion or diff is too large, or the change is empty. No assessment was completed. Please narrow the scope and request another review.\n\n${help}`);
+    publish(s.rows, `## dotsweeper review · Needs a smaller scope\n\nThe discussion or diff is too large, or the change is empty. No assessment was completed. Please narrow the scope and request another review.\n\n${help}`);
     process.exit(0);
   }
-  publish(s.rows, `## Opus review · Reviewing\n\n[Follow this run](${runUrl}). The result will replace this comment.\n\n${help}`);
+  publish(s.rows, `## dotsweeper review · Reviewing\n\n[Follow this run](${runUrl}). The result will replace this comment.\n\n${help}`);
   output('accepted', 'true');
 } else if (mode === 'prepare') {
   const s = snapshot();
@@ -137,12 +137,12 @@ if (mode === 'intake') {
   const s = snapshot();
   let body;
   if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) {
-    body = `## Opus review · Outdated\n\nThe item or main changed during review. Findings were not published.\n\n${help}`;
+    body = `## dotsweeper review · Outdated\n\nThe item or main changed during review. Findings were not published.\n\n${help}`;
   } else if (process.env.REVIEW_OUTCOME !== 'success') {
-    body = `## Opus review · Failed\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;
+    body = `## dotsweeper review · Failed\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;
   } else {
     try { body = render(s); } catch {
-      body = `## Opus review · Failed\n\nThe result could not be validated and was withheld.\n\n[Run](${runUrl})\n\n${help}`;
+      body = `## dotsweeper review · Failed\n\nThe result could not be validated and was withheld.\n\n[Run](${runUrl})\n\n${help}`;
     }
   }
   // Never overwrite a newer run's in-progress/result comment.
