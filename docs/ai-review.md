@@ -44,7 +44,9 @@ input and which run owns the bot comment.
 | Model job cancelled | `Cancelled` when the report job can finish; no label changes. |
 
 Expected state changes stop model preparation without consuming another model
-run. An intake ownership token is carried through retries, so rerunning only the
+run. If the target returns to its original state before reporting, a successful
+preparation stop still reports `Skipped`; genuine preparation failures remain failures.
+An intake ownership token is carried through retries, so rerunning only the
 report job can update its own comment but cannot claim a newer run's comment.
 The reporter rechecks state before comment publication and between label-removal
 operations. GitHub does not provide a transaction spanning issue state, labels,

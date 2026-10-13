@@ -177,6 +177,10 @@ if (mode === 'intake') {
   let s = snapshot();
   let d = disposition(s);
   if (d) { finishWithoutFindings(s, d); process.exit(process.exitCode || 0); }
+  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false') {
+    finishWithoutFindings(s, {state: 'Skipped', reason: 'The input or target changed during preparation; no model assessment was started.'});
+    process.exit(0);
+  }
   let body, triage;
   if (process.env.REVIEW_OUTCOME !== 'success' || process.env.REVIEW_PREPARED === 'false') {
     const cancelled = process.env.REVIEW_OUTCOME === 'cancelled';

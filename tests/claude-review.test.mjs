@@ -218,6 +218,17 @@ const transitions = [
   {name:'newer run', start:{}, change:{newOwner:'5678:1'}, state:'Superseded', noWrite:true},
 ];
 for (const transition of transitions) {
+ test(`${transition.name} restored after a successful preparation stop stays skipped`, t => {
+  const originalIssue = transition.start.issue || issue;
+  const f=use(t,{...transition.start,atIssueRead:{2:transition.change}});success(f.run('intake'));
+  const originalComments=f.read().comments;
+  const prepared=f.run('prepare');success(prepared);assert.equal(prepared.outputs.ready,'false');
+  f.update({issue:originalIssue,pr,comments:originalComments,atIssueRead:{}});
+  success(f.run('report',{REVIEW_PREPARED:'false'}));
+  assert.match(f.read().comments[0].body,/Skipped/);
+  assert.doesNotMatch(f.read().comments[0].body,/Complete|Failed/);
+  assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+ });
  test(`${transition.name} before preparation skips model input`, t => {
   const f=use(t,{...transition.start,atIssueRead:{2:transition.change}});success(f.run('intake'));
   const r=f.run('prepare');success(r);assert.equal(r.outputs.ready,'false');
@@ -252,6 +263,13 @@ test('API failures remain failures in intake, prepare and report',t=>{
   f.update({failRead:'/issues/12'});assert.notEqual(f.run(mode).status,0);
   assert.equal(f.writes().length,mode==='intake'?0:1);
  }
+});
+test('genuine preparation failure stays failed after the target recovers',t=>{
+ const f=use(t);success(f.run('intake'));f.update({failRead:'/issues/12'});
+ assert.notEqual(f.run('prepare').status,0);f.update({failRead:false});
+ assert.notEqual(f.run('report',{REVIEW_OUTCOME:'failure',REVIEW_PREPARED:'false'}).status,0);
+ assert.match(f.read().comments[0].body,/Failed/);
+ assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
 });
 test('diff fetch failure is not reported as a size limit',t=>{
  const f=use(t,{issue:{...issue,pull_request:{}},failDiff:true});
