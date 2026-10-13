@@ -24,7 +24,7 @@ const f = JSON.parse(fs.readFileSync('fixture.json'));
 if(a.includes('--input')) {
  const body = JSON.parse(fs.readFileSync(0, 'utf8'));
  fs.appendFileSync('writes.jsonl', JSON.stringify({path:p,body})+'\\n');
- const row = {id:999,user:{id:41898282,login:'github-actions[bot]',type:'Bot'},body:body.body,html_url:'https://github.com/YusukeIt0/dot-link/issues/12#issuecomment-999'};
+ const row = {id:999,user:{id:98765,login:'dotsweeper[bot]',type:'Bot'},body:body.body,html_url:'https://github.com/YusukeIt0/dot-link/issues/12#issuecomment-999'};
  if(p.endsWith('/comments/999')) f.comments=f.comments.filter(x=>x.id!==999);
  f.comments.push(row); fs.writeFileSync('fixture.json',JSON.stringify(f));
  console.log(JSON.stringify(row));
@@ -47,7 +47,7 @@ else console.log(JSON.stringify(f.issue));
       GITHUB_EVENT_NAME: options.eventName || 'issues', GITHUB_RUN_ID: '1234', ITEM_NUMBER: '12',
       GITHUB_OUTPUT: join(dir, 'output'), GITHUB_STEP_SUMMARY: join(dir, 'summary'),
       REVIEW_FINGERPRINT: outputs.fingerprint, REVIEW_MAIN_SHA: outputs.main_sha,
-      REVIEW_OUTCOME: 'success', REVIEW_JSON: JSON.stringify(result), ...env,
+      REVIEW_BOT_ID: '98765', REVIEW_WRITE_TOKEN: 'fixture-token', REVIEW_OUTCOME: 'success', REVIEW_JSON: JSON.stringify(result), ...env,
     }});
     const out = Object.fromEntries(readFileSync(join(dir, 'output'), 'utf8').trim().split('\n').filter(Boolean).map(x => x.split('=')));
     outputs = {...outputs, ...out};
@@ -83,14 +83,14 @@ test('draft, closed, locked or non-main items do not start a review', t => {
 test('only author or write-access maintainer can request another review', t => {
   const other={id:456,login:'other',type:'User'};
   for(const [actor, permission, accepted] of [[user,'read',true],[other,'read',false],[other,'write',true]]) {
-    const command={id:77,user:actor,body:'/opus review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+    const command={id:77,user:actor,body:'/dotlink review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
     const f=use(t,{eventName:'issue_comment',event:{action:'created',issue,sender:actor,comment:command},command,permission});
     const r=f.run('intake'); success(r); assert.equal(r.outputs.accepted,String(accepted));
   }
 });
 test('edited command, wrong destination and bot sender cannot trigger a review', t => {
-  const command={id:77,user,body:'/opus review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
-  for(const update of [{command:{...command,body:'cancel'}},{command:{...command,issue_url:'https://api.github.com/repos/other/repo/issues/12'}},
+  const command={id:77,user,body:'/dotlink review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+  for(const update of [{command:{...command,body:'/opus review'}},{command:{...command,body:'cancel'}},{command:{...command,issue_url:'https://api.github.com/repos/other/repo/issues/12'}},
     {event:{action:'created',issue,sender:{...user,type:'Bot'},comment:command}}]) {
     const f=use(t,{eventName:'issue_comment',event:{action:'created',issue,sender:user,comment:command},command,...update});
     success(f.run('intake')); assert.equal(f.writes().length,0);
@@ -125,4 +125,21 @@ test('forged marker is not edited; newer run prevents stale overwrite', t => {
 test('invalid identifiers and changed preparation snapshot are rejected', t => {
   const f=use(t); assert.notEqual(f.run('intake',{ITEM_NUMBER:'12;echo bad'}).status,0);
   success(f.run('intake')); assert.notEqual(f.run('prepare',{REVIEW_FINGERPRINT:'stale'}).status,0);
+});
+
+test('publishing requires app identity; legacy or spoofed bot comments remain untouched', t => {
+  const marker='<!-- dot-link-opus-review:v1 -->';
+  const rows=[
+    {id:80,user:{id:41898282,login:'github-actions[bot]',type:'Bot'},body:marker+' old'},
+    {id:81,user:{id:22,login:'dotsweeper[bot]',type:'Bot'},body:marker+' wrong id'},
+    {id:82,user:{id:98765,login:'someone-else[bot]',type:'Bot'},body:marker+' wrong login'},
+  ];
+  const f=use(t,{comments:rows});
+  assert.notEqual(f.run('intake',{REVIEW_BOT_ID:''}).status,0);
+  assert.notEqual(f.run('intake',{REVIEW_WRITE_TOKEN:''}).status,0);
+  assert.equal(f.writes().length,0);
+  success(f.run('intake')); success(f.run('prepare')); success(f.run('report'));
+  assert.deepEqual(f.read().comments.slice(0,3),rows);
+  assert.equal(f.read().comments.length,4);
+  assert.equal(f.read().comments[3].user.login,'dotsweeper[bot]');
 });
