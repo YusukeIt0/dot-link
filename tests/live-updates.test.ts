@@ -2,6 +2,24 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setImmediate as tick } from 'node:timers/promises';
 import { LiveUpdates } from '../src/live-updates.ts';
+import { reconcileHistory, NewReplyQueue, type HistoryMessage } from '../src/message-history.ts';
+
+test('restart before first snapshot restores the newest of 100 messages without replaying alerts', async t => {
+  const calls: {resolve: (value: {revision:string;messages:HistoryMessage[]}) => void}[] = [];
+  let messages: HistoryMessage[] = []; let displayed: string | undefined;
+  const queue = new NewReplyQueue();
+  const loop = new LiveUpdates<{revision:string;messages:HistoryMessage[]}>(() => new Promise(resolve => calls.push({resolve})), (value, initial) => {
+    const update = reconcileHistory(messages, value.messages, initial, () => true);
+    messages = update.messages;
+    if(initial) queue.clear(); else queue.receive(update.replies);
+    displayed = initial ? update.displayId : queue.next(messages, undefined, {hidden:false,browsingHistory:false,mayAnnounce:()=>true});
+  }, () => assert.fail('no failure expected'));
+  t.after(()=>loop.stop());
+  loop.start(true); loop.start(); // visibility/online event before initial response
+  calls[1].resolve({revision:'restored',messages:Array.from({length:100},(_,i)=>({id:String(i+1),status:'replied',reply:'Fixture reply',createdAt:new Date(i*1000).toISOString()}))});
+  await tick();
+  assert.equal(displayed, '100'); assert.equal(queue.count, 0);
+});
 
 test('reconnect discards late responses from an aborted request and never starts overlapping polls', async () => {
   const calls: { revision?: string; signal: AbortSignal; resolve: (v: { revision: string }) => void }[] = [];
@@ -14,4 +32,15 @@ test('reconnect discards late responses from an aborted request and never starts
   assert.deepEqual(received, ['current']); assert.equal(calls.length, 3); assert.equal(calls[2].revision, 'current');
   loop.stop(); assert(calls[2].signal.aborted);
   calls[2].resolve({ revision: 'after-stop' }); await tick(); assert.deepEqual(received, ['current']);
+});
+
+test('completed restores stay incremental on reconnect; explicit new sessions restore again', async t => {
+  const calls: ((value:{revision:string})=>void)[]=[]; const flags:boolean[]=[];
+  const loop=new LiveUpdates<{revision:string}>(()=>new Promise(resolve=>calls.push(resolve)),(_value,initial)=>flags.push(initial),()=>assert.fail());
+  t.after(()=>loop.stop());
+  loop.start(); calls[0]({revision:'first'});await tick();
+  loop.start(); calls[2]({revision:'reconnect'});await tick();
+  loop.start(true);calls[4]({revision:'new-session'});await tick();
+  loop.start(false,'externally-applied');calls[6]({revision:'incremental'});await tick();
+  assert.deepEqual(flags,[true,false,true,false]);
 });

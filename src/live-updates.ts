@@ -3,6 +3,7 @@ export interface Revisioned { revision: string; }
 /** One cancellable request at a time. Reconnects without accepting stale replies. */
 export class LiveUpdates<T extends Revisioned> {
   private controller?: AbortController;
+  private initialPending = true;
   private fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>;
   private receive: (value: T, initial: boolean) => void;
   private failed: () => void;
@@ -11,16 +12,22 @@ export class LiveUpdates<T extends Revisioned> {
   }
   stop(): void { this.controller?.abort(); this.controller = undefined; }
   start(initial = false, revision?: string): void {
+    // A foreground/network restart must not turn an unfinished history restore
+    // into 100 new replies. A supplied revision follows an externally applied snapshot.
+    if (initial) this.initialPending = true;
+    else if (revision !== undefined) this.initialPending = false;
     this.stop(); const controller = new AbortController(); this.controller = controller;
-    void this.run(controller.signal, initial, revision);
+    void this.run(controller.signal, revision);
   }
-  private async run(signal: AbortSignal, initial: boolean, revision?: string): Promise<void> {
+  private async run(signal: AbortSignal, revision?: string): Promise<void> {
     let retryMs = 1000;
     while (!signal.aborted) {
       try {
         const update = await this.fetchUpdate(revision, signal);
         if (signal.aborted) return;
-        this.receive(update, initial); initial = false; revision = update.revision; retryMs = 1000;
+        this.receive(update, this.initialPending);
+        if (signal.aborted) return;
+        this.initialPending = false; revision = update.revision; retryMs = 1000;
       } catch {
         if (signal.aborted) return;
         this.failed(); revision = undefined;
