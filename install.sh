@@ -64,7 +64,7 @@ dotlink_install() (
     case "$dotlink_name" in
       Dot-Link-*-arm64.zip)
         dotlink_url="$(field "assets.$dotlink_index.browser_download_url" string)"
-        dotlink_digest="$(field "assets.$dotlink_index.digest" string)"
+        dotlink_digest="$(field "assets.$dotlink_index.digest" string 2>/dev/null)" || fail checksum
         dotlink_matches=$((dotlink_matches + 1))
         ;;
     esac

@@ -10,8 +10,8 @@ const source = readFileSync(new URL('../install.sh', import.meta.url), 'utf8');
 const zip = 'test archive';
 const hash = createHash('sha256').update(zip).digest('hex');
 const url = 'https://github.com/YusukeIt0/dot-link/releases/download/mac-v9.8.7-999/Dot-Link-9.8.7-999-arm64.zip';
-const release = () => ({draft:false, prerelease:false, tag_name:'mac-v9.8.7-999', assets:[
-  {name:'unrelated.txt'}, {name:'Dot-Link-9.8.7-999-arm64.zip', browser_download_url:url, digest:`sha256:${hash}`},
+const release = () => ({draft:false, prerelease:false, tag_name:'mac-v9.8.7-999', body:null, assets:[
+  {name:'unrelated.txt',label:null}, {name:'Dot-Link-9.8.7-999-arm64.zip', browser_download_url:url, digest:`sha256:${hash}`},
 ]});
 function run(metadata, {existing=false, badSignature=false, language='en-US', bundleId='app.tripsurf.dotlink.mac'}={}) {
   const root = mkdtempSync(join(tmpdir(), 'dot-link-installer-test-'));
