@@ -67,6 +67,11 @@ has no API-key fallback. Subscription limits and enabled extra usage still apply
 time and turn limits are not a monetary spending cap. Cloud-session promotional
 credits are not assumed to cover Actions.
 
+If a run reports an authentication failure, generate a fresh token through the
+official flow and replace the Actions secret, then request another review.
+A successful browser consent screen alone does not verify the stored secret;
+confirm that the linked Actions run completes and publishes a review.
+
 The workflow runs on GitHub-hosted runners with trusted default-branch scripts.
 It never checks out or executes fork/PR-head code. The model job receives only
 read permissions to GitHub and Read/Glob/Grep tools. Intake and publication are
