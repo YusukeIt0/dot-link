@@ -4,18 +4,19 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 
 日本語
 Dotが発話を読み取った時刻を保存し、Even側で待機状態を区別して表示できるようにしました。アクセシビリティ権限を設定する操作は、システム設定を直接開く方式に統一しました。
-Even 0.2.28では履歴の復元、HUDの新着件数・表示タイミング、右端の文字切れを改善しています。Even 0.2.28は審査提出済み・審査中で、現時点の一般公開版は0.2.22です。0.2.28は0.2.27と同じ機能内容で、変更履歴を添えた再提出用の版です。
+Even 0.2.28では履歴の復元、HUDの新着件数・表示タイミング、右端の文字切れを改善しています。Even 0.2.28は審査承認を経てEven Hubで一般公開済みです。Mac 0.4.5と組み合わせて利用してください。0.2.28の機能内容は0.2.27と同じです。
 任意の位置共有は初期状態オフです。利用にはEven 0.2.23以降が必要です。
 Dotの返答に時間がかかることがあります。今回の更新は応答遅延の解消を保証するものではありません。
 自動更新は一時停止中です。Macの「アップデートを確認」から手動で確認してください。
 
 English
 Records when Dot retrieves an utterance so the Even companion app can distinguish waiting states. The accessibility permission action now opens System Settings directly.
-Even 0.2.28 improves history restoration, HUD new-message counts and display timing, and text wrapping at the right edge. Even 0.2.28 has been submitted and is in review; the currently public version is 0.2.22. Version 0.2.28 retains the same app behavior as 0.2.27 and was resubmitted with the missing change log.
+Even 0.2.28 improves history restoration, HUD new-message counts and display timing, and text wrapping at the right edge. Even 0.2.28 has been approved and is now public on Even Hub. Use it with Mac 0.4.5. Version 0.2.28 retains the same app behavior as 0.2.27.
 Optional location sharing starts off and requires Even 0.2.23 or later.
 Replies from Dot may take some time. This update does not guarantee a fix for reply delays.
 Automatic updates remain temporarily disabled. Use Check for updates on the Mac to check manually.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip" sparkle:installationType="application" sparkle:edSignature="l3FYYbm4pGOjoulx0saVyslffLPxD9E8ha9cVmeobP3mK0LFJWBhbpJOGaBSjyuNghvNCRWdsIpW/G5Q2j71CQ==" length="50954282" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: HH4ZX3yVA5/fa8nWzAltWswDFVp0JIgC6wb7NwOXVvfTtt5ILvsLSDq58ZqtngJ2qHkuoI4KkJ3jon+S628iBA==
-length: 2744
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip" sparkle:installationType="application" sparkle:edSignature="l3FYYbm4pGOjoulx0saVyslffLPxD9E8ha9cVmeobP3mK0LFJWBhbpJOGaBSjyuNghvNCRWdsIpW/G5Q2j71CQ==" length="50954282" type="application/octet-stream"></enclosure></item></channel></rss>
+<!-- sparkle-signatures:
+edSignature: J99cgHKdwOwZqNpv/J/YoZzeK5vLdzWTzZkQ6qyp8mYyEkP1Jmoxr6A7kdhyLMD2oReHf92H4LmxW53dUPwXAA==
+length: 2682
 -->
