@@ -35,6 +35,8 @@ The companion's Mac connection section contains setup instructions, a copyable d
 
 ## Speech
 
+Speech input requires Even 0.2.14 or later. Provider labels and detailed errors require 0.2.19; all six provider/model labels require 0.2.21. If these are missing, update the companion through Even Hub.
+
 **Speech input** on the Mac offers local Whisper small and external services: Soniox, ElevenLabs, Microsoft, OpenAI and AssemblyAI. Enter your own service key in the app. Microsoft also needs an Azure Speech resource endpoint; use **About the endpoint** for instructions.
 
 Local Whisper is free and runs on your Mac. External recordings go directly from the Mac to the selected service, under your account's charges and limits. Changes apply to the next recording; there is no automatic fallback. Saving a key does not test provider access—try a recording. Typed messages do not use speech recognition.
