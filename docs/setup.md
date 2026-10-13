@@ -23,7 +23,8 @@ Your account needs OpenAI tunnels and custom MCP connections in ChatGPT. Dot Lin
 - Open **OpenAI connection settings** in the Mac app. Create a separate tunnel for this Mac; keep any tunnel used by another Mac.
 - For the app's API key, choose **Restricted → Tunnels: Read and Use**. Creating the tunnel itself also requires **Read and Manage** on your account; the key used by Dot Link does not need Manage.
 - Enter the **Tunnel ID** (`tunnel_…`) and **API key** in the Mac app, choose **Save and continue**, then **Start relay**.
-- In ChatGPT **Plugins → Add custom MCP server**, select **Tunnel** and this Mac's connection. In your existing Dot, enable the connection and send the message copied with **Copy setup message for Dot**. Choose **Check connection to Dot** on the Mac before pairing Even.
+- In ChatGPT, open **Plugins → Add → Add custom MCP server**. Enter a name, select **Connection: Tunnel** and this Mac’s tunnel, and choose **Authentication: No authentication**. Review and check **I understand and want to continue**, choose **Create as a plugin**, then connect it.
+- Open **Home → Your dot**, choose **+** in the message box, and select the plugin you named. In the Mac app, choose **Copy setup message**, then paste and send it to your dot. When your dot confirms setup, return to the Mac app and choose **Check connection to Dot** before pairing Even.
 
 The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; the pairing code authorizes the Even companion. Keep API keys and pairing codes private. App updates need no GitHub token.
 

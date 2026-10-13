@@ -39,8 +39,8 @@ The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyw
 ### 2. Connect your Dot
 
 1. In the Mac app, follow **Connect your existing Dot**: create a tunnel, enter its **Tunnel ID** and **API key**, then start the relay.
-2. In ChatGPT **Plugins → Add custom MCP server**, choose **Tunnel** and add the connection to your existing Dot.
-3. Send the message from **Copy setup message for Dot**, then choose **Check connection to Dot** on the Mac. [Connection details](docs/setup.md#dot-connection).
+2. In ChatGPT **Plugins → Add → Add custom MCP server**, enter a name, choose **Tunnel** and this Mac’s tunnel, and set **Authentication** to **No authentication**. Review the notice, create the plugin, and connect it.
+3. Open **Home → Your dot**, select the plugin with **+**, and send the message from **Copy setup message** in the Mac app. Return to the Mac app and choose **Check connection to Dot** on the Mac. [Connection details](docs/setup.md#dot-connection).
 
 ### 3. Pair Even
 

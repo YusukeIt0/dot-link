@@ -1,14 +1,13 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.6</title><sparkle:version>74</sparkle:version><sparkle:shortVersionString>0.4.6</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">The Mac setup screen now uses “Tunnel ID” and “API key” consistently in English and Japanese. Connection behavior and saved settings are unchanged.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.7</title><sparkle:version>75</sparkle:version><sparkle:shortVersionString>0.4.7</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Improved ChatGPT connection setup with clear, numbered steps and matching Japanese and English labels.
+Added the missing plugin name, authentication, and message-sending instructions.
+Simplified the setup message sent to Dot.
 
-Automatic updates remain paused. Use Check for updates in the Mac app to install this update.
-
-日本語
-Macの接続設定の表示を「トンネルID」「APIキー」に統一しました。接続の動作と保存済み設定は変わりません。
-
-自動更新は引き続き一時停止中です。Macアプリの「アップデートを確認」から更新してください。
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.6-74/Dot-Link-0.4.6-74-arm64.zip" sparkle:installationType="application" sparkle:edSignature="QlIQTxPkPc3MFXSeyH2UwEJLiP5X+XsbimN81EK2eESK7RB4KWYd8C1Q/S2j7/ePW92+V/a2tA9dva7YC5dzCg==" length="50958921" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 6ITFg4xEyBz1UiD1L+GsKK3H5YRoQ1bKKgp2kYKBlG0dR/9oIVSs4FNnqprCOvhA1C3AQ7S6BSFoEbzPj6pZDQ==
-length: 1572
+ChatGPTとの接続手順を、画面の表記に合わせた3段階の案内に改善しました。
+名前・認証の設定と、Dotへのメッセージ送信手順を追加しました。
+Dotに送る設定メッセージを簡潔にしました。
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.7-75/Dot-Link-0.4.7-75-arm64.zip" sparkle:installationType="application" sparkle:edSignature="wP2eBwJ9s6xL6dK0zcKCIYgBc9vkn3Pcf5aR3XRzADmb42noXwuBA+tEMoY5lwl6NrWBEOJ7jn+SHagFmNHpCg==" length="50954184" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: QwXgfeKGmwHMIHqkrfXOGe3cuPLHfynB9HWysofSRvYLZFrKT8iY5YlZ7a/KI+h0LxZ/dML53mVDtGjpZdS+Dw==
+length: 1507
 -->
