@@ -20,7 +20,8 @@ const send = (path, body, method = 'POST') => JSON.parse(execFileSync('gh', ['ap
 const output = (key, value) => appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 const marker = '<!-- dot-link-opus-review:v1 -->';
 const botId = process.env.REVIEW_BOT_ID || '';
-if (['intake', 'report'].includes(mode) && (!/^[1-9]\d*$/.test(botId) || !process.env.REVIEW_WRITE_TOKEN)) {
+if (!/^[1-9]\d*$/.test(botId)) throw new Error('Configure the dotsweeper bot identity for every review stage');
+if (['intake', 'report'].includes(mode) && !process.env.REVIEW_WRITE_TOKEN) {
   throw new Error('Configure the dotsweeper bot identity and publishing credential');
 }
 const owned = row => String(row.user?.id) === botId && row.user?.login === 'dotsweeper[bot]' && row.user?.type === 'Bot' && row.body?.startsWith(marker);

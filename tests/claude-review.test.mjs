@@ -7,6 +7,10 @@ import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 const script = resolve('scripts/claude-review.mjs');
 const main = 'a'.repeat(40), head = 'b'.repeat(40);
+// Exercise the env contract of the actual workflow, not a richer test-only env.
+const workflow = readFileSync(resolve('.github/workflows/claude-review.yml'), 'utf8');
+const prepareStep = workflow.split('      - name: Prepare read-only review input\n')[1].split('      - name: Check subscription credential\n')[0];
+const prepareEnvKeys = new Set([...prepareStep.matchAll(/^          ([A-Z_]+):/gm)].map(m=>m[1]));
 const user = {id: 123, login: 'contributor', type: 'User'};
 const issue = {number: 12, title: 'History disappears', body: 'After reopening the app', state: 'open', locked: false, user};
 const pr = {number: 12, state: 'open', draft: false, changed_files: 1,
@@ -50,15 +54,20 @@ else {
   let outputs = {};
   const run = (mode, env = {}) => {
     writeFileSync(join(dir, 'output'), '');
-    const r = spawnSync(process.execPath, [script, mode], {cwd: dir, encoding: 'utf8', env: {
+    const runEnv = {
       ...process.env, PATH: dir + ':' + process.env.PATH,
       GITHUB_REPOSITORY: 'YusukeIt0/dot-link', GITHUB_EVENT_PATH: join(dir, 'event.json'),
       GITHUB_EVENT_NAME: options.eventName || 'issues', GITHUB_RUN_ID: '1234', ITEM_NUMBER: '12',
       GITHUB_OUTPUT: join(dir, 'output'), GITHUB_STEP_SUMMARY: join(dir, 'summary'),
       GITHUB_RUN_ATTEMPT: '1', REVIEW_OWNER: outputs.owner,
       REVIEW_FINGERPRINT: outputs.fingerprint, REVIEW_MAIN_SHA: outputs.main_sha,
-      REVIEW_BOT_ID: '98765', REVIEW_WRITE_TOKEN: 'fixture-token', REVIEW_OUTCOME: 'success', REVIEW_JSON: JSON.stringify(result), ...env,
-    }});
+      REVIEW_BOT_ID: '98765', REVIEW_WRITE_TOKEN: 'fixture-token', REVIEW_OUTCOME: 'success', REVIEW_JSON: JSON.stringify(result),
+    };
+    if (mode === 'prepare') for (const key of Object.keys(runEnv)) {
+      if (key.startsWith('REVIEW_') && !prepareEnvKeys.has(key)) delete runEnv[key];
+    }
+    Object.assign(runEnv, env);
+    const r = spawnSync(process.execPath, [script, mode], {cwd: dir, encoding:'utf8', env:runEnv});
     const out = Object.fromEntries(readFileSync(join(dir, 'output'), 'utf8').trim().split('\n').filter(Boolean).map(x => x.split('=')));
     outputs = {...outputs, ...out};
     return {...r, outputs: out};
@@ -265,4 +274,12 @@ test('missing ownership cannot publish or prepare',t=>{
 test('cancelled model run is explicit and does not mutate labels',t=>{
  const f=use(t);success(f.run('intake'));success(f.run('report',{REVIEW_OUTCOME:'cancelled'}));
  assert.match(f.read().comments[0].body,/Cancelled/);assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+});
+
+
+test('prepare requires the public bot identity but no publishing credential',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}}});success(f.run('intake'));
+ const r=f.run('prepare',{REVIEW_BOT_ID:''});assert.notEqual(r.status,0);assert.match(r.stderr,/bot identity/);
+ assert.equal(existsSync(join(f.dir,'summary')),false);
+ const prepared=f.run('prepare',{REVIEW_WRITE_TOKEN:''});success(prepared);assert.equal(prepared.outputs.ready,'true');
 });

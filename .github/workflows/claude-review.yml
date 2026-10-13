@@ -87,6 +87,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ITEM_NUMBER: ${{ needs.intake.outputs.number }}
+          REVIEW_BOT_ID: ${{ vars.DOTSWEEPER_BOT_ID }}
           REVIEW_OWNER: ${{ needs.intake.outputs.owner }}
           REVIEW_FINGERPRINT: ${{ needs.intake.outputs.fingerprint }}
           REVIEW_MAIN_SHA: ${{ needs.intake.outputs.main_sha }}
