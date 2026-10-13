@@ -26,7 +26,7 @@ jobs:
       github.repository == 'YusukeIt0/dot-link' &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) &&
-      (github.event_name != 'issue_comment' || github.event.comment.body == '/opus review') &&
+      (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/opus review')) &&
       github.event.sender.type == 'User'
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -127,7 +127,9 @@ jobs:
             Preferences and speculative causes are not established bugs. An empty
             findings array is valid. Explain uncertainty in limitations and actionable
             next steps in next_steps. Do not decide adoption or silently dismiss a report.
-            Respond in the language used by the author (Japanese or English as appropriate).
+            Respond in the language of the original author, not a later commenter.
+            Honor an explicit response-language request from the author. If unclear,
+            default to English. Shared status labels and command help remain English.
 
   report:
     needs: [intake, review]

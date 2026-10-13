@@ -30,6 +30,10 @@ not reviewed. Automated bot accounts do not trigger this workflow.
 
 ## What to expect
 
+Review prose follows the original author's language, or their explicit language
+request. English is the fallback when unclear. Shared status labels and command
+help use English.
+
 Issue review reads the description, human comments, current public code and
 docs. It distinguishes evidence, possible causes, missing information and
 product decisions. Related issues are not comprehensively searched in this

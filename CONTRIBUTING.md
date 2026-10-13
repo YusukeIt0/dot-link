@@ -6,7 +6,8 @@ and the version you used when available. Keep credentials and private
 conversations out of reports.
 
 Opus reviews new issues and ready-for-review PRs, including external
-contributions. It helps identify relevant code, missing information and next
+contributions. Review prose follows your language, with English as the fallback.
+It helps identify relevant code, missing information and next
 steps. After updating your issue or PR, post `/opus review` to request another
 review. The bot updates the same comment; use its run link if it reports a
 failure. See [review behavior and limits](docs/ai-review.md).
