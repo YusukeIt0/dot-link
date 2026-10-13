@@ -26,14 +26,14 @@ jobs:
       github.repository == 'YusukeIt0/dot-link' &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) &&
-      (github.event_name != 'issue_comment' || github.event.comment.body == '/opus review') &&
+      (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/opus review')) &&
       github.event.sender.type == 'User'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
     outputs:
       accepted: ${{ steps.intake.outputs.accepted }}
       number: ${{ steps.intake.outputs.number }}
@@ -127,7 +127,30 @@ jobs:
             Preferences and speculative causes are not established bugs. An empty
             findings array is valid. Explain uncertainty in limitations and actionable
             next steps in next_steps. Do not decide adoption or silently dismiss a report.
-            Respond in the language used by the author (Japanese or English as appropriate).
+            Respond in the language of the original author, not a later commenter.
+            Honor an explicit response-language request from the author. If unclear,
+            default to English. Shared status labels and command help remain English.
+      - name: Classify provider failure without exposing the transcript
+        if: failure()
+        env:
+          REVIEW_LOG: ${{ runner.temp }}/claude-execution-output.json
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          try {
+            const data = JSON.parse(readFileSync(process.env.REVIEW_LOG, 'utf8'));
+            const rows = Array.isArray(data) ? data : [data];
+            const result = rows.filter(row => row.type === 'result').at(-1);
+            const message = JSON.stringify(result?.result || result?.errors || '');
+            const category = /invalid.*token|authentication|unauthorized|401|OAuth/i.test(message) ? 'authentication'
+              : /model.*not|not.*model|model.*access|404/i.test(message) ? 'model_access'
+              : /credit|billing|usage|rate.limit|quota|429/i.test(message) ? 'usage_or_billing'
+              : /max.turn|turn.limit/i.test(message) ? 'turn_limit'
+              : /schema|structured/i.test(message) ? 'structured_output'
+              : 'unclassified';
+            console.log(`Provider failure category: ${category}; result subtype: ${result?.subtype || 'absent'}`);
+          } catch { console.log('Provider diagnostic unavailable; no transcript printed.'); }
+          NODE
 
   report:
     needs: [intake, review]
@@ -137,7 +160,7 @@ jobs:
     permissions:
       contents: read
       issues: write
-      pull-requests: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

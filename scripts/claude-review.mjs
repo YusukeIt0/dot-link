@@ -46,7 +46,7 @@ function publish(rows, body) {
   console.log(`Review status: ${response.html_url}`);
 }
 const runUrl = `https://github.com/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-const help = 'For another review, the author or a maintainer can comment `/opus review`.\n投稿者・管理者は `/opus review` で再レビューを依頼できます。';
+const help = 'For another review, the author or a maintainer can comment `/opus review`.';
 function authorized(s) {
   const name = process.env.GITHUB_EVENT_NAME;
   const actor = event.sender;
@@ -92,12 +92,12 @@ function render(s) {
     return `### ${f.severity}: ${safeText(f.title)}\n\n${safeText(f.file)}${f.line ? ':' + f.line : ''}\n\n${safeText(f.reason)}`;
   });
   return [
-    '## Opus review · Complete / 完了',
+    '## Opus review · Complete',
     `Reviewed ${s.data.kind === 'issue' ? 'main' : 'PR head'}: \`${(s.data.head || s.data.main).slice(0, 12)}\` · [Run](${runUrl})`,
     safeText(result.summary), ...blocks,
-    `### Next steps / 次の一歩\n\n${safeText(result.next_steps)}`,
-    `### Scope and limitations / 確認範囲と限界\n\n${safeText(result.limitations)}`,
-    'Advisory static review; no tests or physical-device checks were run. Maintainers decide adoption and merging.\n静的な参考レビューです。テスト・実機確認を代替せず、採用・マージは管理者が判断します。', help,
+    `### Next steps\n\n${safeText(result.next_steps)}`,
+    `### Scope and limitations\n\n${safeText(result.limitations)}`,
+    'Advisory static review; no tests or physical-device checks were run. Maintainers decide adoption and merging.', help,
   ].join('\n\n');
 }
 
@@ -113,10 +113,10 @@ if (mode === 'intake') {
   output('fingerprint', s.fingerprint);
   output('main_sha', s.data.main);
   try { boundedInput(s); } catch {
-    publish(s.rows, `## Opus review · Needs a smaller scope / 対象範囲の調整が必要\n\nThe discussion or diff is too large, or the change is empty. No assessment was completed. Please narrow the scope and request another review.\n変更差分または会話量が上限を超えたか、差分が空です。レビュー未完了です。対象範囲を絞って再依頼してください。\n\n${help}`);
+    publish(s.rows, `## Opus review · Needs a smaller scope\n\nThe discussion or diff is too large, or the change is empty. No assessment was completed. Please narrow the scope and request another review.\n\n${help}`);
     process.exit(0);
   }
-  publish(s.rows, `## Opus review · Reviewing / レビュー中\n\n[Follow this run](${runUrl}). The result will replace this comment.\nこのコメントに結果を反映します。\n\n${help}`);
+  publish(s.rows, `## Opus review · Reviewing\n\n[Follow this run](${runUrl}). The result will replace this comment.\n\n${help}`);
   output('accepted', 'true');
 } else if (mode === 'prepare') {
   const s = snapshot();
@@ -132,12 +132,12 @@ if (mode === 'intake') {
   const s = snapshot();
   let body;
   if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) {
-    body = `## Opus review · Outdated / 再レビューが必要\n\nThe item or main changed during review. Findings were not published.\nレビュー中に内容またはmainが更新されたため、評価の掲載を見送りました。\n\n${help}`;
+    body = `## Opus review · Outdated\n\nThe item or main changed during review. Findings were not published.\n\n${help}`;
   } else if (process.env.REVIEW_OUTCOME !== 'success') {
-    body = `## Opus review · Failed / 未完了\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\nレビューは完了していません。管理者が実行ログで認証・利用枠・実行エラーを確認できます。\n\n${help}`;
+    body = `## Opus review · Failed\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;
   } else {
     try { body = render(s); } catch {
-      body = `## Opus review · Failed / 未完了\n\nThe result could not be validated and was withheld.\n結果の検証に失敗したため掲載していません。\n\n[Run](${runUrl})\n\n${help}`;
+      body = `## Opus review · Failed\n\nThe result could not be validated and was withheld.\n\n[Run](${runUrl})\n\n${help}`;
     }
   }
   // Never overwrite a newer run's in-progress/result comment.

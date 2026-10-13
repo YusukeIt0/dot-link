@@ -122,6 +122,10 @@ Your own Mac relays the conversation. There is no shared conversation server ope
 
 ## 開発者向け / For developers
 
+Bug reports, questions and ideas are welcome. See [Contributing](CONTRIBUTING.md) for automatic issue/PR reviews and how to request another review.
+
+不具合・疑問・アイデアの投稿とレビューの使い方は[貢献ガイド](CONTRIBUTING.md)を参照してください。
+
 ```sh
 npm ci
 npm test
