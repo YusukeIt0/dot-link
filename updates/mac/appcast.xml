@@ -1,22 +1,14 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.5</title><sparkle:version>73</sparkle:version><sparkle:shortVersionString>0.4.5</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Dot Link for Mac 0.4.5
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.6</title><sparkle:version>74</sparkle:version><sparkle:shortVersionString>0.4.6</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">The Mac setup screen now uses “Tunnel ID” and “API key” consistently in English and Japanese. Connection behavior and saved settings are unchanged.
+
+Automatic updates remain paused. Use Check for updates in the Mac app to install this update.
 
 日本語
-Dotが発話を読み取った時刻を保存し、Even側で待機状態を区別して表示できるようにしました。アクセシビリティ権限を設定する操作は、システム設定を直接開く方式に統一しました。
-Even 0.2.28では履歴の復元、HUDの新着件数・表示タイミング、右端の文字切れを改善しています。Even 0.2.28は審査承認を経てEven Hubで一般公開済みです。Mac 0.4.5と組み合わせて利用してください。0.2.28の機能内容は0.2.27と同じです。
-任意の位置共有は初期状態オフです。利用にはEven 0.2.23以降が必要です。
-Dotの返答に時間がかかることがあります。今回の更新は応答遅延の解消を保証するものではありません。
-自動更新は一時停止中です。Macの「アップデートを確認」から手動で確認してください。
+Macの接続設定の表示を「トンネルID」「APIキー」に統一しました。接続の動作と保存済み設定は変わりません。
 
-English
-Records when Dot retrieves an utterance so the Even companion app can distinguish waiting states. The accessibility permission action now opens System Settings directly.
-Even 0.2.28 improves history restoration, HUD new-message counts and display timing, and text wrapping at the right edge. Even 0.2.28 has been approved and is now public on Even Hub. Use it with Mac 0.4.5. Version 0.2.28 retains the same app behavior as 0.2.27.
-Optional location sharing starts off and requires Even 0.2.23 or later.
-Replies from Dot may take some time. This update does not guarantee a fix for reply delays.
-Automatic updates remain temporarily disabled. Use Check for updates on the Mac to check manually.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip" sparkle:installationType="application" sparkle:edSignature="l3FYYbm4pGOjoulx0saVyslffLPxD9E8ha9cVmeobP3mK0LFJWBhbpJOGaBSjyuNghvNCRWdsIpW/G5Q2j71CQ==" length="50954282" type="application/octet-stream"></enclosure></item></channel></rss>
-<!-- sparkle-signatures:
-edSignature: J99cgHKdwOwZqNpv/J/YoZzeK5vLdzWTzZkQ6qyp8mYyEkP1Jmoxr6A7kdhyLMD2oReHf92H4LmxW53dUPwXAA==
-length: 2682
+自動更新は引き続き一時停止中です。Macアプリの「アップデートを確認」から更新してください。
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.6-74/Dot-Link-0.4.6-74-arm64.zip" sparkle:installationType="application" sparkle:edSignature="QlIQTxPkPc3MFXSeyH2UwEJLiP5X+XsbimN81EK2eESK7RB4KWYd8C1Q/S2j7/ePW92+V/a2tA9dva7YC5dzCg==" length="50958921" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: 6ITFg4xEyBz1UiD1L+GsKK3H5YRoQ1bKKgp2kYKBlG0dR/9oIVSs4FNnqprCOvhA1C3AQ7S6BSFoEbzPj6pZDQ==
+length: 1572
 -->
