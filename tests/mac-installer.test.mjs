@@ -36,10 +36,11 @@ cp '${root}/Info.plist' 'unpacked/Dot Link.app/Contents/Info.plist'`);
     return {...result, installed:existsSync(destination), opened:existsSync(join(root,'opened')), requests:existsSync(join(root,'requests'))?readFileSync(join(root,'requests'),'utf8'):''};
   } finally {rmSync(root,{recursive:true,force:true});}
 }
-test('both languages use the same short installer command without a pinned release',()=>{
-  const blocks=['mac-install.md','mac-install.ja.md'].map(name=>readFileSync(new URL(`../docs/${name}`,import.meta.url),'utf8').match(/```sh\n([^]*?)\n```/)[1]);
-  assert.equal(blocks[0],blocks[1]); assert.equal(blocks[0].split('\n').length,1);
-  assert.match(blocks[0],/\/main\/install\.sh/); assert.doesNotMatch(blocks[0],/mac-v\d/);
+test('README provides the single-line latest-release installer command',()=>{
+  const readme=readFileSync(new URL('../README.md',import.meta.url),'utf8');
+  const command=readme.match(/```sh\n([^]*?)\n```/)?.[1];
+  assert.equal(command,'curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh | /bin/bash');
+  assert.doesNotMatch(command,/mac-v\d/);
 });
 test('installer resolves a future stable version and its matching checksum', {skip:process.platform!=='darwin'},()=>{
   const r=run(release()); assert.equal(r.status,0,r.stderr); assert.ok(r.installed&&r.opened);

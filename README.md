@@ -3,70 +3,67 @@
 </p>
 
 <h1 align="center">Dot Link</h1>
-
 <p align="center"><strong>Your Dot, now on Even G2.</strong></p>
-<p align="center"><strong>English</strong> · <a href="README.ja.md">日本語</a></p>
 <p align="center">
-  <a href="https://github.com/YusukeIt0/dot-link/releases/latest">Download for Mac</a> ·
-  <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Get it on Even Hub</a> ·
-  <a href="docs/setup.md#english">Setup guide</a>
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Even Hub</a> ·
+  <a href="docs/setup.md">User guide</a>
 </p>
 
-Dot Link connects your existing ChatGPT Dot with Even G2. Speak through your glasses or type on your phone, then read the reply on G2 or listen to it aloud.
+Talk to your existing ChatGPT Dot through Even G2, or type on your phone. Read replies on your glasses, listen aloud, and receive messages from Dot. Your own Mac connects the devices; there is no developer-operated conversation server.
 
 <p align="center">
-  <img src="assets/readme/conversation-en.png" alt="Sample conversation displayed in the Even G2 simulator" width="576">
+  <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">
+  <br><sub>Simulator example; status indicators may differ on physical glasses.</sub>
 </p>
-<p align="center"><sub>Sample conversation in the simulator. It does not fully reproduce the status indicators shown on the physical glasses.</sub></p>
 
-## What you can do
+## Requirements
 
-| | With Dot Link |
-| --- | --- |
-| **Talk or type** | Speak through G2 or enter text on your phone. |
-| **Read or listen** | Read replies on G2 or turn on read-aloud. |
-| **Stay in touch** | Receive proactive messages from your Dot. |
-| **Make it comfortable** | Browse conversation history and adjust display timeout, wake gestures and the head-raise angle. |
-| **Share context** | Optionally share readable Mac notifications with Dot. Dot decides what to announce and when. |
+- **Apple Silicon Mac**, macOS 13 or later, kept awake and online during use.
+- **Even G2 and an iPhone** with the Even Realities app.
+- **Your existing ChatGPT Dot**, with access to OpenAI tunnels and custom MCP connections. Installing Dot Link does not grant this account access.
+- **Tailscale** on both Mac and iPhone, signed in to the same account.
 
-Notification sharing is off until you enable it. Support depends on what macOS makes readable; replying in the source app is not supported.
+## Quickstart
 
-> **Coming to Even Hub:** Optional phone location sharing is implemented, but the compatible Even build is awaiting public release. It starts off and requires Mac 0.4.0+ and Even 0.2.23+. See [location sharing](docs/dot-setup.md#optional-location-sharing-development-builds).
+### 1. Install on your Mac
 
-## What you need
+```sh
+curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh | /bin/bash
+```
 
-- **Even G2** and an **iPhone** with the Even app.
-- An **Apple Silicon Mac with macOS 13 or later**.
-- **Tailscale** on the Mac and iPhone to connect the devices.
-- **Your existing ChatGPT Dot** and access to the required tunnel/plugin features. Check the [Dot connection requirements](docs/dot-setup.md) before installing.
+Installs the latest stable release in `~/Applications` and opens it. Choose **Prepare this Mac** and follow the app's Tailscale setup. The first run downloads about 490 MB for local speech recognition.
 
-Your Mac must stay awake and online while you use Dot Link. A dedicated Mac mini is not required.
+The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyway](docs/setup.md#first-launch). Prefer a ZIP? See [manual installation](docs/setup.md#manual-installation).
 
-## Get started
+### 2. Connect your Dot
 
-Install the latest Mac release with **one Terminal command (recommended)**. See the [installation guide](docs/mac-install.md), or choose [manual ZIP installation](docs/mac-install-finder.md).
+Follow **Connect your existing Dot** in the Mac app: create your OpenAI tunnel, enter its **Tunnel ID** and **API key**, then start the relay. In ChatGPT **Plugins → Add custom MCP server**, choose **Tunnel** and add that connection. Select it in your existing Dot and send the message from **Copy setup message for Dot**. Return to the Mac app and choose **Check connection to Dot**. [Connection details](docs/setup.md#dot-connection).
 
-1. **Set up your Mac.** Follow the [installation guide](docs/mac-install.md), then choose **Prepare this Mac** in Dot Link.
-2. **Install on Even.** Open [Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink) from the Even app.
-3. **Connect them.** Choose **Connect Even** in the Mac app, then paste the generated code into the Even companion.
+### 3. Pair Even
 
-The [setup guide](docs/setup.md#english) covers speech, permissions, updates and daily use. The Mac app is not Apple-notarized, so first launch may require confirmation in macOS. Automatic updates are temporarily paused; use **Check for updates** in the app.
+On your iPhone, install **Tailscale** from the App Store and connect using the same account as your Mac. Install and open [Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). In the Mac app, choose **Connect Even → Create pairing code**; paste the entire code into the Even companion and connect. The code expires after two minutes and works once.
 
-## Guides
+### 4. Start a conversation
 
-| Looking for… | Start here |
-| --- | --- |
-| Installation and everyday use | [Setup](docs/setup.md#english) |
-| Connecting your existing Dot | [Dot setup](docs/dot-setup.md) |
-| What is sent and stored | [Data handling](docs/privacy.md#english) |
-| Building and testing | [Development](docs/development.md) |
+Hold to speak on G2 and release to stop recording, or type and send a message in the Even companion. Check that your Dot's reply appears on G2. Keep the Mac awake and both devices connected to Tailscale.
 
-Your own Mac relays the conversation. The developer does not operate a shared conversation server. Recovery from sleep, connection loss and extended use remain under testing.
+## Make it yours
+
+- **Conversation:** browse history, enable read-aloud, and adjust display timeout, wake gestures and the head-raise angle.
+- **Speech input:** use free local Whisper or your own speech-service API key. [Speech settings](docs/setup.md#speech).
+- **Context:** optionally share [Mac notifications](docs/setup.md#mac-notifications) or your [phone location](docs/setup.md#location-sharing). Both start off; Dot decides what to announce.
+
+## Help and updates
+
+Use **Check for updates** in the Mac app; automatic updates are currently paused. Updates preserve settings and pairing. See the [user guide](docs/setup.md) for manual installation, updates and troubleshooting, and [data handling](docs/privacy.md) for what is sent, stored and deleted.
+
+Recovery after sleep, network loss and extended use is still being validated. Report problems in [Issues](https://github.com/YusukeIt0/dot-link/issues), without credentials or private conversations.
 
 ## Contributing
 
-[Issues](https://github.com/YusukeIt0/dot-link/issues) and pull requests are welcome. **dotsweeper** provides an initial review; authors and maintainers can request another with `/dotlink review`. Reviews are advisory. See [Contributing](CONTRIBUTING.md) and [review details](docs/ai-review.md).
+Bug reports, ideas and pull requests are welcome. Start with [Contributing](CONTRIBUTING.md) or [building and testing](docs/development.md). [Even release notes](docs/even-release-notes.md) · [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
 
 ## License
 
-[MIT](LICENSE). Dependencies retain their [own licenses](docs/dependencies.md). Dot Link is an independent project, not an official product of OpenAI, Even Realities or Tailscale.
+[MIT](LICENSE). Dependencies retain their [own licenses](docs/dependencies.md). Dot Link is independent of OpenAI, Even Realities and Tailscale.

@@ -20,7 +20,7 @@ await cp(join(root,'.runtime/vendor/runtime/bin'),join(payload,'.runtime/bin'),{
 await cp(join(root,'.runtime/vendor/runtime/licenses'),join(contents,'Resources/licenses'),{recursive:true});
 await mkdir(join(payload,'docs'),{recursive:true});
 const publicDocs=join(root,'docs');
-for(const name of ['operations.md','dot-setup.md','privacy.md'])await cp(join(publicDocs,name),join(payload,'docs',name));
+for(const name of ['setup.md','privacy.md'])await cp(join(publicDocs,name),join(payload,'docs',name));
 await cp(join(root,'LICENSE'),join(contents,'Resources/licenses/Dot-Link-LICENSE.txt'));
 await cp(join(root,'distribution/licenses'),join(contents,'Resources/licenses/additional'),{recursive:true});
 const copied=new Set();
