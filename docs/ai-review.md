@@ -14,10 +14,10 @@ next steps; maintainers decide what to adopt, close or merge.
   posting this exact comment on the open issue or PR:
 
   ```text
-  /opus review
+  /dotlink review
   ```
 
-The bot updates one comment to show reviewing, complete, outdated or failed.
+The `dotsweeper` bot, using the Dot Link icon, updates one comment to show reviewing, complete, outdated or failed.
 If content or `main` changes during a review, its findings are withheld; request
 another review after the changes settle. Actions concurrency serializes each
 item; GitHub may replace an older pending request with a newer pending request.
@@ -81,8 +81,14 @@ cannot supply arbitrary prompts, commands or a model choice. Public issue/PR
 content is sent to Anthropic for review, and results appear publicly on GitHub.
 Do not submit secrets or private conversations in an issue or PR.
 
-The pinned official Claude Code Action accepts a short-lived `github_token`;
-this configuration does not require installing an additional GitHub App.
+The pinned official Claude Code Action uses the read-only workflow `github_token`.
+A private GitHub App named `dotsweeper`, installed only on this public repository,
+provides the posting identity and Dot Link avatar. Set repository variables
+`DOTSWEEPER_CLIENT_ID` and `DOTSWEEPER_BOT_ID`, and store its private key only in
+Actions secret `DOTSWEEPER_PRIVATE_KEY`. The official token action mints short-lived
+Issue/PR write tokens only for intake and publication. The model job receives
+neither this key nor these tokens. Existing `github-actions` comments remain as
+history; the first dotsweeper run starts its own comment.
 Its `allowed_non_write_users` input is enabled only for the read-only review job;
 our intake first verifies the exact automatic event or author/maintainer command.
 Repository writers can modify workflows, so write access remains a trusted role.
@@ -98,7 +104,7 @@ not use OpenClaw's hosted service.
 不具合・疑問・アイデアは、実装前でも気軽にIssueへ投稿できます。
 分かる範囲で、起きたこと・期待したこと・利用バージョンを書いてください。
 Issue作成時とPRをレビュー可能にしたときに、外部投稿者も含め自動レビューします。
-追記や修正後は、投稿者または管理者が `/opus review` とコメントすると再レビューを依頼できます。
+追記や修正後は、投稿者または管理者が `/dotlink review` とコメントすると再レビューを依頼できます。
 
 結果は同じコメントを更新して表示します。レビュー中・完了・未完了・対象更新による
 再レビューの必要を区別します。通常のコメントや追加pushだけでは再実行しません。

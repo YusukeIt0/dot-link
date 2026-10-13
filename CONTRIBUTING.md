@@ -8,7 +8,7 @@ conversations out of reports.
 Opus reviews new issues and ready-for-review PRs, including external
 contributions. Review prose follows your language, with English as the fallback.
 It helps identify relevant code, missing information and next
-steps. After updating your issue or PR, post `/opus review` to request another
+steps. After updating your issue or PR, post `/dotlink review` to request another
 review. The bot updates the same comment; use its run link if it reports a
 failure. See [review behavior and limits](docs/ai-review.md).
 
@@ -28,6 +28,6 @@ Opus review is not a required merge check.
 必須ではありません。分かる範囲で、起きたこと・期待したこと・利用バージョンを添えてください。
 
 新しいIssueとレビュー可能なPRには、外部投稿者も含めOpusがレビューを返します。
-情報の追記・コードの修正後は `/opus review` とコメントして再レビューを依頼できます。
+情報の追記・コードの修正後は `/dotlink review` とコメントして再レビューを依頼できます。
 結果は同じコメントにまとまり、採用・マージは管理者が判断します。
 詳細は[レビューの運用と制約](docs/ai-review.md)を参照してください。

@@ -26,14 +26,14 @@ jobs:
       github.repository == 'YusukeIt0/dot-link' &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) &&
-      (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/opus review')) &&
+      (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/dotlink review')) &&
       github.event.sender.type == 'User'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
+      issues: read
+      pull-requests: read
     outputs:
       accepted: ${{ steps.intake.outputs.accepted }}
       number: ${{ steps.intake.outputs.number }}
@@ -45,11 +45,23 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Create dotsweeper publishing token
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.DOTSWEEPER_CLIENT_ID }}
+          private-key: ${{ secrets.DOTSWEEPER_PRIVATE_KEY }}
+          owner: YusukeIt0
+          repositories: dot-link
+          permission-issues: write
+          permission-pull-requests: write
       - name: Authorize request and acknowledge
         id: intake
         env:
           GH_TOKEN: ${{ github.token }}
           ITEM_NUMBER: ${{ inputs.item_number }}
+          REVIEW_WRITE_TOKEN: ${{ steps.bot.outputs.token }}
+          REVIEW_BOT_ID: ${{ vars.DOTSWEEPER_BOT_ID }}
         run: node scripts/claude-review.mjs intake
 
   review:
@@ -163,13 +175,23 @@ jobs:
     timeout-minutes: 3
     permissions:
       contents: read
-      issues: write
-      pull-requests: write
+      issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.intake.outputs.main_sha }}
           persist-credentials: false
+      - name: Create dotsweeper publishing token
+        id: bot
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.DOTSWEEPER_CLIENT_ID }}
+          private-key: ${{ secrets.DOTSWEEPER_PRIVATE_KEY }}
+          owner: YusukeIt0
+          repositories: dot-link
+          permission-issues: write
+          permission-pull-requests: write
       - name: Publish validated result or failure status
         env:
           GH_TOKEN: ${{ github.token }}
@@ -177,4 +199,6 @@ jobs:
           REVIEW_FINGERPRINT: ${{ needs.intake.outputs.fingerprint }}
           REVIEW_OUTCOME: ${{ needs.review.result }}
           REVIEW_JSON: ${{ needs.review.outputs.findings }}
+          REVIEW_WRITE_TOKEN: ${{ steps.bot.outputs.token }}
+          REVIEW_BOT_ID: ${{ vars.DOTSWEEPER_BOT_ID }}
         run: node scripts/claude-review.mjs report

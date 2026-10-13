@@ -14,10 +14,15 @@ const gh = args => execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 3_000_
 const get = path => JSON.parse(gh(['api', path]));
 const send = (path, body, method = 'POST') => JSON.parse(execFileSync('gh', ['api', path, '-X', method, '--input', '-'], {
   input: JSON.stringify(body), encoding: 'utf8', maxBuffer: 3_000_000,
+  env: {...process.env, GH_TOKEN: process.env.REVIEW_WRITE_TOKEN},
 }));
 const output = (key, value) => appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 const marker = '<!-- dot-link-opus-review:v1 -->';
-const owned = row => row.user?.id === 41898282 && row.user?.login === 'github-actions[bot]' && row.body?.startsWith(marker);
+const botId = process.env.REVIEW_BOT_ID || '';
+if (['intake', 'report'].includes(mode) && (!/^[1-9]\d*$/.test(botId) || !process.env.REVIEW_WRITE_TOKEN)) {
+  throw new Error('Configure the dotsweeper bot identity and publishing credential');
+}
+const owned = row => String(row.user?.id) === botId && row.user?.login === 'dotsweeper[bot]' && row.user?.type === 'Bot' && row.body?.startsWith(marker);
 function comments() {
   const pages = JSON.parse(gh(['api', `${endpoint}/comments?per_page=100`, '--paginate', '--slurp']));
   return pages.flat();
@@ -46,14 +51,14 @@ function publish(rows, body) {
   console.log(`Review status: ${response.html_url}`);
 }
 const runUrl = `https://github.com/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-const help = 'For another review, the author or a maintainer can comment `/opus review`.';
+const help = 'For another review, the author or a maintainer can comment `/dotlink review`.';
 function authorized(s) {
   const name = process.env.GITHUB_EVENT_NAME;
   const actor = event.sender;
   if (actor?.type !== 'User') return false;
   if (name === 'issue_comment') {
     const live = get(`${root}/issues/comments/${event.comment.id}`);
-    if (live.user?.id !== actor.id || live.body?.trim() !== '/opus review' || live.issue_url !== `https://api.github.com/${endpoint}`) return false;
+    if (live.user?.id !== actor.id || live.body?.trim() !== '/dotlink review' || live.issue_url !== `https://api.github.com/${endpoint}`) return false;
     if (actor.id === s.issue.user.id) return true;
     const p = get(`${root}/collaborators/${encodeURIComponent(actor.login)}/permission`);
     return ['admin', 'maintain', 'write'].includes(p.permission);
