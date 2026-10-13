@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {latestReceipt, fingerprintPR} from '../scripts/check-review-before-merge.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -6,6 +7,10 @@ import {join, resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 const script = resolve('scripts/claude-review.mjs');
 const main = 'a'.repeat(40), head = 'b'.repeat(40);
+// Exercise the env contract of the actual workflow, not a richer test-only env.
+const workflow = readFileSync(resolve('.github/workflows/claude-review.yml'), 'utf8');
+const prepareStep = workflow.split('      - name: Prepare read-only review input\n')[1].split('      - name: Check subscription credential\n')[0];
+const prepareEnvKeys = new Set([...prepareStep.matchAll(/^          ([A-Z_]+):/gm)].map(m=>m[1]));
 const user = {id: 123, login: 'contributor', type: 'User'};
 const issue = {number: 12, title: 'History disappears', body: 'After reopening the app', state: 'open', locked: false, user};
 const pr = {number: 12, state: 'open', draft: false, changed_files: 1,
@@ -21,6 +26,7 @@ function fixture(options = {}) {
 const fs = require('node:fs');
 const a = process.argv.slice(2), p = a[1];
 const f = JSON.parse(fs.readFileSync('fixture.json'));
+if (!a.includes('--input') && f.failRead && p.includes(f.failRead)) { console.error('simulated API failure'); process.exit(1); }
 if(a.includes('--input')) {
  const body = JSON.parse(fs.readFileSync(0, 'utf8'));
  fs.appendFileSync('writes.jsonl', JSON.stringify({path:p,body})+'\\n');
@@ -29,7 +35,7 @@ if(a.includes('--input')) {
  if(p.endsWith('/comments/999')) f.comments=f.comments.filter(x=>x.id!==999);
  f.comments.push(row); fs.writeFileSync('fixture.json',JSON.stringify(f));
  console.log(JSON.stringify(row));
-} else if(a.includes('Accept: application/vnd.github.diff')) process.stdout.write(f.diff);
+} else if(a.includes('Accept: application/vnd.github.diff')) { if(f.failDiff) process.exit(1); process.stdout.write(f.diff); }
 else if(p.endsWith('/commits/main')) { f.mainReads=(f.mainReads||0)+1; if(f.changeAfterMainReads && f.mainReads>f.changeAfterMainReads) f.main='c'.repeat(40); fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify({sha:f.main})); }
 else if(p.includes('/events?')) console.log(JSON.stringify([f.events || []]));
 else if(p.includes('/comments?')) console.log(JSON.stringify([f.comments]));
@@ -37,20 +43,31 @@ else if(p.includes('/issues/comments/')) console.log(JSON.stringify(f.command));
 else if(p.includes('/collaborators/')) console.log(JSON.stringify({permission:f.permission}));
 else if(p.includes('/files?')) console.log(JSON.stringify([{filename:'src/main.ts'}]));
 else if(p.includes('/pulls/')) console.log(JSON.stringify(f.pr));
-else console.log(JSON.stringify(f.issue));
+else {
+ f.issueReads=(f.issueReads||0)+1;
+ const update=f.atIssueRead?.[f.issueReads];
+ if(update) { if(update.issue) f.issue={...f.issue,...update.issue}; if(update.pr) f.pr={...f.pr,...update.pr}; if(update.newOwner) f.comments=f.comments.map(x=>({...x,body:x.body.replace(/dot-link-review-owner:[0-9:]+/, 'dot-link-review-owner:'+update.newOwner)})); }
+ fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify(f.issue));
+}
 `, {mode: 0o700});
   writeFileSync(join(dir, 'fixture.json'), JSON.stringify(data));
   let outputs = {};
   const run = (mode, env = {}) => {
     writeFileSync(join(dir, 'output'), '');
-    const r = spawnSync(process.execPath, [script, mode], {cwd: dir, encoding: 'utf8', env: {
+    const runEnv = {
       ...process.env, PATH: dir + ':' + process.env.PATH,
       GITHUB_REPOSITORY: 'YusukeIt0/dot-link', GITHUB_EVENT_PATH: join(dir, 'event.json'),
       GITHUB_EVENT_NAME: options.eventName || 'issues', GITHUB_RUN_ID: '1234', ITEM_NUMBER: '12',
       GITHUB_OUTPUT: join(dir, 'output'), GITHUB_STEP_SUMMARY: join(dir, 'summary'),
+      GITHUB_RUN_ATTEMPT: '1', REVIEW_OWNER: outputs.owner,
       REVIEW_FINGERPRINT: outputs.fingerprint, REVIEW_MAIN_SHA: outputs.main_sha,
-      REVIEW_BOT_ID: '98765', REVIEW_WRITE_TOKEN: 'fixture-token', REVIEW_OUTCOME: 'success', REVIEW_JSON: JSON.stringify(result), ...env,
-    }});
+      REVIEW_BOT_ID: '98765', REVIEW_WRITE_TOKEN: 'fixture-token', REVIEW_OUTCOME: 'success', REVIEW_JSON: JSON.stringify(result),
+    };
+    if (mode === 'prepare') for (const key of Object.keys(runEnv)) {
+      if (key.startsWith('REVIEW_') && !prepareEnvKeys.has(key)) delete runEnv[key];
+    }
+    Object.assign(runEnv, env);
+    const r = spawnSync(process.execPath, [script, mode], {cwd: dir, encoding:'utf8', env:runEnv});
     const out = Object.fromEntries(readFileSync(join(dir, 'output'), 'utf8').trim().split('\n').filter(Boolean).map(x => x.split('=')));
     outputs = {...outputs, ...out};
     return {...r, outputs: out};
@@ -75,6 +92,8 @@ test('external fork PR is accepted; no contributor checkout or execution occurs'
   success(f.run('intake')); success(f.run('prepare')); success(f.run('report'));
   assert.match(f.read().comments[0].body, /src\/main.ts:7/);
   assert.match(readFileSync(join(f.dir,'.review/changes.diff'),'utf8'), /new line/);
+  const live=f.read();const receipt=latestReceipt(live.comments,98765);
+  assert.equal(receipt.fingerprint,fingerprintPR({...live.issue,...live.pr},live.main,live.comments));
 });
 test('draft, closed, locked or non-main items do not start a review', t => {
   for(const opts of [{issue:{...issue,state:'closed'}},{issue:{...issue,locked:true}},
@@ -111,7 +130,7 @@ test('edited issue, added human comment, new main and changed PR head invalidate
 test('failure or invalid output is visible and never called a clean review', t => {
   for(const env of [{REVIEW_OUTCOME:'failure'},{REVIEW_JSON:'not json'},
     {REVIEW_JSON:JSON.stringify({...result,summary:'sk-ant-sensitive-output'})}]) {
-    const f=use(t); success(f.run('intake')); success(f.run('report',env));
+    const f=use(t); success(f.run('intake')); assert.notEqual(f.run('report',env).status,0);
     assert.match(f.read().comments[0].body,/Failed/); assert.doesNotMatch(f.read().comments[0].body,/Complete|sk-ant-/);
   }
 });
@@ -123,11 +142,11 @@ test('forged marker is not edited; newer run prevents stale overwrite', t => {
   const fake={id:88,user,body:'<!-- dot-link-opus-review:v1 --> forged'};
   const f=use(t,{comments:[fake]}); success(f.run('intake'));
   assert.equal(f.read().comments[0].body,fake.body);
-  const r=f.run('report',{GITHUB_RUN_ID:'5678'}); assert.notEqual(r.status,0); assert.equal(f.writes().length,1);
+  const r=f.run('report',{GITHUB_RUN_ID:'5678',REVIEW_OWNER:'5678:1'}); success(r); assert.match(readFileSync(join(f.dir,'summary'),'utf8'),/Superseded/); assert.equal(f.writes().length,1);
 });
 test('invalid identifiers and changed preparation snapshot are rejected', t => {
   const f=use(t); assert.notEqual(f.run('intake',{ITEM_NUMBER:'12;echo bad'}).status,0);
-  success(f.run('intake')); assert.notEqual(f.run('prepare',{REVIEW_FINGERPRINT:'stale'}).status,0);
+  success(f.run('intake')); const prepared=f.run('prepare',{REVIEW_FINGERPRINT:'stale'}); success(prepared); assert.equal(prepared.outputs.ready,'false'); assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
 });
 
 test('publishing requires app identity; legacy or spoofed bot comments remain untouched', t => {
@@ -152,7 +171,8 @@ test('PRs and outdated/invalid/failed reviews never mutate labels', t => {
  for (const opts of [{issue:{...issue,pull_request:{}}},{stale:true},{invalid:true},{failed:true}]) {
   const f=use(t,opts); success(f.run('intake'));
   if(opts.stale) f.update({main:'c'.repeat(40)});
-  success(f.run('report',opts.invalid?{REVIEW_JSON:JSON.stringify({...result,triage:{...result.triage,labels:[{name:'arbitrary',reason:'x'}]}})}:opts.failed?{REVIEW_OUTCOME:'failure'}:{}));
+  const report=f.run('report',opts.invalid?{REVIEW_JSON:JSON.stringify({...result,triage:{...result.triage,labels:[{name:'arbitrary',reason:'x'}]}})}:opts.failed?{REVIEW_OUTCOME:'failure'}:{});
+  if(opts.invalid||opts.failed) assert.notEqual(report.status,0); else success(report);
   assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
  }
 });
@@ -185,4 +205,99 @@ test('PR findings do not depend on unused issue triage fields', t => {
   assert.match(f.read().comments[0].body,/Complete/);
   assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
  }
+});
+
+
+const transitions = [
+  {name:'merged PR', start:{issue:{...issue,pull_request:{}}}, change:{issue:{state:'closed'},pr:{state:'closed',merged:true}}, state:'Skipped'},
+  {name:'closed issue', start:{}, change:{issue:{state:'closed'}}, state:'Skipped'},
+  {name:'locked issue', start:{}, change:{issue:{locked:true}}, state:'Skipped', noWrite:true},
+  {name:'draft PR', start:{issue:{...issue,pull_request:{}}}, change:{pr:{draft:true}}, state:'Skipped'},
+  {name:'retargeted PR', start:{issue:{...issue,pull_request:{}}}, change:{pr:{base:{ref:'other'}}}, state:'Skipped'},
+  {name:'changed PR head', start:{issue:{...issue,pull_request:{}}}, change:{pr:{head:{sha:'c'.repeat(40)}}}, state:'Outdated'},
+  {name:'newer run', start:{}, change:{newOwner:'5678:1'}, state:'Superseded', noWrite:true},
+];
+for (const transition of transitions) {
+ test(`${transition.name} restored after a successful preparation stop stays skipped`, t => {
+  const originalIssue = transition.start.issue || issue;
+  const f=use(t,{...transition.start,atIssueRead:{2:transition.change}});success(f.run('intake'));
+  const originalComments=f.read().comments;
+  const prepared=f.run('prepare');success(prepared);assert.equal(prepared.outputs.ready,'false');
+  f.update({issue:originalIssue,pr,comments:originalComments,atIssueRead:{}});
+  success(f.run('report',{REVIEW_PREPARED:'false'}));
+  assert.match(f.read().comments[0].body,/Skipped/);
+  assert.doesNotMatch(f.read().comments[0].body,/Complete|Failed/);
+  assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+ });
+ test(`${transition.name} before preparation skips model input`, t => {
+  const f=use(t,{...transition.start,atIssueRead:{2:transition.change}});success(f.run('intake'));
+  const r=f.run('prepare');success(r);assert.equal(r.outputs.ready,'false');
+  assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
+  success(f.run('report',{REVIEW_PREPARED:'false'}));
+  assert.match(readFileSync(join(f.dir,'summary'),'utf8'),new RegExp(transition.state));
+  assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+ });
+ for (const issueRead of [2,3]) test(`${transition.name} at report read ${issueRead} withholds findings and labels`,t=>{
+  const f=use(t,{...transition.start,atIssueRead:{[issueRead]:transition.change}});success(f.run('intake'));
+  success(f.run('report'));
+  assert.match(readFileSync(join(f.dir,'summary'),'utf8'),new RegExp(transition.state));
+  const writes=f.writes().slice(1);
+  assert.equal(writes.filter(x=>x.path.includes('/labels')).length,0);
+  assert.ok(writes.every(x=>!x.body.body?.includes('State lost')));
+  if(transition.noWrite) assert.equal(writes.length,0);
+  else assert.doesNotMatch(f.read().comments[0].body,/Reviewing/);
+ });
+}
+test('close immediately before labeling does not apply labels',t=>{
+ const f=use(t,{atIssueRead:{4:{issue:{state:'closed'}}}});success(f.run('intake'));success(f.run('report'));
+ assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+ assert.match(f.read().comments[0].body,/Skipped/);
+});
+test('new owner at final PR publication is not overwritten',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},atIssueRead:{4:{newOwner:'5678:2'}}});success(f.run('intake'));success(f.run('report'));
+ assert.equal(f.writes().length,1);assert.match(f.read().comments[0].body,/5678:2/);
+});
+test('API failures remain failures in intake, prepare and report',t=>{
+ for(const mode of ['intake','prepare','report']){
+  const f=use(t);if(mode!=='intake')success(f.run('intake'));
+  f.update({failRead:'/issues/12'});assert.notEqual(f.run(mode).status,0);
+  assert.equal(f.writes().length,mode==='intake'?0:1);
+ }
+});
+test('genuine preparation failure stays failed after the target recovers',t=>{
+ const f=use(t);success(f.run('intake'));f.update({failRead:'/issues/12'});
+ assert.notEqual(f.run('prepare').status,0);f.update({failRead:false});
+ assert.notEqual(f.run('report',{REVIEW_OUTCOME:'failure',REVIEW_PREPARED:'false'}).status,0);
+ assert.match(f.read().comments[0].body,/Failed/);
+ assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+});
+test('diff fetch failure is not reported as a size limit',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},failDiff:true});
+ assert.notEqual(f.run('intake').status,0);assert.equal(f.writes().length,0);
+});
+test('result file lookup failure remains an API failure, not invalid model output',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}}});success(f.run('intake'));f.update({failRead:'/files?'});
+ const r=f.run('report');assert.notEqual(r.status,0);assert.equal(f.writes().length,1);
+});
+test('a report-only retry retains intake ownership across run attempts',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}}});success(f.run('intake'));
+ success(f.run('report',{GITHUB_RUN_ATTEMPT:'2'}));assert.match(f.read().comments[0].body,/Complete/);
+ success(f.run('report',{GITHUB_RUN_ATTEMPT:'3'}));assert.equal(f.read().comments.length,1);
+});
+test('missing ownership cannot publish or prepare',t=>{
+ const f=use(t);success(f.run('intake'));
+ for(const mode of ['prepare','report']) assert.notEqual(f.run(mode,{REVIEW_OWNER:''}).status,0);
+ assert.equal(f.writes().length,1);
+});
+test('cancelled model run is explicit and does not mutate labels',t=>{
+ const f=use(t);success(f.run('intake'));success(f.run('report',{REVIEW_OUTCOME:'cancelled'}));
+ assert.match(f.read().comments[0].body,/Cancelled/);assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+});
+
+
+test('prepare requires the public bot identity but no publishing credential',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}}});success(f.run('intake'));
+ const r=f.run('prepare',{REVIEW_BOT_ID:''});assert.notEqual(r.status,0);assert.match(r.stderr,/bot identity/);
+ assert.equal(existsSync(join(f.dir,'summary')),false);
+ const prepared=f.run('prepare',{REVIEW_WRITE_TOKEN:''});success(prepared);assert.equal(prepared.outputs.ready,'true');
 });

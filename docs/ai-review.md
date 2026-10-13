@@ -17,7 +17,7 @@ next steps; maintainers decide what to adopt, close or merge.
   /dotlink review
   ```
 
-The `dotsweeper` bot, using the Dot Link icon, updates one comment to show reviewing, complete, outdated or failed.
+The `dotsweeper` bot, using the Dot Link icon, updates one comment to show reviewing, complete, outdated, skipped, cancelled or failed.
 If content or `main` changes during a review, its findings are withheld; request
 another review after the changes settle. Actions concurrency serializes each
 item; GitHub may replace an older pending request with a newer pending request.
@@ -27,6 +27,52 @@ check the linked run and request another review.
 A maintainer can also use **Actions → dotsweeper review → Run workflow**, selecting
 `main` and entering an issue or PR number. Closed, locked and draft items are
 not reviewed. Automated bot accounts do not trigger this workflow.
+
+## State changes and completion
+
+Review input is fixed to an accepted PR head, public `main`, and discussion.
+Before starting the model and before publishing, the workflow rechecks both the
+input and which run owns the bot comment.
+
+| Situation | Outcome |
+| --- | --- |
+| PR merged/closed, converted to draft, or retargeted away from `main`; issue closed | `Skipped`; no new findings or further labels. The owning comment is finalized when writable. |
+| Item locked | `Skipped` in the Actions summary; no comment or label writes. |
+| Head, discussion, or `main` changed | `Outdated`; stale findings and further labels are withheld. |
+| Another run owns the comment, or the comment was removed | `Superseded` in the Actions summary; the newer comment is not overwritten. |
+| Authentication/API error, invalid model result, or failed label publication | Failure remains visible; it is not converted into a clean review. |
+| Model job cancelled | `Cancelled` when the report job can finish; no label changes. |
+
+Expected state changes stop model preparation without consuming another model
+run. If the target returns to its original state before reporting, a successful
+preparation stop still reports `Skipped`; genuine preparation failures remain failures.
+An intake ownership token is carried through retries, so rerunning only the
+report job can update its own comment but cannot claim a newer run's comment.
+The reporter rechecks state before comment publication and between label-removal
+operations. GitHub does not provide a transaction spanning issue state, labels,
+and comments: a change after the last read or a partial API failure can still
+leave partial label changes. Those are not rolled back over human edits.
+If the report runner is itself forcibly cancelled or loses API access, a comment
+may remain at `Reviewing`; the Actions run and summary remain authoritative.
+
+### Maintainer check before merging
+
+Do not merge merely because the model job or required tests finished. Read the
+published findings and wait for the owning workflow, including `report`, to
+finish. Run the read-only check against the current PR:
+
+```sh
+node scripts/check-review-before-merge.mjs <PR-number>
+```
+
+The check requires a completed comment from the configured bot for the current
+head and `main`, successful intake/review/report jobs from its owning workflow,
+passing required checks, and GitHub-confirmed mergeability. It returns the exact
+head SHA; use that SHA with `gh pr merge --match-head-commit` to reject a concurrent
+head update. Repeat the check after any head/base/discussion change. Older comments
+without a revision receipt require a fresh review. The check never merges or
+approves anything and does not make review a repository-wide required status.
+Maintainers still decide whether findings are acceptable.
 
 ## What to expect
 
@@ -156,3 +202,18 @@ Issueの採用・クローズ、PRのマージは管理者が判断します。�
 
 優先度を外すと、投稿者を含む権限のある人の次回レビュー依頼で再付与され得ます。
 優先度なしを維持したい場合は`triage:manual`を付けてください。分類ラベルの手動除去とは扱いが異なります。
+
+
+### 状態変更とマージ前の確認
+
+レビュー中に対象がマージ・クローズ・Draft化された場合は正常な対象終了として扱い、
+古い指摘やラベルを反映しません。入力更新はOutdated、別実行への交代はSuperseded、
+認証・通信・出力不正などの障害はFailedとして区別します。ロック済み対象や別実行の
+コメントには書き込みません。途中終了の理由はActionsのsummaryにも残します。
+
+マージ前はモデル処理だけでなく報告ジョブまでの完了と投稿結果を確認し、
+`node scripts/check-review-before-merge.mjs <PR番号>`を実行します。
+現在のhead/mainに対応する投稿・実行全体・必須テスト・マージ可否が揃わなければ停止します。
+返されたhead SHAを`gh pr merge --match-head-commit`へ渡します。これは管理者の確認手順で、
+自動マージやブランチ保護ルールの変更ではありません。GitHubの状態確認と書き込みは
+原子的ではなく、最後の確認直後の競合や一部ラベル反映は完全には防げません。
