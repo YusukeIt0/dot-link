@@ -370,11 +370,19 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             button(yes("lifecycleStopped") ? tr("再開", "Resume") : tr("中継を起動する", "Start relay"), primary: true) { [weak self] in self?.menuResume() }
         case "subscribe":
-            add(tr("Dotで接続を有効にする", "Enable the connection in Dot"), size: 23, bold: true)
-            add(tr("Macの中継は起動しました。ChatGPTのPluginsから「Add custom MCP server」を開き、ConnectionでTunnelを選び、このMacの接続を追加します。", "Your Mac relay is running. In ChatGPT Plugins, open Add custom MCP server, choose Tunnel under Connection, and add this Mac's connection."))
-            add(tr("いつものDotでその接続を選び、下の設定メッセージを送ります。別のDotを作る必要はありません。", "Select the connection in your existing Dot and send the setup message below. You do not need a new Dot."))
-            button(tr("ChatGPTを開く", "Open ChatGPT")) { [weak self] in self?.open("https://chatgpt.com/") }
-            button(tr("Dotへの設定メッセージをコピー", "Copy setup message for Dot")) { [weak self] in self?.copySetupMessage() }
+            add(tr("ChatGPTで接続を設定", "Set up the connection in ChatGPT"), size: 23, bold: true)
+            add(tr("1  プラグインを追加", "1  Add the plugin"), size: 16, bold: true)
+            add(tr("「プラグイン」→「追加」→「カスタム MCP サーバーを追加」", "Plugins → Add → Add custom MCP server"))
+            add(tr("名前：Dot Link（任意の名前でOK）\n接続タイプ：トンネル → このMac用のトンネルを選択\n認証：認証なし", "Name: Dot Link (or a name of your choice)\nConnection: Tunnel → select this Mac’s tunnel\nAuthentication: No authentication"))
+            add(tr("「理解したうえで続けます」を確認・チェックし、\n「プラグインとして作成」→「［名前］を接続する」。", "Review and check “I understand and want to continue”.\nClick “Create as a plugin”, then connect the plugin."))
+            button(tr("ChatGPTのプラグインを開く", "Open ChatGPT Plugins")) { [weak self] in self?.open("https://chatgpt.com/plugins") }
+            space()
+            add(tr("2  Dotに設定メッセージを送る", "2  Send the setup message to your dot"), size: 16, bold: true)
+            add(tr("「ホーム」→「あなたのdot」→ 入力欄の「＋」→ 追加した名前を選択。\n下のボタンでコピーし、Dotの入力欄に貼り付けて送信します。", "Home → Your dot → + in the message box → select your plugin.\nCopy the message below, paste it into your dot, and send it."))
+            button(tr("設定メッセージをコピー", "Copy setup message")) { [weak self] in self?.copySetupMessage() }
+            space()
+            add(tr("3  このアプリに戻って確認", "3  Return here to check the connection"), size: 16, bold: true)
+            add(tr("Dotから設定完了の返事が来たら、下のボタンを押します。", "When your dot confirms setup is complete, click below."))
             button(tr("Dotとの接続を確認", "Check connection to Dot"), primary: true) { [weak self] in self?.inspect() }
         case "pair":
             add(showingPairing ? tr("Evenの接続設定", "Even connection settings") : tr("接続状況", "Connections"), size: 22, bold: true)
@@ -417,7 +425,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(tr("確認する", "Check"), primary: true) { [weak self] in self?.inspect() }
         }
         space()
-        if step != "pair" && !yes("lifecycleStopped") { let footer = label(tr("接続や準備が終わるまで、iPhoneでコードを発行・撮影する必要はありません。", "Finish Mac and Dot setup before pairing your iPhone."), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
+        if step != "pair" && step != "subscribe" && !yes("lifecycleStopped") { let footer = label(tr("接続や準備が終わるまで、iPhoneでコードを発行・撮影する必要はありません。", "Finish Mac and Dot setup before pairing your iPhone."), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
         let footer = NSStackView(); footer.orientation = .horizontal; footer.spacing = 10
         if let checked = lastChecked {
             let f = DateFormatter(); f.locale = Locale(identifier: language == "ja" ? "ja_JP" : "en_US"); f.timeStyle = .medium
@@ -439,7 +447,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         open("https://tailscale.com/download/mac")
     }
     func copySetupMessage() {
-        let text = tr("このMac用のDot Link接続を使って、私のEven G2からの発話を受け取ってください。セッションはpersonal-g2です。utterance.createdを購読し、届いたらget_pending_utterancesで実際のIDと本文を取得して、reply_to_g2で返してください。新しい連絡はsend_message_to_g2を使ってください。まずget_statusで接続を確認してください。別のMacで利用中の接続や購読は変更しないでください。Mac通知の購読は今は追加しないでください。", "Use this Mac's Dot Link connection to receive messages from my Even G2. The session is personal-g2. Subscribe to utterance.created, use get_pending_utterances to read real IDs and messages, then reply with reply_to_g2. Use send_message_to_g2 for new messages. First check get_status. Do not change connections or subscriptions used by another Mac. Do not subscribe to Mac notifications yet.")
+        let text = tr("このMac用のDot Link接続を使って、私のEven G2からの発話を受け取ってください。セッションはpersonal-g2です。utterance.createdを購読し、届いたらget_pending_utterancesで実際のIDと本文を取得して、reply_to_g2で返してください。新しい連絡はsend_message_to_g2を使ってください。まずget_statusで接続を確認してください。", "Use this Mac's Dot Link connection to receive messages from my Even G2. The session is personal-g2. Subscribe to utterance.created, use get_pending_utterances to read real IDs and messages, then reply with reply_to_g2. Use send_message_to_g2 for new messages. First check get_status.")
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); message = tr("設定メッセージをコピーしました。いつものDotへ貼り付けて送ってください。", "Setup message copied. Paste and send it to your existing Dot."); render()
     }
     func copyPairing() {
