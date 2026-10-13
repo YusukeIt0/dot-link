@@ -60,6 +60,8 @@ async function launch(options = {}) {
   const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
+    // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
+    installKeyboardViewport: () => () => {},
     InteractionStatus: class extends dependencies.InteractionStatus { constructor() { super(() => now); } },
     Date: class extends Date { static now() { return epoch + now; } },
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
