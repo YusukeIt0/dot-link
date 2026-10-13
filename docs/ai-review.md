@@ -1,52 +1,98 @@
-# Opus pull-request review
+# Opus issue and pull-request review
 
-The public repository provides a manually started **Opus PR Review** workflow.
-It reviews an open, non-draft PR from this repository targeting `main` and posts
-a comment review tied to the inspected commit. It never approves, merges, or
-modifies the pull request. Existing test workflows remain separate.
+Dot Link welcomes rough bug reports, questions and ideas. You do not need to
+write a patch before opening an issue. Opus helps clarify the report and suggest
+next steps; maintainers decide what to adopt, close or merge.
 
-## One-time authentication
+## When review runs
 
-Use Claude Code's official `claude setup-token` flow with a Claude subscription.
-Store the resulting token as the repository Actions secret
-`CLAUDE_CODE_OAUTH_TOKEN`. Never paste the token into a chat, issue, workflow,
-or committed file. The workflow has no API-key fallback.
+- A new issue starts a review, including issues from external contributors.
+- A non-draft PR targeting `main` starts a review, including fork PRs.
+- Marking a draft PR ready starts its first review.
+- Further pushes and ordinary comments do not automatically rerun Opus.
+- The author or a maintainer with write access can request another review by
+  posting this exact comment on the open issue or PR:
 
-The workflow uses GitHub's short-lived job token, so no additional GitHub App
-or personal access token is required. The review job has read-only repository
-access; only the reporting job can post a PR review. The reporting job does not
-receive the Claude credential.
+  ```text
+  /opus review
+  ```
 
-Subscription limits and any enabled extra-usage settings still apply. Workflow
-timeouts and turn limits bound execution but are not a monetary spending cap.
-Dedicated Claude cloud-session promotional credits are not assumed to apply.
+The bot updates one comment to show reviewing, complete, outdated or failed.
+If content or `main` changes during a review, its findings are withheld; request
+another review after the changes settle. Actions concurrency serializes each
+item; GitHub may replace an older pending request with a newer pending request.
+If a workflow is manually cancelled, its last comment can remain in progress;
+check the linked run and request another review.
 
-## Run a review
+A maintainer can also use **Actions → Opus Review → Run workflow**, selecting
+`main` and entering an issue or PR number. Closed, locked and draft items are
+not reviewed. Automated bot accounts do not trigger this workflow.
 
-1. Open the PR and mark it ready for review.
-2. Open **Actions → Opus PR Review → Run workflow**.
-3. Select `main` and enter the PR number.
-4. Read the resulting PR review and the Actions run result.
+## What to expect
 
-No push, issue, or comment starts this workflow automatically. Fork PRs are
-not accepted by this initial configuration. The workflow rejects very large
-diffs; split them into reviewable changes. If the PR head changes while Opus
-is reviewing, no findings are posted: run the review again for the new commit.
+Issue review reads the description, human comments, current public code and
+docs. It distinguishes evidence, possible causes, missing information and
+product decisions. Related issues are not comprehensively searched in this
+initial version; include relevant links and summarize their connection.
 
-## Review scope and decisions
+PR review reads the diff, discussion and base code for concrete regressions,
+including history retention, lost/duplicate delivery, reconnect/stop behavior,
+notification/location consent, credentials and release contents. Findings
+identify a changed file, line, triggering condition and practical impact.
+Preferences and speculative causes are not established bugs.
 
-Opus checks changed code for concrete regressions: history retention,
-lost/duplicate delivery, reconnect/stop behavior, notification/location consent,
-credentials, and release contents. Findings should identify the changed file,
-line, triggering condition, and practical impact. Preferences and speculative
-causes are not bugs by themselves.
+This is static review. Opus cannot run tests, execute contributor code, or
+confirm physical-device behavior. A report with no findings is not proof of
+correctness. Maintainers evaluate important findings and record why a disputed
+finding is not adopted. Opus is not currently a required merge check and never
+approves, merges, implements, labels or closes an item. Whether review completion
+becomes mandatory is a future maintainer decision, informed by actual use.
 
-The reviewer reads the diff and base code with read-only tools. It cannot run
-tests, execute PR code, or confirm a physical-device experience. The maintainer
-checks each finding, fixes verified problems, and records why any disputed
-finding is not adopted. An empty report is not proof of correctness.
+Input limits are 150 KB of issue/PR text and human discussion, 250 KB of PR diff,
+and 50 changed files. Oversized inputs produce an explicit incomplete status,
+not a partial clean review. Each model job has a 15-minute timeout and 12-turn
+limit. There is no automatic retry or model fallback. Failed authentication,
+usage exhaustion or invalid results must not be interpreted as successful review.
 
-If authentication fails or the execution limit is reached, inspect the failed
-run rather than interpreting the absence of comments as a successful review.
-Update an expired secret through the same official authentication flow. There
-is no automatic retry or model fallback.
+## Authentication and security
+
+Use the official `claude setup-token` flow with a Claude subscription and store
+the token only as the repository Actions secret `CLAUDE_CODE_OAUTH_TOKEN`.
+Never paste it into chat, an issue, a workflow or a committed file. The workflow
+has no API-key fallback. Subscription limits and enabled extra usage still apply;
+time and turn limits are not a monetary spending cap. Cloud-session promotional
+credits are not assumed to cover Actions.
+
+The workflow runs on GitHub-hosted runners with trusted default-branch scripts.
+It never checks out or executes fork/PR-head code. The model job receives only
+read permissions to GitHub and Read/Glob/Grep tools. Intake and publication are
+separate jobs with issue-comment write access and no Claude credential. They
+validate the target, requester, input revision and structured output. Comments
+cannot supply arbitrary prompts, commands or a model choice. Public issue/PR
+content is sent to Anthropic for review, and results appear publicly on GitHub.
+Do not submit secrets or private conversations in an issue or PR.
+
+The pinned official Claude Code Action accepts a short-lived `github_token`;
+this configuration does not require installing an additional GitHub App.
+Its `allowed_non_write_users` input is enabled only for the read-only review job;
+our intake first verifies the exact automatic event or author/maintainer command.
+Repository writers can modify workflows, so write access remains a trusted role.
+
+The review design draws on [OpenClaw's review flow](https://github.com/openclaw/openclaw/blob/main/docs/reference/pull-request-review-flow.md)
+and [ClawSweeper](https://github.com/openclaw/clawsweeper): initial automatic
+review, author-requested re-review, one durable comment, and separation of model
+assessment from GitHub mutations. Dot Link uses its own Opus workflow and does
+not use OpenClaw's hosted service.
+
+## 日本語
+
+不具合・疑問・アイデアは、実装前でも気軽にIssueへ投稿できます。
+分かる範囲で、起きたこと・期待したこと・利用バージョンを書いてください。
+Issue作成時とPRをレビュー可能にしたときに、外部投稿者も含め自動レビューします。
+追記や修正後は、投稿者または管理者が `/opus review` とコメントすると再レビューを依頼できます。
+
+結果は同じコメントを更新して表示します。レビュー中・完了・未完了・対象更新による
+再レビューの必要を区別します。通常のコメントや追加pushだけでは再実行しません。
+Opusは公開コードを読む参考レビューで、実機確認やテストを代替しません。
+Issueの採用・クローズ、PRのマージは管理者が判断します。現在はマージの必須条件ではありません。
+認証情報や私的な会話を投稿しないでください。公開投稿内容はレビューのためAnthropicへ送られます。
