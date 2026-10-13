@@ -1,7 +1,7 @@
-# Opus issue and pull-request review
+# dotsweeper issue and pull-request review
 
 Dot Link welcomes rough bug reports, questions and ideas. You do not need to
-write a patch before opening an issue. Opus helps clarify the report and suggest
+write a patch before opening an issue. dotsweeper helps clarify the report and suggest
 next steps; maintainers decide what to adopt, close or merge.
 
 ## When review runs
@@ -9,7 +9,7 @@ next steps; maintainers decide what to adopt, close or merge.
 - A new issue starts a review, including issues from external contributors.
 - A non-draft PR targeting `main` starts a review, including fork PRs.
 - Marking a draft PR ready starts its first review.
-- Further pushes and ordinary comments do not automatically rerun Opus.
+- Further pushes and ordinary comments do not automatically rerun dotsweeper.
 - The author or a maintainer with write access can request another review by
   posting this exact comment on the open issue or PR:
 
@@ -24,7 +24,7 @@ item; GitHub may replace an older pending request with a newer pending request.
 If a workflow is manually cancelled, its last comment can remain in progress;
 check the linked run and request another review.
 
-A maintainer can also use **Actions → Opus Review → Run workflow**, selecting
+A maintainer can also use **Actions → dotsweeper review → Run workflow**, selecting
 `main` and entering an issue or PR number. Closed, locked and draft items are
 not reviewed. Automated bot accounts do not trigger this workflow.
 
@@ -45,10 +45,10 @@ notification/location consent, credentials and release contents. Findings
 identify a changed file, line, triggering condition and practical impact.
 Preferences and speculative causes are not established bugs.
 
-This is static review. Opus cannot run tests, execute contributor code, or
+This is static review. dotsweeper cannot run tests, execute contributor code, or
 confirm physical-device behavior. A report with no findings is not proof of
 correctness. Maintainers evaluate important findings and record why a disputed
-finding is not adopted. Opus is not currently a required merge check and never
+finding is not adopted. dotsweeper is not currently a required merge check and never
 approves, merges, implements, labels or closes an item. Whether review completion
 becomes mandatory is a future maintainer decision, informed by actual use.
 
@@ -96,7 +96,7 @@ Repository writers can modify workflows, so write access remains a trusted role.
 The review design draws on [OpenClaw's review flow](https://github.com/openclaw/openclaw/blob/main/docs/reference/pull-request-review-flow.md)
 and [ClawSweeper](https://github.com/openclaw/clawsweeper): initial automatic
 review, author-requested re-review, one durable comment, and separation of model
-assessment from GitHub mutations. Dot Link uses its own Opus workflow and does
+assessment from GitHub mutations. Dot Link uses its own dotsweeper workflow and does
 not use OpenClaw's hosted service.
 
 ## 日本語
@@ -108,6 +108,6 @@ Issue作成時とPRをレビュー可能にしたときに、外部投稿者も�
 
 結果は同じコメントを更新して表示します。レビュー中・完了・未完了・対象更新による
 再レビューの必要を区別します。通常のコメントや追加pushだけでは再実行しません。
-Opusは公開コードを読む参考レビューで、実機確認やテストを代替しません。
+dotsweeperは公開コードを読む参考レビューで、実機確認やテストを代替しません。
 Issueの採用・クローズ、PRのマージは管理者が判断します。現在はマージの必須条件ではありません。
 認証情報や私的な会話を投稿しないでください。公開投稿内容はレビューのためAnthropicへ送られます。

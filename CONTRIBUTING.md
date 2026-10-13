@@ -5,7 +5,7 @@ yet know the cause or have a patch. Describe what happened, what you expected,
 and the version you used when available. Keep credentials and private
 conversations out of reports.
 
-Opus reviews new issues and ready-for-review PRs, including external
+dotsweeper reviews new issues and ready-for-review PRs, including external
 contributions. Review prose follows your language, with English as the fallback.
 It helps identify relevant code, missing information and next
 steps. After updating your issue or PR, post `/dotlink review` to request another
@@ -20,14 +20,14 @@ maintainers decide adoption and merging.
 Changes to `main` go through a PR with the existing `test` check passing and
 the branch up to date. Force pushes and deletion of `main` are disabled,
 including for administrators. A separate approving reviewer is not required;
-Opus review is not a required merge check.
+dotsweeper review is not a required merge check.
 
 ## 日本語
 
 不具合・疑問・アイデアは気軽にIssueへ投稿してください。原因の特定や修正コードは
 必須ではありません。分かる範囲で、起きたこと・期待したこと・利用バージョンを添えてください。
 
-新しいIssueとレビュー可能なPRには、外部投稿者も含めOpusがレビューを返します。
+新しいIssueとレビュー可能なPRには、外部投稿者も含めdotsweeperがレビューを返します。
 情報の追記・コードの修正後は `/dotlink review` とコメントして再レビューを依頼できます。
 結果は同じコメントにまとまり、採用・マージは管理者が判断します。
 詳細は[レビューの運用と制約](docs/ai-review.md)を参照してください。
