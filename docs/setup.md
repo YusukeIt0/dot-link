@@ -32,7 +32,7 @@ For notifications, click **Permissions**, open Accessibility, add the installed 
 2. Dot Linkを開き、表示される準備手順に沿ってTailscale接続と音声認識モデルを用意します。初回は約490 MBのモデルを取得します。
 3. 接続設定で、自分のOpenAIトンネル接続を設定します。詳細は[Dotとの連携](dot-setup.md)を参照してください。
 
-既に使っているMacを更新する場合、接続ID・トンネル・ペアリングを作り直す必要はありません。
+既に使っているMacを更新する場合、トンネルID・トンネル・ペアリングを作り直す必要はありません。
 
 Macは起動・ネットワーク接続を維持してください。スリープ中は会話を中継できません。iPhone単体では動作しません。
 

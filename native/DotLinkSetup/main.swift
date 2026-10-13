@@ -348,14 +348,14 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(tr("もう一度確認", "Check again"), primary: true) { [weak self] in self?.inspect() }
         case "dot":
             add(tr("いつものDotと連携", "Connect your existing Dot"), size: 23, bold: true)
-            add(tr("OpenAIの設定画面で、このMac用の接続を作ります。表示された接続IDとキーを、下の欄に一度だけ貼り付けます。", "Create a connection for this Mac in OpenAI settings. Paste its tunnel ID and runtime key below once."))
+            add(tr("OpenAIの設定画面で、このMac用の接続を作ります。表示されたトンネルIDとAPIキーを、下の欄に一度だけ貼り付けます。", "Create a connection for this Mac in OpenAI settings. Paste its tunnel ID and API key below once."))
             add(tr("別のMacで使っている接続はそのまま残し、このMacには別の接続を用意してください。", "Keep connections already used by another Mac. Create a separate one for this Mac."), size: 13)
             button(tr("OpenAIの接続設定を開く", "Open OpenAI connection settings")) { [weak self] in self?.open("https://platform.openai.com/settings/organization/tunnels") }
-            add(tr("キーを作るときは Permissionsで「Restricted」を選び、Tunnelsの「Read」と「Use」だけを有効にします。", "When creating the key, choose Restricted under Permissions and enable only Read and Use for Tunnels."), size: 14, bold: true)
-            add(tr("このアプリで使うキーにManageは不要です。トンネル自体を新しく作る操作には、アカウント側のRead・Manage権限が必要です。", "The runtime key does not need Manage. Creating a new tunnel separately requires Read and Manage on your account."), size: 12)
-            add(tr("接続ID（tunnel_ で始まるもの）", "Tunnel ID (starts with tunnel_)"), size: 13, bold: true)
+            add(tr("APIキーを作るときは Permissionsで「Restricted」を選び、Tunnelsの「Read」と「Use」だけを有効にします。", "When creating the API key, choose Restricted under Permissions and enable only Read and Use for Tunnels."), size: 14, bold: true)
+            add(tr("このアプリで使うAPIキーにManageは不要です。トンネル自体を新しく作る操作には、アカウント側のRead・Manage権限が必要です。", "The API key used by this app does not need Manage. Creating a new tunnel separately requires Read and Manage on your account."), size: 12)
+            add(tr("トンネルID（tunnel_ で始まるもの）", "Tunnel ID (starts with tunnel_)"), size: 13, bold: true)
             let id = field("tunnel_…"); id.stringValue = tunnelID; tunnelField = id
-            add(tr("接続用キー（このMac内だけに保存）", "Runtime key (saved only on this Mac)"), size: 13, bold: true)
+            add(tr("APIキー（このMac内だけに保存）", "API key (saved only on this Mac)"), size: 13, bold: true)
             let secret = field("sk-…", secure: true); secretField = secret
             button(tr("保存して次へ", "Save and continue"), primary: true) { [weak self] in
                 guard let self else { return }; self.tunnelID = self.tunnelField?.stringValue ?? ""; let key = self.secretField?.stringValue ?? ""; self.secretField?.stringValue = ""
