@@ -60,6 +60,8 @@ async function launch(options = {}) {
   const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
+    // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
+    installKeyboardViewport: () => () => {},
     InteractionStatus: class extends dependencies.InteractionStatus { constructor() { super(() => now); } },
     Date: class extends Date { static now() { return epoch + now; } },
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
@@ -451,4 +453,20 @@ test('reopening an old pending message restores its receipt and delayed notice w
   assert.match(app.physical.get(2),/Dot: 通常より返信に時間がかかっています…$/);
   await app.advance(29_999);assert.equal(app.hidden(),false);
   await app.advance(1);assert.equal(app.hidden(),true);
+});
+
+test('download URL copy uses displayed text and failure never focuses a field', async t => {
+  const app = await launch(); t.after(app.close);
+  const url = 'https://github.com/YusukeIt0/dot-link/releases/latest';
+  const display = app.element('mac-download-url'); display.textContent = url;
+  display.focus = display.select = display.setSelectionRange = () => { throw new Error('Display URL must never receive programmatic input focus'); };
+  let copied;
+  app.context.navigator.clipboard = {writeText: async value => {copied = value;}};
+  await app.element('copy-mac-url').click();
+  assert.equal(copied, url);
+  assert.match(app.element('mac-copy-status').textContent, /URLをコピーしました/);
+  app.context.navigator.clipboard.writeText = async () => {throw new Error('Denied');};
+  await app.element('copy-mac-url').click();
+  assert.match(app.element('mac-copy-status').textContent, /コピーできませんでした/);
+  assert.match(app.element('copy-toast').textContent, /コピーできませんでした/);
 });

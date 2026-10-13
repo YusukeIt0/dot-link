@@ -2,7 +2,8 @@
 * { box-sizing: border-box; }
 html, body { height: 100%; overflow: hidden; }
 body { margin: 0; }
-main { max-width: 680px; height: 100vh; height: 100dvh; margin: 0 auto; padding: 32px 24px; overflow-y: auto; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
+/* One scroll area, sized by the visual viewport when the keyboard opens/closes. */
+main { position: fixed; top: 0; left: 0; right: 0; width: 100%; max-width: 680px; height: 100%; margin: 0 auto; padding: 32px 24px max(32px, env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 header > p:first-child { font-size: 12px; letter-spacing: .2em; color: #aebdaf; }
 h1 { font-size: 44px; margin: 8px 0; font-weight: 500; }
 #connection { color: #bec5bf; }
@@ -21,7 +22,7 @@ textarea, input[type=password] { width:100%; margin:8px 0; padding:12px; border:
 details { margin:20px 0; }
 select { padding: 8px; border-radius: 8px; font: inherit; }
 code, #pair-destination { overflow-wrap: anywhere; }
-#pair-code { font-size: 13px; }
+#pair-code { font-size: 16px; }
 #scan-pair, label[for=pair-code] { display: block; }
 .secondary { background: transparent; color: #d0d7d1; }
 [hidden] { display: none !important; }
@@ -34,8 +35,6 @@ body[data-pair-state=unpaired] #dot-status { display: none; }
 .pair-diagnostics { border-left: 2px solid #435446; padding: 0 12px; margin: 16px 0; }
 .pair-diagnostics p:empty { display: none; }
 body[data-pair-state=unpaired] .glass { display: none; }
-body[data-pair-state=unpaired] #pairing-settings > summary { list-style: none; pointer-events: none; font-weight: 600; }
-body[data-pair-state=unpaired] #pairing-settings > summary::-webkit-details-marker { display: none; }
 
 
 .setup-steps { padding-left: 22px; }
@@ -48,12 +47,19 @@ body[data-pair-state=unpaired] #pairing-settings > summary::-webkit-details-mark
 .display-settings input[type=number] { width: 120px; padding: 10px; border: 1px solid #435446; border-radius: 8px; background: #1c2420; color: inherit; font: inherit; }
 .display-settings .display-checkbox { display: flex; align-items: center; gap: 8px; }
 body[data-display-hidden=true] .glass { opacity: .55; }
-body[data-pair-state=unpaired] #standby-status { display: none; }
 
-main:has(.display-settings[open]) { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
 .display-settings-actions { position: fixed; z-index: 10; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 680px); padding: 12px 24px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid #344637; background: #141817; box-shadow: 0 -8px 20px #0004; }
 .display-settings-actions #display-save { display: block; width: 100%; margin: 0; }
 .display-settings-actions .note { margin: 8px 0 0; }
 .display-settings-actions .note:empty { display: none; }
 
 .speech-status { font-size: 13px; color: #9de591; margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid #344637; }
+
+#mac-download-label { margin: 16px 0 0; }
+#mac-download-url { width: 100%; margin: 8px 0; padding: 12px; border: 1px solid #435446; border-radius: 8px; background: #1c2420; font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+#mac-copy-status:empty { display: none; }
+#mac-setup { scroll-margin-top: 16px; }
+
+#copy-toast { position: fixed; z-index: 30; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content; padding: 12px 20px; border: 1px solid #60765f; border-radius: 12px; background: #d1edc8; color: #152013; font-size: 16px; line-height: 1.5; box-shadow: 0 4px 20px #0006; pointer-events: none; }
+#copy-toast:empty { display: none; }

@@ -6,29 +6,6 @@
     <section class="glass" aria-label="G2 display"><p id="hud-state" data-en="Waiting for connection">接続待ち</p><pre id="hud-content" data-en="Hold to speak">長押しで話してください</pre><p id="speech-status" class="speech-status" aria-label="STT / TTS">STT:— / TTS:OFF</p><small data-en="Hold to record · release to stop">長押しで録音 · 指を離すと停止</small></section>
     <p id="notice" role="status" data-en="Open in Even Hub to use the G2 microphone and display.">Even Hubから開くとG2のマイクと表示を使用できます。</p>
     <p id="dot-status" role="status" data-en="Checking your relay">接続先を確認中</p>
-    <details id="pairing-settings"><summary data-en="Connect your Mac">Macと接続</summary>
-      <div id="setup-intro">
-        <p data-en="Set up the relay on your Mac before pairing this iPhone. An iPhone alone cannot connect to Dot.">最初に、会話を中継するMacを準備します。iPhoneだけではDotに接続できません。</p>
-        <ol class="setup-steps">
-          <li><strong data-en="Install the Mac relay">Macに中継を導入</strong><p data-en="Use your everyday MacBook or a dedicated Mac. Install the relay and connect both your Mac and iPhone to Tailscale.">普段のMacBookでも専用Macでも使えます。中継を導入し、MacとiPhoneをTailscaleに接続します。</p></li>
-          <li><strong data-en="Connect your existing Dot">いつものDotと連携</strong><p data-en="Connect the relay to your existing Dot, then start the Mac services and check their status.">中継を既存のDotと連携させ、Mac側のサービスを起動・確認します。</p></li>
-          <li><strong data-en="Create a code on the Mac and pair">Macでコードを作って接続</strong><p data-en="Once the relay is ready, create a pairing code on the Mac and paste it into this app.">中継の準備ができてからMacで接続コードを発行し、このアプリに貼り付けます。</p></li>
-        </ol>
-        <p data-en="Open the supplied Dot Link app on your Mac and follow its setup steps. It checks for existing settings and prepares missing components.">Macで配布されたDot Linkアプリを開き、案内に沿って準備してください。以前の設定を確認し、足りないものを用意します。</p>
-        <p><a href="https://github.com/YusukeIt0/dot-link/releases/latest" target="_blank" rel="noopener noreferrer" data-en="Download Dot Link for Mac">Mac版Dot Linkをダウンロード</a></p>
-        <button id="setup-ready" data-en="My Mac is ready — pair this iPhone">Macの準備ができたので接続する</button>
-      </div>
-      <div id="pairing-form" hidden>
-        <p data-en="Copy the pairing code in Dot Link on your Mac and paste the entire code here.">MacのDot Linkで接続コードをコピーし、全体をここへ貼り付けてください。</p>
-        <span id="pair-notice-slot"></span>
-        <label for="pair-code" data-en="Pairing code">接続コード</label><textarea id="pair-code" rows="3" autocapitalize="off" maxlength="1024" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
-        <p id="pair-destination"></p><button id="pair" hidden data-en="Connect">接続</button><button id="forget-pairing" hidden class="secondary" data-en="Revoke this device">この端末の接続を解除</button>
-        <p data-en="In Dot Link on your Mac, choose Connect Even to display a code.">MacのDot Linkで「Evenを接続」を押すとコードが表示されます。</p>
-        <p class="note" data-en="The pairing code is valid for two minutes and one use.">接続コードは発行から2分・1回限りです。</p>
-        <button id="setup-back" class="secondary" data-en="Mac setup instructions">Macの準備に戻る</button>
-        <p class="note" data-en="Your relay Mac must be awake and online.">接続先のMacが起動・接続している間に使えます。</p>
-      </div>
-    </details>
     <section id="conversation-controls">
     <button id="record" disabled data-en="Start recording">録音を開始</button>
     <button id="discard" disabled data-en="Discard recording">録音を破棄</button>
@@ -66,12 +43,37 @@
         <p id="display-settings-status" class="note" role="status"></p>
       </div>
     </details>
-    <p id="standby-status" class="note" data-en="Set the display duration, head-raise angle, and more.">画面の表示時間、顔上げの角度などを設定します。</p>
+    <details id="mac-setup" class="display-settings">
+      <summary data-en="Connect / disconnect your Mac">Macと接続 / 解除</summary>
+      <div id="setup-intro">
+        <p data-en="Set up the relay on your Mac before pairing this iPhone. An iPhone alone cannot connect to Dot.">最初に、会話を中継するMacを準備します。iPhoneだけではDotに接続できません。</p>
+        <p id="mac-download-label" data-en="GitHub download URL for Mac">Mac版の入手先（GitHub）</p>
+        <div id="mac-download-url" aria-labelledby="mac-download-label" aria-describedby="mac-download-help">https://github.com/YusukeIt0/dot-link/releases/latest</div>
+        <button id="copy-mac-url" type="button" data-en="Copy URL">URLをコピー</button>
+        <p id="mac-copy-status" class="note"></p>
+        <p id="mac-download-help" class="note" data-en="Open this URL in a browser on your Mac to download Dot Link. If copying is unavailable, enter the displayed URL in your Mac browser.">このURLをMacのブラウザーで開き、Dot Linkをダウンロードしてください。コピーできない場合は、表示されているURLをMacのブラウザーに入力してください。</p>
+        <ol class="setup-steps">
+          <li><strong data-en="Install Dot Link on your Mac">MacにDot Linkをインストール</strong><p data-en="Open the URL above on your Mac. Install and open Dot Link, then follow its setup instructions.">上のURLをMacで開きます。Dot Linkをインストールして起動し、画面の案内に沿って準備します。</p></li>
+          <li><strong data-en="Set up Tailscale on your iPhone">iPhoneにもTailscaleを準備</strong><p data-en="Tailscale securely connects your iPhone to your Mac. Search for Tailscale in the App Store on this iPhone and install it. Open Tailscale, sign in with the same account used on your Mac, and follow the prompts to connect. Both devices must be connected to the same Tailscale network.">TailscaleはiPhoneとMacを安全につなぐために使います。このiPhoneのApp Storeで「Tailscale」を検索してインストールします。Tailscaleを開き、Macで使ったものと同じアカウントでログインして、画面の案内に沿って接続してください。両方の端末を同じTailscaleネットワークに接続する必要があります。</p></li>
+          <li><strong data-en="Create a pairing code">接続コードを発行</strong><p data-en="In Dot Link on your Mac, choose Connect Even and copy the code.">MacのDot Linkで「Evenを接続」を押し、接続コードをコピーします。</p></li>
+          <li><strong data-en="Paste the code below to connect">下の欄にコードを貼り付けて接続</strong><p data-en="Return to this app, paste the entire code below, and choose Connect. To disconnect this iPhone later, use Revoke this device in this section.">このアプリに戻り、下の欄にコード全体を貼り付けて「接続」を押します。接続後、このiPhoneの接続を解除するときも、この欄の「この端末の接続を解除」を使います。</p></li>
+        </ol>
+      </div>
+      <div id="pairing-form">
+        <span id="pair-notice-slot"></span>
+        <label for="pair-code" data-en="Pairing code">接続コード</label><textarea id="pair-code" rows="3" autocapitalize="off" maxlength="1024" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+        <p id="pair-destination"></p><button id="pair" hidden data-en="Connect">接続</button><button id="forget-pairing" hidden class="secondary" data-en="Revoke this device">この端末の接続を解除</button>
+        <p class="note" data-en="The pairing code is valid for two minutes and one use.">接続コードは発行から2分・1回限りです。</p>
+        <p class="note" data-en="Your relay Mac must be awake and online.">接続先のMacが起動・接続している間に使えます。</p>
+      </div>
+    </details>
     <footer>
       <label for="language">Language / 言語</label> <select id="language"><option value="auto" data-en="Automatic">自動</option><option value="ja">日本語</option><option value="en">English</option></select>
       <button id="show-diagnostics" class="secondary" aria-expanded="false" aria-controls="connection-diagnostics" data-en="Connection details">接続情報を見る</button>
       <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-en="App origin">この画面の接続元</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p><p id="location-diagnostic" role="status"></p></section>
     </footer>
   </main>
-  <script type="module" src="/src/main.ts"></script></body>
+  <div id="copy-toast" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script type="module" src="/src/main.ts"></script>
+  <script type="module" src="/src/viewport-diagnostics.ts"></script></body>
 </html>

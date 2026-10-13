@@ -17,7 +17,10 @@ import { RelaySettings, PendingUtterance, apiAddress, type RelayCredentials } fr
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
 import { LanguagePreferences } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
+import { installKeyboardViewport } from './keyboard-viewport.ts';
 import './style.css';
+
+installKeyboardViewport(document.querySelector<HTMLElement>('main')!);
 
 const languagePreferences = new LanguagePreferences(() => localStorage);
 const staticLabels = [...document.querySelectorAll<HTMLElement>('[data-en]')].map(element => ({
@@ -43,32 +46,43 @@ const relaySettings = new RelaySettings(() => localStorage);
 let relay = relaySettings.read();
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
 let token = relay?.token ?? pairing.read();
-const setupPanel = el<HTMLDetailsElement>('pairing-settings');
-let setupReady = !!token;
-function showSetupStep(): void {
-  el('setup-intro').hidden = setupReady;
-  el('pairing-form').hidden = !setupReady;
+const setupPanel = el<HTMLDetailsElement>('mac-setup');
+let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
+function showCopyToast(message: string): void {
+  clearTimeout(copyToastTimer);
+  el('copy-toast').textContent = message;
+  copyToastTimer = setTimeout(() => { el('copy-toast').textContent = ''; }, 2500);
 }
-el('setup-ready').onclick = () => { setupReady = true; showSetupStep(); };
-el('setup-back').onclick = () => { setupReady = false; showSetupStep(); };
-const setupHome = document.createComment('connection-settings');
-setupPanel.before(setupHome);
+el('copy-mac-url').onclick = async () => {
+  const url = el('mac-download-url').textContent?.trim() ?? '';
+  const status = el('mac-copy-status');
+  status.textContent = '';
+  try {
+    await navigator.clipboard.writeText(url);
+    status.textContent = t('URLをコピーしました。Macのブラウザーで開いてください。');
+    showCopyToast(t('コピーしました'));
+  } catch {
+    status.textContent = t('コピーできませんでした。表示されているURLをMacのブラウザーに入力してください。');
+    showCopyToast(t('コピーできませんでした'));
+  }
+};
 const noticeHome = document.createComment('notice-home');
 notice.before(noticeHome);
+function placeSetupNotice(): void {
+  if (setupPanel.open) {
+    el<HTMLDetailsElement>('display-settings').open = false;
+    el('pair-notice-slot').after(notice);
+  } else {
+    noticeHome.after(notice);
+  }
+}
+setupPanel.addEventListener('toggle', placeSetupNotice);
 function showSetup(unpaired: boolean): void {
   document.body.dataset.pairState = unpaired ? 'unpaired' : 'paired';
   setupPanel.open = unpaired;
-  if (!unpaired) setupReady = true;
-  showSetupStep();
   el('forget-pairing').hidden = unpaired;
   el('pair').hidden = !offeredInvite;
-  if (unpaired) {
-    document.querySelector('header')!.after(setupPanel);
-    el('pair-notice-slot').after(notice);
-  } else {
-    setupHome.after(setupPanel);
-    noticeHome.after(notice);
-  }
+  placeSetupNotice();
 }
 let pendingDelivery = new PendingUtterance(() => localStorage, relay?.origin ?? location.origin);
 let connectionController = new AbortController();
@@ -162,7 +176,7 @@ function forgetPairing(message: string): void {
   messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
   progress.connection = 'unpaired'; refreshStatus();
   el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
-  el<HTMLDetailsElement>('pairing-settings').open = true;
+  setupPanel.open = true;
 }
 let busy = false;
 let subscribed = false;
@@ -557,7 +571,7 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status']) {
+  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
