@@ -43,16 +43,7 @@ const relaySettings = new RelaySettings(() => localStorage);
 let relay = relaySettings.read();
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
 let token = relay?.token ?? pairing.read();
-const setupPanel = el<HTMLDetailsElement>('pairing-settings');
-const macSetupPanel = el<HTMLDetailsElement>('mac-setup');
-function openSettings(panel: HTMLDetailsElement): void {
-  el<HTMLDetailsElement>('display-settings').open = false;
-  panel.open = true;
-  panel.querySelector('summary')?.focus();
-  panel.scrollIntoView({ block: 'start' });
-}
-el('setup-ready').onclick = () => openSettings(setupPanel);
-el('setup-back').onclick = () => openSettings(macSetupPanel);
+const setupPanel = el<HTMLDetailsElement>('mac-setup');
 let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
 function showCopyToast(message: string): void {
   clearTimeout(copyToastTimer);
@@ -73,22 +64,23 @@ el('copy-mac-url').onclick = async () => {
     showCopyToast(t('コピーできませんでした'));
   }
 };
-const setupHome = document.createComment('connection-settings');
-setupPanel.before(setupHome);
 const noticeHome = document.createComment('notice-home');
 notice.before(noticeHome);
+function placeSetupNotice(): void {
+  if (setupPanel.open) {
+    el<HTMLDetailsElement>('display-settings').open = false;
+    el('pair-notice-slot').after(notice);
+  } else {
+    noticeHome.after(notice);
+  }
+}
+setupPanel.addEventListener('toggle', placeSetupNotice);
 function showSetup(unpaired: boolean): void {
   document.body.dataset.pairState = unpaired ? 'unpaired' : 'paired';
   setupPanel.open = unpaired;
   el('forget-pairing').hidden = unpaired;
   el('pair').hidden = !offeredInvite;
-  if (unpaired) {
-    document.querySelector('header')!.after(setupPanel);
-    el('pair-notice-slot').after(notice);
-  } else {
-    setupHome.after(setupPanel);
-    noticeHome.after(notice);
-  }
+  placeSetupNotice();
 }
 let pendingDelivery = new PendingUtterance(() => localStorage, relay?.origin ?? location.origin);
 let connectionController = new AbortController();
@@ -182,7 +174,7 @@ function forgetPairing(message: string): void {
   messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
   progress.connection = 'unpaired'; refreshStatus();
   el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
-  el<HTMLDetailsElement>('pairing-settings').open = true;
+  setupPanel.open = true;
 }
 let busy = false;
 let subscribed = false;
