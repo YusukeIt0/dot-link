@@ -1,5 +1,7 @@
 # Data handling
 
+Implementation baseline: Mac 0.4.0 and Even through 0.2.23, documented October 12, 2026. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
 Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac you control. There is no shared conversation server operated by the developer. Your Mac and iPhone need your own Tailscale connection.

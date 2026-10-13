@@ -51,9 +51,11 @@ Sharing starts off. When enabled, readable new notifications—including sender 
 
 ## Location sharing
 
+Requires Mac 0.4.0 or later and Even 0.2.23 or later.
+
 In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context` and `respond_to_location`, with the `location.updated` event.
 
-Turn on **Location sharing** in the Even companion and grant the phone's location permission. Then ask your existing Dot to monitor location changes and notify you on G2 only when useful information matches your preferences. Dot must create an event subscription; updating tools alone does not start announcements.
+Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Then ask your existing Dot to monitor location changes and notify you on G2 only when useful information matches your preferences. Dot must create an event subscription; updating tools alone does not start announcements.
 
 Sharing starts off. Turning it off stops new sharing and clears the relay's current location. If the Mac cannot receive the stop, sharing expires 90 seconds after the last relay update. The subscription stays available for later use but cannot read a location while sharing is off. Stopping does not delete locations already read by Dot or saved announcements. Background updates and battery impact depend on the phone and OS. See [data handling](privacy.md#location-sharing).
 
