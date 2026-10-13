@@ -50,7 +50,7 @@ body[data-pair-state=unpaired] #pairing-settings > summary::-webkit-details-mark
 body[data-display-hidden=true] .glass { opacity: .55; }
 body[data-pair-state=unpaired] #standby-status { display: none; }
 
-main:has(.display-settings[open]) { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
 .display-settings-actions { position: fixed; z-index: 10; left: 50%; bottom: 0; transform: translateX(-50%); width: min(100%, 680px); padding: 12px 24px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid #344637; background: #141817; box-shadow: 0 -8px 20px #0004; }
 .display-settings-actions #display-save { display: block; width: 100%; margin: 0; }
 .display-settings-actions .note { margin: 8px 0 0; }
