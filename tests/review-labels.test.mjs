@@ -29,3 +29,9 @@ test('human removal or re-addition wins; bot removals can be reconsidered',()=>{
  assert.deepEqual(planLabels([],events,triage,98765).add,['reliability','P1']);
  assert.deepEqual(planLabels(['needs-info'],[event('needs-info'),event('needs-info',human)],triage,98765).remove,[]);
 });
+
+test('removing a priority explicitly enables reclassification unless manually locked',()=>{
+ const events=[event('P2',human,'unlabeled')];
+ assert.ok(planLabels([],events,triage,98765).add.includes('P1'));
+ assert.deepEqual(planLabels(['triage:manual'],events,triage,98765).add,[]);
+});

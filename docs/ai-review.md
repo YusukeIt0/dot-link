@@ -78,6 +78,9 @@ labels. A label-write failure is reported separately from completed findings.
 
 Existing priority labels are always preserved, including an earlier bot priority.
 To reconsider priority, remove the existing priority and request `/dotlink review`.
+Removing a priority invites a new priority on any later authorized review, including
+a review requested by the issue author. To deliberately keep an issue unprioritized,
+add `triage:manual`. This priority rule differs from preserving removed categories.
 The comment still shows the new proposal even when an existing priority is kept.
 Categories are removed only if their latest label event belongs to the exact
 verified dotsweeper bot. Human-added categories and unrelated labels are preserved;
@@ -150,3 +153,6 @@ Issueの採用・クローズ、PRのマージは管理者が判断します。�
 `/dotlink review`で再依頼してください。分類ラベルはbot自身が付けたものだけ更新し、
 手動で付けた・外した判断を維持します。`triage:manual`で自動ラベル変更を止められます。
 ラベルは実装・公開の承認ではありません。PRへの自動ラベル付与は行いません。
+
+優先度を外すと、投稿者を含む権限のある人の次回レビュー依頼で再付与され得ます。
+優先度なしを維持したい場合は`triage:manual`を付けてください。分類ラベルの手動除去とは扱いが異なります。
