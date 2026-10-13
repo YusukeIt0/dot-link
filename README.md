@@ -38,11 +38,15 @@ The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyw
 
 ### 2. Connect your Dot
 
-Follow **Connect your existing Dot** in the Mac app: create your OpenAI tunnel, enter its **Tunnel ID** and **API key**, then start the relay. In ChatGPT **Plugins → Add custom MCP server**, choose **Tunnel** and add that connection. Select it in your existing Dot and send the message from **Copy setup message for Dot**. Return to the Mac app and choose **Check connection to Dot**. [Connection details](docs/setup.md#dot-connection).
+1. In the Mac app, follow **Connect your existing Dot**: create a tunnel, enter its **Tunnel ID** and **API key**, then start the relay.
+2. In ChatGPT **Plugins → Add custom MCP server**, choose **Tunnel** and add the connection to your existing Dot.
+3. Send the message from **Copy setup message for Dot**, then choose **Check connection to Dot** on the Mac. [Connection details](docs/setup.md#dot-connection).
 
 ### 3. Pair Even
 
-On your iPhone, install **Tailscale** from the App Store and connect using the same account as your Mac. Install and open [Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). In the Mac app, choose **Connect Even → Create pairing code**; paste the entire code into the Even companion and connect. The code expires after two minutes and works once.
+1. On your iPhone, install **Tailscale** and connect using the same account as your Mac.
+2. Install and open [Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink).
+3. On the Mac, choose **Connect Even → Create pairing code**. Paste the entire code into the Even companion and connect within two minutes. Each code works once.
 
 ### 4. Start a conversation
 
