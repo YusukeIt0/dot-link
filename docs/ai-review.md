@@ -70,7 +70,7 @@ credits are not assumed to cover Actions.
 The workflow runs on GitHub-hosted runners with trusted default-branch scripts.
 It never checks out or executes fork/PR-head code. The model job receives only
 read permissions to GitHub and Read/Glob/Grep tools. Intake and publication are
-separate jobs with issue-comment write access and no Claude credential. They
+separate jobs with issue/PR-comment write access and no Claude credential. They
 validate the target, requester, input revision and structured output. Comments
 cannot supply arbitrary prompts, commands or a model choice. Public issue/PR
 content is sent to Anthropic for review, and results appear publicly on GitHub.
