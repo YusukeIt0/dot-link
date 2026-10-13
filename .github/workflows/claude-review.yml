@@ -39,6 +39,7 @@ jobs:
       number: ${{ steps.intake.outputs.number }}
       fingerprint: ${{ steps.intake.outputs.fingerprint }}
       main_sha: ${{ steps.intake.outputs.main_sha }}
+      owner: ${{ steps.intake.outputs.owner }}
     steps:
       # Never check out or execute contributor code with credentials.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -75,19 +76,23 @@ jobs:
       pull-requests: read
     outputs:
       findings: ${{ steps.claude.outputs.structured_output }}
+      prepared: ${{ steps.prepare.outputs.ready }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.intake.outputs.main_sha }}
           persist-credentials: false
       - name: Prepare read-only review input
+        id: prepare
         env:
           GH_TOKEN: ${{ github.token }}
           ITEM_NUMBER: ${{ needs.intake.outputs.number }}
+          REVIEW_OWNER: ${{ needs.intake.outputs.owner }}
           REVIEW_FINGERPRINT: ${{ needs.intake.outputs.fingerprint }}
           REVIEW_MAIN_SHA: ${{ needs.intake.outputs.main_sha }}
         run: node scripts/claude-review.mjs prepare
       - name: Check subscription credential
+        if: steps.prepare.outputs.ready == 'true'
         env:
           CLAUDE_AUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
@@ -96,6 +101,7 @@ jobs:
             exit 1
           fi
       - name: Generate review
+        if: steps.prepare.outputs.ready == 'true'
         id: claude
         uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1
         with:
@@ -208,8 +214,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ITEM_NUMBER: ${{ needs.intake.outputs.number }}
+          REVIEW_OWNER: ${{ needs.intake.outputs.owner }}
           REVIEW_FINGERPRINT: ${{ needs.intake.outputs.fingerprint }}
           REVIEW_OUTCOME: ${{ needs.review.result }}
+          REVIEW_PREPARED: ${{ needs.review.outputs.prepared }}
           REVIEW_JSON: ${{ needs.review.outputs.findings }}
           REVIEW_WRITE_TOKEN: ${{ steps.bot.outputs.token }}
           REVIEW_BOT_ID: ${{ vars.DOTSWEEPER_BOT_ID }}
