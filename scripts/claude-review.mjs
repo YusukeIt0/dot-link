@@ -91,7 +91,7 @@ function render(s) {
   if (Buffer.byteLength(raw) > 40_000) throw new Error('Oversized result');
   const result = JSON.parse(raw);
   if (!Array.isArray(result.findings) || result.findings.length > 10) throw new Error('Invalid findings');
-  const triage = validateTriage(result.triage, safeText);
+  const triage = s.pr ? null : validateTriage(result.triage, safeText);
   const files = s.pr ? new Set(get(`${root}/pulls/${number}/files?per_page=100`).map(row => row.filename)) : null;
   const blocks = result.findings.map(f => {
     if (!['high', 'medium', 'low'].includes(f.severity)) throw new Error('Invalid severity');
@@ -156,8 +156,9 @@ if (mode === 'intake') {
     // Recheck content/main and current labels just before mutation. The model
     // cannot choose API paths or write anything; only this allowlisted plan can.
     const fresh = snapshot();
-    if (fresh.fingerprint !== s.fingerprint) throw new Error('Input changed before label publication');
-    try {
+    if (fresh.fingerprint !== s.fingerprint) {
+      body = `## dotsweeper review · Outdated\n\nThe item or main changed before label publication. Findings were withheld and labels were not changed.\n\n${help}`;
+    } else try {
       const events = JSON.parse(gh(['api', `${endpoint}/events?per_page=100`, '--paginate', '--slurp'])).flat();
       const plan = planLabels((fresh.issue.labels || []).map(x => x.name), events, triage, botId);
       if (plan.add.length) send(`${endpoint}/labels`, {labels: plan.add});

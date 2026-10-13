@@ -30,7 +30,7 @@ if(a.includes('--input')) {
  f.comments.push(row); fs.writeFileSync('fixture.json',JSON.stringify(f));
  console.log(JSON.stringify(row));
 } else if(a.includes('Accept: application/vnd.github.diff')) process.stdout.write(f.diff);
-else if(p.endsWith('/commits/main')) console.log(JSON.stringify({sha:f.main}));
+else if(p.endsWith('/commits/main')) { f.mainReads=(f.mainReads||0)+1; if(f.changeAfterMainReads && f.mainReads>f.changeAfterMainReads) f.main='c'.repeat(40); fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify({sha:f.main})); }
 else if(p.includes('/events?')) console.log(JSON.stringify([f.events || []]));
 else if(p.includes('/comments?')) console.log(JSON.stringify([f.comments]));
 else if(p.includes('/issues/comments/')) console.log(JSON.stringify(f.command));
@@ -169,4 +169,20 @@ test('label mutation failure is explicit while preserving review findings', t =>
  assert.notEqual(f.run('report').status,0);
  assert.match(f.read().comments[0].body,/Label synchronization failed or was partial/);
  assert.match(f.read().comments[0].body,/State lost/);
+});
+
+
+test('late main change publishes Outdated without any label mutation', t => {
+ const f=use(t,{changeAfterMainReads:2});success(f.run('intake'));success(f.run('report'));
+ assert.match(f.read().comments[0].body,/Outdated/);
+ assert.doesNotMatch(f.read().comments[0].body,/Reviewing|State lost/);
+ assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+});
+test('PR findings do not depend on unused issue triage fields', t => {
+ for(const triage of [undefined,{priority:null,priority_reason:'',labels:[]}]) {
+  const f=use(t,{issue:{...issue,pull_request:{}}});success(f.run('intake'));
+  success(f.run('report',{REVIEW_JSON:JSON.stringify({...result,triage})}));
+  assert.match(f.read().comments[0].body,/Complete/);
+  assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+ }
 });
