@@ -149,6 +149,10 @@ jobs:
               : /schema|structured/i.test(message) ? 'structured_output'
               : 'unclassified';
             console.log(`Provider failure category: ${category}; result subtype: ${result?.subtype || 'absent'}`);
+            const flags = ['expired', 'invalid', 'not supported', 'not authorized',
+              '401', '403', 'authentication_error', 'OAuth', 'login', 'organization',
+              'token', 'credential'].filter(word => message.toLowerCase().includes(word.toLowerCase()));
+            console.log(`Provider diagnostic keywords: ${flags.join(', ') || 'none'}`);
           } catch { console.log('Provider diagnostic unavailable; no transcript printed.'); }
           NODE
 
