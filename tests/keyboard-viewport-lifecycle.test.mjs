@@ -28,8 +28,13 @@ test('keyboard focus, resize, dismissal and later manual scrolling preserve usab
   assert.equal(scroller.style.height, '330px');
   assert.ok(field.getBoundingClientRect().bottom <= 314);
   document.activeElement = null; focus('focusout');
+  scroller.scrollTop -= 200;
+  const immediateManualScroll = scroller.scrollTop;
+  viewport.dispatchEvent(new Event('resize')); flush();
+  assert.equal(scroller.scrollTop, immediateManualScroll, 'blurred field must not pull back an immediate flick-scroll');
   viewport.height = 720; viewport.dispatchEvent(new Event('resize')); flush(); timer?.(); flush();
   assert.equal(scroller.style.height, '720px');
+  assert.equal(scroller.scrollTop, immediateManualScroll, 'settling timer must not reveal a blurred input');
   const restored = scroller.scrollTop;
   scroller.scrollTop += 80;
   viewport.dispatchEvent(new Event('scroll')); flush();

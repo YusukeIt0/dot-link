@@ -12,7 +12,6 @@ export function installKeyboardViewport(scroller: HTMLElement): () => void {
   const viewport = window.visualViewport;
   let frame = 0;
   let settle: ReturnType<typeof setTimeout> | undefined;
-  let lastField: HTMLElement | undefined;
   let revealPending = false;
   function editable(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
     return target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
@@ -25,7 +24,7 @@ export function installKeyboardViewport(scroller: HTMLElement): () => void {
     scroller.style.top = `${top}px`;
     if (!revealPending) return;
     revealPending = false;
-    const field = editable(document.activeElement) ? document.activeElement : lastField;
+    const field = editable(document.activeElement) ? document.activeElement : undefined;
     if (!field || !scroller.contains(field) || !field.getClientRects().length) return;
     const area = scroller.getBoundingClientRect(), rect = field.getBoundingClientRect();
     scroller.scrollTop += revealDelta(rect.top, rect.bottom, area.top, area.bottom);
@@ -38,11 +37,11 @@ export function installKeyboardViewport(scroller: HTMLElement): () => void {
   function moved(): void { schedule(); }
   function focusChanged(event: FocusEvent): void {
     if (!editable(event.target)) return;
-    lastField = event.target;
-    schedule(true);
+    const reveal = event.type === 'focusin';
+    schedule(reveal);
     clearTimeout(settle);
     // Keyboard animation can finish after focusout without a further resize.
-    settle = setTimeout(() => { schedule(true); lastField = undefined; }, 400);
+    settle = setTimeout(() => { schedule(reveal); }, 400);
   }
   viewport?.addEventListener('resize', resized);
   viewport?.addEventListener('scroll', moved);
