@@ -17,37 +17,15 @@ Open **Terminal** from Spotlight. You can ask an AI assistant to explain the com
 
 ## 2. Copy and run the commands
 
-This installs **Mac 0.4.5/build 73**. It checks the published download checksum and app signature, then places the app in **your Home folder’s Applications** (`~/Applications`). If Dot Link is already there, it stops; use **Check for updates** in the app.
+This downloads the **latest stable release at the time you run it**. It checks that the download matches GitHub’s published checksum, verifies the app’s internal signature consistency and bundle identifier, then places the app in **your Home folder’s Applications** (`~/Applications`). If Dot Link is already there, it stops; use **Check for updates** in the app.
 
 ```sh
-(
-  set -eu
-  dotlink_destination="$HOME/Applications/Dot Link.app"
-  if [ -e "$dotlink_destination" ] || [ -L "$dotlink_destination" ]; then
-    echo 'Dot Link is already present. Use Check for updates in the app.' >&2
-    exit 1
-  fi
-  dotlink_stage="$(mktemp -d "${TMPDIR:-/tmp}/dot-link-install.XXXXXX")"
-  cd "$dotlink_stage"
-  curl --fail --location --proto '=https' --proto-redir '=https' \
-    --output Dot-Link.zip \
-    'https://github.com/YusukeIt0/dot-link/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip'
-  printf '%s  %s\n' \
-    '82f9a0cdd9a578d4d49b1a01640ee0491d25e74eee75e9524bea99f8df7518c3' \
-    'Dot-Link.zip' | shasum -a 256 -c -
-  ditto -x -k Dot-Link.zip unpacked
-  codesign --verify --deep --strict 'unpacked/Dot Link.app'
-  mkdir -p "$HOME/Applications"
-  mv -n 'unpacked/Dot Link.app' "$dotlink_destination"
-  if [ -e 'unpacked/Dot Link.app' ]; then
-    echo 'Destination appeared during installation; no app was replaced.' >&2
-    exit 1
-  fi
-  open "$dotlink_destination"
-)
+curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh | /bin/bash
 ```
 
-This example is pinned to the version above; it does not automatically select future releases. The temporary download folder remains afterward. Integrity checks are not Apple notarization or a safety guarantee.
+No version number or filename is needed. You can [read the installer](../install.sh) before running it. These checks detect a mismatched download or app bundle; they do not independently authenticate the publisher or provide Apple notarization.
+
+The installer and Mac app start in Japanese when Japanese is the Mac’s preferred language; otherwise they use English.
 
 ## 3. Open and prepare the app
 

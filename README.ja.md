@@ -44,19 +44,19 @@ Dot Linkは、いつものChatGPT DotとEven G2をつなぐアプリです。G2�
 
 ## 始め方
 
-[Macへのインストール](docs/mac-install.ja.md)では、ダウンロード・確認・配置をまとめて進める **ターミナルでの導入を推奨**しています。[ZIPを手動で配置する方法](docs/mac-install-finder.ja.md)も選べます。
+**ターミナルの1行コマンドで最新版を導入（推奨）**できます。[インストール手順](docs/mac-install.ja.md)へ進むか、[ZIPを手動で配置する方法](docs/mac-install-finder.ja.md)を選んでください。
 
 1. **Macを準備する。** [インストール手順](docs/mac-install.ja.md)に沿って導入し、Dot Linkの **このMacを準備する**を押します。
 2. **Evenに入れる。** Evenアプリから[Even HubのDot Link](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)を開いてインストールします。
 3. **接続する。** Macの<strong>「Evenを接続」</strong>でコードを発行し、Even側に貼り付けます。
 
-音声・権限・更新・日常操作は[導入ガイド](docs/setup.md)へ。Mac版はApple公証未実施のため、初回起動時にmacOS側の確認が必要な場合があります。自動更新は一時停止中です。アプリの<strong>「アップデートを確認」</strong>から更新してください。
+音声・権限・更新・日常操作は[導入ガイド](docs/setup.md#日本語)へ。Mac版はApple公証未実施のため、初回起動時にmacOS側の確認が必要な場合があります。自動更新は一時停止中です。アプリの<strong>「アップデートを確認」</strong>から更新してください。
 
 ## ガイド
 
 | 知りたいこと | 参照先 |
 | --- | --- |
-| 導入と日常の使い方 | [導入ガイド](docs/setup.md) |
+| 導入と日常の使い方 | [導入ガイド](docs/setup.md#日本語) |
 | いつものDotとの接続 | [Dotの設定](docs/dot-setup.md) |
 | 送信・保存する情報 | [データの扱い](docs/privacy.md#日本語) |
 | ビルドとテスト | [開発ガイド](docs/development.md) |
