@@ -130,6 +130,27 @@ jobs:
             Respond in the language of the original author, not a later commenter.
             Honor an explicit response-language request from the author. If unclear,
             default to English. Shared status labels and command help remain English.
+      - name: Classify provider failure without exposing the transcript
+        if: failure()
+        env:
+          REVIEW_LOG: ${{ runner.temp }}/claude-execution-output.json
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from 'node:fs';
+          try {
+            const data = JSON.parse(readFileSync(process.env.REVIEW_LOG, 'utf8'));
+            const rows = Array.isArray(data) ? data : [data];
+            const result = rows.filter(row => row.type === 'result').at(-1);
+            const message = JSON.stringify(result?.result || result?.errors || '');
+            const category = /invalid.*token|authentication|unauthorized|401|OAuth/i.test(message) ? 'authentication'
+              : /model.*not|not.*model|model.*access|404/i.test(message) ? 'model_access'
+              : /credit|billing|usage|rate.limit|quota|429/i.test(message) ? 'usage_or_billing'
+              : /max.turn|turn.limit/i.test(message) ? 'turn_limit'
+              : /schema|structured/i.test(message) ? 'structured_output'
+              : 'unclassified';
+            console.log(`Provider failure category: ${category}; result subtype: ${result?.subtype || 'absent'}`);
+          } catch { console.log('Provider diagnostic unavailable; no transcript printed.'); }
+          NODE
 
   report:
     needs: [intake, review]
