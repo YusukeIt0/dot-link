@@ -1,81 +1,86 @@
-# Setup and daily use
+# User guide
 
-[English](#english) · [日本語](#日本語)
+[Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [Installation](#manual-installation) · [Dot connection](#dot-connection) · [Speech](#speech) · [Notifications](#mac-notifications) · [Location](#location-sharing) · [Updates](#updates) · [Troubleshooting](#troubleshooting)
 
-## English
+## Manual installation
 
-Start with [Install Dot Link on a Mac](mac-install.md). **Terminal installation is recommended**; manual ZIP installation and first-launch warnings are covered too.
+For the recommended one-command install, use the [quickstart](https://github.com/YusukeIt0/dot-link#quickstart).
 
-Install using the guide above, then open Dot Link. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
+Download `Dot-Link-…-arm64.zip` from the [latest Mac release](https://github.com/YusukeIt0/dot-link/releases/latest), unzip it, and move **Dot Link.app** to `~/Applications`. Create that folder if needed. Choose the app ZIP, not GitHub's source-code archives. Open the app and continue at [Prepare this Mac](https://github.com/YusukeIt0/dot-link#1-install-on-your-mac).
 
-[Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into Connect / disconnect your Mac in the Even companion, and connect. If you need the Mac app first, open Connect / disconnect your Mac below Location sharing and Display settings. Copy the GitHub download URL and open it in a browser on your Mac. A “Copied” notification appears for about 2.5 seconds after copying succeeds. If copying is unavailable, enter the displayed URL in your Mac browser. On your iPhone, search for Tailscale in the App Store, install it, and sign in with the same account used on your Mac. Connect both devices to the same Tailscale network before creating a pairing code. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
+The installer checks the release checksum, app signature consistency and bundle identity. These checks do not provide Apple notarization. You can [inspect the installer](https://github.com/YusukeIt0/dot-link/blob/main/install.sh).
 
-Mac 0.3.2 and later can update after initial Mac preparation, before connecting Dot. The app quits and relaunches automatically during installation. If 0.3.0 or 0.3.1 keeps waiting for Even to close even though Dot has never been connected, quit Dot Link, download the latest version and replace only the app in your home Applications folder. Do not uninstall or remove the settings in Application Support.
+### First launch
 
-In **Speech input** on the Mac, choose free local Whisper small or save your own key for Soniox, ElevenLabs, Microsoft, OpenAI or AssemblyAI. Recordings go directly from your Mac to the selected service; its API charges and limits apply. Microsoft also requires your Azure Speech endpoint; see About the endpoint below the settings card. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting the active service key switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later; labels for all six services and their models require Even 0.2.21. Typed messages do not use speech recognition.
+Dot Link is not Apple-notarized. If macOS says it cannot verify the developer and you trust the download, dismiss the warning, then open **System Settings → Privacy & Security → Open Anyway**. Authenticate in the Mac dialog and choose **Open**. A warning that the app is damaged or will harm your computer is different; see [Apple's guidance](https://support.apple.com/en-us/102445).
 
-For notifications, click **Permissions**, open Accessibility, add the installed Dot Link.app with **+**, and turn access on. Enable **Share all Mac notifications with Dot** to share visible sender names, headings and text from readable new notifications. Tell Dot which notifications you want to hear about. Some notification formats may not be readable, and announcements may be delayed. If sharing stops after an update, remove Dot Link from the Accessibility list and add it again. Pause stops notification collection.
+The app and installer use Japanese on Japanese Macs and English otherwise. The Even companion also supports Japanese; this guide uses the English labels.
 
-**Uninstall Dot Link…** moves the app, speech model, connection settings and conversation history to Trash. There is no option to keep settings. You will need to set up the app again to use it. See [Data handling](privacy.md) for the deletion scope.
+## Dot connection
 
-### Speech output
+Your account needs OpenAI tunnels and custom MCP connections in ChatGPT. Dot Link uses your existing Dot and does not provision access to these features. Setup on a fresh account is still being validated.
 
-**Speech output** on the Mac shows the current method, iPhone. Turn read aloud on or off in Dot Link inside the Even app. External speech output services are not yet available.
+- Open **OpenAI connection settings** in the Mac app. Create a separate tunnel for this Mac; keep any tunnel used by another Mac.
+- For the app's API key, choose **Restricted → Tunnels: Read and Use**. Creating the tunnel itself also requires **Read and Manage** on your account; the key used by Dot Link does not need Manage.
+- Enter the **Tunnel ID** (`tunnel_…`) and **API key** in the Mac app, choose **Save and continue**, then **Start relay**.
+- In ChatGPT **Plugins → Add custom MCP server**, select **Tunnel** and this Mac's connection. In your existing Dot, enable the connection and send the message copied with **Copy setup message for Dot**. Choose **Check connection to Dot** on the Mac before pairing Even.
 
-## 日本語
+The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; the pairing code authorizes the Even companion. Keep API keys and pairing codes private. App updates need no GitHub token.
 
-### Mac
+## Conversation and display
 
-まず[Macへのインストール](mac-install.ja.md)へ。**ターミナルでの導入を推奨**し、ZIPを手動で配置する方法と初回起動の警告も案内しています。
+Hold to record on G2 and release to stop, or use the recording and text controls in the Even companion. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to review the text before sending. Browse conversation history and use **Display settings** to change idle timeout, wake gestures and head-raise behavior.
 
-1. [インストール手順](mac-install.ja.md)から、ターミナル（推奨）またはFinderで導入します。
-2. Dot Linkを開き、表示される準備手順に沿ってTailscale接続と音声認識モデルを用意します。初回は約490 MBのモデルを取得します。
-3. 接続設定で、自分のOpenAIトンネル接続を設定します。詳細は[Dotとの連携](dot-setup.md)を参照してください。
+The companion's Mac connection section contains setup instructions, a copyable download URL, pairing-code entry and **Revoke this device**. If copying is unavailable, enter the displayed URL in your Mac browser. Older public companions may show these controls separately. To revoke access, keep the Mac reachable; a failed revocation needs to be retried before Mac-side access is considered removed.
 
-既に使っているMacを更新する場合、トンネルID・トンネル・ペアリングを作り直す必要はありません。
+## Speech
 
-Macは起動・ネットワーク接続を維持してください。スリープ中は会話を中継できません。iPhone単体では動作しません。
+Speech input requires Even 0.2.14 or later. Provider labels and detailed errors require 0.2.19; all six provider/model labels require 0.2.21. If these are missing, update the companion through Even Hub.
 
-### Even
+**Speech input** on the Mac offers local Whisper small and external services: Soniox, ElevenLabs, Microsoft, OpenAI and AssemblyAI. Enter your own service key in the app. Microsoft also needs an Azure Speech resource endpoint; use **About the endpoint** for instructions.
 
-[Dot LinkをEven Hubで開く](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)。パソコンで開いた場合は、ページのQRコードをiPhoneで読み取ってください。Evenアプリの「Even Hub」で「Dot Link」を検索して開くこともできます。Dot Linkをインストールしてから、以下の接続手順へ進んでください。Mac版も別途必要です。
+Local Whisper is free and runs on your Mac. External recordings go directly from the Mac to the selected service, under your account's charges and limits. Changes apply to the next recording; there is no automatic fallback. Saving a key does not test provider access—try a recording. Typed messages do not use speech recognition.
 
-Even側の設定は「位置情報の共有」「表示設定」「Macと接続 / 解除」の順です。Mac版をまだ入れていない場合は、一番下の「Macと接続 / 解除」で入手先URLをコピーし、Macのブラウザーで開いてインストールします。コピー成功時は「コピーしました」が約2.5秒表示されます。コピーできない環境では、表示されているURLをMacのブラウザーに入力してください。同じ欄で接続コードの入力・接続・解除まで行えます。iPhoneではApp Storeで「Tailscale」を検索してインストールし、Macで使ったものと同じアカウントでログインしてください。両方の端末を同じTailscaleネットワークに接続してから、接続コードを発行します。
+Keys are stored separately in macOS Keychain. Choose **Always Allow** when prompted; an app update may require permission again. To replace a key, delete it and save the new one. Deleting the active service key switches speech input back to Whisper.
 
-1. Macの「Evenを接続」から接続コードを発行します。
-2. Even側の「Macと接続 / 解除」の入力欄にコード全体を貼り付けて接続します。コードは2分間・1回限りです。
-3. 録音して、Dotからの返信を確認します。
+For **read-aloud**, use the switch in the Even companion. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
 
-### 更新
+## Mac notifications
 
-- **自動更新**は一時停止中のため、オフで操作できない表示になります。
-- **アップデートを確認**から手動で更新してください。
-- 更新の確認・ダウンロード・検証・適用の状態を表示します。「Evenを閉じると更新を適用します」と表示されたら、Even側のDot Linkを終了してください。
-- Mac 0.3.2以降は、Macの準備だけ済ませたDot未接続の状態でも更新できます。更新時はアプリが自動で終了・再起動します。0.3.0／0.3.1で、Dot未接続なのに上の待機表示が続く場合は、Dot Linkを終了し、最新版をダウンロードしてホームフォルダのApplications内のアプリだけを置き換えてください。アンインストールはせず、Application Support内の設定データを残してください。
-- アプリ更新にGitHubアカウントやキーは不要です。OpenAI接続用の認証情報とは別の話です。
+In the Mac app, choose **Permissions**, add the installed Dot Link.app under macOS **Accessibility**, and enable access. Then turn on **Share all Mac notifications with Dot**. Tell your Dot which notifications you want to hear about.
 
-### 音声入力
+Sharing starts off. When enabled, readable new notifications—including sender names, headings and text—go to Dot. Some formats are unreadable; delivery and announcements may be delayed. Dot Link does not open the source chat or email, or reply in the source app. Pausing notification collection alone leaves the conversation relay running.
 
-Macの「音声入力」からサービスを選べます。標準のWhisper smallはMac内で無料で認識します。外部サービス（Soniox、ElevenLabs、Microsoft、OpenAI、AssemblyAI）を使う場合は、ご自身のAPIキーを保存してください。録音はMacから選択先へ直接送られ、各社のAPI料金・利用枠が適用されます。MicrosoftのみAzure Speechの接続先も必要です。画面下部の「接続先について」から公式の取得方法を参照できます。変更は次の音声入力から反映され、失敗時に別のサービスへ自動では切り替わりません。
+## Location sharing
 
-キーチェーンの確認画面が表示されたら「常に許可」を選択してください。アプリ更新後に再許可が必要な場合があります。キーを変更する場合は「キーを削除」してから新しいキーを保存します。使用中サービスのキーを削除するとWhisperへ戻ります。
+Requires Mac 0.4.0 or later and Even 0.2.23 or later.
 
-公開中のEven 0.2.14でも音声入力を利用できます。サービス名の表示や詳しいエラー案内はEven 0.2.19以降に含まれます。全6種類のサービス・モデル表示はEven 0.2.21が必要です。スマートフォンからの文字入力には音声認識サービスを使いません。
+In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context` and `respond_to_location`, with the `location.updated` event.
 
-### 音声出力
+Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Then ask your existing Dot to monitor location changes and notify you on G2 only when useful information matches your preferences. Dot must create an event subscription; updating tools alone does not start announcements.
 
-Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認できます。読み上げのON／OFFは、Evenアプリ内のDot Linkで切り替えます。外部の音声出力サービスはまだ選択できません。
+Sharing starts off. Turning it off stops new sharing and clears the relay's current location. If the Mac cannot receive the stop, sharing expires 90 seconds after the last relay update. The subscription stays available for later use but cannot read a location while sharing is off. Stopping does not delete locations already read by Dot or saved announcements. Background updates and battery impact depend on the phone and OS. See [data handling](privacy.md#location-sharing).
 
-### 通知の共有
+## Updates
 
-通知設定の「権限設定」からアクセシビリティを開き、「＋」でインストール先のDot Link.appを追加してオンにしてください。「Macの全通知をDotに共有」を有効にすると、読み取れる新着通知の送信者・見出し・本文を既存Dotへ渡します。どんな通知を知らせてほしいかは、Dotに直接伝えてください。
+Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. If the app says **Close Even to apply the update**, close Dot Link in the Even app and let the Mac app restart.
 
-更新後に通知を共有できない場合は、アクセシビリティ内にあるDot Linkを一度削除して追加し直してください。通知形式によっては読み取れず、Dotの判断・接続状態によって案内に時間がかかる場合があります。「一時停止」で通知の取り込みを止められます。
+Updates preserve connection settings, pairing and history. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
 
-### アンインストール
+## Troubleshooting
 
-アプリ内の「Dot Linkをアンインストール…」で、アプリ・音声認識モデル・接続設定・会話履歴をまとめてゴミ箱へ移します。設定を残す選択肢はありません。再び使うには初期設定が必要です。対象範囲は[データの扱い](privacy.md)を参照してください。
+| Problem | What to check |
+| --- | --- |
+| Mac cannot reach Dot | Confirm tunnel ID, API-key permissions and the connection selected in your existing Dot. Send the Mac app's setup message and choose **Check connection to Dot**. |
+| Even cannot connect | Keep the Mac awake, resume Dot Link, and connect Mac and iPhone to the same Tailscale network. Generate a fresh code and paste it in full within two minutes. |
+| Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. |
+| Speech service rejects a recording | Check the selected service, key, account access and billing; for Microsoft also check the endpoint. Saving a key alone does not verify it. |
+| Mac 0.3.0 or 0.3.1 waits for Even to close before Dot was ever connected | Quit Dot Link and replace only the app in `~/Applications` with the latest ZIP. Keep Application Support data; do not uninstall. |
 
-### 停止と終了
+Use **Connection details** in the Even companion to inspect connection status. For unresolved problems, [open an issue](https://github.com/YusukeIt0/dot-link/issues) with the versions, symptoms and steps to reproduce. Exclude credentials, pairing codes, private conversations and unreviewed diagnostic files.
 
-ウィンドウを閉じると常駐を続けます。一時停止は中継と通知を停止し、アプリを残します。「Dot Linkを終了」は中継・通知・常駐を終了します。再度アプリを開くと保存済みの設定で再開します。
+## Pause, quit and uninstall
+
+Closing the Mac window keeps Dot Link running. **Pause** stops the relay and notification collection; **Quit** stops the app and its services. Reopen the app to resume with saved settings. Stopping services does not delete history.
+
+**Uninstall Dot Link…** moves the app, runtime, speech model, connection settings and conversation history to Trash and removes speech-service keys from Keychain. There is no option to retain settings; setup is required to use the app again. See [data handling](privacy.md#disconnecting-and-deleting) for removal limits and external-service data.

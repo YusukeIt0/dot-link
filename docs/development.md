@@ -1,4 +1,4 @@
-# Build and release / 開発と配布
+# Development
 
 ## Tests
 
@@ -54,10 +54,14 @@ npm run package:beta
 
 Even Hub publication is separate from Mac Releases. The internal package IDs remain stable for compatibility. Do not rename an installed data directory or recreate pairing when changing a display name.
 
-## 日本語
-
-通常の変更はCIでテストします。動作確認済みの版だけをReleasesへ公開し、署名した配信情報を更新します。現在は自動更新を一時停止しています。利用者は「アップデートを確認」から手動で更新できます。署名鍵は配布担当者だけがローカルに保管します。開発者がソースからビルドするために、配布担当者の鍵や利用者の認証情報を受け取る必要はありません。
-
 ## Repository rename compatibility
 
 The repository is `YusukeIt0/dot-link` (formerly `dot-link-app`). The signed feed and future release enclosures intentionally use the `dot-link-app` download alias, which GitHub redirects to `dot-link`. Installed 0.2.21 clients restrict downloads to that original path. `downloadRepository` keeps publisher and client URL validation consistent; do not reuse the old name or remove this compatibility without a client migration. New builds use the canonical `dot-link` feed URL. Existing signed releases are unchanged.
+
+## Operations and diagnostics
+
+Use the Mac app's pause, resume, quit and update controls for normal operation; see the [user guide](setup.md#pause-quit-and-uninstall). Dot Link owns its launchd jobs and must not change unrelated jobs or network settings. Data, credentials, models, history and pairing live outside the app bundle.
+
+Updates retain the data directory and paused state. Before installation, the app waits for recent Even activity and pending requests, records a recovery journal, and backs up the app and service configuration. Backups are retained; automatic rollback of an app that cannot launch is not implemented.
+
+For source-based diagnostics, run `node scripts/setup.mjs status --voice-only` from the installation directory. Do not start another relay on the same ports. Runtime files may contain credentials: never attach the whole `.runtime` directory to an issue. For iPhone layout investigation, see [viewport diagnostics](viewport-diagnostics.md).
