@@ -17,6 +17,11 @@ Target `main`; use a draft while work is in progress. Distinguish automated test
 code inspection and observations on a real Mac or Even G2. AI review is advisory;
 maintainers decide adoption and merging.
 
+Changes to `main` go through a PR with the existing `test` check passing and
+the branch up to date. Force pushes and deletion of `main` are disabled,
+including for administrators. A separate approving reviewer is not required;
+Opus review is not a required merge check.
+
 ## 日本語
 
 不具合・疑問・アイデアは気軽にIssueへ投稿してください。原因の特定や修正コードは
