@@ -2,7 +2,7 @@
 
 ## Mac
 
-ダウンロードするファイルの選び方、初回起動の警告、ターミナルからの導入は[Macへのインストール](mac-install.md#日本語)を参照してください。
+ダウンロードするファイルの選び方、初回起動の警告、ターミナルからの導入は[Macへのインストール](mac-install.ja.md)を参照してください。
 
 1. [最新版](https://github.com/YusukeIt0/dot-link/releases/latest)のMac ZIPを取得して展開します。
 2. Dot Link.appを自分のホームフォルダのApplicationsへ移動して開きます。
