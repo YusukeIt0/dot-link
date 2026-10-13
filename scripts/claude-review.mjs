@@ -1,3 +1,4 @@
+import {validateTriage, planLabels} from './review-labels.mjs';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
@@ -15,7 +16,7 @@ const get = path => JSON.parse(gh(['api', path]));
 const send = (path, body, method = 'POST') => JSON.parse(execFileSync('gh', ['api', path, '-X', method, '--input', '-'], {
   input: JSON.stringify(body), encoding: 'utf8', maxBuffer: 3_000_000,
   env: {...process.env, GH_TOKEN: process.env.REVIEW_WRITE_TOKEN},
-}));
+}) || 'null');
 const output = (key, value) => appendFileSync(process.env.GITHUB_OUTPUT, `${key}=${value}\n`);
 const marker = '<!-- dot-link-opus-review:v1 -->';
 const botId = process.env.REVIEW_BOT_ID || '';
@@ -90,20 +91,23 @@ function render(s) {
   if (Buffer.byteLength(raw) > 40_000) throw new Error('Oversized result');
   const result = JSON.parse(raw);
   if (!Array.isArray(result.findings) || result.findings.length > 10) throw new Error('Invalid findings');
+  const triage = validateTriage(result.triage, safeText);
   const files = s.pr ? new Set(get(`${root}/pulls/${number}/files?per_page=100`).map(row => row.filename)) : null;
   const blocks = result.findings.map(f => {
     if (!['high', 'medium', 'low'].includes(f.severity)) throw new Error('Invalid severity');
     if (s.pr && (!files.has(f.file) || !Number.isSafeInteger(f.line) || f.line < 1)) throw new Error('Invalid PR finding location');
     return `### ${f.severity}: ${safeText(f.title)}\n\n${safeText(f.file)}${f.line ? ':' + f.line : ''}\n\n${safeText(f.reason)}`;
   });
-  return [
+  const body = [
     '## dotsweeper review · Complete',
     `Reviewed ${s.data.kind === 'issue' ? 'main' : 'PR head'}: \`${(s.data.head || s.data.main).slice(0, 12)}\` · [Run](${runUrl})`,
     safeText(result.summary), ...blocks,
+    ...(!s.pr ? [`### Classification proposal\n\n${triage.priority || 'No single priority'}: ${triage.priority_reason}\n\n${triage.labels.map(x => `- \`${x.name}\`: ${x.reason}`).join('\n')}`] : []),
     `### Next steps\n\n${safeText(result.next_steps)}`,
     `### Scope and limitations\n\n${safeText(result.limitations)}`,
     'Advisory static review; no tests or physical-device checks were run. Maintainers decide adoption and merging.', help,
   ].join('\n\n');
+  return {body, triage};
 }
 
 if (mode === 'intake') {
@@ -135,19 +139,35 @@ if (mode === 'intake') {
   console.log(`Prepared ${s.data.kind} #${number}`);
 } else if (mode === 'report') {
   const s = snapshot();
-  let body;
+  let body, triage;
   if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) {
     body = `## dotsweeper review · Outdated\n\nThe item or main changed during review. Findings were not published.\n\n${help}`;
   } else if (process.env.REVIEW_OUTCOME !== 'success') {
     body = `## dotsweeper review · Failed\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;
   } else {
-    try { body = render(s); } catch {
+    try { ({body, triage} = render(s)); } catch {
       body = `## dotsweeper review · Failed\n\nThe result could not be validated and was withheld.\n\n[Run](${runUrl})\n\n${help}`;
     }
   }
   // Never overwrite a newer run's in-progress/result comment.
   const current = comments();
   if (!current.some(row => owned(row) && row.body.includes(`](${runUrl})`))) throw new Error('A newer run owns the review comment');
+  if (triage && !s.pr) {
+    // Recheck content/main and current labels just before mutation. The model
+    // cannot choose API paths or write anything; only this allowlisted plan can.
+    const fresh = snapshot();
+    if (fresh.fingerprint !== s.fingerprint) throw new Error('Input changed before label publication');
+    try {
+      const events = JSON.parse(gh(['api', `${endpoint}/events?per_page=100`, '--paginate', '--slurp'])).flat();
+      const plan = planLabels((fresh.issue.labels || []).map(x => x.name), events, triage, botId);
+      if (plan.add.length) send(`${endpoint}/labels`, {labels: plan.add});
+      for (const label of plan.remove) send(`${endpoint}/labels/${encodeURIComponent(label)}`, {}, 'DELETE');
+      body += `\n\n### Label application\n\n${plan.status} Added: ${plan.add.join(', ') || 'none'}. Removed: ${plan.remove.join(', ') || 'none'}.`;
+    } catch {
+      body += '\n\n### Label application\n\nLabel synchronization failed or was partial. Review findings remain available; inspect the issue labels and rerun after resolving the publishing error.';
+      process.exitCode = 1;
+    }
+  }
   publish(current, body);
   appendFileSync(process.env.GITHUB_STEP_SUMMARY, body + '\n');
 } else throw new Error('Usage: claude-review.mjs intake|prepare|report');

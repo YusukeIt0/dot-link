@@ -11,7 +11,7 @@ const issue = {number: 12, title: 'History disappears', body: 'After reopening t
 const pr = {number: 12, state: 'open', draft: false, changed_files: 1,
   base: {ref: 'main', sha: main}, head: {sha: head, repo: {full_name: 'external/fork'}}};
 const result = {summary: 'Review complete', findings: [{severity: 'medium', file: 'src/main.ts', line: 7,
-  title: 'State lost', reason: 'Saved state is overwritten'}], next_steps: 'Verify persistence', limitations: 'Static review only'};
+  title: 'State lost', reason: 'Saved state is overwritten'}], next_steps: 'Verify persistence', limitations: 'Static review only', triage: {priority: 'P1', priority_reason: 'Core state loss', labels: [{name: 'bug', reason: 'State disappears'}]}};
 function fixture(options = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'dot-review-test-'));
   const data = {issue, pr, main, comments: [], permission: 'read', diff: '+new line\n', ...options};
@@ -24,12 +24,14 @@ const f = JSON.parse(fs.readFileSync('fixture.json'));
 if(a.includes('--input')) {
  const body = JSON.parse(fs.readFileSync(0, 'utf8'));
  fs.appendFileSync('writes.jsonl', JSON.stringify({path:p,body})+'\\n');
+ if(p.includes('/labels')) { if(f.failLabels) process.exit(1); console.log('{}'); process.exit(0); }
  const row = {id:999,user:{id:98765,login:'dotsweeper[bot]',type:'Bot'},body:body.body,html_url:'https://github.com/YusukeIt0/dot-link/issues/12#issuecomment-999'};
  if(p.endsWith('/comments/999')) f.comments=f.comments.filter(x=>x.id!==999);
  f.comments.push(row); fs.writeFileSync('fixture.json',JSON.stringify(f));
  console.log(JSON.stringify(row));
 } else if(a.includes('Accept: application/vnd.github.diff')) process.stdout.write(f.diff);
 else if(p.endsWith('/commits/main')) console.log(JSON.stringify({sha:f.main}));
+else if(p.includes('/events?')) console.log(JSON.stringify([f.events || []]));
 else if(p.includes('/comments?')) console.log(JSON.stringify([f.comments]));
 else if(p.includes('/issues/comments/')) console.log(JSON.stringify(f.command));
 else if(p.includes('/collaborators/')) console.log(JSON.stringify({permission:f.permission}));
@@ -65,7 +67,8 @@ test('issue lifecycle acknowledges, prepares and updates one bot comment', t => 
   const f=use(t); success(f.run('intake')); success(f.run('prepare')); success(f.run('report'));
   assert.equal(f.read().comments.length, 1);
   assert.match(f.read().comments[0].body, /Complete/);
-  assert.equal(f.writes()[1].path, 'repos/YusukeIt0/dot-link/issues/comments/999');
+  assert.equal(f.writes().at(-1).path, 'repos/YusukeIt0/dot-link/issues/comments/999');
+  assert.deepEqual(f.writes().find(x=>x.path.endsWith('/labels')).body.labels,['bug','P1']);
 });
 test('external fork PR is accepted; no contributor checkout or execution occurs', t => {
   const f=use(t, {issue:{...issue,pull_request:{}}, eventName:'pull_request_target', event:{action:'opened',pull_request:pr,sender:user}});
@@ -142,4 +145,28 @@ test('publishing requires app identity; legacy or spoofed bot comments remain un
   assert.deepEqual(f.read().comments.slice(0,3),rows);
   assert.equal(f.read().comments.length,4);
   assert.equal(f.read().comments[3].user.login,'dotsweeper[bot]');
+});
+
+
+test('PRs and outdated/invalid/failed reviews never mutate labels', t => {
+ for (const opts of [{issue:{...issue,pull_request:{}}},{stale:true},{invalid:true},{failed:true}]) {
+  const f=use(t,opts); success(f.run('intake'));
+  if(opts.stale) f.update({main:'c'.repeat(40)});
+  success(f.run('report',opts.invalid?{REVIEW_JSON:JSON.stringify({...result,triage:{...result.triage,labels:[{name:'arbitrary',reason:'x'}]}})}:opts.failed?{REVIEW_OUTCOME:'failure'}:{}));
+  assert.equal(f.writes().filter(x=>x.path.includes('/labels')).length,0);
+ }
+});
+test('priority added during model review is preserved; manual lock skips all writes', t => {
+ for(const labels of [[{name:'P2'}],[{name:'triage:manual'}]]) {
+  const f=use(t); success(f.run('intake'));f.update({issue:{...issue,labels}});success(f.run('report'));
+  const writes=f.writes().filter(x=>x.path.includes('/labels'));
+  if(labels[0].name==='P2') assert.deepEqual(writes[0].body.labels,['bug']);
+  else assert.equal(writes.length,0);
+ }
+});
+test('label mutation failure is explicit while preserving review findings', t => {
+ const f=use(t,{failLabels:true});success(f.run('intake'));
+ assert.notEqual(f.run('report').status,0);
+ assert.match(f.read().comments[0].body,/Label synchronization failed or was partial/);
+ assert.match(f.read().comments[0].body,/State lost/);
 });

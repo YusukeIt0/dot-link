@@ -49,7 +49,7 @@ This is static review. dotsweeper cannot run tests, execute contributor code, or
 confirm physical-device behavior. A report with no findings is not proof of
 correctness. Maintainers evaluate important findings and record why a disputed
 finding is not adopted. dotsweeper is not currently a required merge check and never
-approves, merges, implements, labels or closes an item. Whether review completion
+approves, merges, implements or closes an item. Issue labeling follows the bounded rules below. Whether review completion
 becomes mandatory is a future maintainer decision, informed by actual use.
 
 Input limits are 150 KB of issue/PR text and human discussion, 250 KB of PR diff,
@@ -57,6 +57,39 @@ and 50 changed files. Oversized inputs produce an explicit incomplete status,
 not a partial clean review. Each model job has a 15-minute timeout and 12-turn
 limit. There is no automatic retry or model fallback. Failed authentication,
 usage exhaustion or invalid results must not be interpreted as successful review.
+
+## Issue labels
+
+Successful issue reviews propose a priority and up to eight classification labels,
+with a reason for each. A separate publisher validates the result against
+[the label catalog](../config/review-labels.json) and applies the allowed labels.
+PR reviews do not change labels. Failed, invalid or outdated reviews do not change
+labels. A label-write failure is reported separately from completed findings.
+
+- `P0`: emergency; `P1`: high user impact or reliability risk; `P2`: normal backlog;
+  `P3`: polish or a proposal whose scope is undecided. Priority is scheduling
+  guidance, not the severity of an individual finding. Tracking indexes can have
+  no single priority.
+- Types/areas: `bug`, `enhancement`, `documentation`, `validation`, `ux`,
+  `reliability`, `regression`, `tracking`. Regression requires concrete evidence
+  that previously working behavior subsequently failed.
+- Impact: `impact:ux-friction`, `impact:ux-release-blocker`.
+- Investigation: `needs-info`, `needs-live-repro`, `needs-product-decision`.
+
+Existing priority labels are always preserved, including an earlier bot priority.
+To reconsider priority, remove the existing priority and request `/dotlink review`.
+The comment still shows the new proposal even when an existing priority is kept.
+Categories are removed only if their latest label event belongs to the exact
+verified dotsweeper bot. Human-added categories and unrelated labels are preserved;
+a category removed by a human is not automatically re-added. Re-add it manually
+if wanted. Add `triage:manual` to pause all automatic label changes for an issue;
+remove that lock and request review to resume under the same preservation rules.
+GitHub label operations are not atomic; partial failure is explicit and a later
+review can reconcile the remaining bot-owned labels.
+
+Existing open issues use the same workflow: request `/dotlink review` or dispatch
+one review by issue number. Labels do not authorize implementation or release.
+Maintainers can change them, and static review cannot establish live behavior.
 
 ## Authentication and security
 
@@ -109,5 +142,11 @@ Issue作成時とPRをレビュー可能にしたときに、外部投稿者も�
 結果は同じコメントを更新して表示します。レビュー中・完了・未完了・対象更新による
 再レビューの必要を区別します。通常のコメントや追加pushだけでは再実行しません。
 dotsweeperは公開コードを読む参考レビューで、実機確認やテストを代替しません。
+Issueには優先度・種類・影響・調査状態のラベルを理由付きで提案し、許可一覧の範囲だけ反映します。
 Issueの採用・クローズ、PRのマージは管理者が判断します。現在はマージの必須条件ではありません。
 認証情報や私的な会話を投稿しないでください。公開投稿内容はレビューのためAnthropicへ送られます。
+
+既存の優先度はbotが付けたものも維持します。変更したい場合は優先度ラベルを外して
+`/dotlink review`で再依頼してください。分類ラベルはbot自身が付けたものだけ更新し、
+手動で付けた・外した判断を維持します。`triage:manual`で自動ラベル変更を止められます。
+ラベルは実装・公開の承認ではありません。PRへの自動ラベル付与は行いません。
