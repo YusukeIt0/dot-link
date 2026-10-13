@@ -39,6 +39,16 @@ test('keyboard focus, resize, dismissal and later manual scrolling preserve usab
   scroller.scrollTop += 80;
   viewport.dispatchEvent(new Event('scroll')); flush();
   assert.equal(scroller.scrollTop, restored + 80, 'viewport movement must not undo manual scrolling');
+  field.readOnly = true;
+  document.activeElement = field;
+  const beforeReadonly = scroller.scrollTop;
+  viewport.offsetTop = -380;
+  viewport.dispatchEvent(new Event('resize')); flush(); focus('focusin');
+  assert.equal(scroller.style.top, '0px', 'measured negative native offset must not move app above origin');
+  assert.equal(scroller.scrollTop, beforeReadonly, 'readonly focus/resize must not reveal a display-only field');
+  viewport.offsetTop = 32;
+  viewport.dispatchEvent(new Event('scroll')); flush();
+  assert.equal(scroller.style.top, '32px', 'legitimate positive viewport panning remains supported');
   vm.runInContext('dispose()', context);
   viewport.height = 300; viewport.dispatchEvent(new Event('resize'));
   assert.equal(frame, undefined, 'cleanup removes event listeners');

@@ -54,15 +54,14 @@ function showCopyToast(message: string): void {
   copyToastTimer = setTimeout(() => { el('copy-toast').textContent = ''; }, 2500);
 }
 el('copy-mac-url').onclick = async () => {
-  const field = el<HTMLTextAreaElement>('mac-download-url');
+  const url = el('mac-download-url').textContent?.trim() ?? '';
   const status = el('mac-copy-status');
   status.textContent = '';
   try {
-    await navigator.clipboard.writeText(field.value);
+    await navigator.clipboard.writeText(url);
     status.textContent = t('URLをコピーしました。Macのブラウザーで開いてください。');
     showCopyToast(t('コピーしました'));
   } catch {
-    field.focus(); field.select(); field.setSelectionRange(0, field.value.length);
     status.textContent = t('コピーできませんでした。表示されているURLをMacのブラウザーに入力してください。');
     showCopyToast(t('コピーできませんでした'));
   }

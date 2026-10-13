@@ -454,3 +454,19 @@ test('reopening an old pending message restores its receipt and delayed notice w
   await app.advance(29_999);assert.equal(app.hidden(),false);
   await app.advance(1);assert.equal(app.hidden(),true);
 });
+
+test('download URL copy uses displayed text and failure never focuses a field', async t => {
+  const app = await launch(); t.after(app.close);
+  const url = 'https://github.com/YusukeIt0/dot-link/releases/latest';
+  const display = app.element('mac-download-url'); display.textContent = url;
+  display.focus = display.select = display.setSelectionRange = () => { throw new Error('Display URL must never receive programmatic input focus'); };
+  let copied;
+  app.context.navigator.clipboard = {writeText: async value => {copied = value;}};
+  await app.element('copy-mac-url').click();
+  assert.equal(copied, url);
+  assert.match(app.element('mac-copy-status').textContent, /URLをコピーしました/);
+  app.context.navigator.clipboard.writeText = async () => {throw new Error('Denied');};
+  await app.element('copy-mac-url').click();
+  assert.match(app.element('mac-copy-status').textContent, /コピーできませんでした/);
+  assert.match(app.element('copy-toast').textContent, /コピーできませんでした/);
+});

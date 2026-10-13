@@ -14,12 +14,15 @@ export function installKeyboardViewport(scroller: HTMLElement): () => void {
   let settle: ReturnType<typeof setTimeout> | undefined;
   let revealPending = false;
   function editable(target: EventTarget | null): target is HTMLInputElement | HTMLTextAreaElement {
-    return target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement;
+    return (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)
+      && !target.readOnly && !target.disabled;
   }
   function update(): void {
     frame = 0;
     const height = viewport?.height ?? window.innerHeight;
-    const top = viewport?.offsetTop ?? 0;
+    // Direct iPhone URL refocus reported -380 after a 380px keyboard dismissal.
+    // A negative native offset must not pull the app above its layout origin.
+    const top = Math.max(0, viewport?.offsetTop ?? 0);
     scroller.style.height = `${height}px`;
     scroller.style.top = `${top}px`;
     if (!revealPending) return;
