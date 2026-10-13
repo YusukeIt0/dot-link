@@ -61,3 +61,6 @@ main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 #mac-download-url { font-size: 16px; line-height: 1.6; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
 #mac-copy-status:empty { display: none; }
 #mac-setup, #pairing-settings { scroll-margin-top: 16px; }
+
+#copy-toast { position: fixed; z-index: 30; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content; padding: 12px 20px; border: 1px solid #60765f; border-radius: 12px; background: #d1edc8; color: #152013; font-size: 16px; line-height: 1.5; box-shadow: 0 4px 20px #0006; pointer-events: none; }
+#copy-toast:empty { display: none; }

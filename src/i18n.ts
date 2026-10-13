@@ -1,7 +1,9 @@
 export type Language = 'ja' | 'en';
 const translations = {
   'URLをコピーしました。Macのブラウザーで開いてください。': 'URL copied. Open it in a browser on your Mac.',
-  '自動でコピーできませんでした。URLを長押ししてコピーしてください。': 'Could not copy automatically. Touch and hold the URL to copy it.',
+  'コピーしました': 'Copied',
+  'コピーできませんでした': 'Could not copy',
+  'コピーできませんでした。表示されているURLをMacのブラウザーに入力してください。': 'Could not copy. Enter the displayed URL in your Mac browser.',
   '接続の有効期限が切れたか、Mac側で解除されました。新しい接続コードで接続してください。': 'Pairing expired or was revoked on your Mac. Connect using a new pairing code.',
   'Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。': 'Could not confirm saving pairing in Even. You may need to pair again after an update.',
   '接続しました。更新後の再接続情報も保存しました。': 'Connected. Update recovery details are saved too.',

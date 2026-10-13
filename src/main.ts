@@ -53,6 +53,12 @@ function openSettings(panel: HTMLDetailsElement): void {
 }
 el('setup-ready').onclick = () => openSettings(setupPanel);
 el('setup-back').onclick = () => openSettings(macSetupPanel);
+let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
+function showCopyToast(message: string): void {
+  clearTimeout(copyToastTimer);
+  el('copy-toast').textContent = message;
+  copyToastTimer = setTimeout(() => { el('copy-toast').textContent = ''; }, 2500);
+}
 el('copy-mac-url').onclick = async () => {
   const field = el<HTMLTextAreaElement>('mac-download-url');
   const status = el('mac-copy-status');
@@ -60,9 +66,11 @@ el('copy-mac-url').onclick = async () => {
   try {
     await navigator.clipboard.writeText(field.value);
     status.textContent = t('URLをコピーしました。Macのブラウザーで開いてください。');
+    showCopyToast(t('コピーしました'));
   } catch {
     field.focus(); field.select(); field.setSelectionRange(0, field.value.length);
-    status.textContent = t('自動でコピーできませんでした。URLを長押ししてコピーしてください。');
+    status.textContent = t('コピーできませんでした。表示されているURLをMacのブラウザーに入力してください。');
+    showCopyToast(t('コピーできませんでした'));
   }
 };
 const setupHome = document.createComment('connection-settings');
@@ -569,7 +577,7 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status']) {
+  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';

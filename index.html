@@ -63,10 +63,11 @@
         <label for="mac-download-url" data-en="GitHub download URL for Mac">Mac版の入手先（GitHub）</label>
         <textarea id="mac-download-url" rows="2" readonly spellcheck="false" autocapitalize="off" aria-describedby="mac-download-help">https://github.com/YusukeIt0/dot-link/releases/latest</textarea>
         <button id="copy-mac-url" type="button" data-en="Copy URL">URLをコピー</button>
-        <p id="mac-copy-status" role="status" class="note"></p>
-        <p id="mac-download-help" class="note" data-en="Open this URL in a browser on your Mac to download Dot Link. If the button cannot copy it, touch and hold the URL to select and copy it.">このURLをMacのブラウザーで開き、Dot Linkをダウンロードしてください。ボタンでコピーできない場合は、URLを長押しして選択・コピーできます。</p>
+        <p id="mac-copy-status" class="note"></p>
+        <p id="mac-download-help" class="note" data-en="Open this URL in a browser on your Mac to download Dot Link. If copying is unavailable, enter the displayed URL in your Mac browser.">このURLをMacのブラウザーで開き、Dot Linkをダウンロードしてください。コピーできない場合は、表示されているURLをMacのブラウザーに入力してください。</p>
         <ol class="setup-steps">
-          <li><strong data-en="Install Dot Link on your Mac">MacにDot Linkをインストール</strong><p data-en="Open the URL above on your Mac. Install and open Dot Link, then follow its setup instructions. Connect both your Mac and iPhone to the same Tailscale network.">上のURLをMacで開きます。Dot Linkをインストールして起動し、画面の案内に沿って準備します。MacとiPhoneの両方を同じTailscaleネットワークに接続してください。</p></li>
+          <li><strong data-en="Install Dot Link on your Mac">MacにDot Linkをインストール</strong><p data-en="Open the URL above on your Mac. Install and open Dot Link, then follow its setup instructions.">上のURLをMacで開きます。Dot Linkをインストールして起動し、画面の案内に沿って準備します。</p></li>
+          <li><strong data-en="Set up Tailscale on your iPhone">iPhoneにもTailscaleを準備</strong><p data-en="Tailscale securely connects your iPhone to your Mac. Search for Tailscale in the App Store on this iPhone and install it. Open Tailscale, sign in with the same account used on your Mac, and follow the prompts to connect. Both devices must be connected to the same Tailscale network.">TailscaleはiPhoneとMacを安全につなぐために使います。このiPhoneのApp Storeで「Tailscale」を検索してインストールします。Tailscaleを開き、Macで使ったものと同じアカウントでログインして、画面の案内に沿って接続してください。両方の端末を同じTailscaleネットワークに接続する必要があります。</p></li>
           <li><strong data-en="Create a pairing code">接続コードを発行</strong><p data-en="In Dot Link on your Mac, choose Connect Even and copy the code.">MacのDot Linkで「Evenを接続」を押し、接続コードをコピーします。</p></li>
           <li><strong data-en="Paste the code in Conversation settings">「会話設定」にコードを貼り付け</strong><p data-en="Return to this app, open Conversation settings above, and paste the entire code to connect.">このアプリに戻り、上の「会話設定」でコード全体を貼り付けて接続します。</p></li>
         </ol>
@@ -79,5 +80,6 @@
       <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-en="App origin">この画面の接続元</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p><p id="location-diagnostic" role="status"></p></section>
     </footer>
   </main>
+  <div id="copy-toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="/src/main.ts"></script></body>
 </html>
