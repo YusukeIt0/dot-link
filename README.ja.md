@@ -44,9 +44,9 @@ Dot Linkは、いつものChatGPT DotとEven G2をつなぐアプリです。G2�
 
 ## 始め方
 
-GitHubからMacアプリを入れるのが初めての方は、[Macへのインストール](docs/mac-install.ja.md)を参照してください。初回起動の警告と、ターミナルからの導入手順も載せています。
+[Macへのインストール](docs/mac-install.ja.md)では、ダウンロード・確認・配置をまとめて進める **ターミナルでの導入を推奨**しています。[ZIPを手動で配置する方法](docs/mac-install-finder.ja.md)も選べます。
 
-1. **Macを準備する。** [Dot Linkをダウンロード](https://github.com/YusukeIt0/dot-link/releases/latest)して、自分のホームフォルダのApplicationsへ移動。アプリの案内に沿って設定します。
+1. **Macを準備する。** [インストール手順](docs/mac-install.ja.md)に沿って導入し、Dot Linkの **このMacを準備する**を押します。
 2. **Evenに入れる。** Evenアプリから[Even HubのDot Link](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)を開いてインストールします。
 3. **接続する。** Macの<strong>「Evenを接続」</strong>でコードを発行し、Even側に貼り付けます。
 

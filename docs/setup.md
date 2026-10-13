@@ -2,12 +2,11 @@
 
 ## Mac
 
-ダウンロードするファイルの選び方、初回起動の警告、ターミナルからの導入は[Macへのインストール](mac-install.ja.md)を参照してください。
+まず[Macへのインストール](mac-install.ja.md)へ。**ターミナルでの導入を推奨**し、ZIPを手動で配置する方法と初回起動の警告も案内しています。
 
-1. [最新版](https://github.com/YusukeIt0/dot-link/releases/latest)のMac ZIPを取得して展開します。
-2. Dot Link.appを自分のホームフォルダのApplicationsへ移動して開きます。
-3. 表示される準備手順に沿って、Tailscale接続と音声認識モデルを用意します。初回は約488 MBのモデルを取得します。
-4. 接続設定で、自分のOpenAIトンネル接続を設定します。詳細は[Dotとの連携](dot-setup.md)を参照してください。
+1. [インストール手順](mac-install.ja.md)から、ターミナル（推奨）またはFinderで導入します。
+2. Dot Linkを開き、表示される準備手順に沿ってTailscale接続と音声認識モデルを用意します。初回は約490 MBのモデルを取得します。
+3. 接続設定で、自分のOpenAIトンネル接続を設定します。詳細は[Dotとの連携](dot-setup.md)を参照してください。
 
 既に使っているMacを更新する場合、接続ID・トンネル・ペアリングを作り直す必要はありません。
 
@@ -59,9 +58,9 @@ Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認�
 
 ## English
 
-For choosing the download, first-launch warnings and Terminal commands, see [Install Dot Link on a Mac](mac-install.md#english).
+Start with [Install Dot Link on a Mac](mac-install.md). **Terminal installation is recommended**; manual ZIP installation and first-launch warnings are covered too.
 
-Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and open it. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
+Install using the guide above, then open Dot Link. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
 
 [Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into Connect / disconnect your Mac in the Even companion, and connect. If you need the Mac app first, open Connect / disconnect your Mac below Location sharing and Display settings. Copy the GitHub download URL and open it in a browser on your Mac. A “Copied” notification appears for about 2.5 seconds after copying succeeds. If copying is unavailable, enter the displayed URL in your Mac browser. On your iPhone, search for Tailscale in the App Store, install it, and sign in with the same account used on your Mac. Connect both devices to the same Tailscale network before creating a pairing code. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
 

@@ -44,9 +44,9 @@ Your Mac must stay awake and online while you use Dot Link. A dedicated Mac mini
 
 ## Get started
 
-New to installing Mac apps from GitHub? See the [Mac installation guide](docs/mac-install.md), including first-launch warnings and optional Terminal commands.
+Start with the [Mac installation guide](docs/mac-install.md): **Terminal installation is recommended** for downloading, checking and placing the app together. [Manual ZIP installation](docs/mac-install-finder.md) is also available.
 
-1. **Set up your Mac.** [Download Dot Link](https://github.com/YusukeIt0/dot-link/releases/latest), move the app to your home folder’s Applications folder, and follow its setup instructions.
+1. **Set up your Mac.** Follow the [installation guide](docs/mac-install.md), then choose **Prepare this Mac** in Dot Link.
 2. **Install on Even.** Open [Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink) from the Even app.
 3. **Connect them.** Choose **Connect Even** in the Mac app, then paste the generated code into the Even companion.
 

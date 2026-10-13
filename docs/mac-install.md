@@ -4,39 +4,53 @@
 
 You need an **Apple Silicon Mac with macOS 13 or later**.
 
-## 1. Download the app
-
-Open **[Download for Mac](https://github.com/YusukeIt0/dot-link/releases/latest)** → scroll to **Assets** → choose **`Dot-Link-…-arm64.zip`**.
-
-Do not choose either **Source code** file. No GitHub account is required.
-
-## 2. Move the app
-
-1. Open the ZIP in **Downloads**. You will see **Dot Link.app**.
-2. In Finder, choose **Go → Home → Applications**. Create an **Applications** folder inside Home if it is missing.
-3. Move **Dot Link.app** into that folder, then open it.
-
-Use **your Home folder’s Applications** (`~/Applications`). Dot Link’s update feature expects this location.
-
-## 3. If macOS blocks the first launch
-
-The current release is not Apple-notarized. If Apple says it could not verify that the app is free of malware, use the steps below **only if you have decided to trust this download**.
-
-| What you see | What to do |
+| Method | Choose this if… |
 | --- | --- |
-| Warning with only **Done** / **Move to Trash** | Choose **Done**. |
-| **System Settings → Privacy & Security** | Scroll down to **Security**. Next to **Dot Link.app**, choose **Open Anyway**. |
-| Password or Touch ID prompt | Authenticate **in the Mac dialog** using your Mac login password or Touch ID. |
-| A further warning with **Open** | Choose **Open**. |
+| **Terminal — recommended** | You want the download, integrity checks and correct app placement handled together. Follow the steps below. |
+| [Finder — manual ZIP installation](mac-install-finder.md) | You prefer downloading and moving the app yourself. |
 
-Do not repeatedly double-click the app after choosing **Done**; continue in **System Settings**. Do not send your password to an AI assistant or enter it on GitHub. If the warning instead says the app **will damage your computer** or **is damaged**, stop: that is a different warning. [Apple’s official instructions](https://support.apple.com/en-us/102445)
+Both methods install **the same Mac app**. There is no separate CLI edition.
 
-## 4. Prepare this Mac
+## 1. Open Terminal
 
-In Dot Link, choose **Prepare this Mac**. The app downloads about **490 MB** of speech data, then advances to **Connect your existing Dot**.
+Open **Terminal** from Spotlight. You can ask an AI assistant to explain the commands before running them.
 
-**The app is now installed.** Continue with [Dot connection setup](dot-setup.md) and [iPhone pairing](setup.md#english).
+## 2. Copy and run the commands
 
----
+This installs **Mac 0.4.5/build 73**. It checks the published download checksum and app signature, then places the app in **your Home folder’s Applications** (`~/Applications`). If Dot Link is already there, it stops; use **Check for updates** in the app.
 
-[Prefer Terminal commands?](mac-install-cli.md) · Already installed? Use **Check for updates** in the app; uninstalling removes settings and history.
+```sh
+(
+  set -eu
+  dotlink_destination="$HOME/Applications/Dot Link.app"
+  if [ -e "$dotlink_destination" ] || [ -L "$dotlink_destination" ]; then
+    echo 'Dot Link is already present. Use Check for updates in the app.' >&2
+    exit 1
+  fi
+  dotlink_stage="$(mktemp -d "${TMPDIR:-/tmp}/dot-link-install.XXXXXX")"
+  cd "$dotlink_stage"
+  curl --fail --location --proto '=https' --proto-redir '=https' \
+    --output Dot-Link.zip \
+    'https://github.com/YusukeIt0/dot-link/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip'
+  printf '%s  %s\n' \
+    '82f9a0cdd9a578d4d49b1a01640ee0491d25e74eee75e9524bea99f8df7518c3' \
+    'Dot-Link.zip' | shasum -a 256 -c -
+  ditto -x -k Dot-Link.zip unpacked
+  codesign --verify --deep --strict 'unpacked/Dot Link.app'
+  mkdir -p "$HOME/Applications"
+  mv -n 'unpacked/Dot Link.app' "$dotlink_destination"
+  if [ -e 'unpacked/Dot Link.app' ]; then
+    echo 'Destination appeared during installation; no app was replaced.' >&2
+    exit 1
+  fi
+  open "$dotlink_destination"
+)
+```
+
+This example is pinned to the version above; it does not automatically select future releases. The temporary download folder remains afterward. Integrity checks are not Apple notarization or a safety guarantee.
+
+## 3. Open and prepare the app
+
+Dot Link opens after installation. If macOS blocks it, follow [the first-launch warning steps](mac-install-finder.md#3-if-macos-blocks-the-first-launch), including the Mac password/Touch ID confirmation. The commands do not remove quarantine attributes or disable Gatekeeper.
+
+Choose **Prepare this Mac**. About **490 MB** of speech data is downloaded. When **Connect your existing Dot** appears, Mac preparation is complete. Continue with [Dot connection setup](dot-setup.md) and [iPhone pairing](setup.md#english); the commands do not configure these accounts or grant their permissions.

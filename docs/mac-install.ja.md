@@ -4,39 +4,53 @@
 
 **Apple Silicon搭載・macOS 13以降のMac**が必要です。
 
-## 1. Mac版をダウンロード
-
-**[Mac版の入手先を開く](https://github.com/YusukeIt0/dot-link/releases/latest)** → 下の **Assets** → **`Dot-Link-…-arm64.zip`** を選びます。
-
-**Source code** は選びません。GitHubアカウントは不要です。
-
-## 2. アプリを移動
-
-1. **ダウンロード**内のZIPを開きます。**Dot Link.app** が出てきます。
-2. Finderで **移動 → ホーム → アプリケーション** を開きます。なければ、ホーム内に **Applications** フォルダを作ります。
-3. そこへ **Dot Link.app** を移動し、開きます。
-
-配置先は **自分のホーム内のアプリケーション**（`~/Applications`）です。Dot Linkの更新機能もこの場所を使います。
-
-## 3. 初回の警告が出たら
-
-現在のMac版はAppleの公証を受けていません。「マルウェアが含まれていないことを検証できませんでした」と表示された場合、**入手元を確認し、起動を許可すると判断したうえで**次へ進みます。
-
-| 表示された画面 | 操作 |
+| 方法 | こんな場合に |
 | --- | --- |
-| **完了／ゴミ箱に入れる**しかない警告 | **完了**を押す |
-| **システム設定 → プライバシーとセキュリティ** | 下の**セキュリティ**へ進み、**Dot Link.app** の **このまま開く**を押す |
-| パスワード・Touch IDの確認 | **Macの確認画面**で、Macのログインパスワードを入力するかTouch IDで認証する |
-| **開く**がある追加の警告 | **開く**を押す |
+| **ターミナルで導入（推奨）** | ダウンロード・整合性確認・正しい場所への配置をまとめて進めたい。下の手順へ。 |
+| [Finderで導入（ZIPを手動で配置）](mac-install-finder.ja.md) | 自分でダウンロードしてアプリを移動したい。 |
 
-**「完了」の後にアプリを繰り返し開くのではなく、システム設定へ進みます。** パスワードをAIとのチャットやGitHubへ送る操作ではありません。「コンピュータに損害を与えます」「壊れている」など別の警告なら、ここで止めて原因を確認してください。[Apple公式の手順](https://support.apple.com/ja-jp/102445)
+どちらも**同じMacアプリ**が入ります。別の「CLI版」があるわけではありません。
 
-## 4. Macの準備
+## 1. ターミナルを開く
 
-Dot Linkの **このMacを準備する**を押します。約**490 MB**の音声認識データを取得すると、**いつものDotと連携**へ進みます。
+Spotlightで **ターミナル**を検索して開きます。コマンドの内容が気になったら、実行前にAIへ説明を求めても構いません。
 
-**ここまででアプリの導入は完了です。** 続いて[Dotとの連携](dot-setup.md)、[iPhoneとの接続](setup.md#even)へ進んでください。
+## 2. コマンドをコピーして実行
 
----
+**Mac 0.4.5/build 73**を入れます。公開ハッシュと署名の整合性を確認し、**自分のホーム内のアプリケーション**（`~/Applications`）へ配置します。既存のDot Linkがある場合は停止するので、アプリの **アップデートを確認**を使ってください。
 
-[ターミナルで導入する場合](mac-install-cli.md#日本語) · 更新はアプリの **アップデートを確認**から行います。アンインストールすると設定と履歴も削除されます。
+```sh
+(
+  set -eu
+  dotlink_destination="$HOME/Applications/Dot Link.app"
+  if [ -e "$dotlink_destination" ] || [ -L "$dotlink_destination" ]; then
+    echo 'Dot Link is already present. Use Check for updates in the app.' >&2
+    exit 1
+  fi
+  dotlink_stage="$(mktemp -d "${TMPDIR:-/tmp}/dot-link-install.XXXXXX")"
+  cd "$dotlink_stage"
+  curl --fail --location --proto '=https' --proto-redir '=https' \
+    --output Dot-Link.zip \
+    'https://github.com/YusukeIt0/dot-link/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip'
+  printf '%s  %s\n' \
+    '82f9a0cdd9a578d4d49b1a01640ee0491d25e74eee75e9524bea99f8df7518c3' \
+    'Dot-Link.zip' | shasum -a 256 -c -
+  ditto -x -k Dot-Link.zip unpacked
+  codesign --verify --deep --strict 'unpacked/Dot Link.app'
+  mkdir -p "$HOME/Applications"
+  mv -n 'unpacked/Dot Link.app' "$dotlink_destination"
+  if [ -e 'unpacked/Dot Link.app' ]; then
+    echo 'Destination appeared during installation; no app was replaced.' >&2
+    exit 1
+  fi
+  open "$dotlink_destination"
+)
+```
+
+これは上記バージョン専用で、将来の最新版を自動選択するものではありません。作業用の一時フォルダは実行後も残ります。整合性の確認は、Appleの公証や安全性の保証とは別です。
+
+## 3. アプリを開いて準備
+
+配置後にDot Linkが開きます。macOSに止められた場合は、[初回の警告への対応](mac-install-finder.ja.md#3-初回の警告が出たら)へ進んでください。Macのパスワード・Touch IDの確認も含めて案内しています。コマンドで隔離属性を削除したり、Gatekeeperを無効化したりする手順ではありません。
+
+**このMacを準備する**を押し、約**490 MB**の音声認識データを取得します。**いつものDotと連携**が出たらMacの準備は完了です。続いて[Dotとの連携](dot-setup.md)、[iPhoneとの接続](setup.md#even)へ進みます。アカウントの接続設定や権限は、コマンドだけでは設定されません。
