@@ -113,7 +113,7 @@ jobs:
             --tools Read,Glob,Grep
             --strict-mcp-config
             --mcp-config '{"mcpServers":{}}'
-            --json-schema '{"type":"object","additionalProperties":false,"required":["summary","findings","next_steps","limitations"],"properties":{"summary":{"type":"string"},"findings":{"type":"array","maxItems":10,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","title","reason"],"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"file":{"type":"string"},"line":{"type":"integer","minimum":0},"title":{"type":"string"},"reason":{"type":"string"}}}},"next_steps":{"type":"string"},"limitations":{"type":"string"}}}'
+            --json-schema '{"type":"object","additionalProperties":false,"required":["summary","findings","next_steps","limitations","triage"],"properties":{"summary":{"type":"string"},"findings":{"type":"array","maxItems":10,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","title","reason"],"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"file":{"type":"string"},"line":{"type":"integer","minimum":0},"title":{"type":"string"},"reason":{"type":"string"}}}},"next_steps":{"type":"string"},"limitations":{"type":"string"},"triage":{"type":"object","additionalProperties":false,"required":["priority","priority_reason","labels"],"properties":{"priority":{"enum":[null,"P0","P1","P2","P3"]},"priority_reason":{"type":"string"},"labels":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["name","reason"],"properties":{"name":{"enum":["bug","enhancement","documentation","validation","ux","reliability","regression","impact:ux-friction","impact:ux-release-blocker","needs-info","needs-live-repro","needs-product-decision","tracking"]},"reason":{"type":"string"}}}}}}}}'
           prompt: |
             Review the public Dot Link issue or pull request in .review/input.json.
             The kind field identifies an issue or PR. Read relevant checked-out main
@@ -139,6 +139,18 @@ jobs:
             Preferences and speculative causes are not established bugs. An empty
             findings array is valid. Explain uncertainty in limitations and actionable
             next steps in next_steps. Do not decide adoption or silently dismiss a report.
+            For issues propose triage using config/review-labels.json definitions.
+            Give a concrete rationale for priority and each selected label. Priority
+            is scheduling guidance, not the severity of a single code finding.
+            P0 is an emergency, P1 is high user impact/reliability, P2 is normal
+            backlog, P3 is polish or an undecided proposal. Use null priority for
+            tracking indexes or insufficient evidence; explain why. Do not simply
+            copy a reporter's requested priority. Use regression ONLY with concrete
+            evidence of previously working behavior and a subsequent failure.
+            Select at most 8 relevant labels; uncertainty belongs in needs-info,
+            needs-live-repro or needs-product-decision, not invented certainty.
+            Never propose triage:manual. For PRs use null priority, an explanatory
+            priority_reason and no labels; automatic labeling is issue-only.
             Respond in the language of the original author, not a later commenter.
             Honor an explicit response-language request from the author. If unclear,
             default to English. Shared status labels and command help remain English.

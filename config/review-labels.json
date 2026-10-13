@@ -1,0 +1,92 @@
+[
+  {
+    "name": "P0",
+    "color": "b60205",
+    "description": "Emergency: security bypass, data loss or unusable core functionality."
+  },
+  {
+    "name": "P1",
+    "color": "d93f0b",
+    "description": "High-priority user-facing failure or reliability risk."
+  },
+  {
+    "name": "P2",
+    "color": "fbca04",
+    "description": "Normal backlog priority."
+  },
+  {
+    "name": "P3",
+    "color": "c5def5",
+    "description": "Polish, cleanup or a proposal with undecided scope."
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "Confirmed or reported incorrect behavior; inspect review evidence."
+  },
+  {
+    "name": "enhancement",
+    "color": "a2eeef",
+    "description": "New capability or behavior improvement."
+  },
+  {
+    "name": "documentation",
+    "color": "0075ca",
+    "description": "Documentation work."
+  },
+  {
+    "name": "validation",
+    "color": "bfdadc",
+    "description": "Runtime, integration or physical-device evidence is needed."
+  },
+  {
+    "name": "ux",
+    "color": "d4c5f9",
+    "description": "User interaction, clarity or accessibility of the experience."
+  },
+  {
+    "name": "reliability",
+    "color": "1d76db",
+    "description": "Delivery, persistence, recovery or sustained operation."
+  },
+  {
+    "name": "regression",
+    "color": "b60205",
+    "description": "Previously working behavior now fails; requires before/after evidence."
+  },
+  {
+    "name": "impact:ux-friction",
+    "color": "e4e669",
+    "description": "Avoidable user confusion, repetition or support burden."
+  },
+  {
+    "name": "impact:ux-release-blocker",
+    "color": "d93f0b",
+    "description": "A normal user cannot proceed without technical recovery or support."
+  },
+  {
+    "name": "needs-info",
+    "color": "fef2c0",
+    "description": "Specific information is needed to investigate."
+  },
+  {
+    "name": "needs-live-repro",
+    "color": "fef2c0",
+    "description": "Requires live or physical-device verification."
+  },
+  {
+    "name": "needs-product-decision",
+    "color": "fef2c0",
+    "description": "Requires a product scope or behavior decision."
+  },
+  {
+    "name": "tracking",
+    "color": "ededed",
+    "description": "Planning index spanning multiple issues; no single priority required."
+  },
+  {
+    "name": "triage:manual",
+    "color": "5319e7",
+    "description": "Pause all automatic label changes for this issue."
+  }
+]
