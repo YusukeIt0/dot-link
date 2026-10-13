@@ -17,37 +17,15 @@ Spotlightで **ターミナル**を検索して開きます。コマンドの内
 
 ## 2. コマンドをコピーして実行
 
-**Mac 0.4.5/build 73**を入れます。公開ハッシュと署名の整合性を確認し、**自分のホーム内のアプリケーション**（`~/Applications`）へ配置します。既存のDot Linkがある場合は停止するので、アプリの **アップデートを確認**を使ってください。
+実行時点の**最新の正式版**を取得します。ダウンロードと署名の整合性を確認し、**自分のホーム内のアプリケーション**（`~/Applications`）へ配置します。既存のDot Linkがある場合は停止するので、アプリの **アップデートを確認**を使ってください。
 
 ```sh
-(
-  set -eu
-  dotlink_destination="$HOME/Applications/Dot Link.app"
-  if [ -e "$dotlink_destination" ] || [ -L "$dotlink_destination" ]; then
-    echo 'Dot Link is already present. Use Check for updates in the app.' >&2
-    exit 1
-  fi
-  dotlink_stage="$(mktemp -d "${TMPDIR:-/tmp}/dot-link-install.XXXXXX")"
-  cd "$dotlink_stage"
-  curl --fail --location --proto '=https' --proto-redir '=https' \
-    --output Dot-Link.zip \
-    'https://github.com/YusukeIt0/dot-link/releases/download/mac-v0.4.5-73/Dot-Link-0.4.5-73-arm64.zip'
-  printf '%s  %s\n' \
-    '82f9a0cdd9a578d4d49b1a01640ee0491d25e74eee75e9524bea99f8df7518c3' \
-    'Dot-Link.zip' | shasum -a 256 -c -
-  ditto -x -k Dot-Link.zip unpacked
-  codesign --verify --deep --strict 'unpacked/Dot Link.app'
-  mkdir -p "$HOME/Applications"
-  mv -n 'unpacked/Dot Link.app' "$dotlink_destination"
-  if [ -e 'unpacked/Dot Link.app' ]; then
-    echo 'Destination appeared during installation; no app was replaced.' >&2
-    exit 1
-  fi
-  open "$dotlink_destination"
-)
+curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh | /bin/bash
 ```
 
-これは上記バージョン専用で、将来の最新版を自動選択するものではありません。作業用の一時フォルダは実行後も残ります。整合性の確認は、Appleの公証や安全性の保証とは別です。
+バージョン番号やファイル名の指定は不要です。[インストーラーの内容](../install.sh)を確認できます。整合性の確認は、Appleの公証や安全性の保証とは別です。
+
+インストーラーとMacアプリの初期表示は、Macの優先言語が日本語なら日本語、それ以外は英語です。
 
 ## 3. アプリを開いて準備
 

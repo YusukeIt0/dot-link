@@ -1,4 +1,28 @@
-# 導入と日常操作 / Setup
+# Setup and daily use
+
+[English](#english) · [日本語](#日本語)
+
+## English
+
+Start with [Install Dot Link on a Mac](mac-install.md). **Terminal installation is recommended**; manual ZIP installation and first-launch warnings are covered too.
+
+Install using the guide above, then open Dot Link. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
+
+[Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into Connect / disconnect your Mac in the Even companion, and connect. If you need the Mac app first, open Connect / disconnect your Mac below Location sharing and Display settings. Copy the GitHub download URL and open it in a browser on your Mac. A “Copied” notification appears for about 2.5 seconds after copying succeeds. If copying is unavailable, enter the displayed URL in your Mac browser. On your iPhone, search for Tailscale in the App Store, install it, and sign in with the same account used on your Mac. Connect both devices to the same Tailscale network before creating a pairing code. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
+
+Mac 0.3.2 and later can update after initial Mac preparation, before connecting Dot. The app quits and relaunches automatically during installation. If 0.3.0 or 0.3.1 keeps waiting for Even to close even though Dot has never been connected, quit Dot Link, download the latest version and replace only the app in your home Applications folder. Do not uninstall or remove the settings in Application Support.
+
+In **Speech input** on the Mac, choose free local Whisper small or save your own key for Soniox, ElevenLabs, Microsoft, OpenAI or AssemblyAI. Recordings go directly from your Mac to the selected service; its API charges and limits apply. Microsoft also requires your Azure Speech endpoint; see About the endpoint below the settings card. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting the active service key switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later; labels for all six services and their models require Even 0.2.21. Typed messages do not use speech recognition.
+
+For notifications, click **Permissions**, open Accessibility, add the installed Dot Link.app with **+**, and turn access on. Enable **Share all Mac notifications with Dot** to share visible sender names, headings and text from readable new notifications. Tell Dot which notifications you want to hear about. Some notification formats may not be readable, and announcements may be delayed. If sharing stops after an update, remove Dot Link from the Accessibility list and add it again. Pause stops notification collection.
+
+**Uninstall Dot Link…** moves the app, speech model, connection settings and conversation history to Trash. There is no option to keep settings. You will need to set up the app again to use it. See [Data handling](privacy.md) for the deletion scope.
+
+### Speech output
+
+**Speech output** on the Mac shows the current method, iPhone. Turn read aloud on or off in Dot Link inside the Even app. External speech output services are not yet available.
+
+## 日本語
 
 ## Mac
 
@@ -55,23 +79,3 @@ Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認�
 ## 停止と終了
 
 ウィンドウを閉じると常駐を続けます。一時停止は中継と通知を停止し、アプリを残します。「Dot Linkを終了」は中継・通知・常駐を終了します。再度アプリを開くと保存済みの設定で再開します。
-
-## English
-
-Start with [Install Dot Link on a Mac](mac-install.md). **Terminal installation is recommended**; manual ZIP installation and first-launch warnings are covered too.
-
-Install using the guide above, then open Dot Link. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
-
-[Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into Connect / disconnect your Mac in the Even companion, and connect. If you need the Mac app first, open Connect / disconnect your Mac below Location sharing and Display settings. Copy the GitHub download URL and open it in a browser on your Mac. A “Copied” notification appears for about 2.5 seconds after copying succeeds. If copying is unavailable, enter the displayed URL in your Mac browser. On your iPhone, search for Tailscale in the App Store, install it, and sign in with the same account used on your Mac. Connect both devices to the same Tailscale network before creating a pairing code. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
-
-Mac 0.3.2 and later can update after initial Mac preparation, before connecting Dot. The app quits and relaunches automatically during installation. If 0.3.0 or 0.3.1 keeps waiting for Even to close even though Dot has never been connected, quit Dot Link, download the latest version and replace only the app in your home Applications folder. Do not uninstall or remove the settings in Application Support.
-
-In **Speech input** on the Mac, choose free local Whisper small or save your own key for Soniox, ElevenLabs, Microsoft, OpenAI or AssemblyAI. Recordings go directly from your Mac to the selected service; its API charges and limits apply. Microsoft also requires your Azure Speech endpoint; see About the endpoint below the settings card. Changes take effect on the next recording, with no automatic fallback. Choose **Always Allow** when Keychain asks; an app update may require permission again. To replace a key, delete it first and save the new one. Deleting the active service key switches back to Whisper. Speech input also works with the published Even 0.2.14; provider labels and detailed error messages are included in Even 0.2.19 and later; labels for all six services and their models require Even 0.2.21. Typed messages do not use speech recognition.
-
-For notifications, click **Permissions**, open Accessibility, add the installed Dot Link.app with **+**, and turn access on. Enable **Share all Mac notifications with Dot** to share visible sender names, headings and text from readable new notifications. Tell Dot which notifications you want to hear about. Some notification formats may not be readable, and announcements may be delayed. If sharing stops after an update, remove Dot Link from the Accessibility list and add it again. Pause stops notification collection.
-
-**Uninstall Dot Link…** moves the app, speech model, connection settings and conversation history to Trash. There is no option to keep settings. You will need to set up the app again to use it. See [Data handling](privacy.md) for the deletion scope.
-
-### Speech output
-
-**Speech output** on the Mac shows the current method, iPhone. Turn read aloud on or off in Dot Link inside the Even app. External speech output services are not yet available.
