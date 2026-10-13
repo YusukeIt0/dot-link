@@ -2,6 +2,8 @@
 
 ## Mac
 
+ダウンロードするファイルの選び方、初回起動の警告、ターミナルからの導入は[Macへのインストール](mac-install.md#日本語)を参照してください。
+
 1. [最新版](https://github.com/YusukeIt0/dot-link/releases/latest)のMac ZIPを取得して展開します。
 2. Dot Link.appを自分のホームフォルダのApplicationsへ移動して開きます。
 3. 表示される準備手順に沿って、Tailscale接続と音声認識モデルを用意します。初回は約488 MBのモデルを取得します。
@@ -56,6 +58,8 @@ Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認�
 ウィンドウを閉じると常駐を続けます。一時停止は中継と通知を停止し、アプリを残します。「Dot Linkを終了」は中継・通知・常駐を終了します。再度アプリを開くと保存済みの設定で再開します。
 
 ## English
+
+For choosing the download, first-launch warnings and Terminal commands, see [Install Dot Link on a Mac](mac-install.md#english).
 
 Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and open it. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
 
