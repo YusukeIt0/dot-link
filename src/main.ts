@@ -44,13 +44,27 @@ let relay = relaySettings.read();
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
 let token = relay?.token ?? pairing.read();
 const setupPanel = el<HTMLDetailsElement>('pairing-settings');
-let setupReady = !!token;
-function showSetupStep(): void {
-  el('setup-intro').hidden = setupReady;
-  el('pairing-form').hidden = !setupReady;
+const macSetupPanel = el<HTMLDetailsElement>('mac-setup');
+function openSettings(panel: HTMLDetailsElement): void {
+  el<HTMLDetailsElement>('display-settings').open = false;
+  panel.open = true;
+  panel.querySelector('summary')?.focus();
+  panel.scrollIntoView({ block: 'start' });
 }
-el('setup-ready').onclick = () => { setupReady = true; showSetupStep(); };
-el('setup-back').onclick = () => { setupReady = false; showSetupStep(); };
+el('setup-ready').onclick = () => openSettings(setupPanel);
+el('setup-back').onclick = () => openSettings(macSetupPanel);
+el('copy-mac-url').onclick = async () => {
+  const field = el<HTMLTextAreaElement>('mac-download-url');
+  const status = el('mac-copy-status');
+  status.textContent = '';
+  try {
+    await navigator.clipboard.writeText(field.value);
+    status.textContent = t('URLをコピーしました。Macのブラウザーで開いてください。');
+  } catch {
+    field.focus(); field.select(); field.setSelectionRange(0, field.value.length);
+    status.textContent = t('自動でコピーできませんでした。URLを長押ししてコピーしてください。');
+  }
+};
 const setupHome = document.createComment('connection-settings');
 setupPanel.before(setupHome);
 const noticeHome = document.createComment('notice-home');
@@ -58,8 +72,6 @@ notice.before(noticeHome);
 function showSetup(unpaired: boolean): void {
   document.body.dataset.pairState = unpaired ? 'unpaired' : 'paired';
   setupPanel.open = unpaired;
-  if (!unpaired) setupReady = true;
-  showSetupStep();
   el('forget-pairing').hidden = unpaired;
   el('pair').hidden = !offeredInvite;
   if (unpaired) {
@@ -557,7 +569,7 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status']) {
+  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';

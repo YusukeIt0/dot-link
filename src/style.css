@@ -57,3 +57,7 @@ main:has(.display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 .display-settings-actions .note:empty { display: none; }
 
 .speech-status { font-size: 13px; color: #9de591; margin: 16px 0 10px; padding-top: 14px; border-top: 1px solid #344637; }
+
+#mac-download-url { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+#mac-copy-status:empty { display: none; }
+#mac-setup, #pairing-settings { scroll-margin-top: 16px; }

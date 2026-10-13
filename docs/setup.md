@@ -15,8 +15,10 @@ Macは起動・ネットワーク接続を維持してください。スリー�
 
 [Dot LinkをEven Hubで開く](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)。パソコンで開いた場合は、ページのQRコードをiPhoneで読み取ってください。Evenアプリの「Even Hub」で「Dot Link」を検索して開くこともできます。Dot Linkをインストールしてから、以下の接続手順へ進んでください。Mac版も別途必要です。
 
+Even側の設定は「会話設定」「位置情報の共有」「表示設定」「Macと接続」の順です。Mac版をまだ入れていない場合は、一番下の「Macと接続」で入手先URLをコピーし、Macのブラウザーで開いてインストールします。コピーできない環境ではURLを長押しして選択・コピーしてください。「会話設定」からも入手・接続手順を開けます。
+
 1. Macの「Evenを接続」から接続コードを発行します。
-2. Even側にコード全体を貼り付けて保存します。コードは2分間・1回限りです。
+2. Even側の「会話設定」にコード全体を貼り付けて接続します。コードは2分間・1回限りです。
 3. 録音して、Dotからの返信を確認します。
 
 ## 更新
@@ -57,7 +59,7 @@ Macの「音声出力」で、現在の読み上げ方式（iPhone）を確認�
 
 Download the Mac ZIP, place Dot Link.app in your user's Applications folder, and open it. Follow setup for Tailscale, the local speech model, and your own OpenAI tunnel. Keep the Mac awake and online; an iPhone alone is not enough.
 
-[Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into the Even companion, and save it. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
+[Open Dot Link in Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink). On a computer, scan the page’s QR code with your iPhone. Alternatively, search for “Dot Link” in the Even Realities app. Install and open the companion before pairing. Create an Even connection code on the Mac, paste the entire code into Conversation settings in the Even companion, and connect. If you need the Mac app first, open Connect your Mac below Location sharing and Display settings. Copy the GitHub download URL and open it in a browser on your Mac. If copying is unavailable, select and copy the displayed URL manually. Codes expire after two minutes and work once. Automatic updates are temporarily disabled. Use **Check for updates**; GitHub credentials are not required. If the app says “Close Even to apply the update”, close Dot Link on the Even side. Closing the window keeps the app running. Pause stops the relay; Quit stops the app and relay. Existing settings and pairing are preserved during updates.
 
 Mac 0.3.2 and later can update after initial Mac preparation, before connecting Dot. The app quits and relaunches automatically during installation. If 0.3.0 or 0.3.1 keeps waiting for Even to close even though Dot has never been connected, quit Dot Link, download the latest version and replace only the app in your home Applications folder. Do not uninstall or remove the settings in Application Support.
 
