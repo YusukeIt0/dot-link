@@ -17,13 +17,13 @@ Open **Terminal** from Spotlight. You can ask an AI assistant to explain the com
 
 ## 2. Copy and run the commands
 
-This downloads the **latest stable release at the time you run it**. It checks the download checksum and app signature, then places the app in **your Home folder’s Applications** (`~/Applications`). If Dot Link is already there, it stops; use **Check for updates** in the app.
+This downloads the **latest stable release at the time you run it**. It checks that the download matches GitHub’s published checksum, verifies the app’s internal signature consistency and bundle identifier, then places the app in **your Home folder’s Applications** (`~/Applications`). If Dot Link is already there, it stops; use **Check for updates** in the app.
 
 ```sh
 curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh | /bin/bash
 ```
 
-No version number or filename is needed. You can [read the installer](../install.sh) before running it. Integrity checks are not Apple notarization or a safety guarantee.
+No version number or filename is needed. You can [read the installer](../install.sh) before running it. These checks detect a mismatched download or app bundle; they do not independently authenticate the publisher or provide Apple notarization.
 
 The installer and Mac app start in Japanese when Japanese is the Mac’s preferred language; otherwise they use English.
 

@@ -19,6 +19,7 @@ dotlink_install() (
       ja:url) echo '配布ファイルの取得先を確認できませんでした。' ;;
       ja:checksum) echo '配布ファイルのSHA-256を確認できませんでした。' ;;
       ja:download) echo '%s をダウンロードしています…' ;;
+      ja:identity) echo '配布ファイル内のアプリがDot Linkではありません。' ;;
       ja:race) echo '導入先にアプリが作成されたため停止しました。既存アプリは置き換えていません。' ;;
       ja:installed) echo '%s を導入しました。Dot Linkを開きます…' ;;
       *:platform) echo 'An Apple Silicon Mac is required.' ;;
@@ -30,6 +31,7 @@ dotlink_install() (
       *:url) echo 'Unexpected download location.' ;;
       *:checksum) echo 'The release SHA-256 checksum is missing or invalid.' ;;
       *:download) echo 'Downloading %s…' ;;
+      *:identity) echo 'The downloaded app is not identified as Dot Link.' ;;
       *:race) echo 'Destination appeared during installation; no app was replaced.' ;;
       *:installed) echo 'Installed %s. Opening Dot Link…' ;;
     esac
@@ -82,6 +84,8 @@ dotlink_install() (
   printf '%s  %s\n' "$dotlink_hash" Dot-Link.zip | shasum -a 256 -c -
   ditto -x -k Dot-Link.zip unpacked
   codesign --verify --deep --strict 'unpacked/Dot Link.app'
+  dotlink_bundle_id="$(plutil -extract CFBundleIdentifier raw -expect string -o - 'unpacked/Dot Link.app/Contents/Info.plist')"
+  [ "$dotlink_bundle_id" = app.tripsurf.dotlink.mac ] || fail identity
   mkdir -p "$HOME/Applications"
   mv -n 'unpacked/Dot Link.app' "$dotlink_destination"
   [ ! -e 'unpacked/Dot Link.app' ] || fail race
