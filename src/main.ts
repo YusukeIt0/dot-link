@@ -17,7 +17,10 @@ import { RelaySettings, PendingUtterance, apiAddress, type RelayCredentials } fr
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
 import { LanguagePreferences } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
+import { installKeyboardViewport } from './keyboard-viewport.ts';
 import './style.css';
+
+installKeyboardViewport(document.querySelector<HTMLElement>('main')!);
 
 const languagePreferences = new LanguagePreferences(() => localStorage);
 const staticLabels = [...document.querySelectorAll<HTMLElement>('[data-en]')].map(element => ({

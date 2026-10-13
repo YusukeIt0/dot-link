@@ -1,9 +1,9 @@
 :root { font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif; color: #ebeee9; background: #141817; color-scheme: dark; }
 * { box-sizing: border-box; }
-html, body { min-height: 100%; }
+html, body { height: 100%; overflow: hidden; }
 body { margin: 0; }
-/* Let the document scroll so native iPhone touch and keyboard scrolling share one viewport. */
-main { max-width: 680px; min-height: 100vh; min-height: 100dvh; margin: 0 auto; padding: 32px 24px; }
+/* One scroll area, sized by the visual viewport when the keyboard opens/closes. */
+main { position: fixed; top: 0; left: 0; right: 0; width: 100%; max-width: 680px; height: 100%; margin: 0 auto; padding: 32px 24px max(32px, env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 header > p:first-child { font-size: 12px; letter-spacing: .2em; color: #aebdaf; }
 h1 { font-size: 44px; margin: 8px 0; font-weight: 500; }
 #connection { color: #bec5bf; }
