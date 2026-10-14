@@ -41,6 +41,7 @@ let speakingCount = 0;
 let speechGeneration = 0;
 let speechQueuedAt = 0;
 let speechCooldownUntil = 0;
+let speechRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
 let speechCooldownTimer: ReturnType<typeof setTimeout> | undefined;
 const deferredSpeech: SpeechSynthesisUtterance[] = [];
 const headRaise = new HeadRaiseDetector(displayPreferences.value);
@@ -475,13 +476,6 @@ let lastDisplayText = t('長押しで話してください');
 let renderDisplayText: () => string = () => t('長押しで話してください');
 
 function syncVoiceContext(): void {
-  // Some hosts interrupt synthesis without delivering end/error. Allow its
-  // queue to settle, then trust the actual synthesizer state to recover.
-  if (speakingCount && performance.now() - speechQueuedAt > 1500 &&
-      !window.speechSynthesis?.speaking && !window.speechSynthesis?.pending) {
-    speechGeneration++; speakingCount = 0;
-    speechCooldownUntil = performance.now() + 600;
-  }
   recorder.setContext(!exited && glassesReady && !!token && subscribed && progress.connection === 'online',
     busy || speakingCount > 0 || !!window.speechSynthesis?.speaking || !!window.speechSynthesis?.pending ||
     performance.now() < speechCooldownUntil || (recorder.state === 'idle' && !!transcript.value.trim()),
@@ -498,7 +492,23 @@ function renderWakeState(): void {
     paused: t('Hey dotは一時停止中'), error: t('Hey dotを使えません。オフにしてから再度オンにしてください。') };
   el('wake-status').textContent = labels[wakeState];
 }
+// Observe synthesis independently of relay polls and UI activity. Keep checking
+// through long/queued speech; missing completion callbacks must not block wake.
+function monitorSpeechCompletion(): void {
+  clearTimeout(speechRecoveryTimer);
+  if (exited || !speakingCount) return;
+  speechRecoveryTimer = setTimeout(() => {
+    speechRecoveryTimer = undefined;
+    if (exited || !speakingCount) return;
+    if (performance.now() - speechQueuedAt > 1500 &&
+        !window.speechSynthesis?.speaking && !window.speechSynthesis?.pending) {
+      speechGeneration++; speakingCount = 0;
+      finishSpeechCooldown();
+    } else monitorSpeechCompletion();
+  }, 500);
+}
 function finishSpeechCooldown(): void {
+  clearTimeout(speechRecoveryTimer); speechRecoveryTimer = undefined;
   speechCooldownUntil = performance.now() + 600;
   clearTimeout(speechCooldownTimer);
   speechCooldownTimer = setTimeout(() => syncVoiceContext(), 650);
@@ -526,6 +536,7 @@ function speakReply(speech: SpeechSynthesisUtterance): void {
   speech.onend = complete;
   speech.onerror = () => { complete(); if (!exited && generation === speechGeneration) notice.textContent = t('読み上げできませんでした。画面の返信をご確認ください。'); };
   try { window.speechSynthesis.speak(speech); } catch { complete(); }
+  monitorSpeechCompletion();
 }
 
 // A timer updates only the short status line. Keep at most one queued update
@@ -769,7 +780,7 @@ function stopSession(): void {
   exited = true; pageActive = false; connectionVersion++; connectionController.abort();
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
-  clearTimeout(speechCooldownTimer); speechGeneration++; speakingCount = 0;
+  clearTimeout(speechCooldownTimer); clearTimeout(speechRecoveryTimer); speechGeneration++; speakingCount = 0;
   deferredSpeech.length = 0;
   window.speechSynthesis?.cancel(); clearClip(); void recorder.dispose();
 }
