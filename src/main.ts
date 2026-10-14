@@ -726,8 +726,13 @@ const recorder = new VoiceInput({
     }
     if (state === 'stopping' && !discarding) { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     if (state === 'idle' && discarding) { showDiscarded(); return; }
+    // A no-speech cancellation has no onClip callback to end recognition.
+    // Reset its phase/prompt before restoring a reply queued during capture.
+    if (state === 'idle' && !clip && !busy) {
+      progress.setPhase('idle');
+      display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。'));
+    }
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
-    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。')); }
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
     if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => t('指を離すと停止します')); }
     if (state === 'recording') {
