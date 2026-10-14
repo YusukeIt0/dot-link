@@ -70,7 +70,8 @@
     "THIRD-PARTY-NOTICES.txt": {
       "bytes": 427950,
       "sha256": "4d56f42f5bfbda167cbd22abeb3a18ea4a0ac24da08a0331f9809687592c85e7",
-      "local": "THIRD-PARTY-NOTICES.txt"
+      "gzip": "THIRD-PARTY-NOTICES.txt.gz",
+      "gzipSha256": "ae78a359ab4b8bfb1286ee52c071367a0b06239a842c9bba773012174fde8db9"
     }
   }
 }

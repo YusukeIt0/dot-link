@@ -20,7 +20,8 @@ const patch=join(root,'distribution/wake/runtime.patch');
 const applied=spawnSync('git',['apply','--reverse','--check',patch],{cwd:source,stdio:'ignore'}).status===0;
 if(!applied)run('git',['apply',patch],source);
 // emcmake finds emcc through PATH. No shell profile or global configuration edits.
-const env={...process.env,PATH:join(sdk,'upstream/emscripten')+':'+process.env.PATH,EMSDK:sdk};
+const env={...process.env,PATH:join(sdk,'upstream/emscripten')+':'+process.env.PATH,EMSDK:sdk,
+  SHERPA_ONNX_IS_USING_BUILD_WASM_SH:'1'};
 run(join(sdk,'upstream/emscripten/emcmake'),['cmake','-S',source,'-B',build,
   '-DCMAKE_BUILD_TYPE=Release','-DBUILD_SHARED_LIBS=OFF','-DSHERPA_ONNX_ENABLE_WASM=ON',
   '-DSHERPA_ONNX_ENABLE_WASM_WEB=ON','-DSHERPA_ONNX_ENABLE_TTS=OFF','-DSHERPA_ONNX_ENABLE_BINARY=OFF',
@@ -40,7 +41,7 @@ for(const [kind,symbol] of [['kws','Kws'],['vad','Vad']]){
 }
 const hash=b=>createHash('sha256').update(b).digest('hex');
 for(const [name,info] of Object.entries(manifest.files)){
-  if(!info.local&&!info.gzip)continue;
+  if(!['runtime.js','runtime.wasm','kws.js','vad.js'].includes(name))continue;
   const data=info.local?await readFile(join(output,info.local)):wasm;
   info.bytes=data.length;info.sha256=hash(data);
   if(info.gzip)info.gzipSha256=hash(await readFile(join(output,info.gzip)));
