@@ -24,7 +24,8 @@ export class OperationPreferences {
   }
   async attach(native: NativeStore): Promise<void> {
     this.native = native;
-    if (this.hasLocal) return;
+    // A choice made in this session outranks every restored copy.
+    if (this.revision > 0) { await this.save(this.wakeWord); return; }
     const revision = this.revision;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -32,7 +33,11 @@ export class OperationPreferences {
         timer = setTimeout(() => resolve(''), 3000);
       })]);
       if (revision !== this.revision) return;
-      this.wakeWord = parse(raw) ?? false; this.writeLocal();
+      const restored = parse(raw);
+      // Packaged WebViews can revisit an old origin with a stale ON value.
+      // Conflicting stored copies never turn microphone listening back on.
+      if (restored === false || !this.hasLocal) this.wakeWord = restored ?? false;
+      this.writeLocal();
     } catch {} finally { clearTimeout(timer); }
   }
   save(enabled: boolean): Promise<boolean> {
@@ -40,8 +45,8 @@ export class OperationPreferences {
     const saved = this.writeLocal(), native = this.native, raw = String(enabled);
     this.writes = this.writes.then(async () => {
       if (!native) return saved;
-      try { return await native.setLocalStorage(KEY, raw) === true || saved; }
-      catch { return saved; }
+      try { return await native.setLocalStorage(KEY, raw) === true; }
+      catch { return false; }
     });
     return this.writes;
   }

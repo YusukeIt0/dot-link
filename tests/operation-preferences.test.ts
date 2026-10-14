@@ -18,3 +18,17 @@ test('native writes stay in order and both stores failing is reported',async()=>
   assert.deepEqual(await Promise.all([prefs.save(true),prefs.save(false)]),[true,true]);assert.deepEqual(writes,['true','false']);
   const broken=new OperationPreferences(()=>{throw new Error('blocked');});assert.equal(await broken.save(true),false);
 });
+
+test('native OFF overrides an old WebView ON value; a fresh user choice still wins',async()=>{
+  const prefs=new OperationPreferences(()=>store('true'));
+  await prefs.attach({getLocalStorage:async()=> 'false',setLocalStorage:async()=>true});assert.equal(prefs.wakeWord,false);
+  const writes:string[]=[];const fresh=new OperationPreferences(()=>store('false'));await fresh.save(true);
+  await fresh.attach({getLocalStorage:async()=> 'false',setLocalStorage:async(_key,value)=>{writes.push(value);return true;}});
+  assert.equal(fresh.wakeWord,true);assert.deepEqual(writes,['true']);
+});
+
+test('failed native persistence is reported even if a current-origin copy was saved',async()=>{
+  const prefs=new OperationPreferences(()=>store('true'));
+  await prefs.attach({getLocalStorage:async()=> 'true',setLocalStorage:async()=>false});
+  assert.equal(await prefs.save(false),false);assert.equal(prefs.wakeWord,false);
+});

@@ -245,7 +245,7 @@ async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   updates.start(true);
 }
 
-async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, recovered = false): Promise<T> {
+async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, recovered = false, requestSignal?: AbortSignal): Promise<T> {
   const version = connectionVersion;
   await ensureRelayOrigin();
   if (version !== connectionVersion || exited) throw new Error('Connection changed');
@@ -253,11 +253,11 @@ async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, 
     ...(trace ? { 'X-G2-Trace-ID': trace } : {}),
     ...(body ? { 'Content-Type': typeof body === 'string' ? 'application/json' : 'audio/wav' } : {}) },
     body: body instanceof Uint8Array ? new Blob([new Uint8Array(body).buffer], {type:'audio/wav'}) : body,
-    signal: AbortSignal.any([connectionController.signal, AbortSignal.timeout(path === '/api/transcribe' ? 100000 : 25000)]) });
+    signal: AbortSignal.any([connectionController.signal, AbortSignal.timeout(path === '/api/transcribe' ? 100000 : 25000), ...(requestSignal ? [requestSignal] : [])]) });
   if (version !== connectionVersion || exited) throw new Error('Connection changed');
   if (response.status === 401 && relay?.resumeToken && !recovered) {
     await ensureRelayOrigin(true);
-    return api<T>(path, method, body, trace, true);
+    return api<T>(path, method, body, trace, true, requestSignal);
   }
   if (response.status === 401) forgetPairing(t('接続設定が無効になりました。Macで新しい接続コードを発行してください。'));
   if (!response.ok && path === '/api/transcribe' && response.status === 422) {
@@ -463,6 +463,8 @@ transcript.oninput = () => { sendButton.disabled = busy || !transcript.value.tri
 
 let bridge: EvenAppBridge | undefined;
 let clip: Uint8Array | undefined;
+let discarding = false;
+let transcriptionController: AbortController | undefined;
 let displayChain = Promise.resolve();
 let displayGeneration = 0;
 let lastDisplayText = t('長押しで話してください');
@@ -664,7 +666,9 @@ const recorder = new VoiceInput({
   loadWake: loadWakeDetector,
   onWakeState: state => { wakeState = state; renderWakeState(); },
   onClip: (wav, _seconds, source) => {
-    if (exited) return;
+    if (exited || discarding) { wav.fill(0); return; }
+    transcriptionController?.abort();
+    const controller = new AbortController(); transcriptionController = controller;
     const version = connectionVersion;
     audioTraceId ??= crypto.randomUUID();
     timing.mark(audioTraceId, 'audio_ready');
@@ -674,13 +678,14 @@ const recorder = new VoiceInput({
     busy = true; display(() => t('認識中'), () => getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
     const trace = audioTraceId;
     timing.mark(trace, 'asr_sent');
-    void api<{text:string}>('/api/transcribe', 'POST', wav, trace).then(result => {
-      if (exited || version !== connectionVersion) return;
+    void api<{text:string}>('/api/transcribe', 'POST', wav, trace, false, controller.signal).then(result => {
+      if (exited || version !== connectionVersion || controller.signal.aborted) return;
       timing.mark(trace, 'asr_received');
       const text = source === 'wake' ? wakeTranscript(result.text) : result.text;
       if (!text.trim()) {
         busy = false; clearClip(); progress.setPhase('idle');
         display(() => t('G2接続済み'), () => t('Hey dot または長押しで話してください'));
+        flushPendingDisplay();
         return;
       }
       transcript.value = text; sendButton.disabled = false;
@@ -690,12 +695,14 @@ const recorder = new VoiceInput({
       if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       refreshStatus();
-    }).catch(error => { if (exited || version !== connectionVersion) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); });
+    }).catch(error => { if (exited || version !== connectionVersion || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); })
+      .finally(() => { if (transcriptionController === controller) transcriptionController = undefined; });
   },
   onState: state => {
-    if (state === 'stopping') { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
+    if (state === 'stopping' && !discarding) { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
     recordButton.disabled = !glassesReady || state === 'stopping';
+    if (state === 'idle' && discarding) { showDiscarded(); return; }
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
     else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => recorder.source === 'wake' ? t('Hey dot または長押しで話してください') : t('音声を取得できませんでした。もう一度長押ししてください。')); }
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
@@ -732,11 +739,19 @@ function startRecording(): void {
   void recorder.start();
 }
 recordButton.onclick = () => recorder.state === 'idle' ? startRecording() : void recorder.stop();
-discardButton.onclick = () => {
-  if (recorder.state !== 'idle') void recorder.stop(true);
+function showDiscarded(): void {
+  discarding = false;
   clearClip(); notice.textContent = t('録音を破棄しました。');
   progress.setPhase('idle');
   display(() => t('G2接続済み'), () => t('長押しで話してください')); flushPendingDisplay();
+}
+discardButton.onclick = () => {
+  if (transcriptionController) { transcriptionController.abort(); transcriptionController = undefined; busy = false; }
+  clearClip();
+  if (recorder.state !== 'idle') {
+    discarding = true; notice.textContent = t('録音を破棄しました。');
+    void recorder.stop(true);
+  } else showDiscarded();
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
