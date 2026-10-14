@@ -17,7 +17,7 @@ The spotter keeps a two-second PCM ring to recover following speech received dur
 - Silero VAD model; pinned SHA-256 in `distribution/wake/manifest.json`.
 - Emscripten **4.0.23**, ONNX Runtime SIMD **1.28.2** as hash-pinned by the sherpa source.
 
-The compiled runtime exports only keyword spotting and VAD APIs. Its WebAssembly heap starts at 64 MiB and has a 256 MiB ceiling; these are heap settings, not measured phone memory or battery consumption. JavaScript, models and WebView memory add overhead. WebAssembly SIMD is required. Failure leaves hold-to-talk available.
+The compiled runtime exports only keyword spotting and VAD APIs. A small source patch preserves absolute keyword token timestamps when sherpa resets its decoder after silence; without it, the reported timestamp can point at older audio after a wait. Out-of-window timestamps never substitute the whole audio ring. Its WebAssembly heap starts at 64 MiB and has a 256 MiB ceiling; these are heap settings, not measured phone memory or battery consumption. JavaScript, models and WebView memory add overhead. WebAssembly SIMD is required. Failure leaves hold-to-talk available.
 
 `npm run build`, `npm test` and `npm run dev` prepare the assets. Model archives download at build time from official GitHub releases, are checked by size/SHA-256, and are extracted to ignored `public/wake-assets/`. End-user detection loads only packaged assets. `package:beta` verifies their complete filename set and hashes before allowing model/WASM files through its release scanner. The runtime gzip is checked in so normal builds do not need a compiler toolchain.
 
@@ -25,9 +25,9 @@ To rebuild the runtime, install CMake, Git and a C/C++ build tool, then run `nod
 
 ## Validation and physical checklist
 
-Automated tests cover cue trimming, no-speech cancellation, silence/manual endpoints, 30-second bounds, microphone ownership, OFF/loading races, stale results, disconnection, close retries, preserved manual input and preference restore races. A runtime test initializes the actual WASM and both models with local files and processes/cancels silent sessions without network access.
+Automated tests cover cue trimming, no-speech cancellation, silence/manual endpoints, 30-second bounds, microphone ownership, OFF/loading races, stale results, disconnection, close retries, preserved manual input and preference restore races. A runtime test initializes the actual WASM and both models with local files and processes/cancels silent sessions without network access. A second regression uses the upstream model archive's own test sample to verify a 30-second timestamp shift after silence. It fails with the unpatched runtime and passes with the patched runtime. The fixture comes from the same hash-pinned model archive; a missing build cache requires downloading that archive again.
 
-Local synthetic English/Japanese samples activated on cue plus command and cue alone. Cue alone produced no clip; two short ordinary-speech samples produced no activation. This is a narrow smoke test, not an accuracy estimate or real-device proof. It does not establish recognition for all voices, accents or environments.
+Local synthetic English/Japanese samples activated on cue plus command and cue alone. Both immediate input and input after 30 seconds of silence were checked. Cue alone produced no clip; two short ordinary-speech samples produced no activation. This is a narrow smoke test, not an accuracy estimate or real-device proof. It does not establish recognition for all voices, accents or environments.
 
 Before merge, install the PR commit through the owner's Even Beta route and record the package version/commit with results:
 

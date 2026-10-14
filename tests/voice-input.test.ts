@@ -5,21 +5,21 @@ import type { WakeEvent } from '../src/wake-engine.ts';
 import type { WakeDetector } from '../src/wake-detector.ts';
 const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 function setup() {
-  const calls: boolean[] = [], states: string[] = [], clips: string[] = [], detectorCalls: string[] = [];
+  const calls: boolean[] = [], states: string[] = [], clips: string[] = [], detectorCalls: string[] = [], errors: string[] = [];
   let emit!: (event: WakeEvent) => void, fail!: () => void;
-  let closeOK = true, time = 0;
+  let closeOK = true, time = 0; const closeSequence: boolean[] = [];
   const detector: WakeDetector = {
     listen: () => { detectorCalls.push('listen'); }, cancel: () => { detectorCalls.push('cancel'); },
     hold: () => { detectorCalls.push('hold'); }, finish: discard => emit({ type: 'clip', seconds: 1, ...(!discard ? { wav: new Uint8Array(46) } : {}) }),
     append: () => {}, dispose: () => { detectorCalls.push('dispose'); },
   };
-  const voice = new VoiceInput({ microphone: async open => { calls.push(open); return open || closeOK; },
+  const voice = new VoiceInput({ microphone: async open => { calls.push(open); return open || (closeSequence.shift() ?? closeOK); },
     loadWake: async (event, error) => { emit = event; fail = error; return detector; },
     onClip: (_wav, _seconds, source) => clips.push(source), onState: state => states.push(state),
-    onError: message => assert.fail(message), onWakeState: state => states.push('wake:'+state), now: () => time });
+    onError: message => errors.push(message), onWakeState: state => states.push('wake:'+state), now: () => time });
   voice.setContext(true, false);
-  return { voice, calls, states, clips, detectorCalls, emit: (event: WakeEvent) => emit(event), fail: () => fail(),
-    close: (ok: boolean) => { closeOK = ok; }, clock: (value: number) => { time = value; } };
+  return { voice, calls, states, clips, detectorCalls, errors, emit: (event: WakeEvent) => emit(event), fail: () => fail(),
+    close: (ok: boolean) => { closeOK = ok; }, closeSequence: (...values: boolean[]) => { closeSequence.push(...values); }, clock: (value: number) => { time = value; } };
 }
 
 test('OFF leaves the microphone closed; enabling opens it once and blocking closes it', async () => {
@@ -98,4 +98,21 @@ test('an active wake utterance survives a poll failure, then pauses until connec
   s.emit({type:'clip',seconds:2,wav:new Uint8Array(48)});await tick();assert.deepEqual(s.clips,['wake']);
   assert.deepEqual(s.calls,[true,false]);s.voice.setContext(true,false,true);await tick();
   assert.deepEqual(s.calls,[true,false,true]);await s.voice.dispose();
+});
+
+
+test('wake close failure warns the HUD and a successful OFF retry clears stop-error UI', async () => {
+  const s=setup();await s.voice.setEnabled(true);await tick();s.close(false);
+  await s.voice.setEnabled(false);assert.equal(s.voice.state,'stop-error');assert.equal(s.errors.length,1);
+  await s.voice.start();assert.equal(s.errors.length,2);
+  s.close(true);await s.voice.setEnabled(false);assert.equal(s.voice.state,'idle');
+  assert.equal(s.states.filter(x=>!x.startsWith('wake:')).at(-1),'idle');await s.voice.dispose();
+});
+
+
+test('queued close attempts restore the UI when a later attempt succeeds', async () => {
+  const s=setup();await s.voice.setEnabled(true);await tick();s.closeSequence(false,true);
+  await Promise.all([s.voice.setEnabled(false),s.voice.setEnabled(false)]);
+  assert.equal(s.errors.length,1);assert.equal(s.voice.state,'idle');
+  assert.equal(s.states.filter(x=>!x.startsWith('wake:')).at(-1),'idle');await s.voice.dispose();
 });

@@ -87,7 +87,9 @@ export class WakeEngine {
         // Token timestamps mark onset, not word completion. Keep a short post-token
         // margin; retain following speech already received during decoder latency.
         const end = Math.round(((result.start_time ?? 0) + last + 0.20) * SAMPLE_RATE);
-        const start = Math.max(this.received - this.ring.length, Math.min(this.received, end));
+        // Never substitute the whole ring when a detector supplies an old or
+        // future timestamp: that could include the cue or pre-wake speech.
+        const start = end >= Math.max(0, this.received - this.ring.length) && end <= this.received ? end : this.received;
         const preRoll = new Uint8Array((this.received - start) * 2);
         const view = new DataView(preRoll.buffer);
         const floats = new Float32Array(preRoll.length / 2);

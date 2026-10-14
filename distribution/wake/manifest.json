@@ -33,10 +33,10 @@
       "local": "vad.js"
     },
     "runtime.wasm": {
-      "bytes": 12806716,
-      "sha256": "cecdbfb04cbf3b3a35467b47316e3d7de78f87abc15e56f9e69b1c86e2e872bd",
+      "bytes": 12806735,
+      "sha256": "2d64ec3fb0ea63ea5d733ddd2e9d5a2675f9b92d6deaddd1cd33574e8746d08e",
       "gzip": "runtime.wasm.gz",
-      "gzipSha256": "3432dd3f8809c78f941dbe8401d7bebc7bebcafb6181b3895f0400e0fe543580"
+      "gzipSha256": "3bf6acc1bba76c67fb54ca3a42cb49086bd8c152c485f01bcc8ac402b7cf0e21"
     },
     "encoder.onnx": {
       "bytes": 4807159,

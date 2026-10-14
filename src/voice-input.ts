@@ -2,6 +2,7 @@ import { Recorder, type RecordingState } from './audio.ts';
 import { MicrophoneLease } from './microphone-lease.ts';
 import type { LoadWakeDetector, WakeDetector } from './wake-detector.ts';
 import type { WakeEvent } from './wake-engine.ts';
+import { t } from './i18n.ts';
 
 export type WakeState = 'off' | 'loading' | 'listening' | 'paused' | 'error';
 export type VoiceSource = 'manual' | 'wake';
@@ -85,7 +86,8 @@ export class VoiceInput {
     this.sync();
   }
   start(): Promise<void> {
-    if (this.disposed || !this.available || this.closeFailed) return Promise.resolve();
+    if (this.closeFailed) { this.reportCloseFailure(); return Promise.resolve(); }
+    if (this.disposed || !this.available) return Promise.resolve();
     if (this.capture === 'recording') {
       this.source = 'manual'; this.detector?.hold(); this.options.onState('recording');
       return Promise.resolve();
@@ -100,7 +102,6 @@ export class VoiceInput {
   async stop(discard = false): Promise<void> {
     if (this.closeFailed) {
       await this.closeListening();
-      if (!this.closeFailed) this.options.onState('idle');
       return;
     }
     if (this.capture) {
@@ -177,9 +178,14 @@ export class VoiceInput {
   }
   private async closeListening(): Promise<void> {
     const ok = await this.mic.setListening(false);
+    const wasFailed = this.closeFailed;
     this.closeFailed = !ok;
-    if (!ok) { this.failed = true; this.options.onState('stop-error'); }
+    if (!ok) { this.failed = true; this.options.onState('stop-error'); this.reportCloseFailure(); }
+    else if (wasFailed) this.options.onState(this.state);
     this.updateWakeState();
+  }
+  private reportCloseFailure(): void {
+    this.options.onError(t('マイク停止を確認できません。Evenアプリで停止してください'));
   }
   private stopWatchdog(): void { clearInterval(this.watchdog); this.watchdog = undefined; }
   private updateWakeState(): void {
