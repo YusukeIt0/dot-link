@@ -506,7 +506,6 @@ function speakReply(speech: SpeechSynthesisUtterance): void {
   // A proactive reply must not interrupt a spoken utterance or enter its clip.
   if (recorder.state !== 'idle' || busy) {
     deferredSpeech.push(speech);
-    if (deferredSpeech.length > 3) deferredSpeech.shift();
     return;
   }
   const generation = speechGeneration;
