@@ -182,6 +182,7 @@ el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabl
 function forgetPairing(message: string): void {
   locationSharing.setEnabled(false);
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
+  cancelSpeech();
   busy = false; clearClip();
   token = ''; relay = undefined; relaySettings.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
@@ -237,6 +238,7 @@ async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   // Legacy development credentials are separate from packaged pairing.
   if (!saved && !relay) return;
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
+  cancelSpeech();
   busy = false; clearClip();
   relay = saved; token = saved?.token ?? '';
   if (!saved) { showSetup(true); progress.connection = 'unpaired'; refreshStatus(); return; }
@@ -378,6 +380,7 @@ el('pair').onclick = async () => {
   catch { notice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
+  cancelSpeech();
   const version = connectionVersion;
   progress.connection = 'connecting'; refreshStatus();
   try {
