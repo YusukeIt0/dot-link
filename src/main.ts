@@ -486,6 +486,9 @@ function syncVoiceContext(): void {
 function hudCaption(): string {
   return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId);
 }
+function idleVoicePrompt(): string {
+  return operationPreferences.wakeWord && wakeState === 'listening' ? t('Hey dot または長押しで話してください') : t('長押しで話してください');
+}
 function renderWakeState(): void {
   const labels = { off: '', loading: t('Hey dotを準備中…'), listening: t('Hey dotで話せます'),
     paused: t('Hey dotは一時停止中'), error: t('Hey dotを使えません。オフにしてから再度オンにしてください。') };
@@ -683,7 +686,7 @@ const recorder = new VoiceInput({
       const text = source === 'wake' ? wakeTranscript(result.text) : result.text;
       if (!text.trim()) {
         busy = false; clearClip(); progress.setPhase('idle');
-        display(() => t('G2接続済み'), () => t('Hey dot または長押しで話してください'));
+        display(() => t('G2接続済み'), idleVoicePrompt);
         flushPendingDisplay();
         return;
       }
@@ -703,7 +706,7 @@ const recorder = new VoiceInput({
     recordButton.disabled = !glassesReady || state === 'stopping';
     if (state === 'idle' && discarding) { showDiscarded(); return; }
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
-    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => recorder.source === 'wake' ? t('Hey dot または長押しで話してください') : t('音声を取得できませんでした。もう一度長押ししてください。')); }
+    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。')); }
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
     if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => t('指を離すと停止します')); }
     if (state === 'recording') {
@@ -722,8 +725,9 @@ const recorder = new VoiceInput({
 el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
 el<HTMLInputElement>('wake-word').onchange = () => {
   const enabled = el<HTMLInputElement>('wake-word').checked;
+  const saved = operationPreferences.save(enabled);
   void recorder.setEnabled(enabled);
-  void operationPreferences.save(enabled).then(saved => {
+  void saved.then(saved => {
     if (!exited) el('operation-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
   });
 };

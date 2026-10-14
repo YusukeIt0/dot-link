@@ -13,7 +13,7 @@
     },
     {
       "name": "g2-microphone",
-      "desc": "Record speech when you hold to talk. If you enable Hey dot, keep the G2 microphone open while Dot Link is active to detect the cue locally on your phone. Only your following utterance is sent for transcription, for up to 30 seconds."
+      "desc": "Hold to record up to 30 seconds. With Hey dot on, Dot Link keeps the G2 microphone open while active and detects the cue on your phone. Only speech after the cue is sent for transcription. 長押しで最大30秒録音します。Hey dotをオンにすると、Dot Linkの起動中はG2マイクを使ってスマートフォン内で呼びかけを検出し、その後の発話だけを文字起こしに送信します。"
     },
     {
       "name": "location",
