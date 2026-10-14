@@ -14,6 +14,8 @@ sh scripts/test-notification-native.sh
 
 Pushes and pull requests run these checks in GitHub Actions. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
 
+For the standalone introduction page, see [page maintenance and deployment](introduction-page.md).
+
 ## Build the Mac app
 
 Apple Silicon macOS, Xcode Command Line Tools, Python 3 and CMake are required.
