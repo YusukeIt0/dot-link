@@ -1,5 +1,13 @@
 # Even app release notes
 
+## 0.3.0
+
+- Added optional Hey dot voice activation, with English and Japanese pronunciation support.
+- Added a listening prompt on G2 after the wake phrase is detected.
+- Added automatic recording stop after a short silence, while respecting your automatic-send setting.
+- Added a Hey dot switch in Operation settings; hold-to-talk remains available.
+- Added automatic pause of wake detection during read-aloud replies.
+
 ## 0.2.38
 
 - Fixed the latest conversation not appearing after a connection interruption during startup.

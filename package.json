@@ -1,6 +1,6 @@
 {
   "name": "even-g2-dot",
-  "version": "0.2.39",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
