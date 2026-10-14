@@ -10,7 +10,7 @@
   <a href="docs/setup.md">User guide</a>
 </p>
 
-Talk to your existing ChatGPT Dot through Even G2, or type on your phone. Read replies on your glasses, listen aloud, and receive messages from Dot. Your own Mac connects the devices; there is no developer-operated conversation server.
+Interact with your existing ChatGPT Dot in the way that suits the moment: say **Hey dot**, hold to talk on Even G2, or type on your phone. Read replies on your glasses, enable read-aloud, and receive proactive messages from Dot—even when speaking aloud or listening to audio is not an option. Your own Mac connects the devices; there is no developer-operated conversation server.
 
 <p align="center">
   <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">
@@ -50,7 +50,13 @@ The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyw
 
 ### 4. Start a conversation
 
-Hold to speak on G2 and release to stop recording, or type and send a message in the Even companion. Check that your Dot's reply appears on G2. Keep the Mac awake and both devices connected to Tailscale.
+- **Hold to talk:** hold to speak on G2 and release to stop recording.
+- **Hey dot:** with Even app **0.3.1 or later**, open **Operation settings** in the phone companion and enable **Talk with Hey dot** (off by default). Say “Hey dot” in English or Japanese pronunciation, wait for **Go ahead** on G2, then speak. A short silence ends recording. Say the cue again for each new turn.
+- **Type:** write and send a message in the Even companion.
+
+With **Send after transcription** enabled, recognized speech is sent automatically; turn it off to review the text before sending. Check that your Dot's reply appears on G2. Keep Dot Link open on G2, the Mac awake, and both devices connected to Tailscale.
+
+Hey dot pauses during processing and read-aloud. If you do not speak after the cue, the chat and your reading position stay in place. Detection runs locally on your phone; only speech captured after the cue goes to your Mac for transcription. See [Hey dot behavior and limitations](docs/wake-word.md).
 
 ## Make it yours
 
@@ -66,7 +72,7 @@ Recovery after sleep, network loss and extended use is still being validated. Re
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome. Start with [Contributing](CONTRIBUTING.md) or [building and testing](docs/development.md). [Even release notes](docs/even-release-notes.md) · [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
+Bug reports, ideas and pull requests are welcome—you do not need to be a developer to contribute. Start with [Contributing](CONTRIBUTING.md) or [building and testing](docs/development.md). [Even release notes](docs/even-release-notes.md) · [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
 
 ## License
 

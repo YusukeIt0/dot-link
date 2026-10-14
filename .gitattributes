@@ -1,0 +1,3 @@
+
+# Patch context contains significant leading spaces, including blank lines.
+distribution/wake/runtime.patch -whitespace
