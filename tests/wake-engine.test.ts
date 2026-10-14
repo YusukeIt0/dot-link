@@ -41,9 +41,11 @@ test('cancel erases an utterance and rejects malformed frames',()=>{
 });
 
 test('wake text is an activation cue, without changing ordinary content',()=>{
-  for(const text of ['Hey dot!','HEY, DOT.','ヘイ、ドット','dot.','ドット。'])assert.equal(wakeTranscript(text),'');
+  for(const text of ['Hey dot!','HEY, DOT.','ヘイ、ドット','ヘイ・ドット','ヘイ・ドット。','ヘイ･ドット','ヘイ・ドット・','dot.','ドット。'])assert.equal(wakeTranscript(text),'');
   assert.equal(wakeTranscript('Hey dot, what time is it?'),'what time is it?');
   assert.equal(wakeTranscript('ヘイ、ドット。今日の天気は？'),'今日の天気は？');
+  assert.equal(wakeTranscript('ヘイ・ドット。今日の天気は？'),'今日の天気は？');
+  assert.equal(wakeTranscript('ヘイ･ドット･今日の天気は？'),'今日の天気は？');
   assert.equal(wakeTranscript('Tell me about the dot product.'),'Tell me about the dot product.');
 });
 

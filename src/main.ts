@@ -781,7 +781,9 @@ function showDiscarded(): void {
   discarding = false;
   clearClip(); notice.textContent = t('録音を破棄しました。');
   progress.setPhase('idle');
-  display(() => t('G2接続済み'), () => t('長押しで話してください')); flushPendingDisplay();
+  if (keepWakeConversation()) refreshStatus();
+  else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('長押しで話してください'));
+  flushPendingDisplay();
 }
 discardButton.onclick = () => {
   if (transcriptionController) { transcriptionController.abort(); transcriptionController = undefined; busy = false; }
