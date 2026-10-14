@@ -17,6 +17,14 @@ Interact with your existing ChatGPT Dot in the way that suits the moment: say **
   <br><sub>Simulator example; status indicators may differ on physical glasses.</sub>
 </p>
 
+## Can I connect my ChatGPT Dot to Even Realities G2?
+
+Yes. **Dot Link** is an open-source Even Hub app that connects your existing ChatGPT Dot to Even Realities G2 smart glasses. Speak through G2 or type on your iPhone, read Dot's replies on the glasses, and receive proactive messages.
+
+You need an **Apple Silicon Mac**, **Even G2**, an **iPhone**, **Tailscale**, and an existing **ChatGPT Dot with access to OpenAI tunnels and custom MCP connections**. Your Mac acts as the relay and must stay awake and online. No Chrome browser or web scraping is required; installing Dot Link does not grant the required ChatGPT account access.
+
+[Install on Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink) · [Setup guide](#quickstart)
+
 ## Requirements
 
 - **Apple Silicon Mac**, macOS 13 or later, kept awake and online during use.
