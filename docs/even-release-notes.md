@@ -1,10 +1,5 @@
 # Even app release notes
 
-## 0.2.39
-
-- Added optional Hey dot voice activation in Operation settings.
-- Added a Go ahead prompt and automatic end-of-speech capture for hands-free input.
-
 ## 0.2.38
 
 - Fixed the latest conversation not appearing after a connection interruption during startup.

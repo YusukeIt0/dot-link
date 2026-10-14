@@ -24,6 +24,7 @@ export class VoiceInput {
   private detector?: WakeDetector;
   private enabled = false;
   private available = false;
+  private sessionActive = false;
   private blocked = false;
   private loading = false;
   private failed = false;
@@ -50,10 +51,11 @@ export class VoiceInput {
   }
   get state(): RecordingState { return this.closeFailed ? 'stop-error' : this.capture ?? this.manual.state; }
 
-  setContext(available: boolean, blocked: boolean): void {
-    const lost = this.available && !available;
-    this.available = available; this.blocked = blocked;
-    if (lost && this.manual.state !== 'idle') void this.manual.stop(true);
+  setContext(available: boolean, blocked: boolean, sessionActive = available): void {
+    this.available = available; this.blocked = blocked; this.sessionActive = sessionActive;
+    // A poll failure prevents new wake input, but does not erase an utterance.
+    // Only explicit unpair/exit invalidates the active recording session.
+    if (!sessionActive && this.manual.state !== 'idle') void this.manual.stop(true);
     this.sync();
   }
   async setEnabled(enabled: boolean): Promise<void> {
@@ -147,7 +149,7 @@ export class VoiceInput {
   }
   private sync(): void {
     const wanted = (this.enabled || (!!this.capture && this.source === 'manual')) && !this.loading && !this.failed && !this.closeFailed && !this.disposed &&
-      this.available && !this.blocked && this.manual.state === 'idle' && !!this.detector;
+      this.sessionActive && (this.available || !!this.capture) && !this.blocked && this.manual.state === 'idle' && !!this.detector;
     if (wanted !== this.detectorActive) {
       this.detectorActive = wanted;
       const version = ++this.listenVersion;

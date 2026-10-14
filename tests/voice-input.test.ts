@@ -84,3 +84,18 @@ test('turning OFF while models load disposes the result without opening the mic'
   resolve({listen:()=>assert.fail(),cancel:()=>{},hold:()=>{},finish:()=>{},append:()=>{},dispose:()=>{disposed++;}});
   await loading; assert.equal(disposed,1); await voice.dispose();
 });
+
+test('a transient relay failure preserves a manual hold until release, even with wake OFF', async () => {
+  const s=setup();await s.voice.start();s.voice.append(new Uint8Array([1,0]));
+  s.voice.setContext(false,false,true);await tick();assert.equal(s.voice.state,'recording');
+  s.voice.append(new Uint8Array([2,0]));await s.voice.stop();assert.deepEqual(s.clips,['manual']);
+  await s.voice.dispose();
+});
+
+test('an active wake utterance survives a poll failure, then pauses until connectivity returns', async () => {
+  const s=setup();await s.voice.setEnabled(true);await tick();s.emit({type:'wake'});
+  s.voice.setContext(false,false,true);await tick();assert.equal(s.voice.state,'recording');
+  s.emit({type:'clip',seconds:2,wav:new Uint8Array(48)});await tick();assert.deepEqual(s.clips,['wake']);
+  assert.deepEqual(s.calls,[true,false]);s.voice.setContext(true,false,true);await tick();
+  assert.deepEqual(s.calls,[true,false,true]);await s.voice.dispose();
+});

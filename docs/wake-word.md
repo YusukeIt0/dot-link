@@ -6,7 +6,7 @@ Detection runs locally in the phone's Even WebView worker while Dot Link is acti
 
 ## Audio path
 
-G2 16 kHz mono PCM → phone-local keyword spotter → post-cue capture → existing Mac transcription endpoint → existing Dot conversation. No wake-detection service, account or API key is introduced. Existing STT provider and read-aloud settings remain in control. Wake detection pauses during transcription, sending, an unsubmitted draft, read-aloud playback and a 600 ms playback cooldown. It also stops on explicit app exit, disconnection and OFF.
+G2 16 kHz mono PCM → phone-local keyword spotter → post-cue capture → existing Mac transcription endpoint → existing Dot conversation. No wake-detection service, account or API key is introduced. Existing STT provider and read-aloud settings remain in control. Wake detection pauses during transcription, sending, an unsubmitted draft, read-aloud playback and a 600 ms playback cooldown. It also stops on explicit app exit, unpairing and OFF. A transient update-poll failure pauses new wake input while allowing an active manual or wake utterance to finish; its transcription still uses the existing error handling. A missing read-aloud completion callback is recovered when the synthesizer reports neither speech nor pending output after a short grace period.
 
 The spotter keeps a two-second PCM ring to recover following speech received during decoder latency. The final keyword token timestamp plus 200 ms estimates cue completion; VAD then ends capture after 1.2 seconds of silence. Six seconds without detected speech cancels; capture never exceeds 30 seconds. A held utterance uses manual release instead of silence. There is no wake-listening audio file or network request. The selected STT sees the trimmed utterance; defensive text cleanup removes a leading full activation cue and suppresses cue-only output before Dot submission. This is not speaker authentication: another nearby voice or media can activate it.
 
@@ -36,7 +36,7 @@ Before merge, install the PR commit through the owner's Even Beta route and reco
 3. Cue → HUD → short and long utterance → silence sends only the intended text, through the selected STT; unchecked automatic send leaves a review draft.
 4. Each subsequent turn requires a new cue. Discard, long-press takeover and read-aloud ON/OFF work; a spoken reply containing the cue does not activate recording.
 5. Repeat while G2 content is blanked, while the phone is locked and while Even is backgrounded. Record actual behavior rather than inferring it from connection status.
-6. Turn OFF, disconnect/reconnect and exit/reopen. Verify microphone closure, clear failure status and manual fallback.
+6. Interrupt the relay during manual and wake capture, then turn OFF, unpair/reconnect and exit/reopen. Verify microphone closure, clear failure status and manual fallback.
 7. Exercise sustained quiet/noisy listening and measure phone/G2 battery and responsiveness before describing the feature as ready for everyday use.
 
 This work changes the Even frontend only; it does not require replacing the Mac app or changing its speech settings.

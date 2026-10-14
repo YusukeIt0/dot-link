@@ -39,6 +39,7 @@ const operationPreferences = new OperationPreferences(() => localStorage);
 let wakeState: WakeState = 'off';
 let speakingCount = 0;
 let speechGeneration = 0;
+let speechQueuedAt = 0;
 let speechCooldownUntil = 0;
 let speechCooldownTimer: ReturnType<typeof setTimeout> | undefined;
 const deferredSpeech: SpeechSynthesisUtterance[] = [];
@@ -468,9 +469,17 @@ let lastDisplayText = t('長押しで話してください');
 let renderDisplayText: () => string = () => t('長押しで話してください');
 
 function syncVoiceContext(): void {
+  // Some hosts interrupt synthesis without delivering end/error. Allow its
+  // queue to settle, then trust the actual synthesizer state to recover.
+  if (speakingCount && performance.now() - speechQueuedAt > 1500 &&
+      !window.speechSynthesis?.speaking && !window.speechSynthesis?.pending) {
+    speechGeneration++; speakingCount = 0;
+    speechCooldownUntil = performance.now() + 600;
+  }
   recorder.setContext(!exited && glassesReady && !!token && subscribed && progress.connection === 'online',
     busy || speakingCount > 0 || !!window.speechSynthesis?.speaking || !!window.speechSynthesis?.pending ||
-    performance.now() < speechCooldownUntil || (recorder.state === 'idle' && !!transcript.value.trim()));
+    performance.now() < speechCooldownUntil || (recorder.state === 'idle' && !!transcript.value.trim()),
+    !exited && glassesReady && !!token);
 }
 function hudCaption(): string {
   return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId);
@@ -499,7 +508,7 @@ function speakReply(speech: SpeechSynthesisUtterance): void {
     return;
   }
   const generation = speechGeneration;
-  speakingCount++; syncVoiceContext();
+  speakingCount++; speechQueuedAt = performance.now(); syncVoiceContext();
   let settled = false;
   const complete = () => {
     if (settled || generation !== speechGeneration) return;
