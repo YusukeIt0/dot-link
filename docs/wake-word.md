@@ -36,7 +36,7 @@ Before merge, install the PR commit through the owner's Even Beta route and reco
 3. Cue → HUD → short and long utterance → silence sends only the intended text, through the selected STT; unchecked automatic send leaves a review draft.
 4. Each subsequent turn requires a new cue. Discard, long-press takeover and read-aloud ON/OFF work; a spoken reply containing the cue does not activate recording.
 5. Repeat while G2 content is blanked, while the phone is locked and while Even is backgrounded. Record actual behavior rather than inferring it from connection status.
-6. Interrupt the relay during manual and wake capture, then turn OFF, unpair/reconnect and exit/reopen. Verify microphone closure, clear failure status and manual fallback.
+6. Interrupt the relay during manual and wake capture, then turn OFF, unpair/reconnect and exit/reopen. Verify microphone closure, clear failure status and manual fallback. Unpairing during transcription must clear the processing display and allow standby to blank again.
 7. Exercise sustained quiet/noisy listening and measure phone/G2 battery and responsiveness before describing the feature as ready for everyday use.
 
 This work changes the Even frontend only; it does not require replacing the Mac app or changing its speech settings.

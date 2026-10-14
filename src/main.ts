@@ -183,11 +183,12 @@ function forgetPairing(message: string): void {
   locationSharing.setEnabled(false);
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
   cancelSpeech();
-  busy = false; clearClip();
+  busy = false; clearClip(); progress.setPhase('idle');
   token = ''; relay = undefined; relaySettings.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
   messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
-  progress.connection = 'unpaired'; refreshStatus();
+  progress.connection = 'unpaired';
+  display(() => t('再接続が必要です'), message);
   el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
   setupPanel.open = true;
 }
@@ -239,11 +240,11 @@ async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   if (!saved && !relay) return;
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
   cancelSpeech();
-  busy = false; clearClip();
+  busy = false; clearClip(); progress.setPhase('idle');
   relay = saved; token = saved?.token ?? '';
-  if (!saved) { showSetup(true); progress.connection = 'unpaired'; refreshStatus(); return; }
+  if (!saved) { showSetup(true); progress.connection = 'unpaired'; display(() => t('再接続が必要です'), () => t('接続先を確認して「接続」を押してください。')); return; }
   pendingDelivery = new PendingUtterance(() => localStorage, saved.origin);
-  showSetup(false); progress.connection = 'connecting'; refreshStatus();
+  showSetup(false); progress.connection = 'connecting'; display(() => t('再接続中'), idleVoicePrompt);
   updates.start(true);
 }
 
