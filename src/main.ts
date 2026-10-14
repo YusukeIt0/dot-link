@@ -484,6 +484,9 @@ function syncVoiceContext(): void {
 function hudCaption(): string {
   return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId);
 }
+function keepWakeConversation(): boolean {
+  return recorder.source === 'wake' && !!visibleMessageId && messages.some(message => message.id === visibleMessageId);
+}
 function idleVoicePrompt(): string {
   return operationPreferences.wakeWord && wakeState === 'listening' ? t('Hey dot または長押しで話してください') : t('長押しで話してください');
 }
@@ -692,7 +695,9 @@ const recorder = new VoiceInput({
     clearClip(); clip = wav; discardButton.disabled = false;
     notice.textContent = '';
     progress.begin(audioTraceId, 'recognizing');
-    busy = true; display(() => t('認識中'), () => getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
+    busy = true;
+    if (keepWakeConversation()) refreshStatus();
+    else display(() => t('認識中'), () => getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
     const trace = audioTraceId;
     timing.mark(trace, 'asr_sent');
     void api<{text:string}>('/api/transcribe', 'POST', wav, trace, false, controller.signal).then(result => {
@@ -701,7 +706,8 @@ const recorder = new VoiceInput({
       const text = source === 'wake' ? wakeTranscript(result.text) : result.text;
       if (!text.trim()) {
         busy = false; clearClip(); progress.setPhase('idle');
-        display(() => t('G2接続済み'), idleVoicePrompt);
+        if (keepWakeConversation()) refreshStatus();
+        else display(() => t('G2接続済み'), idleVoicePrompt);
         flushPendingDisplay();
         return;
       }
@@ -727,10 +733,12 @@ const recorder = new VoiceInput({
     if (state === 'stopping' && !discarding) { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     if (state === 'idle' && discarding) { showDiscarded(); return; }
     // A no-speech cancellation has no onClip callback to end recognition.
-    // Reset its phase/prompt before restoring a reply queued during capture.
+    // Leave the existing conversation container untouched so its native scroll
+    // position survives cancellation; only the transient status needs resetting.
     if (state === 'idle' && !clip && !busy) {
       progress.setPhase('idle');
-      display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。'));
+      if (keepWakeConversation()) refreshStatus();
+      else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。'));
     }
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
@@ -741,7 +749,8 @@ const recorder = new VoiceInput({
       progress.setPhase('recording');
       if (recorder.source === 'wake') {
         audioTraceId = undefined; clearClip(); discardButton.disabled = false;
-        display(() => t('話してください'), () => el<HTMLInputElement>('auto-send').checked ? t('話し終わると送信します') : t('話し終わると認識します'));
+        if (keepWakeConversation()) refreshStatus();
+        else display(() => t('話してください'), () => el<HTMLInputElement>('auto-send').checked ? t('話し終わると送信します') : t('話し終わると認識します'));
       } else display(() => t('録音中'), () => `${t('指を離すと停止します')}\n${t('最長30秒')}`);
     }
   },
