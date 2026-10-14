@@ -716,9 +716,14 @@ const recorder = new VoiceInput({
       .finally(() => { if (transcriptionController === controller) transcriptionController = undefined; });
   },
   onState: state => {
-    if (state === 'stopping' && !discarding) { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
     recordButton.disabled = !glassesReady || state === 'stopping';
+    // Session loss stops capture too. Its completion must not overwrite the
+    // reconnection explanation or re-enter recognition without a pairing.
+    if (!token && (state === 'stopping' || state === 'idle')) {
+      progress.setPhase('idle'); refreshStatus(); return;
+    }
+    if (state === 'stopping' && !discarding) { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     if (state === 'idle' && discarding) { showDiscarded(); return; }
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
     else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。')); }
