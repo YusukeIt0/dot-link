@@ -2,7 +2,10 @@ import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTyp
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
 import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from './speech-status.ts';
 import { sttErrorMessage } from './stt-errors.ts';
-import { Recorder } from './audio.ts';
+import { VoiceInput, type WakeState } from './voice-input.ts';
+import { loadWakeDetector } from './wake-detector.ts';
+import { OperationPreferences } from './operation-preferences.ts';
+import { wakeTranscript } from './wake-transcript.ts';
 import { TimingTracker } from './timing.ts';
 import { reconcileHistory, NewReplyQueue } from './message-history.ts';
 import { conversationText, receiptCaption, newReplyCaption, type DisplayMessage } from './conversation-display.ts';
@@ -32,6 +35,13 @@ for (const { element, ja, en } of staticLabels) element.textContent = getLanguag
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const displayPreferences = new DisplayPreferenceStore(() => localStorage);
+const operationPreferences = new OperationPreferences(() => localStorage);
+let wakeState: WakeState = 'off';
+let speakingCount = 0;
+let speechGeneration = 0;
+let speechCooldownUntil = 0;
+let speechCooldownTimer: ReturnType<typeof setTimeout> | undefined;
+const deferredSpeech: SpeechSynthesisUtterance[] = [];
 const headRaise = new HeadRaiseDetector(displayPreferences.value);
 let standby: DisplayStandby | undefined;
 el('app-version').textContent = `v${import.meta.env.VITE_APP_VERSION}`;
@@ -171,6 +181,7 @@ el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabl
 function forgetPairing(message: string): void {
   locationSharing.setEnabled(false);
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
+  busy = false; clearClip();
   token = ''; relay = undefined; relaySettings.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
   messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
@@ -225,6 +236,7 @@ async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   // Legacy development credentials are separate from packaged pairing.
   if (!saved && !relay) return;
   updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
+  busy = false; clearClip();
   relay = saved; token = saved?.token ?? '';
   if (!saved) { showSetup(true); progress.connection = 'unpaired'; refreshStatus(); return; }
   pendingDelivery = new PendingUtterance(() => localStorage, saved.origin);
@@ -294,8 +306,7 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
     if (!initial) timing.mark(message.id, 'reply_received');
     if (!initial && tts && 'speechSynthesis' in window) {
       const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US';
-      speech.onerror = () => { notice.textContent = t('読み上げできませんでした。画面の返信をご確認ください。'); };
-      window.speechSynthesis.speak(speech);
+      speakReply(speech);
     }
   }
   messages = update.messages;
@@ -406,8 +417,8 @@ el('forget-pairing').onclick = async () => {
 };
 el('tts').onclick = () => {
   tts = !tts; el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
-  if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; window.speechSynthesis.speak(speech); }
-  else window.speechSynthesis?.cancel();
+  if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; speakReply(speech); }
+  else cancelSpeech();
   refreshStatus();
 };
 el('previous').onclick = () => { standby?.activity(); historyIndex = Math.max(0, historyIndex - 1); browsingHistory = historyIndex < messages.length - 1; showMessage(); };
@@ -445,9 +456,9 @@ sendButton.onclick = async () => {
     progress.setPhase('error'); notice.textContent = (error as Error).message;
     display(() => t('送信を確認できませんでした'), (error as Error).message);
   }
-  finally { busy = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); }
+  finally { busy = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); syncVoiceContext(); }
 };
-transcript.oninput = () => { sendButton.disabled = busy || !transcript.value.trim(); };
+transcript.oninput = () => { sendButton.disabled = busy || !transcript.value.trim(); syncVoiceContext(); };
 
 let bridge: EvenAppBridge | undefined;
 let clip: Uint8Array | undefined;
@@ -456,10 +467,58 @@ let displayGeneration = 0;
 let lastDisplayText = t('長押しで話してください');
 let renderDisplayText: () => string = () => t('長押しで話してください');
 
+function syncVoiceContext(): void {
+  recorder.setContext(!exited && glassesReady && !!token && subscribed && progress.connection === 'online',
+    busy || speakingCount > 0 || !!window.speechSynthesis?.speaking || !!window.speechSynthesis?.pending ||
+    performance.now() < speechCooldownUntil || (recorder.state === 'idle' && !!transcript.value.trim()));
+}
+function hudCaption(): string {
+  return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId);
+}
+function renderWakeState(): void {
+  const labels = { off: '', loading: t('Hey dotを準備中…'), listening: t('Hey dotで話せます'),
+    paused: t('Hey dotは一時停止中'), error: t('Hey dotを使えません。オフにしてから再度オンにしてください。') };
+  el('wake-status').textContent = labels[wakeState];
+}
+function finishSpeechCooldown(): void {
+  speechCooldownUntil = performance.now() + 600;
+  clearTimeout(speechCooldownTimer);
+  speechCooldownTimer = setTimeout(() => syncVoiceContext(), 650);
+  syncVoiceContext();
+}
+function cancelSpeech(): void {
+  deferredSpeech.length = 0;
+  speechGeneration++; speakingCount = 0;
+  window.speechSynthesis?.cancel(); finishSpeechCooldown();
+}
+function speakReply(speech: SpeechSynthesisUtterance): void {
+  // A proactive reply must not interrupt a spoken utterance or enter its clip.
+  if (recorder.state !== 'idle' || busy) {
+    deferredSpeech.push(speech);
+    if (deferredSpeech.length > 3) deferredSpeech.shift();
+    return;
+  }
+  const generation = speechGeneration;
+  speakingCount++; syncVoiceContext();
+  let settled = false;
+  const complete = () => {
+    if (settled || generation !== speechGeneration) return;
+    settled = true; speakingCount = Math.max(0, speakingCount - 1);
+    if (!speakingCount) finishSpeechCooldown();
+  };
+  speech.onend = complete;
+  speech.onerror = () => { complete(); if (!exited && generation === speechGeneration) notice.textContent = t('読み上げできませんでした。画面の返信をご確認ください。'); };
+  try { window.speechSynthesis.speak(speech); } catch { complete(); }
+}
+
 // A timer updates only the short status line. Keep at most one queued update
 // and read its latest value when it runs, so slow BLE never queues old seconds.
 function refreshStatus(sendToG2 = true): void {
   if (exited) return;
+  if (tts && !busy && recorder.state === 'idle') {
+    for (const speech of deferredSpeech.splice(0)) speakReply(speech);
+  }
+  syncVoiceContext();
   standby?.protect(busy || recorder.state !== 'idle' || ['recognizing', 'sending'].includes(progress.phase) || progress.protectWaiting);
   baseStatus = renderBaseStatus();
   const nextText = renderDisplayText();
@@ -467,7 +526,7 @@ function refreshStatus(sendToG2 = true): void {
     lastDisplayText = nextText; el('hud-content').textContent = nextText;
     if (sendToG2) queueDisplayFrame();
   }
-  const caption = progress.caption(baseStatus, visibleMessageId);
+  const caption = hudCaption();
   const speech = speechCaption();
   el('speech-status').textContent = speech;
   el('hud-state').textContent = caption;
@@ -481,7 +540,7 @@ function refreshStatus(sendToG2 = true): void {
   const activeBridge = bridge;
   displayChain = displayChain.then(async () => {
     if (exited || standby?.hidden) return;
-    const content = progress.caption(baseStatus, visibleMessageId);
+    const content = hudCaption();
     if (content !== lastSentStatus) {
       const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
         containerID: 1, containerName: 'status', contentOffset: 0, contentLength: content.length, content,
@@ -537,7 +596,7 @@ function queueDisplayFrame(trace?: string): void {
     if (exited || generation !== displayGeneration) return;
     if (trace) timing.mark(trace, 'g2_update_started');
     const hidden = standby?.hidden ?? false;
-    const caption = hidden ? ' ' : progress.caption(baseStatus, visibleMessageId);
+    const caption = hidden ? ' ' : hudCaption();
     const text = hidden ? ' ' : wrapHudText(lastDisplayText);
     const help = hidden ? ' ' : t('長押しで録音 · 指を離すと停止');
     for (const [containerID, containerName, content] of [[1, 'status', caption], [2, 'conversation', text || ' '], [3, 'help', help], [4, 'speech', hidden ? ' ' : speechDisplayCaption()], [5, 'receipt', hidden ? ' ' : currentReceipt() || ' '], [6, 'new', hidden ? ' ' : currentNewReplies() || ' ']] as const) {
@@ -576,6 +635,7 @@ function applyLanguage(): void {
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
   recordButton.textContent = recorder.state === 'idle' ? t('録音を開始') : recorder.state === 'stop-error' ? t('マイク停止を再試行') : t('録音を停止');
+  renderWakeState();
   el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
   if (!namedHost) hostName = t('接続先');
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
@@ -590,10 +650,13 @@ function clearClip(): void {
   clip?.fill(0); clip = undefined; discardButton.disabled = true;
 }
 
-const recorder = new Recorder(
-  open => bridge?.audioControl(open, AudioInputSource.Glasses) ?? Promise.resolve(false),
-  (wav) => {
+const recorder = new VoiceInput({
+  microphone: open => bridge?.audioControl(open, AudioInputSource.Glasses) ?? Promise.resolve(false),
+  loadWake: loadWakeDetector,
+  onWakeState: state => { wakeState = state; renderWakeState(); },
+  onClip: (wav, _seconds, source) => {
     if (exited) return;
+    const version = connectionVersion;
     audioTraceId ??= crypto.randomUUID();
     timing.mark(audioTraceId, 'audio_ready');
     clearClip(); clip = wav; discardButton.disabled = false;
@@ -603,29 +666,52 @@ const recorder = new Recorder(
     const trace = audioTraceId;
     timing.mark(trace, 'asr_sent');
     void api<{text:string}>('/api/transcribe', 'POST', wav, trace).then(result => {
-      if (exited) return;
+      if (exited || version !== connectionVersion) return;
       timing.mark(trace, 'asr_received');
-      transcript.value = result.text; sendButton.disabled = false;
+      const text = source === 'wake' ? wakeTranscript(result.text) : result.text;
+      if (!text.trim()) {
+        busy = false; clearClip(); progress.setPhase('idle');
+        display(() => t('G2接続済み'), () => t('Hey dot または長押しで話してください'));
+        return;
+      }
+      transcript.value = text; sendButton.disabled = false;
       progress.review(); notice.textContent = '';
-      display(() => t('認識完了'), result.text);
+      display(() => t('認識完了'), text);
       busy = false; clearClip();
       if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       refreshStatus();
-    }).catch(error => { busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); });
+    }).catch(error => { if (exited || version !== connectionVersion) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); });
   },
-  state => {
+  onState: state => {
     if (state === 'stopping') { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
     recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
     recordButton.disabled = !glassesReady || state === 'stopping';
     if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
-    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => t('音声を取得できませんでした。もう一度長押ししてください。')); }
+    else if (state === 'idle' && !clip && !busy) { progress.setPhase('idle'); display(() => t('G2接続済み'), () => recorder.source === 'wake' ? t('Hey dot または長押しで話してください') : t('音声を取得できませんでした。もう一度長押ししてください。')); }
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
     if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => t('指を離すと停止します')); }
-    if (state === 'recording') { progress.setPhase('recording'); display(() => t('録音中'), () => `${t('指を離すと停止します')}\n${t('最長30秒')}`); }
+    if (state === 'recording') {
+      standby?.activity();
+      discardButton.disabled = false;
+      progress.setPhase('recording');
+      if (recorder.source === 'wake') {
+        audioTraceId = undefined; clearClip(); discardButton.disabled = false;
+        display(() => t('話してください'), () => el<HTMLInputElement>('auto-send').checked ? t('話し終わると送信します') : t('話し終わると認識します'));
+      } else display(() => t('録音中'), () => `${t('指を離すと停止します')}\n${t('最長30秒')}`);
+    }
   },
-  message => { progress.setPhase('error'); notice.textContent = message; display(() => t('確認が必要'), message); },
-);
+  onError: message => { progress.setPhase('error'); notice.textContent = message; display(() => t('確認が必要'), message); },
+});
+
+el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
+el<HTMLInputElement>('wake-word').onchange = () => {
+  const enabled = el<HTMLInputElement>('wake-word').checked;
+  void recorder.setEnabled(enabled);
+  void operationPreferences.save(enabled).then(saved => {
+    if (!exited) el('operation-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
+  });
+};
 
 function startRecording(): void {
   if (exited) return;
@@ -633,10 +719,12 @@ function startRecording(): void {
   if (busy) { notice.textContent = t('処理が終わるまでお待ちください。'); return; }
   if (!token || !subscribed || progress.connection !== 'online') { notice.textContent = getLanguage() === 'ja' ? `${hostName}とDotへの接続を確認してください。` : `Check the connection to ${hostName} and Dot.`; return; }
   standby?.activity();
-  window.speechSynthesis?.cancel(); void recorder.start();
+  if (speakingCount || window.speechSynthesis?.speaking || window.speechSynthesis?.pending) cancelSpeech();
+  void recorder.start();
 }
 recordButton.onclick = () => recorder.state === 'idle' ? startRecording() : void recorder.stop();
 discardButton.onclick = () => {
+  if (recorder.state !== 'idle') void recorder.stop(true);
   clearClip(); notice.textContent = t('録音を破棄しました。');
   progress.setPhase('idle');
   display(() => t('G2接続済み'), () => t('長押しで話してください')); flushPendingDisplay();
@@ -650,7 +738,9 @@ function stopSession(): void {
   exited = true; pageActive = false; connectionVersion++; connectionController.abort();
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
-  window.speechSynthesis?.cancel(); clearClip(); void recorder.stop(true);
+  clearTimeout(speechCooldownTimer); speechGeneration++; speakingCount = 0;
+  deferredSpeech.length = 0;
+  window.speechSynthesis?.cancel(); clearClip(); void recorder.dispose();
 }
 
 async function connect(): Promise<void> {
@@ -680,6 +770,11 @@ async function connect(): Promise<void> {
   startupResult = result;
   if (result !== 0) throw new Error('Glasses page initialization failed');
   startupStage = 'ready'; glassesReady = true;
+  void operationPreferences.attach(appBridge).then(() => {
+    if (exited) return;
+    el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
+    void recorder.setEnabled(operationPreferences.wakeWord);
+  });
   standby?.start();
   void syncHeadRaise();
   void displayPreferences.attach(appBridge).then(restored => {
@@ -718,7 +813,7 @@ async function connect(): Promise<void> {
     if (!isGesture) return;
     if (isSingle || eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
       if (standby?.tap(isSingle ? 'single' : 'double')) return;
-    } else if (standby?.hidden) return;
+    } else if (standby?.hidden && eventType !== OsEventTypeList.LONG_PRESS_EVENT && eventType !== OsEventTypeList.LONG_PRESS_RELEASE_EVENT) return;
     if (hasInput) standby?.activity();
     if (eventType === OsEventTypeList.LONG_PRESS_EVENT) startRecording();
     if (eventType === OsEventTypeList.SCROLL_TOP_EVENT) el('previous').click();

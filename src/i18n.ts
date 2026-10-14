@@ -1,5 +1,14 @@
 export type Language = 'ja' | 'en';
 const translations = {
+  'Hey dotを準備中…': 'Preparing Hey dot…',
+  'Hey dotで話せます': 'Ready for Hey dot',
+  'Hey dotは一時停止中': 'Hey dot is paused',
+  'Hey dotを使えません。オフにしてから再度オンにしてください。': 'Hey dot is unavailable. Turn it off and on to retry.',
+  'Hey dot または長押しで話してください': 'Say Hey dot or hold to speak',
+  '話してください': 'Go ahead',
+  '話し終わると送信します': 'Sends when you finish speaking',
+  '話し終わると認識します': 'Transcribes when you finish speaking',
+  '設定を保存できませんでした': 'Could not save settings',
   'URLをコピーしました。Macのブラウザーで開いてください。': 'URL copied. Open it in a browser on your Mac.',
   'コピーしました': 'Copied',
   'コピーできませんでした': 'Could not copy',

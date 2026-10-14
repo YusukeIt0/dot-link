@@ -2,6 +2,7 @@ import { readFile, readdir, lstat, mkdir, writeFile, rename, rm } from 'node:fs/
 import { resolve, relative, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { verifyWakeAssets, wakeManifest } from './lib/wake-assets.mjs';
 
 const root = resolve('dist');
 const manifest = JSON.parse(await readFile('app.json', 'utf8'));
@@ -12,12 +13,14 @@ for (const name of ['device-key', 'mcp-key', 'notification-key']) {
   try { const value = (await readFile(join('.runtime', name), 'utf8')).trim(); if (value.length >= 32) secrets.push(value); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 }
 const files = [];
+await verifyWakeAssets(join(root, 'wake-assets'));
 async function inspect(directory) {
   for (const name of (await readdir(directory)).sort()) {
     const file = join(directory, name); const info = await lstat(file);
     if (info.isSymbolicLink() || name.startsWith('.')) throw new Error('Hidden file or symlink in release assets');
     if (info.isDirectory()) { await inspect(file); continue; }
-    if (!/\.(?:html|js|css|svg|txt|png)$/.test(name) || info.size > 2000000) throw new Error('Unexpected release asset');
+    const wakeAsset = relative(root, file).startsWith('wake-assets/') && Object.hasOwn(wakeManifest.files, name);
+    if (!wakeAsset && (!/\.(?:html|js|css|svg|txt|png)$/.test(name) || info.size > 2000000)) throw new Error('Unexpected release asset');
     const data = await readFile(file); const text = data.toString('utf8');
     if (/\/Users\/|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|Bearer [A-Za-z0-9_-]{32,}|https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net\b/.test(text) || secrets.some(value => text.includes(value))) throw new Error('Private configuration found in release assets');
     files.push({path:relative(root,file),bytes:data.length,sha256:createHash('sha256').update(data).digest('hex')});

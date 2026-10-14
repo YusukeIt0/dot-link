@@ -1,0 +1,76 @@
+{
+  "sherpaVersion": "1.13.8",
+  "sourceCommit": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
+  "emsdkVersion": "4.0.23",
+  "initialMemoryMiB": 64,
+  "maximumMemoryMiB": 256,
+  "downloads": {
+    "kws": {
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2",
+      "sha256": "f170013b4716e41b62b9bfd809687c207cef798ef9bc6534d524e17af9b6561a",
+      "bytes": 17626723
+    },
+    "vad": {
+      "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "bytes": 643854
+    }
+  },
+  "files": {
+    "runtime.js": {
+      "bytes": 82311,
+      "sha256": "1e505c446b548039a60f198b896a1ad6e38772129c15174dccd5057027704665",
+      "local": "runtime.js"
+    },
+    "kws.js": {
+      "bytes": 10093,
+      "sha256": "6c194998db46748f206a6e4a93472cb2ef2a21a784ae21a5accb408ad9e8b051",
+      "local": "kws.js"
+    },
+    "vad.js": {
+      "bytes": 7940,
+      "sha256": "c577b931f1c1d2947ea3f3344bae3e02975093789e1e14c0430dbd0a4abc0be2",
+      "local": "vad.js"
+    },
+    "runtime.wasm": {
+      "bytes": 12806716,
+      "sha256": "cecdbfb04cbf3b3a35467b47316e3d7de78f87abc15e56f9e69b1c86e2e872bd",
+      "gzip": "runtime.wasm.gz",
+      "gzipSha256": "3432dd3f8809c78f941dbe8401d7bebc7bebcafb6181b3895f0400e0fe543580"
+    },
+    "encoder.onnx": {
+      "bytes": 4807159,
+      "sha256": "1e721676515bcd42a186979733981213c66c80db680e1cc582dfedf3be76e678",
+      "archive": "kws",
+      "entry": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
+    },
+    "decoder.onnx": {
+      "bytes": 277985,
+      "sha256": "e40ff43297abe815e8898494c17e71bba2152d9d40fa3eb803f75d0f7533329a",
+      "archive": "kws",
+      "entry": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
+    },
+    "joiner.onnx": {
+      "bytes": 163380,
+      "sha256": "eae9da0c7e1e6c6a3f4cc42d167899c388f6c6701b94cb96320e4f55df79624c",
+      "archive": "kws",
+      "entry": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
+    },
+    "tokens.txt": {
+      "bytes": 5006,
+      "sha256": "fd2ded4050a55d2b1578870ba8697d02371980217806b7558bd0a5cc60f3ba53",
+      "archive": "kws",
+      "entry": "sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/tokens.txt"
+    },
+    "silero_vad.onnx": {
+      "bytes": 643854,
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "download": "vad"
+    },
+    "THIRD-PARTY-NOTICES.txt": {
+      "bytes": 427950,
+      "sha256": "4d56f42f5bfbda167cbd22abeb3a18ea4a0ac24da08a0331f9809687592c85e7",
+      "local": "THIRD-PARTY-NOTICES.txt"
+    }
+  }
+}
