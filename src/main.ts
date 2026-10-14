@@ -721,6 +721,7 @@ const recorder = new VoiceInput({
     // Session loss stops capture too. Its completion must not overwrite the
     // reconnection explanation or re-enter recognition without a pairing.
     if (!token && (state === 'stopping' || state === 'idle')) {
+      discarding = false;
       progress.setPhase('idle'); refreshStatus(); return;
     }
     if (state === 'stopping' && !discarding) { audioTraceId ??= crypto.randomUUID(); timing.mark(audioTraceId, 'recording_stop'); progress.begin(audioTraceId, 'recognizing'); refreshStatus(); }
