@@ -100,7 +100,7 @@ becomes mandatory is a future maintainer decision, informed by actual use.
 
 Input limits are 150 KB of issue/PR text and human discussion, 250 KB of PR diff,
 and 50 changed files. Oversized inputs produce an explicit incomplete status,
-not a partial clean review. Each model job has a 15-minute timeout and 20-turn
+not a partial clean review. Each model job has a 15-minute timeout and 40-turn
 limit. There is no automatic retry or model fallback. Failed authentication,
 usage exhaustion or invalid results must not be interpreted as successful review.
 
