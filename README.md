@@ -11,6 +11,14 @@
   <a href="docs/setup.md">User guide</a>
 </p>
 
+<p align="center">
+  <a href="https://yusukeit0.github.io/dot-link/#film">
+    <img src="assets/film/dot-link-introduction.jpg" alt="Watch the Dot Link introduction film" width="720">
+  </a>
+  <br><a href="https://yusukeit0.github.io/dot-link/#film"><strong>Watch the film · 1 minute</strong></a>
+  <br><sub>AI-generated illustrative scenes with simulator displays. Timing condensed.</sub>
+</p>
+
 Interact with your existing ChatGPT Dot in the way that suits the moment: say **Hey dot**, hold to talk on Even G2, or type on your phone. Read replies on your glasses, enable read-aloud, and receive proactive messages from Dot—even when speaking aloud or listening to audio is not an option. Your own Mac connects the devices; there is no developer-operated conversation server.
 
 <p align="center">

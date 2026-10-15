@@ -84,3 +84,12 @@ figcaption { color: var(--muted); font-size: 11px; line-height: 1.6; margin-top:
   .site-header nav { gap: 12px; }
   .brand { gap: 6px; font-size: 16px; }
 }
+
+.film { padding-bottom: 58px; scroll-margin-top: 24px; }
+.film-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 14px 24px; margin-bottom: 24px; }
+.film-heading h2 { max-width: none; }
+.film-heading p { color: var(--muted); font-size: 14px; }
+.film video { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border: 1px solid var(--line); border-radius: 8px; background: #0c1712; }
+.film video:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+.film-note { color: var(--muted); font-size: 12px; margin-top: 12px; }
+@media (max-width: 680px) { .film { padding-bottom: 40px; } }

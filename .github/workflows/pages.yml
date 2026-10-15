@@ -7,6 +7,7 @@ on:
       - 'scripts/build-site.mjs'
       - 'assets/brand/orbit/**'
       - 'assets/readme/**'
+      - 'assets/film/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 

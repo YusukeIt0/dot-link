@@ -15,6 +15,9 @@ for (const [source, name] of [
   ['assets/brand/orbit/mark.svg', 'mark.svg'],
   ['assets/brand/orbit/mac-1024.png', 'mac-1024.png'],
   ['assets/readme/conversation-en.png', 'conversation-en.png'],
+  ['assets/film/dot-link-introduction.mp4', 'dot-link-introduction.mp4'],
+  ['assets/film/dot-link-introduction.jpg', 'dot-link-introduction.jpg'],
+  ['assets/film/dot-link-introduction.en.vtt', 'dot-link-introduction.en.vtt'],
 ]) {
   await copyFile(resolve(root, source), resolve(output, 'assets', name));
 }
