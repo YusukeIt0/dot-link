@@ -34,7 +34,7 @@ async function launch(options = {}) {
   const clock = {now: () => now, schedule, cancel: id => timers.delete(id)};
   const element = id => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', dataset: {}, checked: false, disabled: false,
-      before() {}, after() {}, setAttribute() {}, addEventListener() {}, close() {}, pause() {}, showModal() {},
+      before() {}, after() {}, setAttribute() {}, removeAttribute() {}, focus() {}, addEventListener() {}, close() {}, pause() {}, showModal() {},
       click() { return this.onclick?.(); }});
     return elements.get(id);
   };
@@ -51,7 +51,7 @@ async function launch(options = {}) {
     async imuControl(open) { calls.push(['imu', open]); return true; },
     async shutDownPageContainer(mode) { calls.push(['exit', mode]); return true; },
     async getLocalStorage(k) { return nativeSaved.get(k) ?? ''; },
-    async setLocalStorage(k, v) { nativeSaved.set(k, v); return true; },
+    async setLocalStorage(k, v) { const result = await (options.nativeWrite?.(k, v) ?? true); if (result) nativeSaved.set(k, v); return result; },
     onAppLocationChanged() { return () => {}; },
     async startAppLocationUpdates() { calls.push(['location-start']); return true; },
     async stopAppLocationUpdates() { calls.push(['location-stop']); return true; },
@@ -469,4 +469,40 @@ test('download URL copy uses displayed text and failure never focuses a field', 
   await app.element('copy-mac-url').click();
   assert.match(app.element('mac-copy-status').textContent, /コピーできませんでした/);
   assert.match(app.element('copy-toast').textContent, /コピーできませんでした/);
+});
+
+
+test('native wake-name save failure remains visible after a newer draft, and a later successful save clears it', async t => {
+  const writes = [];
+  const app = await launch({nativeWrite: (key) => key === 'dot-wake-name-v1' ? new Promise(resolve => writes.push(resolve)) : true});
+  t.after(app.close);
+  app.element('custom-wake-name').checked = true;
+  app.element('wake-name').value = 'Sakura';
+  app.element('wake-name-form').onsubmit({preventDefault() {}}); await flush();
+  app.element('wake-name').value = 'Nova'; app.element('wake-name').oninput();
+  writes.shift()(false); await flush();
+  assert.equal(app.element('wake-name').value, 'Nova');
+  assert.match(app.element('wake-name-status').textContent, /変更はまだ保存されていません/);
+  assert.match(app.element('wake-name-save-status').textContent, /設定を保存できません/);
+  assert.equal(app.calls.some(c => c[0] === 'mic' && c[1]), false);
+  app.element('wake-name-form').onsubmit({preventDefault() {}}); await flush();
+  writes.shift()(true); await flush();
+  assert.equal(app.element('wake-name-save-status').textContent, '');
+  assert.equal(app.element('wake-name-status').textContent, '呼び名を保存しました');
+});
+
+test('a failed older name save cannot overwrite the result of a newer save', async t => {
+  const writes = [];
+  const app = await launch({nativeWrite: (key) => key === 'dot-wake-name-v1' ? new Promise(resolve => writes.push(resolve)) : true});
+  t.after(app.close);
+  app.element('custom-wake-name').checked = true;
+  app.element('wake-name').value = 'Sakura';
+  app.element('wake-name-form').onsubmit({preventDefault() {}}); await flush();
+  app.element('wake-name').value = 'Nova'; app.element('wake-name').oninput();
+  app.element('wake-name-form').onsubmit({preventDefault() {}}); await flush();
+  writes.shift()(false); await flush();
+  assert.equal(app.element('wake-name-save-status').textContent, '');
+  writes.shift()(true); await flush();
+  assert.equal(app.element('wake-name-save-status').textContent, '');
+  assert.equal(app.element('wake-name-status').textContent, '呼び名を保存しました');
 });

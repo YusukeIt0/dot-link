@@ -1,4 +1,5 @@
 import type { WakeEvent } from './wake-engine.ts';
+import { validateWakeName } from './wake-name.ts';
 
 export interface WakeDetector {
   listen(): void;
@@ -8,10 +9,11 @@ export interface WakeDetector {
   append(pcm: Uint8Array): void;
   dispose(): void;
 }
-export type LoadWakeDetector = (event: (event: WakeEvent) => void, error: () => void) => Promise<WakeDetector>;
+export type LoadWakeDetector = (event: (event: WakeEvent) => void, error: () => void, name?: string) => Promise<WakeDetector>;
 
 /** Audio never enters a network API. The worker and its models are packaged assets. */
-export const loadWakeDetector: LoadWakeDetector = (event, error) => new Promise((resolve, reject) => {
+export const loadWakeDetector: LoadWakeDetector = (event, error, name = 'dot') => new Promise((resolve, reject) => {
+  if (validateWakeName(name).error) { reject(new Error('Invalid wake name')); return; }
   const worker = new Worker(new URL('./wake-worker.ts', import.meta.url), { type: 'module' });
   let ready = false, disposed = false, generation = 0, pendingBytes = 0;
   const timer = setTimeout(() => fail(), 30_000);
@@ -47,5 +49,5 @@ export const loadWakeDetector: LoadWakeDetector = (event, error) => new Promise(
     if (data.type === 'wake') event({ type: 'wake' });
     if (data.type === 'clip') event({ type: 'clip', wav: data.wav, seconds: data.seconds });
   };
-  send('init', { assets: new URL('wake-assets/', document.baseURI).href });
+  send('init', { assets: new URL('wake-assets/', document.baseURI).href, name });
 });

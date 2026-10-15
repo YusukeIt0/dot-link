@@ -72,6 +72,11 @@
       "sha256": "4d56f42f5bfbda167cbd22abeb3a18ea4a0ac24da08a0331f9809687592c85e7",
       "gzip": "THIRD-PARTY-NOTICES.txt.gz",
       "gzipSha256": "ae78a359ab4b8bfb1286ee52c071367a0b06239a842c9bba773012174fde8db9"
+    },
+    "name-vocabulary.json": {
+      "bytes": 14591,
+      "sha256": "8cfd71c52cd8be122c1a3d743987f5d1dbcf743dbd30293aba93dc88ac6b9a10",
+      "local": "name-vocabulary.json"
     }
   }
 }

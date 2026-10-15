@@ -5,6 +5,8 @@ import { sttErrorMessage } from './stt-errors.ts';
 import { VoiceInput, type WakeState } from './voice-input.ts';
 import { loadWakeDetector } from './wake-detector.ts';
 import { OperationPreferences } from './operation-preferences.ts';
+import { WakeNamePreferences } from './wake-name-preferences.ts';
+import { validateWakeName } from './wake-name.ts';
 import { wakeTranscript } from './wake-transcript.ts';
 import { TimingTracker } from './timing.ts';
 import { reconcileHistory, NewReplyQueue } from './message-history.ts';
@@ -36,6 +38,7 @@ for (const { element, ja, en } of staticLabels) element.textContent = getLanguag
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const displayPreferences = new DisplayPreferenceStore(() => localStorage);
 const operationPreferences = new OperationPreferences(() => localStorage);
+const wakeNamePreferences = new WakeNamePreferences(() => localStorage);
 let wakeState: WakeState = 'off';
 let speakingCount = 0;
 let speechGeneration = 0;
@@ -285,8 +288,8 @@ function showMessage(): void {
   display(() => {
     const item = current();
     return item.reply ? `${messages.findIndex(m => m.id === item.id) + 1}/${messages.length}` :
-      item.status === 'failed' ? t('送信未確認') : t('Dotの返信待ち');
-  }, () => conversationText(current(), Date.now()), message.id);
+      item.status === 'failed' ? t('送信未確認') : t('{name}の返信待ち').replace('{name}', wakeNamePreferences.assistantName);
+  }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id);
 }
 function currentReceipt(): string { return receiptCaption(messages.find(message => message.id === visibleMessageId)); }
 function currentNewReplies(): string { return newReplyCaption(newReplies.count); }
@@ -482,17 +485,18 @@ function syncVoiceContext(): void {
     !exited && glassesReady && !!token);
 }
 function hudCaption(): string {
-  return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId);
+  return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId, wakeNamePreferences.assistantName);
 }
 function keepWakeConversation(): boolean {
   return recorder.source === 'wake' && !!visibleMessageId && messages.some(message => message.id === visibleMessageId);
 }
 function idleVoicePrompt(): string {
-  return operationPreferences.wakeWord && wakeState === 'listening' ? t('Hey dot または長押しで話してください') : t('長押しで話してください');
+  return operationPreferences.wakeWord && wakeState === 'listening' ? wakeText('{wake} または長押しで話してください') : t('長押しで話してください');
 }
+function wakeText(key: Parameters<typeof t>[0]): string { return t(key).replace('{wake}', `Hey ${wakeNamePreferences.wakeName}`); }
 function renderWakeState(): void {
-  const labels = { off: '', loading: t('Hey dotを準備中…'), listening: t('Hey dotで話せます'),
-    paused: t('Hey dotは一時停止中'), error: t('Hey dotを使えません。オフにしてから再度オンにしてください。') };
+  const labels = { off: '', loading: wakeText('{wake}を準備中…'), listening: '',
+    paused: wakeText('{wake}は一時停止中'), error: wakeText('{wake}を使えません。オフにしてから再度オンにしてください。') };
   el('wake-status').textContent = labels[wakeState];
 }
 // Observe synthesis independently of relay polls and UI activity. Keep checking
@@ -661,7 +665,7 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast']) {
+  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
@@ -685,7 +689,7 @@ const recorder = new VoiceInput({
   microphone: open => bridge?.audioControl(open, AudioInputSource.Glasses) ?? Promise.resolve(false),
   loadWake: loadWakeDetector,
   onWakeState: state => { wakeState = state; renderWakeState(); },
-  onClip: (wav, _seconds, source) => {
+  onClip: (wav, _seconds, source, capturedWakeName) => {
     if (exited || discarding) { wav.fill(0); return; }
     transcriptionController?.abort();
     const controller = new AbortController(); transcriptionController = controller;
@@ -703,7 +707,7 @@ const recorder = new VoiceInput({
     void api<{text:string}>('/api/transcribe', 'POST', wav, trace, false, controller.signal).then(result => {
       if (exited || version !== connectionVersion || controller.signal.aborted) return;
       timing.mark(trace, 'asr_received');
-      const text = source === 'wake' ? wakeTranscript(result.text) : result.text;
+      const text = source === 'wake' ? wakeTranscript(result.text, capturedWakeName) : result.text;
       if (!text.trim()) {
         busy = false; clearClip(); progress.setPhase('idle');
         if (keepWakeConversation()) refreshStatus();
@@ -756,6 +760,69 @@ const recorder = new VoiceInput({
   },
   onError: message => { progress.setPhase('error'); notice.textContent = message; display(() => t('確認が必要'), message); },
 });
+
+let wakeNameEdited = false;
+let wakeNameSaveVersion = 0;
+let wakeNamePersistenceVersion = 0;
+function renderWakeNameControls(): void {
+  el<HTMLInputElement>('custom-wake-name').checked = wakeNamePreferences.value.custom;
+  el<HTMLInputElement>('wake-name').value = wakeNamePreferences.value.name;
+  el('wake-name-fields').hidden = !wakeNamePreferences.value.custom;
+  renderWakeState();
+}
+async function saveWakeName(custom: boolean): Promise<void> {
+  if (busy || recorder.state !== 'idle') {
+    el('wake-name-status').textContent = t('処理が終わるまでお待ちください。');
+    if (!custom) el<HTMLInputElement>('custom-wake-name').checked = wakeNamePreferences.value.custom;
+    return;
+  }
+  const checked = validateWakeName(custom ? el<HTMLInputElement>('wake-name').value : wakeNamePreferences.value.name);
+  if (checked.error) {
+    el<HTMLInputElement>('wake-name').setAttribute('aria-invalid', 'true');
+    el('wake-name-status').textContent = t(checked.error === 'reserved' ? 'その名前は使えません' : '呼び名は英字1〜24文字で入力してください');
+    return;
+  }
+  wakeNameEdited = true;
+  el<HTMLInputElement>('wake-name').removeAttribute('aria-invalid');
+  const version = ++wakeNameSaveVersion;
+  const persistenceVersion = ++wakeNamePersistenceVersion;
+  const saved = wakeNamePreferences.save({custom, name: checked.name});
+  renderWakeNameControls();
+  const applying = recorder.setWakeName(wakeNamePreferences.wakeName);
+  refreshStatus();
+  const retained = await saved;
+  // Draft edits only invalidate their own success message. Persistence failure
+  // stays visible independently; a newer save alone supersedes this result.
+  if (!exited && persistenceVersion === wakeNamePersistenceVersion) {
+    el('wake-name-save-status').textContent = retained ? '' : t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  }
+  await applying;
+  if (exited || version !== wakeNameSaveVersion) return;
+  renderWakeState(); refreshStatus();
+  el('wake-name-status').textContent = retained ? t('呼び名を保存しました') : '';
+}
+el<HTMLInputElement>('custom-wake-name').onchange = () => {
+  wakeNameEdited = true; wakeNameSaveVersion++;
+  const custom = el<HTMLInputElement>('custom-wake-name').checked;
+  el('wake-name-status').textContent = '';
+  if (!custom) { void saveWakeName(false); return; }
+  el('wake-name-fields').hidden = false;
+  el('wake-name-status').textContent = t('変更はまだ保存されていません');
+  el<HTMLInputElement>('wake-name').focus();
+};
+el<HTMLInputElement>('wake-name').oninput = () => {
+  wakeNameEdited = true; wakeNameSaveVersion++;
+  const input = el<HTMLInputElement>('wake-name');
+  const reserved = validateWakeName(input.value).error === 'reserved';
+  if (reserved) input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
+  el('wake-name-status').textContent = t(reserved ? 'その名前は使えません' : '変更はまだ保存されていません');
+};
+el<HTMLFormElement>('wake-name-form').onsubmit = event => {
+  event.preventDefault(); void saveWakeName(el<HTMLInputElement>('custom-wake-name').checked);
+};
+renderWakeNameControls();
+void recorder.setWakeName(wakeNamePreferences.wakeName);
 
 el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
 el<HTMLInputElement>('wake-word').onchange = () => {
@@ -834,8 +901,14 @@ async function connect(): Promise<void> {
   startupResult = result;
   if (result !== 0) throw new Error('Glasses page initialization failed');
   startupStage = 'ready'; glassesReady = true;
-  void operationPreferences.attach(appBridge).then(() => {
+  void Promise.all([operationPreferences.attach(appBridge), wakeNamePreferences.attach(appBridge)]).then(async () => {
     if (exited) return;
+    // Preserve an explicitly marked unsaved draft; the wake label below uses
+    // the restored active name until the user saves the draft.
+    if (!wakeNameEdited) renderWakeNameControls();
+    await recorder.setWakeName(wakeNamePreferences.wakeName);
+    if (exited) return;
+    renderWakeState(); refreshStatus();
     el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
     void recorder.setEnabled(operationPreferences.wakeWord);
   });
