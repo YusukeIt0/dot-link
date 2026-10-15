@@ -796,17 +796,18 @@ async function saveWakeName(custom: boolean): Promise<void> {
   el('wake-name-status').textContent = retained ? t('呼び名を保存しました') : t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
 }
 el<HTMLInputElement>('custom-wake-name').onchange = () => {
-  wakeNameEdited = true;
+  wakeNameEdited = true; wakeNameSaveVersion++;
   const custom = el<HTMLInputElement>('custom-wake-name').checked;
   el('wake-name-status').textContent = '';
   if (!custom) { void saveWakeName(false); return; }
   el('wake-name-fields').hidden = false;
+  el('wake-name-status').textContent = t('変更はまだ保存されていません');
   el<HTMLInputElement>('wake-name').focus();
 };
 el<HTMLInputElement>('wake-name').oninput = () => {
-  wakeNameEdited = true;
+  wakeNameEdited = true; wakeNameSaveVersion++;
   el<HTMLInputElement>('wake-name').removeAttribute('aria-invalid');
-  el('wake-name-status').textContent = '';
+  el('wake-name-status').textContent = t('変更はまだ保存されていません');
 };
 el<HTMLFormElement>('wake-name-form').onsubmit = event => {
   event.preventDefault(); void saveWakeName(el<HTMLInputElement>('custom-wake-name').checked);
@@ -893,6 +894,8 @@ async function connect(): Promise<void> {
   startupStage = 'ready'; glassesReady = true;
   void Promise.all([operationPreferences.attach(appBridge), wakeNamePreferences.attach(appBridge)]).then(async () => {
     if (exited) return;
+    // Preserve an explicitly marked unsaved draft; the wake label below uses
+    // the restored active name until the user saves the draft.
     if (!wakeNameEdited) renderWakeNameControls();
     await recorder.setWakeName(wakeNamePreferences.wakeName);
     if (exited) return;
