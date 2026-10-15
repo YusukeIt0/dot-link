@@ -1,6 +1,9 @@
-# Optional Hey dot input
+# Optional voice activation
 
 Enable **Talk with Hey dot** in Operation settings, between Location sharing and Display settings. It starts off. Say **Hey dot** (including the Japanese pronunciation ヘイ、ドット), wait for **Go ahead** on G2, then speak. The activation cue is independent of the interface language. A short silence ends the utterance; the existing automatic-send choice still applies. Say the cue again for each new utterance. Hold-to-talk remains available.
+
+To choose another name, enable **Change the name** below the wake switch, enter 1–24 ASCII letters after the fixed **Hey**, and save. Even, Siri and Meta are reserved (case-insensitive). The custom cue replaces Hey dot and uses English pronunciation; recognition depends on the name and speaker. Turning the custom-name option off restores Hey dot. The selected name also appears in conversation speaker labels and reply status; it does not rename your ChatGPT account or Dot Link. Name changes persist separately from microphone permission and never turn listening on. A change applies without restarting; an ongoing utterance finishes with its original name before the detector switches.
+
 
 Detection runs locally in the phone's Even WebView worker while Dot Link is active on G2, including app-level display blanking. It does not launch an exited app. iOS suspension, Even background audio delivery, recognition in noise, false activations and battery impact require physical validation; a connected SDK alone is not proof. If audio stops for five seconds, the listener closes and asks for OFF/ON retry instead of accumulating audio.
 
@@ -40,3 +43,9 @@ Before merge, install the PR commit through the owner's Even Beta route and reco
 7. Exercise sustained quiet/noisy listening and measure phone/G2 battery and responsiveness before describing the feature as ready for everyday use.
 
 This work changes the Even frontend only; it does not require replacing the Mac app or changing its speech settings.
+
+## Custom-name implementation and checks
+
+`distribution/wake/name-vocabulary.json` contains the ASCII pieces and scores exported from the pinned keyword model. Although its upstream filename is `bpe.model`, its SentencePiece trainer type is UNIGRAM. `scripts/export-wake-vocabulary.mjs <model-archive>` verifies the archive hash and exports the vocabulary; the client computes maximum-score segmentation for `HEY <NAME>`. The fixture in `tests/fixtures/wake-name-segmentation.json` was cross-checked against the upstream SentencePiece model. Each worker initializes one selected keyword; the `HEY_DOT` event tag is internal and does not retain a second activation phrase.
+
+Before merging a custom-name change, check a chosen name on G2, the default cue after reverting, labels and waiting status, restart persistence, invalid/reserved names, OFF behavior, and name changes during manual/wake speech. Silent-WASM and lifecycle tests do not establish acoustic accuracy, false-trigger rate or battery impact.

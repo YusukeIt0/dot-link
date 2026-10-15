@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { verifyWakeAssets } from '../scripts/lib/wake-assets.mjs';
 
-test('packaged worker initializes real WASM/models offline and releases silent sessions', async () => {
+test(`packaged worker initializes ${process.env.DOT_TEST_WAKE_NAME ?? 'dot'} with real WASM/models offline and releases silent sessions`, async () => {
   const base=new URL('../public/wake-assets/',import.meta.url);
   await verifyWakeAssets(fileURLToPath(base));
   const messages: {type:string;generation?:number}[]=[];
@@ -15,7 +15,7 @@ test('packaged worker initializes real WASM/models offline and releases silent s
   host.fetch=async(url:string)=>{assert.ok(url.startsWith(base.href),'Detector must not fetch remote assets');return new Response(readFileSync(new URL(url)));};
   await import('../src/wake-worker.ts');
   const message=host.onmessage as (event:{data:object})=>Promise<void>;
-  await message({data:{type:'init',assets:base.href}});
+  await message({data:{type:'init',assets:base.href,name:process.env.DOT_TEST_WAKE_NAME}});
   assert.deepEqual(messages,[{type:'ready'}]);
   for(let generation=1;generation<=3;generation++){
     await message({data:{type:'listen',generation}});

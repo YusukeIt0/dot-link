@@ -1,5 +1,11 @@
 # Even app release notes
 
+## 0.3.2
+
+- Choose a custom name for Hey voice activation in Operation settings.
+- See your chosen name in conversation labels and reply status.
+- Change or restore the name without restarting the app.
+
 ## 0.3.1
 
 - Added optional Hey dot voice activation in English and Japanese.

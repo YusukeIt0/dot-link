@@ -1,4 +1,5 @@
 import { WakeEngine, type KeywordSpotter, type SpeechDetector } from './wake-engine.ts';
+import { validateWakeName, wakeNameTokens, type WakeVocabulary } from './wake-name.ts';
 
 interface Runtime {
   FS: { writeFile(path: string, data: Uint8Array | string): void; unlink(path: string): void };
@@ -14,7 +15,8 @@ let engine: WakeEngine | undefined;
 let generation = 0;
 let initialized = false;
 
-async function initialize(assets: string): Promise<void> {
+async function initialize(assets: string, name = 'dot'): Promise<void> {
+  if (validateWakeName(name).error) throw new Error('Invalid wake name');
   if (initialized) throw new Error('Already initialized');
   initialized = true;
   const base = new URL(assets);
@@ -31,8 +33,12 @@ async function initialize(assets: string): Promise<void> {
     if (!response.ok) throw new Error('Model unavailable');
     module.FS.writeFile(`/${name}`, new Uint8Array(await response.arrayBuffer()));
   }));
-  // Fixed activation phrase, independent of the UI and transcription language.
-  module.FS.writeFile('/keywords.txt', '▁HE Y ▁DO T @HEY_DOT\n');
+  const response = await fetch(asset('name-vocabulary.json'));
+  if (!response.ok) throw new Error('Vocabulary unavailable');
+  const vocabulary = await response.json() as WakeVocabulary;
+  // HEY_DOT is an internal event tag, not the user's phrase. Keep one keyword
+  // only: a custom name replaces the default rather than adding a second cue.
+  module.FS.writeFile('/keywords.txt', `${wakeNameTokens(name, vocabulary).join(' ')} @HEY_DOT\n`);
   const kws = kwsApi.createKws(module, {
     featConfig: { samplingRate: 16000, featureDim: 80 },
     modelConfig: { transducer: { encoder: '/encoder.onnx', decoder: '/decoder.onnx', joiner: '/joiner.onnx' },
@@ -57,7 +63,7 @@ async function initialize(assets: string): Promise<void> {
 
 globalThis.onmessage = async ({ data }) => {
   try {
-    if (data.type === 'init') { await initialize(data.assets); return; }
+    if (data.type === 'init') { await initialize(data.assets, data.name); return; }
     if (!engine) return;
     if (data.type === 'listen' || data.type === 'cancel') {
       generation = data.generation;

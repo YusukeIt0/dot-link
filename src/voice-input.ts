@@ -3,13 +3,14 @@ import { MicrophoneLease } from './microphone-lease.ts';
 import type { LoadWakeDetector, WakeDetector } from './wake-detector.ts';
 import type { WakeEvent } from './wake-engine.ts';
 import { t } from './i18n.ts';
+import { validateWakeName } from './wake-name.ts';
 
 export type WakeState = 'off' | 'loading' | 'listening' | 'paused' | 'error';
 export type VoiceSource = 'manual' | 'wake';
 interface Options {
   microphone: (open: boolean) => Promise<boolean>;
   loadWake: LoadWakeDetector;
-  onClip: (wav: Uint8Array, seconds: number, source: VoiceSource) => void;
+  onClip: (wav: Uint8Array, seconds: number, source: VoiceSource, wakeName: string) => void;
   onState: (state: RecordingState) => void;
   onError: (message: string) => void;
   onWakeState: (state: WakeState) => void;
@@ -39,18 +40,32 @@ export class VoiceInput {
   private watchdog?: ReturnType<typeof setInterval>;
   private lastFrame = 0;
   private now: () => number;
+  private wakeName = 'dot';
+  private detectorName = 'dot';
+  private captureName = 'dot';
+  private detectorEpoch = 0;
 
   constructor(options: Options) {
     this.options = options; this.now = options.now ?? (() => performance.now());
     this.mic = new MicrophoneLease(options.microphone);
     this.manual = new Recorder(open => this.mic.setCapture(open),
-      (wav, seconds) => options.onClip(wav, seconds, 'manual'),
+      (wav, seconds) => options.onClip(wav, seconds, 'manual', this.wakeName),
       state => {
         if (state === 'idle') void this.mic.setCapture(false);
         options.onState(state); this.sync();
       }, options.onError);
   }
   get state(): RecordingState { return this.closeFailed ? 'stop-error' : this.capture ?? this.manual.state; }
+
+  async setWakeName(name: string): Promise<void> {
+    const checked = validateWakeName(name);
+    if (checked.error) throw new Error('Invalid wake name');
+    if (checked.name === this.wakeName) return;
+    this.wakeName = checked.name;
+    // A current utterance keeps its detector and original cleanup name.
+    // sync() applies the pending name once both capture paths are idle.
+    if (this.enabled && this.state === 'idle') await this.setEnabled(true);
+  }
 
   setContext(available: boolean, blocked: boolean, sessionActive = available): void {
     this.available = available; this.blocked = blocked; this.sessionActive = sessionActive;
@@ -62,23 +77,34 @@ export class VoiceInput {
   async setEnabled(enabled: boolean): Promise<void> {
     if (this.disposed) return;
     this.enabled = enabled; this.failed = false;
+    if (enabled && (this.capture || this.manual.state !== 'idle')) { this.sync(); return; }
     const version = ++this.loadVersion;
     if (!enabled) {
       // Turning off automatic activation must not discard a held utterance.
       if (this.capture && this.source === 'manual') { this.sync(); return; }
       this.loading = false; this.cancelCapture();
-      this.detector?.dispose(); this.detector = undefined;
+      this.detector?.dispose(); this.detector = undefined; this.detectorEpoch++;
       this.detectorActive = false;
       this.stopWatchdog();
       await this.closeListening(); this.updateWakeState();
       return;
     }
+    if (this.detector && this.detectorName !== this.wakeName) {
+      this.detectorActive = false; this.listenVersion++;
+      this.stopWatchdog(); this.detector.dispose(); this.detector = undefined; this.detectorEpoch++;
+      this.loading = true; this.updateWakeState();
+      await this.closeListening();
+      if (version !== this.loadVersion || this.disposed || !this.enabled) return;
+    }
     if (!this.detector) {
       this.loading = true; this.updateWakeState();
+      const name = this.wakeName, epoch = ++this.detectorEpoch;
       try {
-        const detector = await this.options.loadWake(event => this.handle(event), () => this.fail());
+        const detector = await this.options.loadWake(event => {
+          if (epoch === this.detectorEpoch) this.handle(event);
+        }, () => { if (epoch === this.detectorEpoch) this.fail(); }, name);
         if (version !== this.loadVersion || this.disposed || !this.enabled) { detector.dispose(); return; }
-        this.detector = detector;
+        this.detector = detector; this.detectorName = name;
       } catch { if (version === this.loadVersion && !this.disposed) this.failed = true; }
       if (version !== this.loadVersion) return;
       this.loading = false;
@@ -122,7 +148,7 @@ export class VoiceInput {
   }
   async dispose(): Promise<void> {
     this.disposed = true; this.enabled = false; this.loadVersion++;
-    this.cancelCapture(); this.detector?.dispose(); this.detector = undefined;
+    this.cancelCapture(); this.detector?.dispose(); this.detector = undefined; this.detectorEpoch++;
     this.detectorActive = false; this.stopWatchdog();
     await this.closeListening(); await this.manual.stop(true);
   }
@@ -130,13 +156,13 @@ export class VoiceInput {
     if (!this.detectorActive || this.disposed) return;
     if (event.type === 'wake') {
       if (!this.available || this.blocked || this.manual.state !== 'idle' || this.capture) return;
-      this.source = 'wake'; this.capture = 'recording'; this.options.onState('recording');
+      this.source = 'wake'; this.captureName = this.detectorName; this.capture = 'recording'; this.options.onState('recording');
       return;
     }
     if (!this.capture) return;
     const source = this.source;
     this.capture = 'stopping'; this.options.onState('stopping');
-    if (event.wav) this.options.onClip(event.wav, event.seconds, source);
+    if (event.wav) this.options.onClip(event.wav, event.seconds, source, this.captureName);
     this.capture = undefined; this.detectorActive = false;
     if (!this.enabled) { this.detector?.dispose(); this.detector = undefined; }
     this.options.onState('idle'); this.sync();
@@ -149,6 +175,10 @@ export class VoiceInput {
     if (wasCapturing) this.options.onState('idle');
   }
   private sync(): void {
+    if (this.enabled && !this.loading && !this.failed && !this.disposed && !this.closeFailed &&
+        !this.capture && this.manual.state === 'idle' && (!this.detector || this.detectorName !== this.wakeName)) {
+      void this.setEnabled(true); return;
+    }
     const wanted = (this.enabled || (!!this.capture && this.source === 'manual')) && !this.loading && !this.failed && !this.closeFailed && !this.disposed &&
       this.sessionActive && (this.available || !!this.capture) && !this.blocked && this.manual.state === 'idle' && !!this.detector;
     if (wanted !== this.detectorActive) {
@@ -174,7 +204,7 @@ export class VoiceInput {
     if (this.disposed) return;
     this.failed = true;
     this.sync();
-    this.detector?.dispose(); this.detector = undefined;
+    this.detector?.dispose(); this.detector = undefined; this.detectorEpoch++;
   }
   private async closeListening(): Promise<void> {
     const ok = await this.mic.setListening(false);

@@ -22,7 +22,7 @@ External STT paths send audio and receive transcription in memory without creati
 
 The Mac also stores connection and tunnel settings, OpenAI tunnel credentials, relay authentication keys, and event delivery destinations and secrets. These are local files; files containing secrets are given owner-only read/write permissions. They are not all hashed or stored in Keychain. The all-notification sharing choice, paused state, language and update preferences are stored as Mac app settings.
 
-**On the Even side:** WebView storage and the Even SDK's app storage retain the relay address, session credential, expiry, app origin and update-recovery credential. The optional Hey dot choice is saved. Language and display preferences are also saved: idle time, wake gesture, head-raise enablement, angle and calibrated forward angle. Dot Link does not itself implement Keychain storage for these records.
+**On the Even side:** WebView storage and the Even SDK's app storage retain the relay address, session credential, expiry, app origin and update-recovery credential. The optional voice-activation choice and custom wake name are saved. Changing the name does not enable the microphone. Language and display preferences are also saved: idle time, wake gesture, head-raise enablement, angle and calibrated forward angle. Dot Link does not itself implement Keychain storage for these records.
 
 An uncertain outgoing message has a saved ID and SHA-256 text digest for duplicate prevention. This record does not contain the message text. Short-text hashes may be guessable and are not treated as anonymous data.
 

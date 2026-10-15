@@ -22,10 +22,10 @@ export function receiptCaption(message?: DisplayMessage): string {
 export function newReplyCaption(count: number): string {
   return count > 0 ? getLanguage() === 'ja' ? `新着${count}件` : `${count} new` : '';
 }
-export function conversationText(message: DisplayMessage, now = Date.now()): string {
+export function conversationText(message: DisplayMessage, now = Date.now(), assistantName = 'Dot'): string {
   if (message.kind === 'proactive') return message.reply ?? '';
   const sender = message.kind === 'notification' ? `${t('通知')} (${message.source_app ?? 'Mac'})` : t('あなた');
   const answer = message.reply ?? (message.status === 'failed' ? t('配送を確認できませんでした') :
     delayedReply(message, now) ? t('通常より返信に時間がかかっています…') : t('返信を待っています…'));
-  return `${sender}: ${message.text}\n\nDot: ${answer}`;
+  return `${sender}: ${message.text}\n\n${assistantName}: ${answer}`;
 }
