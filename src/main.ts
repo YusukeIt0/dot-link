@@ -495,7 +495,7 @@ function idleVoicePrompt(): string {
 }
 function wakeText(key: Parameters<typeof t>[0]): string { return t(key).replace('{wake}', `Hey ${wakeNamePreferences.wakeName}`); }
 function renderWakeState(): void {
-  const labels = { off: '', loading: wakeText('{wake}を準備中…'), listening: wakeText('{wake}で話せます'),
+  const labels = { off: '', loading: wakeText('{wake}を準備中…'), listening: '',
     paused: wakeText('{wake}は一時停止中'), error: wakeText('{wake}を使えません。オフにしてから再度オンにしてください。') };
   el('wake-status').textContent = labels[wakeState];
 }
