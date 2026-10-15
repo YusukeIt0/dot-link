@@ -1,5 +1,10 @@
 # Even app release notes
 
+## 0.3.3
+
+- Clarified the default wake phrase and name-entry guidance.
+- Show an unavailable-name message as soon as a reserved name is entered.
+
 ## 0.3.2
 
 - Choose a custom name for Hey voice activation in Operation settings.

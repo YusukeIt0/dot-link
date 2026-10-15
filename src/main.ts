@@ -495,7 +495,6 @@ function idleVoicePrompt(): string {
 }
 function wakeText(key: Parameters<typeof t>[0]): string { return t(key).replace('{wake}', `Hey ${wakeNamePreferences.wakeName}`); }
 function renderWakeState(): void {
-  el('wake-word-label').textContent = wakeText('{wake}で話す');
   const labels = { off: '', loading: wakeText('{wake}を準備中…'), listening: wakeText('{wake}で話せます'),
     paused: wakeText('{wake}は一時停止中'), error: wakeText('{wake}を使えません。オフにしてから再度オンにしてください。') };
   el('wake-status').textContent = labels[wakeState];
@@ -779,7 +778,7 @@ async function saveWakeName(custom: boolean): Promise<void> {
   const checked = validateWakeName(custom ? el<HTMLInputElement>('wake-name').value : wakeNamePreferences.value.name);
   if (checked.error) {
     el<HTMLInputElement>('wake-name').setAttribute('aria-invalid', 'true');
-    el('wake-name-status').textContent = t(checked.error === 'reserved' ? 'この呼び名は使えません' : '呼び名は英字1〜24文字で入力してください');
+    el('wake-name-status').textContent = t(checked.error === 'reserved' ? 'その名前は使えません' : '呼び名は英字1〜24文字で入力してください');
     return;
   }
   wakeNameEdited = true;
@@ -806,8 +805,11 @@ el<HTMLInputElement>('custom-wake-name').onchange = () => {
 };
 el<HTMLInputElement>('wake-name').oninput = () => {
   wakeNameEdited = true; wakeNameSaveVersion++;
-  el<HTMLInputElement>('wake-name').removeAttribute('aria-invalid');
-  el('wake-name-status').textContent = t('変更はまだ保存されていません');
+  const input = el<HTMLInputElement>('wake-name');
+  const reserved = validateWakeName(input.value).error === 'reserved';
+  if (reserved) input.setAttribute('aria-invalid', 'true');
+  else input.removeAttribute('aria-invalid');
+  el('wake-name-status').textContent = t(reserved ? 'その名前は使えません' : '変更はまだ保存されていません');
 };
 el<HTMLFormElement>('wake-name-form').onsubmit = event => {
   event.preventDefault(); void saveWakeName(el<HTMLInputElement>('custom-wake-name').checked);

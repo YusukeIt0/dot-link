@@ -10,7 +10,7 @@ const translations = {
   '呼び名を保存しました': 'Name saved',
   '変更はまだ保存されていません': 'Changes not saved',
   '呼び名は英字1〜24文字で入力してください': 'Use 1–24 English letters for the name',
-  'この呼び名は使えません': 'This name cannot be used',
+  'その名前は使えません': 'This name cannot be used',
   'Hey dotを準備中…': 'Preparing Hey dot…',
   'Hey dotで話せます': 'Ready for Hey dot',
   'Hey dotは一時停止中': 'Hey dot is paused',

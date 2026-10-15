@@ -24,13 +24,14 @@
     </details>
     <details id="operation-settings" class="display-settings">
       <summary data-en="Operation settings">操作設定</summary>
-      <label class="display-checkbox"><input id="wake-word" type="checkbox"> <span id="wake-word-label" data-en="Talk with Hey dot">Hey dotで話す</span></label>
+      <label class="display-checkbox"><input id="wake-word" type="checkbox"> <span id="wake-word-label" data-en="Talk with Hey XX">Hey XXで話す</span></label>
+      <p class="note" data-en="The default is Hey dot.">初期値はHey dotです。</p>
       <form id="wake-name-form" novalidate>
         <label class="display-checkbox"><input id="custom-wake-name" type="checkbox"> <span data-en="Change the name">呼び名を変える</span></label>
         <div id="wake-name-fields" hidden>
           <label for="wake-name" class="note" data-en="Name (1–24 English letters)">呼び名（英字1〜24文字）</label>
           <div class="wake-name-input"><span aria-hidden="true">Hey</span><input id="wake-name" type="text" pattern="[A-Za-z]+" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="wake-name-help wake-name-status"></div>
-          <p id="wake-name-help" class="note" data-en="Use the English pronunciation. Even, Siri and Meta cannot be used.">英語の発音で呼びかけてください。Even・Siri・Metaは使えません。</p>
+          <p id="wake-name-help" class="note" data-en="English letters only.">英字のみ入力できます。</p>
           <button type="submit" data-en="Save name">呼び名を保存</button>
         </div>
         <p id="wake-name-status" role="status" class="note"></p>

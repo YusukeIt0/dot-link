@@ -68,7 +68,7 @@ The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyw
 ### 4. Start a conversation
 
 - **Hold to talk:** hold to speak on G2 and release to stop recording.
-- **Hey dot:** with Even app **0.3.1 or later**, open **Operation settings** in the phone companion and enable **Talk with Hey dot** (off by default). Say “Hey dot” in English or Japanese pronunciation, wait for **Go ahead** on G2, then speak. A short silence ends recording. Say the cue again for each new turn. In 0.3.2, you can also enable **Change the name**, enter 1–24 ASCII letters, and save. Custom names use English pronunciation; Even, Siri and Meta are reserved.
+- **Hey dot:** with Even app **0.3.1 or later**, open **Operation settings** in the phone companion and enable **Talk with Hey XX** (off by default). Say “Hey dot” in English or Japanese pronunciation, wait for **Go ahead** on G2, then speak. A short silence ends recording. Say the cue again for each new turn. In 0.3.2, you can also enable **Change the name**, enter 1–24 ASCII letters, and save. Custom names use English pronunciation; Even, Siri and Meta are reserved.
 - **Type:** write and send a message in the Even companion.
 
 With **Send after transcription** enabled, recognized speech is sent automatically; turn it off to review the text before sending. Check that your Dot's reply appears on G2. Keep Dot Link open on G2, the Mac awake, and both devices connected to Tailscale.
