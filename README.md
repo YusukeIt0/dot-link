@@ -5,6 +5,7 @@
 <h1 align="center">Dot Link</h1>
 <p align="center"><strong>Your Dot, now on Even G2.</strong></p>
 <p align="center">
+  <a href="https://yusukeit0.github.io/dot-link/">Website</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Even Hub</a> ·
   <a href="docs/setup.md">User guide</a>
