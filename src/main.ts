@@ -665,7 +665,7 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status']) {
+  for (const id of ['connection', 'notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
@@ -763,6 +763,7 @@ const recorder = new VoiceInput({
 
 let wakeNameEdited = false;
 let wakeNameSaveVersion = 0;
+let wakeNamePersistenceVersion = 0;
 function renderWakeNameControls(): void {
   el<HTMLInputElement>('custom-wake-name').checked = wakeNamePreferences.value.custom;
   el<HTMLInputElement>('wake-name').value = wakeNamePreferences.value.name;
@@ -784,15 +785,21 @@ async function saveWakeName(custom: boolean): Promise<void> {
   wakeNameEdited = true;
   el<HTMLInputElement>('wake-name').removeAttribute('aria-invalid');
   const version = ++wakeNameSaveVersion;
+  const persistenceVersion = ++wakeNamePersistenceVersion;
   const saved = wakeNamePreferences.save({custom, name: checked.name});
   renderWakeNameControls();
   const applying = recorder.setWakeName(wakeNamePreferences.wakeName);
   refreshStatus();
   const retained = await saved;
+  // Draft edits only invalidate their own success message. Persistence failure
+  // stays visible independently; a newer save alone supersedes this result.
+  if (!exited && persistenceVersion === wakeNamePersistenceVersion) {
+    el('wake-name-save-status').textContent = retained ? '' : t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  }
   await applying;
   if (exited || version !== wakeNameSaveVersion) return;
   renderWakeState(); refreshStatus();
-  el('wake-name-status').textContent = retained ? t('呼び名を保存しました') : t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  el('wake-name-status').textContent = retained ? t('呼び名を保存しました') : '';
 }
 el<HTMLInputElement>('custom-wake-name').onchange = () => {
   wakeNameEdited = true; wakeNameSaveVersion++;
