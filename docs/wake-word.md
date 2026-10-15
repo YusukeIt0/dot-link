@@ -2,7 +2,7 @@
 
 Enable **Talk with Hey dot** in Operation settings, between Location sharing and Display settings. It starts off. Say **Hey dot** (including the Japanese pronunciation ヘイ、ドット), wait for **Go ahead** on G2, then speak. The activation cue is independent of the interface language. A short silence ends the utterance; the existing automatic-send choice still applies. Say the cue again for each new utterance. Hold-to-talk remains available.
 
-To choose another name, enable **Change the name** below the wake switch, enter 1–24 ASCII letters after the fixed **Hey**, and save. Even, Siri and Meta are reserved (case-insensitive). The custom cue replaces Hey dot and uses English pronunciation; recognition depends on the name and speaker. Turning the custom-name option off restores Hey dot. The selected name also appears in conversation speaker labels and reply status; it does not rename your ChatGPT account or Dot Link. Name changes persist separately from microphone permission and never turn listening on. A change applies without restarting; an ongoing utterance finishes with its original name before the detector switches.
+To choose another name, enable **Change the name** below the wake switch, enter 1–24 ASCII letters after the fixed **Hey**, and save. Even, Siri and Meta are reserved (case-insensitive). The custom cue replaces Hey dot and uses English pronunciation; recognition depends on the name and speaker. Turning the custom-name option off restores Hey dot. The selected name also appears in conversation speaker labels and reply status; it does not rename your ChatGPT account or Dot Link. Name changes persist separately from the listening switch and never turn listening on. On restore, a valid Even-native record takes precedence over browser storage; an invalid native record restores Dot defaults, while a missing native record keeps the browser choice. A choice saved in the current session wins over a pending restore. A change applies without restarting; an ongoing utterance finishes with its original name before the detector switches.
 
 
 Detection runs locally in the phone's Even WebView worker while Dot Link is active on G2, including app-level display blanking. It does not launch an exited app. iOS suspension, Even background audio delivery, recognition in noise, false activations and battery impact require physical validation; a connected SDK alone is not proof. If audio stops for five seconds, the listener closes and asks for OFF/ON retry instead of accumulating audio.
@@ -16,7 +16,7 @@ The spotter keeps a two-second PCM ring to recover following speech received dur
 ## Packaged dependencies
 
 - sherpa-onnx **1.13.8**, source commit `11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf`.
-- Int8 Zipformer GigaSpeech 3.3M English keyword model, release `2024-01-01`; fixed tokens `▁HE Y ▁DO T`, score 3, threshold 0.1.
+- Int8 Zipformer GigaSpeech 3.3M English keyword model, release `2024-01-01`; default tokens `▁HE Y ▁DO T` (replaced by the saved custom cue), score 3, threshold 0.1.
 - Silero VAD model; pinned SHA-256 in `distribution/wake/manifest.json`.
 - Emscripten **4.0.23**, ONNX Runtime SIMD **1.28.2** as hash-pinned by the sherpa source.
 
