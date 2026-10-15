@@ -7,6 +7,7 @@
 - Change or restore the name without restarting the app.
 - Clearer default-name and microphone guidance, with unavailable-name messages while typing.
 - Removed the redundant voice-ready message.
+- Keep save-failure warnings visible while editing a name.
 
 ## 0.3.1
 
