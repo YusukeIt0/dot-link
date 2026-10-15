@@ -26,6 +26,7 @@
       <summary data-en="Operation settings">操作設定</summary>
       <label class="display-checkbox"><input id="wake-word" type="checkbox"> <span id="wake-word-label" data-en="Talk with Hey XX">Hey XXで話す</span></label>
       <p class="note" data-en="The default is Hey dot.">初期値はHey dotです。</p>
+      <p class="note" data-en="Keeps the G2 microphone on while waiting. Wake detection stays on your phone. Hold-to-talk still works.">待受中はG2のマイクを使います。呼びかけの検出はスマートフォン内で行います。長押しも使えます。</p>
       <form id="wake-name-form" novalidate>
         <label class="display-checkbox"><input id="custom-wake-name" type="checkbox"> <span data-en="Change the name">呼び名を変える</span></label>
         <div id="wake-name-fields" hidden>
@@ -36,7 +37,6 @@
         </div>
         <p id="wake-name-status" role="status" class="note"></p>
       </form>
-      <p class="note" data-en="Keeps the G2 microphone on while waiting. Wake detection stays on your phone. Hold-to-talk still works.">待受中はG2のマイクを使います。呼びかけの検出はスマートフォン内で行います。長押しも使えます。</p>
       <p id="wake-status" role="status" class="note"></p>
       <p id="operation-save-status" role="status" class="note"></p>
     </details>
