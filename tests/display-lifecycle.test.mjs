@@ -392,8 +392,7 @@ test('location toggle reaches native/relay and an OFF blocks late announcements 
 test('whole app waits sixty seconds then uses configured idle interval, preserving late replies and all header fields', async t => {
   const app = await launch({typedInput:true,provider:'soniox'}); t.after(app.close);
   app.element('transcript').value = 'Synthetic waiting question'; await app.element('send').click(); await flush();
-  const stored = vm.runInContext('JSON.parse(JSON.stringify(messages))',app.context);
-  const message = stored[0];
+  const message = vm.runInContext('JSON.parse(JSON.stringify(conversation.selected))',app.context);
   assert.match(app.physical.get(1), /^Dotの返信待ち \(0秒\)$/);
   assert.match(app.physical.get(5), /^未読 \d{2}:\d{2}$/);
   const time = app.physical.get(5).slice(3);
