@@ -80,6 +80,8 @@ async function launch(options = {}) {
     setInterval: (fn, ms) => schedule(fn, ms, true), clearInterval: id => timers.delete(id),
     fetch: (url, init) => {
       networkCalls.push(String(url));
+      const custom = options.request?.(String(url), init);
+      if (custom !== undefined) return custom;
       if (String(url).includes('/api/location/')) {
         calls.push(['location-api', String(url), JSON.parse(init.body)]);
         return Promise.resolve({status: 200, ok: true, json: async () => ({locationSharing: true, locationFresh: true})});
@@ -544,4 +546,54 @@ test('opening and cancelling the system exit dialog keeps sharing alive', async 
   await app.evaluate('void locationSharing.pump()');
   assert.ok(app.calls.filter(c => c[0] === 'location-api').length > before);
   assert.equal(app.calls.some(c => c[0] === 'location-api' && c[2].enabled === false), false);
+});
+
+
+test('a send response parsed after forgetting cannot restore history or release a newer busy operation', async t => {
+ let releaseBody, parsing=false;
+ const body=new Promise(resolve=>{releaseBody=resolve;});
+ const app=await launch({typedInput:true,request:(url)=>url.endsWith('/api/utterances')
+  ? Promise.resolve({ok:true,status:200,json:()=>{parsing=true;return body;}}) : undefined});
+ t.after(app.close);
+ app.element('transcript').value='Synthetic pending request';
+ const sending=app.element('send').click();
+ for(let i=0;i<20&&!parsing;i++) await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(parsing,true);
+ await app.evaluate("forgetPairing('Reconnect required'); busy=true; progress.connection='connecting';");
+ releaseBody({id:'old',text:'Synthetic pending request',status:'accepted'});await sending;await flush();
+ assert.equal(vm.runInContext('conversation.count',app.context),0);
+ assert.equal(vm.runInContext('busy',app.context),true);
+ assert.equal(app.element('notice').textContent,'Reconnect required');
+ assert.equal(app.element('transcript').value,'Synthetic pending request');
+});
+
+test('forget clears the queued restore/wake state and preserves the unsent draft and user preferences', async t => {
+ const app=await launch({initialMessages:[proactive('history')]});t.after(app.close);
+ app.element('transcript').value='Unsent draft';
+ await app.evaluate("tts=true; pendingId='old'; pendingText='old'; conversation.receive([{id:'queued',text:'',status:'replied',reply:'Old reply'}],false,()=>true);");
+ await app.evaluate("forgetPairing('Reconnect required');");
+ assert.equal(vm.runInContext('conversation.count',app.context),0);
+ assert.equal(vm.runInContext('conversation.unreadCount',app.context),0);
+ assert.equal(vm.runInContext('pendingId',app.context),undefined);
+ assert.equal(vm.runInContext('pendingText',app.context),undefined);
+ assert.equal(vm.runInContext('tts',app.context),true);
+ assert.equal(app.element('transcript').value,'Unsent draft');
+ await app.evaluate('conversation.receive([],true,()=>true); flushPendingDisplay();');
+ assert.equal(vm.runInContext('conversation.visibleId',app.context),undefined);
+});
+
+test('successful pairing releases the send control for a preserved draft', async t => {
+ const origin='https://relay.example.ts.net';
+ const app=await launch({request:url=>url===`${origin}/api/pair`
+  ? Promise.resolve({ok:true,status:200,json:async()=>({token:'p'.repeat(43),expiresAt:Date.now()+86400000})})
+  : url===`${origin}/api/updates`
+   ? Promise.resolve({ok:true,status:200,json:async()=>({revision:'paired',status:{subscribed:true},messages:[]})}) : undefined});
+ t.after(app.close);
+ app.element('transcript').value='Preserved draft';
+ app.element('pair-code').value=JSON.stringify({version:1,origin,code:'c'.repeat(43),expiresAt:Date.now()+60000});
+ await app.element('pair').click(); await flush();
+ assert.equal(vm.runInContext('session.credentials?.origin',app.context),origin);
+ assert.equal(vm.runInContext('busy',app.context),false);
+ assert.equal(app.element('send').disabled,false);
+ assert.equal(app.element('transcript').value,'Preserved draft');
 });

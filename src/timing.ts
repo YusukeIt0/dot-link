@@ -4,6 +4,7 @@ export interface TimingReport { id: string; events: { stage: ClientStage; at: nu
 // Keep only bounded timing metadata, never conversation or audio content.
 export class TimingTracker {
   private traces = new Map<string, { start: number; events: TimingReport['events'] }>();
+  reset(): void { this.traces.clear(); }
   mark(id: string, stage: ClientStage): void {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return;
     let trace = this.traces.get(id);

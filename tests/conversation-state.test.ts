@@ -74,10 +74,12 @@ test('presentation of transient status retains history selection for later repai
   assert.equal(show(state)?.id,'a');
 });
 
-test('forget clears history, unread and pending display using the existing transition policy', () => {
+test('reset clears all conversation state, including deferred restore and wake', () => {
   const state=new ConversationState(); state.receive([message('a',1000,'a')],false,()=>true);
-  state.forget(); assert.equal(state.selected,undefined); assert.equal(state.count,0);
+  state.reset(); assert.equal(state.selected,undefined); assert.equal(state.count,0);
   assert.equal(state.unreadCount,0); assert.equal(state.hasPendingDisplay,false);
+  state.receive([],true,()=>true); assert.deepEqual(state.flush(allowed),{display:false,wake:false});
+  assert.equal(state.visibleId,undefined);
 });
 
 
