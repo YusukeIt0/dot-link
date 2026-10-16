@@ -724,6 +724,7 @@ function stopSession(): void {
 
 async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
+  void exitDiagnostics.attach(appBridge);
   void restoreRelay(appBridge).then(() => locationSharing.attach(appBridge));
   void languagePreferences.attach(appBridge).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;

@@ -30,3 +30,27 @@ test('exit envelopes remain visible even if routing would prefer another envelop
   probe.observe({sysEvent: {systemExitReasonCode: 1}}, false);
   assert.deepEqual(JSON.parse(map.get('dot-exit-check-v1')!).map((r: {event: string}) => r.event), ['text-exit', 'exit-after-stop', 'exit-reason']);
 });
+test('native storage restores the previous run across different WebView origins and merges an early new boot', async () => {
+  const nativeMap = new Map<string, string>();
+  const native = {async getLocalStorage(k: string) {return nativeMap.get(k) ?? '';}, async setLocalStorage(k: string, v: string) {nativeMap.set(k, v); return true;}};
+  const make = (now: number) => {
+    const local = new Map<string, string>();
+    const probe = new ExitDiagnostics({enabled: true, storage: () => ({getItem: k => local.get(k) ?? null, setItem: (k, v) => {local.set(k, v);}}), changed() {}, log() {}, now: () => now});
+    return {probe, local};
+  };
+  const first = make(1000); first.probe.record('system-exit'); await first.probe.attach(native);
+  const second = make(2000); second.probe.record('boot'); await second.probe.attach(native);
+  const rows = JSON.parse(second.local.get('dot-exit-check-v1')!);
+  assert.deepEqual(rows.map((r: {event: string}) => r.event), ['system-exit', 'boot']);
+  assert.equal(new Set(rows.map((r: {run: string}) => r.run)).size, 2);
+});
+test('events arriving during a native save are persisted afterwards, and failed saves are visible', async () => {
+  const local = new Map<string, string>(); let text = '', finish: (ok: boolean) => void = () => {};
+  const writes: string[] = [];
+  const probe = new ExitDiagnostics({enabled: true, storage: () => ({getItem: k => local.get(k) ?? null, setItem: (k, v) => {local.set(k, v);}}), changed: value => {text = value;}, log() {}});
+  probe.record('boot');
+  const attaching = probe.attach({async getLocalStorage() {return '';}, setLocalStorage(_k, v) {writes.push(v); return new Promise(resolve => {finish = resolve;});}});
+  await Promise.resolve(); probe.record('system-exit'); finish(true); await Promise.resolve(); await Promise.resolve();
+  assert.equal(writes.length, 2); assert.ok(writes[1].includes('system-exit')); finish(false); await attaching;
+  assert.match(text, /native failed/);
+});
