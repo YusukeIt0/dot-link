@@ -24,6 +24,7 @@ import { LanguagePreferences } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
 import { installKeyboardViewport } from './keyboard-viewport.ts';
 import { SpeechPlayback } from './speech-playback.ts';
+import { ReadAloudPreferences } from './read-aloud-preferences.ts';
 import { G2Display } from './g2-display.ts';
 import { RelaySession } from './relay-session.ts';
 import { RuntimeEffects } from './runtime-effects.ts';
@@ -44,6 +45,7 @@ for (const { element, ja, en } of staticLabels) element.textContent = getLanguag
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const displayPreferences = new DisplayPreferenceStore(() => localStorage);
 const operationPreferences = new OperationPreferences(() => localStorage);
+const readAloudPreferences = new ReadAloudPreferences(() => localStorage);
 const wakeNamePreferences = new WakeNamePreferences(() => localStorage);
 let wakeState: WakeState = 'off';
 const headRaise = new HeadRaiseDetector(displayPreferences.value);
@@ -210,7 +212,8 @@ function forgetPairing(message: string): void {
 }
 let busy = false;
 let subscribed = false;
-let tts = false;
+let tts = readAloudPreferences.value;
+el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
 const conversation = new ConversationState();
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
@@ -349,6 +352,9 @@ el('forget-pairing').onclick = async () => {
 };
 el('tts').onclick = () => {
   tts = !tts; el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+  void readAloudPreferences.save(tts).then(saved => {
+    if (!saved && !exited) notice.textContent = t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  });
   if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; playback.speak(speech); }
   else playback.cancel();
   updateRuntime();
@@ -736,6 +742,14 @@ async function connect(): Promise<void> {
   startupResult = result;
   if (result !== 0) throw new Error('Glasses page initialization failed');
   startupStage = 'ready'; glassesReady = true; syncRuntimeEffects();
+  void readAloudPreferences.attach(appBridge).then(() => {
+    if (exited) return;
+    const wasEnabled = tts;
+    tts = readAloudPreferences.value;
+    el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+    if (wasEnabled && !tts) playback.cancel();
+    updateRuntime();
+  });
   exitDiagnostics.record('ready');
   void Promise.all([operationPreferences.attach(appBridge), wakeNamePreferences.attach(appBridge)]).then(async () => {
     if (exited) return;

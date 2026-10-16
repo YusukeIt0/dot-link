@@ -27,6 +27,7 @@ async function launch(options = {}) {
   const nativeSaved = new Map(options.nativePairing ? [['dot-relay-native-v1', JSON.stringify(options.nativePairing)]] : []);
   if (options.savedLanguage) saved.set('dot-language', options.savedLanguage);
   if (options.nativeLanguage) nativeSaved.set('dot-language-preference-v1', options.nativeLanguage);
+  if (options.nativeReadAloud !== undefined) nativeSaved.set('dot-read-aloud-preference-v1', String(options.nativeReadAloud));
   let resumeAttempts = 0;
   let writeGate;
   const schedule = (callback, ms, repeat = false) => {
@@ -135,6 +136,27 @@ async function launch(options = {}) {
 const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT}};
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
+
+test('read-aloud choice persists through reopen without enable speech or history replay', async t => {
+  const first = await launch(); t.after(first.close);
+  await first.element('tts').click(); await flush();
+  assert.equal(first.nativeSaved.get('dot-read-aloud-preference-v1'), 'true');
+  await first.close();
+  const history = [proactive('old')];
+  const reopened = await launch({nativeReadAloud: true, initialMessages: history}); t.after(reopened.close);
+  assert.match(reopened.element('tts').textContent, /ON$/);
+  assert.match(reopened.element('speech-status').textContent, /TTS:iPhone/);
+  assert.equal(reopened.calls.filter(c => c[0] === 'speech').length, 0);
+  await reopened.deliver(reopened.snapshot([...history, proactive('new')]));
+  assert.deepEqual(reopened.calls.filter(c => c[0] === 'speech').map(c => c[1]), ['Synthetic message new']);
+  await reopened.element('tts').click(); await flush();
+  assert.equal(reopened.nativeSaved.get('dot-read-aloud-preference-v1'), 'false');
+  await reopened.close();
+  const off = await launch({nativeReadAloud: false, initialMessages: history}); t.after(off.close);
+  assert.match(off.element('tts').textContent, /OFF$/);
+  await off.deliver(off.snapshot([...history, proactive('another')]));
+  assert.equal(off.calls.filter(c => c[0] === 'speech').length, 0);
+});
 
 test('full app hides all 6 containers, keeps receiving, and wakes on a new autonomous message', async t => {
   const app = await launch(); t.after(app.close);
