@@ -625,3 +625,19 @@ test('offline waiting protection expires even with presentation refresh disabled
  await app.advance(29999);assert.equal(app.hidden(),false);
  await app.advance(1);assert.equal(app.hidden(),true);
 });
+
+test('a reply deferred during recording is spoken once recording ends without presentation refresh',async t=>{
+ const app=await launch();t.after(app.close);
+ await app.evaluate('tts=true;');
+ await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.LONG_PRESS_EVENT}});
+ assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+ await app.evaluate('refreshStatus=()=>{};');
+ await app.deliver(app.snapshot([proactive('during-recording')]));
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,0);
+ await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.LONG_PRESS_RELEASE_EVENT}});
+ await flush();
+ assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
+ await app.advance(2000);
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
+});
