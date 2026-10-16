@@ -10,6 +10,7 @@ export function sourceIdentity() {
     const options = {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']};
     return {
       sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], options).trim(),
+      branch: execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], options).trim(),
       dirty: !!execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], options).trim(),
     };
   } catch {
@@ -19,6 +20,13 @@ export function sourceIdentity() {
   }
 }
 export function assertBetaBuild(build, version, source) {
+  if (source.branch === 'main') throw new Error('Main uses release packaging, not Beta');
   if (build.channel !== 'beta' || build.version !== version || build.displayVersion !== `${version} Beta`) throw new Error('Rebuild the current version in Beta mode before packaging');
   if (build.sourceCommit !== source.sourceCommit || build.dirty || source.dirty) throw new Error('Beta package requires a clean, matching source commit; commit changes and rebuild');
+}
+
+export function assertReleaseBuild(build, version, source) {
+  if (source.branch !== 'main') throw new Error('Release packaging requires the merged main checkout');
+  if (build.channel !== 'release' || build.version !== version || build.displayVersion !== version || build.exitDiagnostics !== false) throw new Error('Release packaging requires release mode without Beta or diagnostics');
+  if (!build.sourceCommit || build.sourceCommit !== source.sourceCommit || build.dirty || source.dirty) throw new Error('Release package requires a clean, matching source commit');
 }
