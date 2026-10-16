@@ -77,3 +77,20 @@ Use the Mac app's pause, resume, quit and update controls for normal operation; 
 Updates retain the data directory and paused state. Before installation, the app waits for recent Even activity and pending requests, records a recovery journal, and backs up the app and service configuration. Backups are retained; automatic rollback of an app that cannot launch is not implemented.
 
 For source-based diagnostics, run `node scripts/setup.mjs status --voice-only` from the installation directory. Do not start another relay on the same ports. Runtime files may contain credentials: never attach the whole `.runtime` directory to an issue. For iPhone layout investigation, see [viewport diagnostics](viewport-diagnostics.md).
+
+
+## Parent and child PR review
+
+For a cohesive change split into substantial dependent steps, track the outcome in a parent issue and integration branch, with native sub-issues and child PRs targeting that branch. Define the ownership and dependency order first. Update each dependent child from the integrated parent before starting its work; small fixes do not need this hierarchy. Keep acceptance evidence in the issues/PRs, not a duplicate backlog.
+
+Automated review executes helpers from trusted main. A child review pins its target branch and commit and supplies the exact main-to-base delta as read-only context before the PR diff. No reviewed base/head code is checked out or executed by the review job. Large base deltas stop preparation with a Needs a smaller scope result rather than silently omitting context. Moving the base or retargeting the PR invalidates the receipt. The child gate also verifies that the exact tested head contains the current parent commit (ahead or identical, with that parent as merge base). If the parent has advanced or a new target is not contained in the child, update the child and rerun CI/review. PR CI must also record the current parent ref/SHA; otherwise use the exact-head push CI, whose tree already contains the current parent. A run against an unrelated old target cannot qualify.
+
+The normal gate remains `node scripts/check-review-before-merge.mjs <PR>` for main. For child integration, explicitly name the intended parent:
+
+```sh
+node scripts/check-review-before-merge.mjs <PR> --base refactor/even-state-coordination
+```
+
+Both paths require completed intake/review/report jobs, current review inputs, clean mergeability and passing branch-required CI. The child CI lookup supports in-repository heads and PR runs whose API metadata identifies the PR; fork child PRs with missing run association remain NOT READY. A child target may have no branch-protection requirements; the child gate additionally requires the completed product CI workflow and its test job for the exact head, even in that case. Read the findings; READY is not merge authorization. Integrate children in dependency order, then verify the combined parent with automated checks, review and the affected physical flows. Give device testers the exact build, starting state, numbered actions, expected results and requested observations. Main merge, upload/distribution, review submission and publication retain separate authorization stages.
+
+When automation or repository settings conflict with this workflow, record the mismatch and agree on a meaningful workflow change before proceeding. A skipped review is not a completed review. For existing parent branches that predate a workflow update, dispatch the review from main (`gh workflow run claude-review.yml --ref main -f item_number=<PR>`) so the updated workflow runs.

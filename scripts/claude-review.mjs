@@ -35,7 +35,7 @@ function snapshot() {
   const reason = issue.locked ? 'The item is locked.'
     : issue.state !== 'open' ? (pr?.merged ? 'The PR was merged.' : 'The item was closed.')
     : pr?.draft ? 'The PR was converted to draft.'
-    : pr && (pr.state !== 'open' || pr.base.ref !== 'main') ? 'The PR is no longer open against main.' : '';
+    : pr && (pr.state !== 'open' || pr.base.repo?.full_name !== repo) ? 'The PR is no longer open against this repository.' : '';
   const rows = comments();
   if (reason) return {issue, pr, rows, reason};
   const discussion = rows.filter(row => row.user?.type !== 'Bot').map(row => ({
@@ -45,6 +45,7 @@ function snapshot() {
   const data = {number: issue.number, title: issue.title, body: issue.body,
     author: issue.user?.login, kind: pr ? 'pull_request' : 'issue',
     main, head: pr?.head.sha || '', discussion};
+  if (pr && pr.base.ref !== 'main') data.base = {ref: pr.base.ref, sha: get(`${root}/commits/${encodeURIComponent(pr.base.ref)}`).sha};
   const fingerprint = createHash('sha256').update(JSON.stringify(data)).digest('hex');
   return {issue, pr, rows, data, fingerprint};
 }
@@ -66,7 +67,7 @@ const help = 'For another review, the author or a maintainer can comment `/dotli
 function disposition(s) {
   if (!ownsRun(s.rows)) return {state: 'Superseded', reason: 'Another run owns the review comment, or it was removed.'};
   if (s.reason) return {state: 'Skipped', reason: s.reason};
-  if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) return {state: 'Outdated', reason: 'The item, discussion, PR head or main changed during review.'};
+  if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) return {state: 'Outdated', reason: 'The item, discussion, PR head, target branch or main changed during review.'};
   return null;
 }
 function finishWithoutFindings(s, d) {
@@ -130,6 +131,8 @@ function render(s) {
   const body = [
     '## dotsweeper review · Complete',
     `<!-- dot-link-review-input:head=${s.data.head};main=${s.data.main};input=${s.fingerprint} -->`,
+    ...(s.data.base ? [`<!-- dot-link-review-base:ref=${encodeURIComponent(s.data.base.ref)};sha=${s.data.base.sha} -->`,
+      `Review base: \`${safeText(s.data.base.ref)}\` at \`${s.data.base.sha}\`.`] : []),
     `Reviewed ${s.data.kind === 'issue' ? 'main' : 'PR head'}: \`${(s.data.head || s.data.main).slice(0, 12)}\` · [Run](${runUrl})`,
     safeText(result.summary), ...blocks,
     ...(!s.pr ? [`### Classification proposal\n\n${triage.priority || 'No single priority'}: ${triage.priority_reason}\n\n${triage.labels.map(x => `- \`${x.name}\`: ${x.reason}`).join('\n')}`] : []),
@@ -164,6 +167,20 @@ if (mode === 'intake') {
   if (d) { summary(`Review preparation stopped: ${d.state}. ${d.reason}`); process.exit(0); }
   if (s.data.main !== process.env.REVIEW_MAIN_SHA) throw new Error('Pinned review main does not match the accepted input');
   const {input, diff} = boundedInput(s);
+  let baseDiff = '';
+  if (s.data.base) {
+    if (!/^[a-f0-9]{40}$/.test(s.data.base.sha) || !/^[a-f0-9]{40}$/.test(s.data.main)) throw new Error('Invalid pinned commit');
+    // Fetch objects only. Never check out or execute the reviewed base/head.
+    execFileSync('git', ['-c', 'core.hooksPath=/dev/null', 'fetch', '--no-tags', 'origin', s.data.base.sha], {stdio: 'pipe', timeout: 60_000});
+    try {
+      baseDiff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', s.data.main, s.data.base.sha, '--'],
+        {encoding: 'utf8', maxBuffer: 250_001, timeout: 30_000});
+    } catch (error) {
+      if (error.code !== 'ENOBUFS') throw error;
+      output('scope_limited', 'true'); process.exit(0);
+    }
+    if (Buffer.byteLength(baseDiff) > 250_000) { output('scope_limited', 'true'); process.exit(0); }
+  }
   // Recheck before writing input or starting the model.
   const fresh = snapshot();
   const changed = disposition(fresh);
@@ -171,18 +188,21 @@ if (mode === 'intake') {
   mkdirSync('.review', {recursive: true});
   writeFileSync('.review/input.json', input);
   writeFileSync('.review/changes.diff', diff);
+  writeFileSync('.review/base-changes.diff', baseDiff);
   output('ready', 'true');
   console.log(`Prepared ${s.data.kind} #${number}`);
 } else if (mode === 'report') {
   let s = snapshot();
   let d = disposition(s);
   if (d) { finishWithoutFindings(s, d); process.exit(process.exitCode || 0); }
-  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false') {
+  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false' && process.env.REVIEW_SCOPE_LIMITED !== 'true') {
     finishWithoutFindings(s, {state: 'Skipped', reason: 'The input or target changed during preparation; no model assessment was started.'});
     process.exit(0);
   }
   let body, triage;
-  if (process.env.REVIEW_OUTCOME !== 'success' || process.env.REVIEW_PREPARED === 'false') {
+  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false' && process.env.REVIEW_SCOPE_LIMITED === 'true') {
+    body = `## dotsweeper review · Needs a smaller scope\n\nThe main-to-target context exceeds the review input limit. No assessment was completed. Reduce the parent divergence or narrow the work, then request another review.\n\n${help}`;
+  } else if (process.env.REVIEW_OUTCOME !== 'success' || process.env.REVIEW_PREPARED === 'false') {
     const cancelled = process.env.REVIEW_OUTCOME === 'cancelled';
     body = `## dotsweeper review · ${cancelled ? 'Cancelled' : 'Failed'}\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;
     if (!cancelled) process.exitCode = 1;
