@@ -49,7 +49,9 @@ test('forged and stale comments do not certify the latest review',()=>{
 
 function childReady() {
  const x=ready();x.expectedBase='refactor/parent';x.base={ref:x.expectedBase,sha:'c'.repeat(40)};
- x.ciRun={path:'.github/workflows/ci.yml',head_sha:head,repository:{full_name:'YusukeIt0/dot-link'},status:'completed',conclusion:'success'};
+ x.baseComparison={status:'ahead',merge_base_commit:{sha:x.base.sha}};
+ x.pr.head={...x.pr.head,ref:'child',repo:{full_name:'YusukeIt0/dot-link'}};
+ x.ciRun={event:'push',head_branch:'child',path:'.github/workflows/ci.yml',head_sha:head,repository:{full_name:'YusukeIt0/dot-link'},status:'completed',conclusion:'success'};
  x.ciJobs=[{name:'test',status:'completed',conclusion:'success'}];
  x.pr.base={...x.base};x.receipt={...x.receipt,base:x.base,
   fingerprint:fingerprintPR(x.pr,x.main,x.comments,x.base)};
@@ -79,4 +81,22 @@ test('receipt parser reads encoded child base identity; child receipt cannot aut
 test('unprotected parent still requires exact-head product CI when no branch-required checks exist',()=>{
  const x=childReady();x.checks=[];assert.equal(assertReady(x),head);
  x.ciRun.status='in_progress';assert.throws(()=>assertReady(x));
+});
+
+test('retargeting or parent advancement requires child ancestry as well as a fresh review',()=>{
+ for(const status of ['behind','diverged']) {
+  const x=childReady();x.baseComparison.status=status;assert.throws(()=>assertReady(x),/include the current parent/);
+ }
+ const x=childReady();x.baseComparison.merge_base_commit.sha='d'.repeat(40);
+ assert.throws(()=>assertReady(x),/include the current parent/);
+ const identical=childReady();identical.baseComparison.status='identical';assert.equal(assertReady(identical),head);
+});
+
+test('PR CI association must match the pinned parent; push CI tests the contained parent directly',()=>{
+ const x=childReady();x.ciRun.event='pull_request';
+ x.ciRun.pull_requests=[{number:x.pr.number,base:{ref:x.expectedBase,sha:x.base.sha}}];
+ assert.equal(assertReady(x),head);
+ x.ciRun.pull_requests[0].base.ref='old-parent';assert.throws(()=>assertReady(x));
+ x.ciRun.pull_requests[0].base.ref=x.expectedBase;
+ x.ciRun.pull_requests[0].base.sha='d'.repeat(40);assert.throws(()=>assertReady(x));
 });

@@ -28,10 +28,14 @@ export function fingerprintPR(pr, main, comments, base) {
   return createHash('sha256').update(JSON.stringify(data)).digest('hex');
 }
 
-export function assertReady({pr, main, base, expectedBase = 'main', comments, receipt, run, jobs, checks, ciRun, ciJobs}) {
+export function assertReady({pr, main, base, expectedBase = 'main', comments, receipt, run, jobs, checks, ciRun, ciJobs, baseComparison}) {
   if (pr.state !== 'open' || pr.draft || pr.base?.ref !== expectedBase) throw new Error('PR must be open, ready and target the expected base.');
   if (expectedBase !== 'main' && (!base || base.ref !== expectedBase || !/^[a-f0-9]{40}$/.test(base.sha) ||
       receipt.base?.ref !== base.ref || receipt.base?.sha !== base.sha)) throw new Error('PR base changed or lacks a pinned review receipt.');
+  if (expectedBase !== 'main' && (!['ahead', 'identical'].includes(baseComparison?.status) ||
+      baseComparison?.merge_base_commit?.sha !== base.sha)) {
+    throw new Error('Child head must include the current parent commit; update the child and rerun CI/review.');
+  }
   if (expectedBase === 'main' && receipt.base) throw new Error('Child review receipt cannot certify a main merge.');
   if (pr.head?.sha !== receipt.head || main !== receipt.main) throw new Error('PR head or main changed since the published review.');
   if (fingerprintPR(pr, main, comments, base) !== receipt.fingerprint) throw new Error('PR description or discussion changed since review.');
@@ -46,7 +50,11 @@ export function assertReady({pr, main, base, expectedBase = 'main', comments, re
     }
   }
   if ((expectedBase === 'main' && !checks.length) || checks.some(x => x.bucket !== 'pass')) throw new Error('Required checks are missing, pending, or unsuccessful.');
-  if (expectedBase !== 'main' && (ciRun?.path !== '.github/workflows/ci.yml' || ciRun?.head_sha !== pr.head.sha ||
+  const matchingCIContext = ciRun?.event === 'push'
+    ? ciRun.head_branch === pr.head.ref && pr.head.repo?.full_name === repository
+    : ciRun?.event === 'pull_request' && ciRun.pull_requests?.some(p => p.number === pr.number &&
+      p.base?.ref === expectedBase && p.base?.sha === base?.sha);
+  if (expectedBase !== 'main' && (!matchingCIContext || ciRun?.path !== '.github/workflows/ci.yml' || ciRun?.head_sha !== pr.head.sha ||
       ciRun?.repository?.full_name !== repository || ciRun?.status !== 'completed' || ciRun?.conclusion !== 'success' ||
       !ciJobs?.some(x => x.name === 'test') || ciJobs.some(x => x.status !== 'completed' || x.conclusion !== 'success'))) {
     throw new Error('Child PR requires the completed product CI workflow for its exact head.');
@@ -80,16 +88,17 @@ async function main() {
   const pr = api(`pulls/${number}`);
   const mainSha = api('commits/main').sha;
   const base = expectedBase === 'main' ? undefined : {ref: expectedBase, sha: api(`commits/${encodeURIComponent(expectedBase)}`).sha};
-  let ciRun, ciJobs;
+  let ciRun, ciJobs, baseComparison;
   if (expectedBase !== 'main') {
+    baseComparison = api(`compare/${base.sha}...${pr.head.sha}`);
     const runs = api(`actions/workflows/ci.yml/runs?head_sha=${pr.head.sha}&per_page=100`).workflow_runs;
-    ciRun = runs.find(x => x.event === 'pull_request' && x.pull_requests?.some(p => p.number === pr.number)) ||
+    ciRun = runs.find(x => x.event === 'pull_request' && x.pull_requests?.some(p => p.number === pr.number && p.base?.ref === expectedBase && p.base?.sha === base.sha)) ||
       runs.find(x => x.event === 'push' && x.head_branch === pr.head.ref && pr.head.repo?.full_name === repository);
     if (ciRun) ciJobs = gh(['api', `repos/${repository}/actions/runs/${ciRun.id}/jobs?filter=latest&per_page=100`, '--paginate', '--slurp']).flatMap(x => x.jobs);
   }
   const comments = readComments();
   if (JSON.stringify(receipt) !== JSON.stringify(latestReceipt(comments, botId))) throw new Error('Review ownership changed during this check.');
-  const head = assertReady({pr, main:mainSha, base, expectedBase, comments, receipt, run, jobs, checks, ciRun, ciJobs});
+  const head = assertReady({pr, main:mainSha, base, expectedBase, comments, receipt, run, jobs, checks, ciRun, ciJobs, baseComparison});
   console.log(`READY: PR #${number} targeting ${expectedBase}, head ${head}, review run ${receipt.runId}.`);
   console.log(`Read findings before deciding to merge. Use --match-head-commit ${head} when merging; repeat this check after any change.`);
 }
