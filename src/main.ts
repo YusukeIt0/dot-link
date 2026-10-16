@@ -18,11 +18,14 @@ import { InteractionStatus } from './interaction-status.ts';
 import { DisplayStandby, HeadRaiseDetector, type DisplayPreferences } from './display-standby.ts';
 import { DisplayPreferenceStore } from './display-preferences.ts';
 import { t, getLanguage, setLanguage, chooseLanguage, translateLabel } from './i18n.ts';
-import { RelaySettings, PendingUtterance, apiAddress, type RelayCredentials } from './relay-connection.ts';
+import { RelaySettings, PendingUtterance } from './relay-connection.ts';
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
 import { LanguagePreferences } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
 import { installKeyboardViewport } from './keyboard-viewport.ts';
+import { SpeechPlayback } from './speech-playback.ts';
+import { G2Display } from './g2-display.ts';
+import { RelaySession } from './relay-session.ts';
 import './style.css';
 
 installKeyboardViewport(document.querySelector<HTMLElement>('main')!);
@@ -40,13 +43,6 @@ const displayPreferences = new DisplayPreferenceStore(() => localStorage);
 const operationPreferences = new OperationPreferences(() => localStorage);
 const wakeNamePreferences = new WakeNamePreferences(() => localStorage);
 let wakeState: WakeState = 'off';
-let speakingCount = 0;
-let speechGeneration = 0;
-let speechQueuedAt = 0;
-let speechCooldownUntil = 0;
-let speechRecoveryTimer: ReturnType<typeof setTimeout> | undefined;
-let speechCooldownTimer: ReturnType<typeof setTimeout> | undefined;
-const deferredSpeech: SpeechSynthesisUtterance[] = [];
 const headRaise = new HeadRaiseDetector(displayPreferences.value);
 let standby: DisplayStandby | undefined;
 el('app-version').textContent = `v${import.meta.env.VITE_APP_VERSION}`;
@@ -58,9 +54,15 @@ const sendButton = el<HTMLButtonElement>('send');
 const transcript = el<HTMLTextAreaElement>('transcript');
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
 const relaySettings = new RelaySettings(() => localStorage);
-let relay = relaySettings.read();
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
-let token = relay?.token ?? pairing.read();
+const session = new RelaySession({
+  settings: relaySettings, legacyToken: pairing.read(), appOrigin: location.origin,
+  fetch: (input, init) => fetch(input, init),
+  rejected: reason => forgetPairing(reason === 'expired'
+    ? t('接続の有効期限が切れたか、Mac側で解除されました。新しい接続コードで接続してください。')
+    : t('接続設定が無効になりました。Macで新しい接続コードを発行してください。')),
+  persistenceFailed: () => { notice.textContent = t('Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。'); },
+});
 const setupPanel = el<HTMLDetailsElement>('mac-setup');
 let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
 function showCopyToast(message: string): void {
@@ -99,17 +101,15 @@ function showSetup(unpaired: boolean): void {
   el('pair').hidden = !offeredInvite;
   placeSetupNotice();
 }
-let pendingDelivery = new PendingUtterance(() => localStorage, relay?.origin ?? location.origin);
-let connectionController = new AbortController();
-let connectionVersion = 0;
+let pendingDelivery = new PendingUtterance(() => localStorage, session.credentials?.origin ?? location.origin);
 let exited = false;
 let glassesReady = false;
 let startupStage: 'bridge' | 'page' | 'ready' = 'bridge';
 let startupResult: number | undefined;
 let offeredInvite: PairingInvite | undefined;
 const pairingToken = new URLSearchParams(location.hash.slice(1)).get('pair');
-if (!relay && pairingToken && /^[A-Za-z0-9_-]{43}$/.test(pairingToken)) {
-  token = pairingToken; pairing.save(token);
+if (!session.credentials && pairingToken && /^[A-Za-z0-9_-]{43}$/.test(pairingToken)) {
+  session.use(undefined, pairingToken); pairing.save(session.token);
   history.replaceState(null, '', location.pathname + location.search);
 }
 el('app-origin').textContent = location.origin;
@@ -128,19 +128,13 @@ language.onchange = () => {
   applyLanguage();
 };
 const progress = new InteractionStatus();
-progress.connection = token ? 'connecting' : 'unpaired';
+progress.connection = session.token ? 'connecting' : 'unpaired';
 let hostName = t('接続先');
 let namedHost = false;
 let baseStatus = t('長押しで話してください');
 let renderBaseStatus: () => string = () => t('長押しで話してください');
 let visibleMessageId: string | undefined;
 let statusTimer: ReturnType<typeof setInterval> | undefined;
-let statusQueued = false;
-let statusDirty = false;
-let lastSentStatus = '';
-let lastSentSpeechStatus = '';
-let lastSentReceipt = '';
-let lastSentNewReplies = '';
 let selectedSTT: STTProvider | undefined;
 let selectedSTTModel: unknown;
 const ttsDevice = speechDevice(navigator.userAgent, navigator.maxTouchPoints);
@@ -150,19 +144,8 @@ const speechDisplayCaption = () => `${'─'.repeat(24)}\n${speechCaption()}`;
 let pageActive = true;
 const locationSharing = new LocationSharing({
   storage: () => localStorage,
-  target: () => token ? relay?.origin ?? location.origin : undefined,
-  api: async (path, body) => {
-    // A stop must still be allowed while the rest of the glasses session exits.
-    const stopping = path === '/api/location/control' && (body as {enabled?: boolean}).enabled === false;
-    if (!stopping) await ensureRelayOrigin();
-    const target = relay?.origin, credential = token;
-    if (!credential) throw new Error('Pairing required');
-    const response = await fetch(apiAddress(path, target), {method: 'POST', credentials: 'omit', redirect: 'error',
-      headers: {Authorization: `Bearer ${credential}`, 'Content-Type': 'application/json'}, body: JSON.stringify(body),
-      signal: AbortSignal.timeout(12000)});
-    if (!response.ok) throw new Error('Location sharing unavailable');
-    return response.json();
-  },
+  target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
+  api: (path, body) => session.location(path, body),
   changed: () => renderLocationStatus(),
 });
 function renderLocationStatus(): void {
@@ -183,12 +166,14 @@ function renderLocationStatus(): void {
   el('location-diagnostic').textContent = `${ja ? '位置共有' : 'Location'}: ${s.state} · ${ja ? '受信' : 'received'} ${s.receivedCount ?? 0} · ${ja ? '案内' : 'announcements'} ${s.announcementCount ?? 0}${s.accuracy === undefined ? '' : ` · ±${Math.round(s.accuracy)}m`}${s.receivedAt ? ` · ${new Date(s.receivedAt).toLocaleTimeString()}` : ''}`;
 }
 el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabled(el<HTMLInputElement>('location-share').checked);
+function restartConnection(): void {
+  updates.stop(); session.restart(); playback.cancel();
+}
 function forgetPairing(message: string): void {
   locationSharing.setEnabled(false);
-  updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
-  cancelSpeech();
+  restartConnection();
   busy = false; clearClip(); progress.setPhase('idle');
-  token = ''; relay = undefined; relaySettings.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
+  session.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
   messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
   progress.connection = 'unpaired';
@@ -211,62 +196,25 @@ let replyWakePending = false;
 let showingReply = false;
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
-const reportedDisplay = new Set<string>();
 interface Message extends DisplayMessage { location_sharing_id?: string; location_expires_at?: string; }
 
-let resumeFlight: Promise<void> | undefined;
-async function ensureRelayOrigin(force = false): Promise<void> {
-  if (!relay?.resumeToken || (!force && relay.appOrigin === location.origin)) return;
-  if (resumeFlight) return resumeFlight;
-  const saved = relay, version = connectionVersion;
-  const attempt = (async () => {
-    const response = await fetch(apiAddress('/api/pair/resume', saved.origin), {
-      method: 'POST', credentials: 'omit', redirect: 'error', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({resumeToken: saved.resumeToken}),
-      signal: AbortSignal.any([connectionController.signal, AbortSignal.timeout(15000)]),
-    });
-    if (version !== connectionVersion || exited) throw new Error('Connection changed');
-    if (response.status === 401) { forgetPairing(t('接続の有効期限が切れたか、Mac側で解除されました。新しい接続コードで接続してください。')); throw new Error('Recovery rejected'); }
-    if (!response.ok) throw new Error('Recovery unavailable');
-    const renewed: RelayCredentials = {...await response.json(), origin: saved.origin, appOrigin: location.origin};
-    if (version !== connectionVersion || exited) throw new Error('Connection changed');
-    relaySettings.save(renewed); relay = renewed; token = renewed.token;
-    void relaySettings.nativeSaved().then(ok => { if (!ok && version === connectionVersion && !exited) notice.textContent = t('Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。'); });
-  })();
-  resumeFlight = attempt;
-  try { await attempt; } finally { if (resumeFlight === attempt) resumeFlight = undefined; }
-}
 async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
-  const version = connectionVersion;
+  const version = session.version;
   const saved = await relaySettings.attach(appBridge);
-  if (version !== connectionVersion || exited) return;
+  if (version !== session.version || exited) return;
   // Legacy development credentials are separate from packaged pairing.
-  if (!saved && !relay) return;
-  updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
-  cancelSpeech();
+  if (!saved && !session.credentials) return;
+  restartConnection();
   busy = false; clearClip(); progress.setPhase('idle');
-  relay = saved; token = saved?.token ?? '';
+  session.use(saved);
   if (!saved) { showSetup(true); progress.connection = 'unpaired'; display(() => t('再接続が必要です'), () => t('接続先を確認して「接続」を押してください。')); return; }
   pendingDelivery = new PendingUtterance(() => localStorage, saved.origin);
   showSetup(false); progress.connection = 'connecting'; display(() => t('再接続中'), idleVoicePrompt);
   updates.start(true);
 }
 
-async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, recovered = false, requestSignal?: AbortSignal): Promise<T> {
-  const version = connectionVersion;
-  await ensureRelayOrigin();
-  if (version !== connectionVersion || exited) throw new Error('Connection changed');
-  const response = await fetch(apiAddress(path, relay?.origin), { method, credentials: 'omit', redirect: 'error', headers: { Authorization: `Bearer ${token}`,
-    ...(trace ? { 'X-G2-Trace-ID': trace } : {}),
-    ...(body ? { 'Content-Type': typeof body === 'string' ? 'application/json' : 'audio/wav' } : {}) },
-    body: body instanceof Uint8Array ? new Blob([new Uint8Array(body).buffer], {type:'audio/wav'}) : body,
-    signal: AbortSignal.any([connectionController.signal, AbortSignal.timeout(path === '/api/transcribe' ? 100000 : 25000), ...(requestSignal ? [requestSignal] : [])]) });
-  if (version !== connectionVersion || exited) throw new Error('Connection changed');
-  if (response.status === 401 && relay?.resumeToken && !recovered) {
-    await ensureRelayOrigin(true);
-    return api<T>(path, method, body, trace, true, requestSignal);
-  }
-  if (response.status === 401) forgetPairing(t('接続設定が無効になりました。Macで新しい接続コードを発行してください。'));
+async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, requestSignal?: AbortSignal): Promise<T> {
+  const response = await session.request(path, method, body, trace, requestSignal);
   if (!response.ok && path === '/api/transcribe' && response.status === 422) {
     const failure = await response.json().catch(() => ({}));
     throw new Error(sttErrorMessage(failure.code) ?? t('処理できませんでした。接続または録音を確認してください。'));
@@ -314,7 +262,7 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
     if (!initial) timing.mark(message.id, 'reply_received');
     if (!initial && tts && 'speechSynthesis' in window) {
       const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US';
-      speakReply(speech);
+      playback.speak(speech);
     }
   }
   messages = update.messages;
@@ -352,18 +300,7 @@ function flushPendingDisplay(): void {
   refreshStatus();
 }
 
-const updates = new LiveUpdates<Snapshot>(async (revision, signal) => {
-  await ensureRelayOrigin();
-  if (signal.aborted) throw new Error('Connection changed');
-  const response = await fetch(apiAddress('/api/updates', relay?.origin), { credentials: 'omit', redirect: 'error', headers: { Authorization: `Bearer ${token}`, ...(revision ? { 'X-G2-Revision': revision } : {}) },
-    signal: AbortSignal.any([signal, AbortSignal.timeout(25000)]) });
-  if (!signal.aborted && response.status === 401) {
-    if (relay?.resumeToken) await ensureRelayOrigin(true);
-    else forgetPairing(t('接続設定が無効になりました。Macで新しい接続コードを発行してください。'));
-  }
-  if (!response.ok) throw new Error('Update connection failed');
-  return response.json() as Promise<Snapshot>;
-}, receiveUpdate, () => {
+const updates = new LiveUpdates<Snapshot>((revision, signal) => session.updates<Snapshot>(revision, signal), receiveUpdate, () => {
   progress.connection = 'offline'; refreshStatus();
   el('dot-status').textContent = `${hostName} · ${t('再接続中')}`;
 });
@@ -384,41 +321,36 @@ el('pair').onclick = async () => {
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
   catch { notice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
-  updates.stop(); connectionController.abort(); connectionController = new AbortController(); connectionVersion++;
-  cancelSpeech();
-  const version = connectionVersion;
+  restartConnection();
+  const version = session.version;
   progress.connection = 'connecting'; refreshStatus();
   try {
-    const response = await fetch(apiAddress('/api/pair', invite.origin), { method: 'POST', redirect: 'error', credentials: 'omit',
-      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: invite.code }),
-      signal: AbortSignal.any([connectionController.signal, AbortSignal.timeout(15000)]) });
-    if (!response.ok) throw new Error('Pairing failed');
-    const credentials = { ...await response.json(), origin: invite.origin, appOrigin: location.origin };
-    if (version !== connectionVersion || exited) return;
-    const retained = relaySettings.save(credentials);
-    relay = credentials; token = credentials.token; pairing.forget();
-    pendingDelivery = new PendingUtterance(() => localStorage, relay!.origin);
+    const credentials = await session.pair(invite);
+    if (version !== session.version || exited) return;
+    const retained = session.save(credentials);
+    pairing.forget();
+    pendingDelivery = new PendingUtterance(() => localStorage, session.credentials!.origin);
     pendingId = undefined; pendingText = undefined;
     messages = []; spoken.clear(); historyIndex = -1;
     const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
-    if (version !== connectionVersion || exited) return;
+    if (version !== session.version || exited) return;
     notice.textContent = nativeRetained && credentials.resumeToken ? t('接続しました。更新後の再接続情報も保存しました。') : retained ? t('接続しました。更新後の自動復元は未確認です。') : t('接続しました。この画面では設定を保存できないため、閉じた後は新しい接続コードで接続してください。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? '接続確認成功' : 'Connection verified';
     showSetup(false);
   } catch (error) {
-    if (version !== connectionVersion || exited) return;
-    progress.connection = token ? 'offline' : 'unpaired'; refreshStatus();
+    if (version !== session.version || exited) return;
+    progress.connection = session.token ? 'offline' : 'unpaired'; refreshStatus();
     notice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
-    if (token) updates.start(true);
+    if (session.token) updates.start(true);
   } finally { busy = false; button.disabled = false; flushPendingDisplay(); }
 };
 el('forget-pairing').onclick = async () => {
   if (busy || recorder.state !== 'idle') return;
   busy = true; let revoked = false;
-  try { if (relay) { await api('/api/pair/revoke', 'POST'); revoked = true; } }
+  try { if (session.credentials) { await api('/api/pair/revoke', 'POST'); revoked = true; } }
   catch {} finally {
     forgetPairing(revoked ? t('接続を解除しました。') : t('端末の設定を削除しました。Macに接続できなかったため、Mac側でも接続を解除してください。'));
     busy = false; display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
@@ -426,8 +358,8 @@ el('forget-pairing').onclick = async () => {
 };
 el('tts').onclick = () => {
   tts = !tts; el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
-  if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; speakReply(speech); }
-  else cancelSpeech();
+  if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; playback.speak(speech); }
+  else playback.cancel();
   refreshStatus();
 };
 el('previous').onclick = () => { standby?.activity(); historyIndex = Math.max(0, historyIndex - 1); browsingHistory = historyIndex < messages.length - 1; showMessage(); };
@@ -435,14 +367,14 @@ el('next').onclick = () => { standby?.activity(); historyIndex = Math.min(messag
 let pendingId: string | undefined;
 let pendingText: string | undefined;
 sendButton.onclick = async () => {
-  const text = transcript.value.trim(); if (!text || busy || !token || exited) return;
+  const text = transcript.value.trim(); if (!text || busy || !session.token || exited) return;
   standby?.activity();
   busy = true; sendButton.disabled = true;
   refreshStatus(false);
-  const version = connectionVersion;
+  const version = session.version;
   try {
     if (pendingText !== text) { pendingId = await pendingDelivery.prepare(text, audioTraceId); pendingText = text; audioTraceId = undefined; }
-    if (version !== connectionVersion || exited) return;
+    if (version !== session.version || exited) return;
     progress.begin(pendingId!, 'sending'); refreshStatus();
     timing.mark(pendingId!, 'utterance_sent');
     const message = await api<Message>('/api/utterances', 'POST', JSON.stringify({id:pendingId,text}));
@@ -461,7 +393,7 @@ sendButton.onclick = async () => {
     showMessage();
     notice.textContent = '';
   } catch (error) {
-    if (version !== connectionVersion || exited) return;
+    if (version !== session.version || exited) return;
     progress.setPhase('error'); notice.textContent = (error as Error).message;
     display(() => t('送信を確認できませんでした'), (error as Error).message);
   }
@@ -473,16 +405,13 @@ let bridge: EvenAppBridge | undefined;
 let clip: Uint8Array | undefined;
 let discarding = false;
 let transcriptionController: AbortController | undefined;
-let displayChain = Promise.resolve();
-let displayGeneration = 0;
 let lastDisplayText = t('長押しで話してください');
 let renderDisplayText: () => string = () => t('長押しで話してください');
 
 function syncVoiceContext(): void {
-  recorder.setContext(!exited && glassesReady && !!token && subscribed && progress.connection === 'online',
-    busy || speakingCount > 0 || !!window.speechSynthesis?.speaking || !!window.speechSynthesis?.pending ||
-    performance.now() < speechCooldownUntil || (recorder.state === 'idle' && !!transcript.value.trim()),
-    !exited && glassesReady && !!token);
+  recorder.setContext(!exited && glassesReady && !!session.token && subscribed && progress.connection === 'online',
+    busy || playback.blocksInput || (recorder.state === 'idle' && !!transcript.value.trim()),
+    !exited && glassesReady && !!session.token);
 }
 function hudCaption(): string {
   return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId, wakeNamePreferences.assistantName);
@@ -499,60 +428,36 @@ function renderWakeState(): void {
     paused: wakeText('{wake}は一時停止中'), error: wakeText('{wake}を使えません。オフにしてから再度オンにしてください。') };
   el('wake-status').textContent = labels[wakeState];
 }
-// Observe synthesis independently of relay polls and UI activity. Keep checking
-// through long/queued speech; missing completion callbacks must not block wake.
-function monitorSpeechCompletion(): void {
-  clearTimeout(speechRecoveryTimer);
-  if (exited || !speakingCount) return;
-  speechRecoveryTimer = setTimeout(() => {
-    speechRecoveryTimer = undefined;
-    if (exited || !speakingCount) return;
-    if (performance.now() - speechQueuedAt > 1500 &&
-        !window.speechSynthesis?.speaking && !window.speechSynthesis?.pending) {
-      speechGeneration++; speakingCount = 0;
-      finishSpeechCooldown();
-    } else monitorSpeechCompletion();
-  }, 500);
-}
-function finishSpeechCooldown(): void {
-  clearTimeout(speechRecoveryTimer); speechRecoveryTimer = undefined;
-  speechCooldownUntil = performance.now() + 600;
-  clearTimeout(speechCooldownTimer);
-  speechCooldownTimer = setTimeout(() => syncVoiceContext(), 650);
-  syncVoiceContext();
-}
-function cancelSpeech(): void {
-  deferredSpeech.length = 0;
-  speechGeneration++; speakingCount = 0;
-  window.speechSynthesis?.cancel(); finishSpeechCooldown();
-}
-function speakReply(speech: SpeechSynthesisUtterance): void {
-  // A proactive reply must not interrupt a spoken utterance or enter its clip.
-  if (recorder.state !== 'idle' || busy) {
-    deferredSpeech.push(speech);
-    return;
-  }
-  const generation = speechGeneration;
-  speakingCount++; speechQueuedAt = performance.now(); syncVoiceContext();
-  let settled = false;
-  const complete = () => {
-    if (settled || generation !== speechGeneration) return;
-    settled = true; speakingCount = Math.max(0, speakingCount - 1);
-    if (!speakingCount) finishSpeechCooldown();
-  };
-  speech.onend = complete;
-  speech.onerror = () => { complete(); if (!exited && generation === speechGeneration) notice.textContent = t('読み上げできませんでした。画面の返信をご確認ください。'); };
-  try { window.speechSynthesis.speak(speech); } catch { complete(); }
-  monitorSpeechCompletion();
-}
+const playback = new SpeechPlayback({
+  synthesis: () => window.speechSynthesis,
+  canSpeak: () => recorder.state === 'idle' && !busy,
+  changed: () => syncVoiceContext(),
+  failed: () => { notice.textContent = t('読み上げできませんでした。画面の返信をご確認ください。'); },
+  now: () => performance.now(), schedule: (callback, ms) => setTimeout(callback, ms), cancelTimer: timer => clearTimeout(timer),
+});
+const g2Display = new G2Display({
+  ready: () => !!bridge && glassesReady,
+  hidden: () => standby?.hidden ?? false,
+  frame: () => ({status: hudCaption(), conversation: wrapHudText(lastDisplayText),
+    help: t('長押しで録音 · 指を離すと停止'), speech: speechDisplayCaption(), receipt: currentReceipt(), newReplies: currentNewReplies()}),
+  writer: () => {
+    const activeBridge = bridge!;
+    return (containerID, containerName, content) => activeBridge.textContainerUpgrade(new TextContainerUpgrade({
+      containerID, containerName, contentOffset: 0, contentLength: content.length, content,
+    }));
+  },
+  failed: kind => {
+    if (kind === 'status') connection.textContent = t('G2の表示更新を確認できません');
+    else notice.textContent = t('G2表示を更新できませんでした。接続を確認してください。');
+  },
+  timing: (id, stage) => timing.mark(id, stage), report: reportTiming,
+});
 
 // A timer updates only the short status line. Keep at most one queued update
 // and read its latest value when it runs, so slow BLE never queues old seconds.
 function refreshStatus(sendToG2 = true): void {
   if (exited) return;
-  if (tts && !busy && recorder.state === 'idle') {
-    for (const speech of deferredSpeech.splice(0)) speakReply(speech);
-  }
+  if (tts) playback.flush();
   syncVoiceContext();
   standby?.protect(busy || recorder.state !== 'idle' || ['recognizing', 'sending'].includes(progress.phase) || progress.protectWaiting);
   baseStatus = renderBaseStatus();
@@ -569,43 +474,7 @@ function refreshStatus(sendToG2 = true): void {
   const ticking = (progress.ticking || progress.protectWaiting) && !standby?.hidden;
   if (ticking && !statusTimer) statusTimer = setInterval(() => refreshStatus(), 1000);
   else if (!ticking && statusTimer) { clearInterval(statusTimer); statusTimer = undefined; }
-  if (!sendToG2 || standby?.hidden || !bridge || !glassesReady || (caption === lastSentStatus && speechDisplayCaption() === lastSentSpeechStatus && currentReceipt() === lastSentReceipt && currentNewReplies() === lastSentNewReplies)) return;
-  if (statusQueued) { statusDirty = true; return; }
-  statusQueued = true;
-  const activeBridge = bridge;
-  displayChain = displayChain.then(async () => {
-    if (exited || standby?.hidden) return;
-    const content = hudCaption();
-    if (content !== lastSentStatus) {
-      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
-        containerID: 1, containerName: 'status', contentOffset: 0, contentLength: content.length, content,
-      }));
-      if (!ok) throw new Error('Status update failed');
-      lastSentStatus = content;
-    }
-    const speech = speechDisplayCaption();
-    if (speech !== lastSentSpeechStatus) {
-      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
-        containerID: 4, containerName: 'speech', contentOffset: 0, contentLength: speech.length, content: speech,
-      }));
-      if (!ok) throw new Error('Speech status update failed');
-      lastSentSpeechStatus = speech;
-    }
-    for (const [containerID, containerName, value] of [[5, 'receipt', currentReceipt()], [6, 'new', currentNewReplies()]] as const) {
-      const previous = containerID === 5 ? lastSentReceipt : lastSentNewReplies;
-      if (value === previous) continue;
-      const content = value || ' ';
-      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({ containerID, containerName,
-        contentOffset: 0, contentLength: content.length, content }));
-      if (!ok) throw new Error('Header update failed');
-      if (containerID === 5) lastSentReceipt = value; else lastSentNewReplies = value;
-    }
-  }).catch(() => {
-    connection.textContent = t('G2の表示更新を確認できません');
-  }).finally(() => {
-    statusQueued = false;
-    if (statusDirty) { statusDirty = false; refreshStatus(); }
-  });
+  if (sendToG2) g2Display.refreshStatus();
 }
 
 function display(state: string | (() => string), text: string | (() => string), trace?: string): void {
@@ -621,39 +490,7 @@ function display(state: string | (() => string), text: string | (() => string), 
   queueDisplayFrame(trace);
 }
 
-// Blanking and normal frames share the same serial BLE queue. If a newer frame
-// wins while a write is in flight, stop the old frame before its next container.
-function queueDisplayFrame(trace?: string): void {
-  if (!bridge || !glassesReady) return;
-  const activeBridge = bridge;
-  const generation = ++displayGeneration;
-  displayChain = displayChain.then(async () => {
-    if (exited || generation !== displayGeneration) return;
-    if (trace) timing.mark(trace, 'g2_update_started');
-    const hidden = standby?.hidden ?? false;
-    const caption = hidden ? ' ' : hudCaption();
-    const text = hidden ? ' ' : wrapHudText(lastDisplayText);
-    const help = hidden ? ' ' : t('長押しで録音 · 指を離すと停止');
-    for (const [containerID, containerName, content] of [[1, 'status', caption], [2, 'conversation', text || ' '], [3, 'help', help], [4, 'speech', hidden ? ' ' : speechDisplayCaption()], [5, 'receipt', hidden ? ' ' : currentReceipt() || ' '], [6, 'new', hidden ? ' ' : currentNewReplies() || ' ']] as const) {
-      if (exited || generation !== displayGeneration) return;
-      const ok = await activeBridge.textContainerUpgrade(new TextContainerUpgrade({
-        containerID, containerName, contentOffset: 0, contentLength: content.length, content,
-      }));
-      if (!ok) throw new Error('G2表示の更新を確認できませんでした');
-      if (containerID === 1) lastSentStatus = content;
-      if (containerID === 4) lastSentSpeechStatus = content;
-      if (containerID === 5) lastSentReceipt = content.trim();
-      if (containerID === 6) lastSentNewReplies = content.trim();
-    }
-    if (!hidden && trace && generation === displayGeneration && !reportedDisplay.has(trace)) {
-      timing.mark(trace, 'g2_update_ack'); reportedDisplay.add(trace); reportTiming(trace);
-      if (reportedDisplay.size > 100) reportedDisplay.delete(reportedDisplay.values().next().value!);
-    }
-  }).catch(() => {
-    if (trace) { timing.mark(trace, 'g2_update_failed'); reportTiming(trace); }
-    notice.textContent = t('G2表示を更新できませんでした。接続を確認してください。');
-  });
-}
+function queueDisplayFrame(trace?: string): void { g2Display.render(trace); }
 
 function applyLanguage(): void {
   language.value = languagePreferences.value;
@@ -676,7 +513,7 @@ function applyLanguage(): void {
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
   el('hud-content').textContent = lastDisplayText;
-  lastSentStatus = ''; lastSentSpeechStatus = ''; lastSentReceipt = ''; lastSentNewReplies = '';
+  g2Display.invalidate();
   refreshStatus(false); queueDisplayFrame();
 }
 window.addEventListener('languagechange', () => { if (!exited && languagePreferences.value === 'auto') applyLanguage(); });
@@ -693,7 +530,7 @@ const recorder = new VoiceInput({
     if (exited || discarding) { wav.fill(0); return; }
     transcriptionController?.abort();
     const controller = new AbortController(); transcriptionController = controller;
-    const version = connectionVersion;
+    const version = session.version;
     audioTraceId ??= crypto.randomUUID();
     timing.mark(audioTraceId, 'audio_ready');
     clearClip(); clip = wav; discardButton.disabled = false;
@@ -704,8 +541,8 @@ const recorder = new VoiceInput({
     else display(() => t('認識中'), () => getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
     const trace = audioTraceId;
     timing.mark(trace, 'asr_sent');
-    void api<{text:string}>('/api/transcribe', 'POST', wav, trace, false, controller.signal).then(result => {
-      if (exited || version !== connectionVersion || controller.signal.aborted) return;
+    void api<{text:string}>('/api/transcribe', 'POST', wav, trace, controller.signal).then(result => {
+      if (exited || version !== session.version || controller.signal.aborted) return;
       timing.mark(trace, 'asr_received');
       const text = source === 'wake' ? wakeTranscript(result.text, capturedWakeName) : result.text;
       if (!text.trim()) {
@@ -722,7 +559,7 @@ const recorder = new VoiceInput({
       if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       refreshStatus();
-    }).catch(error => { if (exited || version !== connectionVersion || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); })
+    }).catch(error => { if (exited || version !== session.version || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); })
       .finally(() => { if (transcriptionController === controller) transcriptionController = undefined; });
   },
   onState: state => {
@@ -730,7 +567,7 @@ const recorder = new VoiceInput({
     recordButton.disabled = !glassesReady || state === 'stopping';
     // Session loss stops capture too. Its completion must not overwrite the
     // reconnection explanation or re-enter recognition without a pairing.
-    if (!token && (state === 'stopping' || state === 'idle')) {
+    if (!session.token && (state === 'stopping' || state === 'idle')) {
       discarding = false;
       progress.setPhase('idle'); refreshStatus(); return;
     }
@@ -838,9 +675,9 @@ function startRecording(): void {
   if (exited) return;
   if (!glassesReady) { notice.textContent = t('G2との接続と起動状態を確認し、Dot Linkを開き直してください。'); return; }
   if (busy) { notice.textContent = t('処理が終わるまでお待ちください。'); return; }
-  if (!token || !subscribed || progress.connection !== 'online') { notice.textContent = getLanguage() === 'ja' ? `${hostName}とDotへの接続を確認してください。` : `Check the connection to ${hostName} and Dot.`; return; }
+  if (!session.token || !subscribed || progress.connection !== 'online') { notice.textContent = getLanguage() === 'ja' ? `${hostName}とDotへの接続を確認してください。` : `Check the connection to ${hostName} and Dot.`; return; }
   standby?.activity();
-  if (speakingCount || window.speechSynthesis?.speaking || window.speechSynthesis?.pending) cancelSpeech();
+  if (playback.active) playback.cancel();
   void recorder.start();
 }
 recordButton.onclick = () => recorder.state === 'idle' ? startRecording() : void recorder.stop();
@@ -866,12 +703,10 @@ window.addEventListener('pagehide', () => { pageActive = false; refreshStatus(fa
 function stopSession(): void {
   if (exited) return;
   void locationSharing.stop();
-  exited = true; pageActive = false; connectionVersion++; connectionController.abort();
+  exited = true; pageActive = false; session.stop();
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
-  clearTimeout(speechCooldownTimer); clearTimeout(speechRecoveryTimer); speechGeneration++; speakingCount = 0;
-  deferredSpeech.length = 0;
-  window.speechSynthesis?.cancel(); clearClip(); void recorder.dispose();
+  playback.stop(); g2Display.stop(); clearClip(); void recorder.dispose();
 }
 
 async function connect(): Promise<void> {
@@ -920,7 +755,7 @@ async function connect(): Promise<void> {
     else void syncHeadRaise();
   });
   el('g2-diagnostic').textContent = 'G2_READY';
-  lastSentStatus = ''; lastSentSpeechStatus = ''; lastSentReceipt = ''; lastSentNewReplies = '';
+  g2Display.invalidate();
   connection.textContent = t('Even Hub接続済み');
   notice.textContent = '';
   recordButton.disabled = false;
@@ -929,7 +764,7 @@ async function connect(): Promise<void> {
   if (historyIndex >= 0 && messages[historyIndex]) {
     showMessage();
   } else {
-    display(() => token ? t('G2接続済み') : t('接続設定が必要'), () => token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
+    display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
   }
   appBridge.onEvenHubEvent(event => {
     if (exited) return;
@@ -1052,13 +887,13 @@ standby = new DisplayStandby(displayPreferences.value, hidden => {
 });
 initializeDisplaySettings();
 renderLocationStatus();
-showSetup(!token);
-if (token && !relay?.resumeToken) updates.start(true);
+showSetup(!session.token);
+if (session.token && !session.credentials?.resumeToken) updates.start(true);
 refreshStatus(false);
-window.addEventListener('pageshow', event => { if (exited) return; pageActive = true; standby?.check(); refreshStatus(); if (event.persisted && token) updates.start(); });
-window.addEventListener('online', () => { if (token && !exited) updates.start(); });
+window.addEventListener('pageshow', event => { if (exited) return; pageActive = true; standby?.check(); refreshStatus(); if (event.persisted && session.token) updates.start(); });
+window.addEventListener('online', () => { if (session.token && !exited) updates.start(); });
 window.addEventListener('offline', () => { progress.connection = 'offline'; refreshStatus(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
-document.addEventListener('visibilitychange', () => { if (exited) return; standby?.check(); refreshStatus(); if (!document.hidden && token) updates.start(); });
+document.addEventListener('visibilitychange', () => { if (exited) return; standby?.check(); refreshStatus(); if (!document.hidden && session.token) updates.start(); });
 
 void connect().catch(() => {
   const nativeReady = startupStage !== 'bridge';

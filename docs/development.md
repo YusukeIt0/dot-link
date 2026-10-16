@@ -16,6 +16,8 @@ Pushes and pull requests run these checks in GitHub Actions. Passing checks do n
 
 For the standalone introduction page, see [page maintenance and deployment](introduction-page.md).
 
+For Even application state ownership and diagnosis, see [Even runtime ownership](even-runtime.md).
+
 ## Build the Mac app
 
 Apple Silicon macOS, Xcode Command Line Tools, Python 3 and CMake are required.
@@ -53,6 +55,12 @@ The release helper packages the app, verifies its signature, signs the ZIP, uplo
 ```sh
 npm run package:beta
 ```
+
+Ordinary builds show `Beta` beside the numeric app version. `package:beta` produces `dot-link-<version>-beta.ehpk` and a receipt containing the channel and source commit. Packaging requires a clean worktree and matching build metadata, so commit changes before building the physical-test candidate. The numeric manifest version remains compatible with Even Hub; increment it for a new upload when required.
+
+Only an explicitly authorized public-release step uses `npm run build:release` to omit the Beta label. This command builds assets; it does not upload or publish them. The Beta packager rejects release-mode assets. Determine the currently public version from the actual Even Hub publication record, not the highest local or Beta version.
+
+Keep the refactor in one work branch and PR until the whole scope, automated checks/reviews, and affected physical verification are complete. Intermediate commits are checkpoints. Merge requires explicit maintainer instruction; build, upload, submission, and publication are separate stages.
 
 Even Hub publication is separate from Mac Releases. The internal package IDs remain stable for compatibility. Do not rename an installed data directory or recreate pairing when changing a display name.
 

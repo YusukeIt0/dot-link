@@ -2,12 +2,15 @@ import { readFile, readdir, lstat, mkdir, writeFile, rename, rm } from 'node:fs/
 import { resolve, relative, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { assertBetaBuild, sourceIdentity } from './lib/even-build.mjs';
 import { verifyWakeAssets, wakeManifest } from './lib/wake-assets.mjs';
 
 const root = resolve('dist');
 const manifest = JSON.parse(await readFile('app.json', 'utf8'));
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
 if (manifest.version !== pkg.version || manifest.min_sdk_version !== pkg.dependencies['@evenrealities/even_hub_sdk']) throw new Error('Manifest and dependency versions differ');
+const build = JSON.parse(await readFile(join(root, 'build-info.txt'), 'utf8'));
+assertBetaBuild(build, manifest.version, sourceIdentity());
 const secrets = [];
 for (const name of ['device-key', 'mcp-key', 'notification-key']) {
   try { const value = (await readFile(join('.runtime', name), 'utf8')).trim(); if (value.length >= 32) secrets.push(value); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -29,7 +32,7 @@ async function inspect(directory) {
 await inspect(root);
 if (!files.some(file => file.path === manifest.entrypoint)) throw new Error('Missing entrypoint');
 await mkdir('.runtime/release', {recursive:true,mode:0o700});
-const output = resolve(`.runtime/release/dot-link-${manifest.version}.ehpk`);
+const output = resolve(`.runtime/release/dot-link-${manifest.version}-beta.ehpk`);
 const candidate = `${output}.candidate-${process.pid}`;
 const result = spawnSync(process.execPath, ['tools/evenhub/node_modules/@evenrealities/evenhub-cli/main.js',
   'pack', 'app.json', 'dist', '--sdk-ver', manifest.min_sdk_version, '-o', candidate], {encoding:'utf8'});
@@ -41,7 +44,7 @@ if (result.status !== 0 || /WARNING|default floor|fallback/i.test(packingLog) ||
 }
 await rename(candidate,output);
 const data = await readFile(output);
-const receipt = {version:manifest.version,sdk:manifest.min_sdk_version,minAppVersion:minimumApp[1],cli:'0.1.14',
+const receipt = {...build,version:manifest.version,sdk:manifest.min_sdk_version,minAppVersion:minimumApp[1],cli:'0.1.14',
   scope:'Self-only beta candidate; not approved for public submission',
   unresolved:['Runtime relay destination permission is not established by an empty manifest whitelist','Physical beta validation pending'],
   bytes:data.length,sha256:createHash('sha256').update(data).digest('hex'),files};
