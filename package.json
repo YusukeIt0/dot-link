@@ -13,6 +13,7 @@
     "tunnel:save-key": "node scripts/save-tunnel-key.mjs",
     "tunnel:prepare": "node scripts/prepare-tunnel.mjs",
     "test:http": "node --test tests/*.integration.ts",
+    "package:release": "npm run build:release && node scripts/package-even.mjs --release",
     "package:beta": "npm run build && node scripts/package-beta.mjs",
     "beta:pair": "node scripts/beta-pair.mjs",
     "prebuild": "node scripts/prepare-wake-assets.mjs",
