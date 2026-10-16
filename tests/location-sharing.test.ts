@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocationSharing } from '../src/location-sharing.ts';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { LocationContext } from '../server/location.ts';
+import { WebhookSender } from '../server/webhook.ts';
 import type { AppLocation } from '@evenrealities/even_hub_sdk';
 
 const flush = async () => { for (let i = 0; i < 8; i++) await new Promise<void>(resolve => setImmediate(resolve)); };
-function fixture() {
+function fixture(relay?: (path: string, body: unknown) => unknown) {
   let now = Date.now();
   let target: string | undefined = 'https://relay.example.test';
   const local = new Map<string, string>(), nativeStore = new Map<string, string>();
@@ -23,11 +28,12 @@ function fixture() {
   const controller = new LocationSharing({automatic: false, now: () => now, storage: () => ({getItem: key => local.get(key) ?? null, setItem: (key, raw) => {local.set(key, raw);}}),
     target: () => target, changed: () => {}, api: async (path, body) => {
       requests.push({path, body}); if (failed) throw new Error('Offline');
+      if (relay) return relay(path, body);
       const p = body as any;
       return path.endsWith('/control') ? {enabled: p.enabled} : {locationSharing: true, locationSubscribed: true, locationFresh: !!p.fix, locationMeasuredAt: p.fix?.measured_at, locationAccuracy: p.fix?.accuracy, locationReceivedAt: new Date(now).toISOString()};
     }});
   return {controller, native, local, nativeStore, requests, fix, emit: () => listener?.(fix()), starts: () => starts, stops: () => stops, reads: () => reads,
-    advance: (ms: number) => {now += ms;}, setTarget: (value?: string) => {target = value;}, fail: (value: boolean) => {failed = value;}};
+    now: () => now, advance: (ms: number) => {now += ms;}, setTarget: (value?: string) => {target = value;}, fail: (value: boolean) => {failed = value;}};
 }
 
 test('no permission request, position acquisition or upload happens before explicit ON', async t => {
@@ -56,14 +62,16 @@ test('OFF stops the native source, revokes the relay, and ignores later native c
 
 test('OFF during a one-shot location request reaches the relay before the measurement resolves', async t => {
   const f = fixture(); t.after(() => f.controller.stop());
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  f.advance(31_000);
   let resolveFix!: (fix: AppLocation) => void;
   f.native.getAppLocation = () => new Promise(resolve => {resolveFix = resolve;});
-  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  const pumping = f.controller.pump(); await flush();
   assert.equal(typeof resolveFix, 'function');
   f.controller.setEnabled(false); await flush();
   assert.equal(f.requests.at(-1)?.body.enabled, false);
-  resolveFix(f.fix()); await flush();
-  assert.equal(f.requests.filter(r => r.path.endsWith('/update')).length, 0);
+  resolveFix(f.fix()); await pumping; await flush();
+  assert.equal(f.requests.filter(r => r.path.endsWith('/update')).length, 1);
 });
 
 test('failed native stop stays visibly pending and retries without uploading more locations', async t => {
@@ -117,9 +125,10 @@ test('failed native permission does not repeatedly prompt; toggling allows a del
 
 test('stale measurements are not uploaded as fresh, and explicit exit retains preference but stops source', async t => {
   const f = fixture(); await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  const count = f.requests.length;
   f.advance(100_000); f.native.getAppLocation = async () => null;
   await f.controller.pump();
-  assert.equal(f.requests.at(-1)?.body.fix, undefined); assert.equal(f.controller.status().state, 'stale');
+  assert.equal(f.requests.length, count); assert.equal(f.controller.status().state, 'stale');
   await f.controller.stop(); await flush(); assert.equal(f.stops(), 1);
   assert.equal(JSON.parse(f.nativeStore.get('dot-location-sharing-v1')!).enabled, true);
   assert.equal(f.requests.at(-1)?.body.enabled, false);
@@ -136,4 +145,58 @@ test('a late G2 announcement is suppressed after OFF, expiry or a previous shari
   const latest = {...message, location_sharing_id: f.requests.at(-1)?.body.sharing_id};
   assert.equal(f.controller.acceptsAnnouncement(latest), true);
   f.advance(100_000); assert.equal(f.controller.acceptsAnnouncement(latest), false);
+});
+
+
+test('missing exit event cannot renew sharing with cached fixes or empty heartbeats', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  const cached = f.fix();
+  f.native.getAppLocation = async () => cached;
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  const count = f.requests.length;
+  assert.equal(count, 2);
+  // The native source stops but JavaScript remains alive, with no exit callback.
+  for (let i = 0; i < 20; i++) {
+    f.advance(15_000);
+    if (i >= 6) f.controller.receive({locationSharing: false, locationFresh: false});
+    await f.controller.pump();
+  }
+  assert.equal(f.requests.length, count, 'neither control nor update may renew the lease');
+  assert.equal(f.controller.status().enabled, true, 'saved consent remains available for recovery');
+  assert.equal(f.controller.status().state, 'stale');
+  f.emit(); await f.controller.pump();
+  assert.equal(f.requests.length, count + 2, 'a new measurement re-enables and updates the expired lease');
+  assert.equal(f.requests.at(-1)?.body.fix.measured_at, new Date(cached.timestamp! + 300_000).toISOString());
+});
+
+test('no first measurement means no live sharing lease, and a later fix starts sharing', async t => {
+  const f = fixture(); t.after(() => f.controller.stop());
+  f.native.getAppLocation = async () => null;
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  for (let i = 0; i < 10; i++) { f.advance(15_000); await f.controller.pump(); }
+  assert.equal(f.requests.length, 0);
+  assert.equal(f.controller.status().state, 'waiting');
+  f.emit(); await f.controller.pump();
+  assert.deepEqual(f.requests.map(r => r.path), ['/api/location/control', '/api/location/update']);
+});
+
+
+test('real relay lease expires while an exited native source leaves the WebView timer running', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'dot-exit-lease-'));
+  let context!: LocationContext;
+  const f = fixture((path, body) => path.endsWith('/control') ? context.control(body, 'owner') : context.update(body, 'owner'));
+  context = new LocationContext(join(directory, 'location.json'), new WebhookSender(async () => ({status: 200, body: '{}'})), [], async () => ({}), f.now);
+  t.after(async () => { await f.controller.stop(); context.close(); rmSync(directory, {recursive: true, force: true}); });
+  const cached = f.fix(); f.native.getAppLocation = async () => cached;
+  await f.controller.attach(f.native); f.controller.setEnabled(true); await flush();
+  assert.equal(context.status().locationSharing, true);
+  // A live timer and repeated cached measurements must not extend the last upload's lease.
+  for (let i = 0; i < 20; i++) {
+    f.advance(15_000); f.controller.receive(context.status()); await f.controller.pump();
+    if (i >= 6) assert.equal(context.status().locationSharing, false);
+  }
+  assert.equal(context.read().context, null);
+  f.emit(); await f.controller.pump();
+  assert.equal(context.status().locationSharing, true);
+  assert.equal(context.status().locationFresh, true);
 });
