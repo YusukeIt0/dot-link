@@ -56,11 +56,12 @@ async function launch(options = {}) {
     onAppLocationChanged() { return () => {}; },
     async startAppLocationUpdates() { calls.push(['location-start']); return true; },
     async stopAppLocationUpdates() { calls.push(['location-stop']); return true; },
-    async getAppLocation() { return {latitude: 10, longitude: 20, accuracy: 5, timestamp: Date.now()}; },
+    async getAppLocation() { return {latitude: 10, longitude: 20, accuracy: 5, timestamp: epoch + now}; },
   };
   const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
+    LocationSharing: class extends dependencies.LocationSharing { constructor(options) { super({...options, now: () => epoch + now, automatic: false}); } },
     exitDiagnosticsFlag: options.exitDiagnostics ? '1' : '0',
     // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
     installKeyboardViewport: () => () => {},
@@ -540,7 +541,7 @@ test('opening and cancelling the system exit dialog keeps sharing alive', async 
   await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.FOREGROUND_ENTER_EVENT}});
   await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.FOREGROUND_EXIT_EVENT}});
   const before = app.calls.filter(c => c[0] === 'location-api').length;
-  await app.advance(15_000);
+  await app.advance(31_000);
   await app.evaluate('void locationSharing.pump()');
   assert.ok(app.calls.filter(c => c[0] === 'location-api').length > before);
   assert.equal(app.calls.some(c => c[0] === 'location-api' && c[2].enabled === false), false);

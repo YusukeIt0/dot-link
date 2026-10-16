@@ -44,7 +44,7 @@ export class LocationSharing {
   private nativeChain = Promise.resolve();
   private nativeStarted = false;
   private nativeFailed = false;
-  private session?: { id: string; origin: string; enabled: boolean; sequence: number };
+  private session?: { id: string; origin: string; enabled: boolean; sequence: number; uploadedAt?: string };
   private latest?: LocationFix;
   private working = false;
   private stopping?: Promise<void>;
@@ -192,11 +192,6 @@ export class LocationSharing {
       if (!this.preferences.enabled || this.disposed || this.target() !== target) return;
       if (this.nativeFailed || !this.nativeStarted) { this.state = 'unavailable'; return; }
       const session = this.session ??= { id: crypto.randomUUID(), origin: target, enabled: false, sequence: 0 };
-      if (!session.enabled) {
-        await this.api('/api/location/control', { sharing_id: session.id, enabled: true });
-        if (this.session !== session || !this.preferences.enabled || this.disposed) return;
-        session.enabled = true;
-      }
       if (!this.latest || this.now() - Date.parse(this.latest.measured_at) > 30_000) {
         // Stationary phones may suppress pushes. An occasional fresh fix keeps current/stale honest.
         const raw = await this.native!.getAppLocation({ accuracy: AppLocationAccuracy.High, timeoutMs: 8000 }).catch(() => null);
@@ -206,8 +201,21 @@ export class LocationSharing {
       }
       if (this.session !== session || !this.preferences.enabled || this.disposed || this.target() !== target) return;
       const fix = freshLocation(this.latest, this.now()) ? this.latest : undefined;
-      const status = await this.api('/api/location/update', { sharing_id: session.id, sequence: ++session.sequence, ...(fix ? { fix } : {}) });
+      // A surviving WebView must not keep a sharing lease alive with empty heartbeats or
+      // repeated cached measurements after the native location source has stopped.
+      // New native measurements resume sharing; timers alone cannot renew it.
+      if (!fix || (session.uploadedAt && Date.parse(fix.measured_at) <= Date.parse(session.uploadedAt))) {
+        this.state = fix && this.relayStatus.locationSharing !== false ? 'sharing' : this.latest ? 'stale' : 'waiting';
+        return;
+      }
+      if (!session.enabled) {
+        await this.api('/api/location/control', { sharing_id: session.id, enabled: true });
+        if (this.session !== session || !this.preferences.enabled || this.disposed) return;
+        session.enabled = true;
+      }
+      const status = await this.api('/api/location/update', { sharing_id: session.id, sequence: ++session.sequence, fix });
       if (this.session !== session || !this.preferences.enabled || this.disposed) return;
+      session.uploadedAt = fix.measured_at;
       this.relayStatus = status as LocationRelayStatus;
       this.state = fix ? 'sharing' : this.latest ? 'stale' : 'waiting';
     } catch { if (this.preferences.enabled) { this.state = 'offline'; if (this.session) this.session.enabled = false; } }
