@@ -34,6 +34,25 @@ test('a choice before bridge attachment is persisted instead of overwritten', as
   await prefs.attach(nativeStore(host)); assert.equal(prefs.value, false);
   assert.equal(host.getItem(KEY), 'false');
 });
+test('native timeout never overwrites a newer OFF with stale local ON', async t => {
+  t.mock.timers.enable({apis: ['setTimeout']});
+  const disk = memory(); disk.setItem(KEY, 'true');
+  const writes: string[] = []; let resolve!: (value: string) => void;
+  const prefs = new ReadAloudPreferences(() => disk);
+  const attach = prefs.attach({getLocalStorage: () => new Promise(r => { resolve = r; }),
+    setLocalStorage: async (_, value) => { writes.push(value); return true; }});
+  t.mock.timers.tick(3001); await attach;
+  assert.equal(prefs.value, false); assert.deepEqual(writes, []);
+  resolve('false'); await Promise.resolve();
+  assert.equal(prefs.value, false); assert.deepEqual(writes, []);
+});
+test('failed native read cannot activate stale local ON', async () => {
+  const disk = memory(); disk.setItem(KEY, 'true');
+  const prefs = new ReadAloudPreferences(() => disk);
+  await prefs.attach({getLocalStorage: async () => { throw Error('unavailable'); },
+    setLocalStorage: async () => { assert.fail('must not overwrite an unread setting'); }});
+  assert.equal(prefs.value, false);
+});
 test('slow restore cannot replace a new choice and rapid toggles persist in order', async () => {
   let resolve!: (v: string) => void; const writes: string[] = [];
   const prefs = new ReadAloudPreferences(memory);

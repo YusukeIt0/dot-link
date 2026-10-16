@@ -25,16 +25,21 @@ export class ReadAloudPreferences {
     // A choice made before the bridge arrived still needs native persistence.
     if (this.revision > 0) { await this.queueNative(this.value); return; }
     const revision = this.revision;
+    const timedOut = Symbol('native preference timeout');
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const raw = await Promise.race([native.getLocalStorage(KEY), new Promise<string>(resolve => {
-        timer = setTimeout(() => resolve(''), 3000);
+      const raw = await Promise.race([native.getLocalStorage(KEY), new Promise<typeof timedOut>(resolve => {
+        timer = setTimeout(() => resolve(timedOut), 3000);
       })]);
       if (revision !== this.revision) return;
+      // An unread native copy may contain a newer OFF. Never migrate on timeout.
+      if (raw === timedOut) { this.value = false; return; }
       const saved = parse(raw);
       if (saved !== undefined) { this.value = saved; this.writeLocal(); }
       else if (this.hasLocal) await this.queueNative(this.value);
-    } catch {} finally { clearTimeout(timer); }
+    } catch {
+      if (revision === this.revision) this.value = false;
+    } finally { clearTimeout(timer); }
   }
   save(enabled: boolean): Promise<boolean> {
     this.value = enabled; this.revision++;

@@ -212,7 +212,8 @@ function forgetPairing(message: string): void {
 }
 let busy = false;
 let subscribed = false;
-let tts = readAloudPreferences.value;
+// Packaged origins can retain stale local ON values; wait for native restore.
+let tts = false;
 el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
 const conversation = new ConversationState();
 const timing = new TimingTracker();
