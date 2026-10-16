@@ -49,11 +49,12 @@ export class InteractionStatus {
     if (!this.measurements.has(id)) this.measurements.set(id, { started, waitingStarted: started, pausedMs: 0 });
     this.activeId = id; this.phase = 'waiting';
   }
-  get protectWaiting(): boolean {
-    if (this.phase !== 'waiting' || !this.activeId) return false;
+  get waitingProtectionMs(): number {
+    if (this.phase !== 'waiting' || !this.activeId) return 0;
     const started = this.measurements.get(this.activeId)?.waitingStarted;
-    return started !== undefined && this.clock() - started < 60_000;
+    return started === undefined ? 0 : Math.max(0, 60_000 - (this.clock() - started));
   }
+  get protectWaiting(): boolean { return this.waitingProtectionMs > 0; }
   complete(id: string): void {
     const measurement = this.measurements.get(id);
     if (!measurement || measurement.completedMs !== undefined) return;
