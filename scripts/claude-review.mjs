@@ -172,9 +172,14 @@ if (mode === 'intake') {
     if (!/^[a-f0-9]{40}$/.test(s.data.base.sha) || !/^[a-f0-9]{40}$/.test(s.data.main)) throw new Error('Invalid pinned commit');
     // Fetch objects only. Never check out or execute the reviewed base/head.
     execFileSync('git', ['-c', 'core.hooksPath=/dev/null', 'fetch', '--no-tags', 'origin', s.data.base.sha], {stdio: 'pipe', timeout: 60_000});
-    baseDiff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', s.data.main, s.data.base.sha, '--'],
-      {encoding: 'utf8', maxBuffer: 1_000_000, timeout: 30_000});
-    if (Buffer.byteLength(baseDiff) > 250_000) throw new RangeError('Base context exceeds review input limit');
+    try {
+      baseDiff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', s.data.main, s.data.base.sha, '--'],
+        {encoding: 'utf8', maxBuffer: 250_001, timeout: 30_000});
+    } catch (error) {
+      if (error.code !== 'ENOBUFS') throw error;
+      output('scope_limited', 'true'); process.exit(0);
+    }
+    if (Buffer.byteLength(baseDiff) > 250_000) { output('scope_limited', 'true'); process.exit(0); }
   }
   // Recheck before writing input or starting the model.
   const fresh = snapshot();
@@ -190,12 +195,14 @@ if (mode === 'intake') {
   let s = snapshot();
   let d = disposition(s);
   if (d) { finishWithoutFindings(s, d); process.exit(process.exitCode || 0); }
-  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false') {
+  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false' && process.env.REVIEW_SCOPE_LIMITED !== 'true') {
     finishWithoutFindings(s, {state: 'Skipped', reason: 'The input or target changed during preparation; no model assessment was started.'});
     process.exit(0);
   }
   let body, triage;
-  if (process.env.REVIEW_OUTCOME !== 'success' || process.env.REVIEW_PREPARED === 'false') {
+  if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false' && process.env.REVIEW_SCOPE_LIMITED === 'true') {
+    body = `## dotsweeper review · Needs a smaller scope\n\nThe main-to-target context exceeds the review input limit. No assessment was completed. Reduce the parent divergence or narrow the work, then request another review.\n\n${help}`;
+  } else if (process.env.REVIEW_OUTCOME !== 'success' || process.env.REVIEW_PREPARED === 'false') {
     const cancelled = process.env.REVIEW_OUTCOME === 'cancelled';
     body = `## dotsweeper review · ${cancelled ? 'Cancelled' : 'Failed'}\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;
     if (!cancelled) process.exitCode = 1;

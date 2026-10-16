@@ -330,10 +330,17 @@ for (const stage of ['prepare','report']) test(`parent branch advancement invali
  assert.match(readFileSync(join(f.dir,'summary'),'utf8'),/Outdated/);
  assert.doesNotMatch(f.read().comments[0].body,/State lost/);
 });
-test('base context fetch failures and oversized deltas fail preparation',t=>{
- for(const options of [{failFetch:true},{baseDiff:'x'.repeat(250001)}]) {
-  const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}},...options});
-  success(f.run('intake'));assert.notEqual(f.run('prepare').status,0);
-  assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
- }
+test('base context fetch failure remains an infrastructure failure',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}},failFetch:true});
+ success(f.run('intake'));assert.notEqual(f.run('prepare').status,0);
+ assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
+});
+for(const bytes of [250001,1100000]) test(`oversized base context (${bytes} bytes) reports scope without invoking the model`,t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}},baseDiff:'x'.repeat(bytes)});
+ success(f.run('intake'));const prep=f.run('prepare');success(prep);
+ assert.equal(prep.outputs.ready,'false');assert.equal(prep.outputs.scope_limited,'true');
+ assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
+ success(f.run('report',{REVIEW_PREPARED:'false',REVIEW_SCOPE_LIMITED:prep.outputs.scope_limited}));
+ assert.match(f.read().comments[0].body,/Needs a smaller scope/);
+ assert.doesNotMatch(f.read().comments[0].body,/Complete|State lost/);
 });
