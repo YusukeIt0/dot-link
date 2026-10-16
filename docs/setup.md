@@ -44,7 +44,7 @@ Local Whisper is free and runs on your Mac. External recordings go directly from
 
 Keys are stored separately in macOS Keychain. Choose **Always Allow** when prompted; an app update may require permission again. To replace a key, delete it and save the new one. Deleting the active service key switches speech input back to Whisper.
 
-For **read-aloud**, use the switch in the Even companion. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
+For **read-aloud**, use the switch in the Even companion. It starts OFF on first use and remembers your ON/OFF choice when you reopen the app. Reopening does not replay earlier replies. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
 
 ## Mac notifications
 
