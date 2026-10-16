@@ -56,15 +56,13 @@ The release helper packages the app, verifies its signature, signs the ZIP, uplo
 npm run package:beta
 ```
 
-Ordinary builds show `Beta` beside the numeric app version. `package:beta` produces `dot-link-<version>-beta.ehpk` and a receipt containing the channel and source commit. Packaging requires a clean worktree and matching build metadata, so commit changes before building the physical-test candidate. The numeric manifest version remains compatible with Even Hub; increment it for a new upload when required.
+Work-branch validation builds show `Beta` beside the numeric app version. Use `npm run build` and `node scripts/package-beta.mjs` for those builds; the packager requires clean matching source and records its commit. Keep package ID and pairing identity stable, and increment the numeric version when a new upload requires it.
 
-Only an explicitly authorized public-release step uses `npm run build:release` to omit the Beta label. This command builds assets; it does not upload or publish them. The Beta packager rejects release-mode assets. Determine the currently public version from the actual Even Hub publication record, not the highest local or Beta version.
+Build code merged into main with `npm run build:release`, without the Beta marker and without opt-in diagnostics. The version update must also be merged before packaging the main release. Private storage in Even Hub before review does not make a main release a Beta. Upload authorization does not authorize review submission or publication.
 
-Independent defects discovered during the refactor may use a child fix branch and PR targeting the parent branch. Verify the fix before integrating it and preserve the parent acceptance criteria.
+Independent defects discovered during the refactor may use a child fix branch and PR targeting the parent branch. Verify the fix before integrating it and preserve the parent acceptance criteria. Keep one overall outcome until automated checks, review and affected physical verification are complete. Main merge requires explicit maintainer instruction.
 
-Keep the refactor under one overall outcome and parent PR until the whole scope, automated checks/reviews, and affected physical verification are complete. Intermediate commits are checkpoints. Merge requires explicit maintainer instruction; build, upload, submission, and publication are separate stages.
-
-The in-app Beta label applies to every non-public uploaded build, including diagnostic and fix builds opened through Developer Hub. It does not require a separate beta-tester distribution route. Reuse an uploaded build when it can answer the verification question; upload a new build when changed code or diagnostics require it.
+Reuse an uploaded build when it can answer the verification question; upload a new build when changed code requires it, within the authorized scope.
 
 Even Hub publication is separate from Mac Releases. The internal package IDs remain stable for compatibility. Do not rename an installed data directory or recreate pairing when changing a display name.
 
