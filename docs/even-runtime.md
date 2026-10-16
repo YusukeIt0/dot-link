@@ -6,6 +6,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 | --- | --- | --- |
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
+| `src/runtime-effects.ts` | Deferred speech, voice eligibility, standby protection and its waiting deadline | DOM/G2 presentation, transport or conversation selection |
 | `src/connection-transitions.ts` | Reset/retention policy for pairing, restoration and forgetting | Transport implementation, rendering or user preference changes |
 | `src/relay-session.ts` | Active relay credentials, origin recovery, request cancellation, and connection generations | User-facing status, history selection, or whether to record |
 | `src/speech-playback.ts` | Queued read-aloud speech, cancellation, completion recovery, and the quiet interval before voice input resumes | Which replies to announce or whether TTS is enabled |
@@ -23,13 +24,13 @@ The entry point coordinates the existing user experience. A module boundary shou
 
 `ConnectionTransitions` is the shared application reset boundary. `RelaySession.restart()` still owns cancellation and generation changes; callers and parsed API responses check that generation before changing application state. A phone page becoming hidden remains distinct from an explicit glasses-app exit.
 
-## Remaining coordination work (#62)
+## Coordinated state boundaries (#62)
 
 The planned boundaries span three dependent children:
 
 1. Conversation state (#63) owns durable history, selection, unread and announcement bookkeeping. `receive` returns announcement candidates and an initial waiting message; `flush` takes display eligibility, standby visibility and current location-announcement eligibility, then returns display/wake decisions. The entry point executes these decisions. Browser speech objects and UI callbacks do not enter this owner.
 2. Connection transitions (#64) now implement the matrix below, while `RelaySession` retains transport lifetime ownership. Conversation reset clears all selection, unread, deferred restore/wake and announcement state, including an empty-history new connection.
-3. Runtime effects (#65, planned) will synchronize speech flushing, input eligibility and standby protection on state transitions. Until then, `refreshStatus` retains those effects. Rendering-only updates should ultimately consume state without initiating them.
+3. Runtime effects (#65) synchronize deferred speech, input eligibility and standby protection through `updateRuntime` / `syncRuntimeEffects` at state transitions. `refreshStatus`, `display`, language repainting and the presentation timer only render. The effects owner independently schedules the remaining reply-wait protection deadline, including while offline; repainting cannot extend it. Synchronous playback/recorder callbacks are coalesced and state is reread before applying dependent policy.
 
 Each child PR targets `refactor/even-state-coordination`; later children incorporate the integrated parent before implementation. Automated checks and review precede child integration. Integrated physical acceptance remains required before the parent can be proposed for main merge. For each device check, specify the exact build, starting state, numbered actions, expected outcome and requested observation; report device observations separately from simulated tests. Main merge and distribution remain separately authorized.
 
@@ -65,7 +66,7 @@ Do not infer delivery, physical display, or microphone state from a connection i
 
 ## Verification
 
-`tests/connection-transitions.test.ts` verifies reset ordering and retention. Composed tests also hold a send response body across forget and check that stale results cannot restore history or release a newer busy operation. `tests/conversation-state.test.ts` covers restore, deferred display, late reply ordering, browsing/unread behavior, location eligibility and send/reply races. `tests/display-lifecycle.test.mjs` exercises the composed application with simulated SDK, network, storage, and time. `tests/runtime-ownership.test.mjs` exercises late callbacks, missing speech completion, queued/stale G2 writes, session replacement during recovery, and location stop during exit. Existing module and HTTP integration tests remain applicable.
+`tests/runtime-effects.test.ts` verifies state-policy decisions, synchronous callback reentry, deadline expiry and stop. Composed tests verify that repeated presentation/language refreshes do not flush speech or alter input/standby policy, and that offline wait protection expires even when rendering is disabled. `tests/connection-transitions.test.ts` verifies reset ordering and retention. Composed tests also hold a send response body across forget and check that stale results cannot restore history or release a newer busy operation. `tests/conversation-state.test.ts` covers restore, deferred display, late reply ordering, browsing/unread behavior, location eligibility and send/reply races. `tests/display-lifecycle.test.mjs` exercises the composed application with simulated SDK, network, storage, and time. `tests/runtime-ownership.test.mjs` exercises late callbacks, missing speech completion, queued/stale G2 writes, session replacement during recovery, and location stop during exit. Existing module and HTTP integration tests remain applicable.
 
 Physical acceptance should cover hold/wake input, transcription/review/send, reply/history selection, read-aloud interruption and recovery, standby/tap/head-raise, reconnection, location stop, and explicit exit. Record the source commit and Beta package in the PR. Test completion is not merge or publication authorization.
 
