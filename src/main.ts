@@ -26,6 +26,7 @@ import { installKeyboardViewport } from './keyboard-viewport.ts';
 import { SpeechPlayback } from './speech-playback.ts';
 import { G2Display } from './g2-display.ts';
 import { RelaySession } from './relay-session.ts';
+import { ConnectionTransitions } from './connection-transitions.ts';
 import { ExitDiagnostics } from './exit-diagnostics.ts';
 import './style.css';
 
@@ -177,16 +178,30 @@ function renderLocationStatus(): void {
   el('location-diagnostic').textContent = `${ja ? '位置共有' : 'Location'}: ${s.state} · ${ja ? '受信' : 'received'} ${s.receivedCount ?? 0} · ${ja ? '案内' : 'announcements'} ${s.announcementCount ?? 0}${s.accuracy === undefined ? '' : ` · ±${Math.round(s.accuracy)}m`}${s.receivedAt ? ` · ${new Date(s.receivedAt).toLocaleTimeString()}` : ''}`;
 }
 el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabled(el<HTMLInputElement>('location-share').checked);
-function restartConnection(): void {
-  updates.stop(); session.restart(); playback.cancel();
-}
+const connectionTransitions = new ConnectionTransitions({
+  session,
+  stopUpdates: () => updates.stop(), cancelPlayback: () => playback.cancel(),
+  stopLocation: () => locationSharing.setEnabled(false), clearLegacyPairing: () => pairing.forget(),
+  resetInteraction: (pairing, newIdentity) => {
+    transcriptionController?.abort(); transcriptionController = undefined;
+    busy = pairing; clearClip(); audioTraceId = undefined; discarding = false;
+    el<HTMLButtonElement>('pair').disabled = pairing; sendButton.disabled = pairing || !transcript.value.trim();
+    if (newIdentity) { progress.reset(); timing.reset(); } else progress.setPhase('idle');
+  },
+  resetConversation: () => conversation.reset(),
+  resetDelivery: (origin, clearRetry) => {
+    pendingDelivery = new PendingUtterance(() => localStorage, origin ?? location.origin);
+    if (clearRetry) { pendingId = undefined; pendingText = undefined; }
+  },
+  resetConnectionInfo: () => {
+    subscribed = false; progress.dotConnected = false;
+    hostName = t('接続先'); namedHost = false; selectedSTT = readSTTProvider(undefined); selectedSTTModel = undefined;
+  },
+});
 function forgetPairing(message: string): void {
-  locationSharing.setEnabled(false);
-  restartConnection();
-  busy = false; clearClip(); progress.setPhase('idle');
-  session.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
+  connectionTransitions.forget();
+  pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
-  conversation.forget();
   progress.connection = 'unpaired';
   display(() => t('再接続が必要です'), message);
   el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
@@ -205,23 +220,25 @@ async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   if (version !== session.version || exited) return;
   // Legacy development credentials are separate from packaged pairing.
   if (!saved && !session.credentials) return;
-  restartConnection();
-  busy = false; clearClip(); progress.setPhase('idle');
-  session.use(saved);
+  connectionTransitions.restore(saved);
   if (!saved) { showSetup(true); progress.connection = 'unpaired'; display(() => t('再接続が必要です'), () => t('接続先を確認して「接続」を押してください。')); return; }
-  pendingDelivery = new PendingUtterance(() => localStorage, saved.origin);
   showSetup(false); progress.connection = 'connecting'; display(() => t('再接続中'), idleVoicePrompt);
   updates.start(true);
 }
 
 async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, requestSignal?: AbortSignal): Promise<T> {
+  const version = session.version;
+  const current = () => { if (exited || !session.isCurrent(version)) throw new Error('Connection changed'); };
   const response = await session.request(path, method, body, trace, requestSignal);
+  current();
   if (!response.ok && path === '/api/transcribe' && response.status === 422) {
-    const failure = await response.json().catch(() => ({}));
+    const failure = await response.json().catch(() => ({})); current();
     throw new Error(sttErrorMessage(failure.code) ?? t('処理できませんでした。接続または録音を確認してください。'));
   }
   if (!response.ok) throw new Error(response.status === 401 ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
-  return (response.status === 204 ? undefined : response.json()) as Promise<T>;
+  const result = response.status === 204 ? undefined : await response.json();
+  current();
+  return result as T;
 }
 
 function reportTiming(id: string): void {
@@ -297,17 +314,13 @@ el('pair').onclick = async () => {
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
   catch { notice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
-  restartConnection();
+  connectionTransitions.beginPairing();
   const version = session.version;
   progress.connection = 'connecting'; refreshStatus();
   try {
     const credentials = await session.pair(invite);
     if (version !== session.version || exited) return;
-    const retained = session.save(credentials);
-    pairing.forget();
-    pendingDelivery = new PendingUtterance(() => localStorage, session.credentials!.origin);
-    pendingId = undefined; pendingText = undefined;
-    conversation.resetHistory();
+    const retained = connectionTransitions.paired(credentials);
     const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
@@ -321,13 +334,14 @@ el('pair').onclick = async () => {
     notice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
     if (session.token) updates.start(true);
-  } finally { busy = false; button.disabled = false; flushPendingDisplay(); }
+  } finally { if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
 };
 el('forget-pairing').onclick = async () => {
   if (busy || recorder.state !== 'idle') return;
-  busy = true; let revoked = false;
+  busy = true; let revoked = false; const version = session.version;
   try { if (session.credentials) { await api('/api/pair/revoke', 'POST'); revoked = true; } }
   catch {} finally {
+    if (exited || !session.isCurrent(version)) return;
     forgetPairing(revoked ? t('接続を解除しました。') : t('端末の設定を削除しました。Macに接続できなかったため、Mac側でも接続を解除してください。'));
     busy = false; display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
   }
@@ -349,7 +363,11 @@ sendButton.onclick = async () => {
   refreshStatus(false);
   const version = session.version;
   try {
-    if (pendingText !== text) { pendingId = await pendingDelivery.prepare(text, audioTraceId); pendingText = text; audioTraceId = undefined; }
+    if (pendingText !== text) {
+      const preparedId = await pendingDelivery.prepare(text, audioTraceId);
+      if (exited || !session.isCurrent(version)) return;
+      pendingId = preparedId; pendingText = text; audioTraceId = undefined;
+    }
     if (version !== session.version || exited) return;
     progress.begin(pendingId!, 'sending'); refreshStatus();
     timing.mark(pendingId!, 'utterance_sent');
@@ -368,7 +386,7 @@ sendButton.onclick = async () => {
     progress.setPhase('error'); notice.textContent = (error as Error).message;
     display(() => t('送信を確認できませんでした'), (error as Error).message);
   }
-  finally { busy = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); syncVoiceContext(); }
+  finally { if (!exited && session.isCurrent(version)) { busy = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); syncVoiceContext(); } }
 };
 transcript.oninput = () => { sendButton.disabled = busy || !transcript.value.trim(); syncVoiceContext(); };
 
@@ -683,7 +701,7 @@ function stopSession(): void {
 async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
   void exitDiagnostics.attach(appBridge);
-  void restoreRelay(appBridge).then(() => locationSharing.attach(appBridge));
+  void restoreRelay(appBridge).then(() => { if (!exited) return locationSharing.attach(appBridge); });
   void languagePreferences.attach(appBridge).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;
   startupStage = 'page';

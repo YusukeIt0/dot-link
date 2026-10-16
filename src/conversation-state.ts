@@ -88,9 +88,9 @@ export class ConversationState {
     return this.selected!;
   }
 
-  // Preserve existing transition differences here; connection policy is the next child task.
-  resetHistory(): void { this.messages = []; this.spoken.clear(); this.index = -1; }
-  forget(): void {
-    this.resetHistory(); this.unread.clear(); this.browsing = false; this.pending = false;
+  reset(): void {
+    this.messages = []; this.index = -1; this.spoken.clear(); this.unread.clear();
+    this.browsing = false; this.pending = false; this.restoreId = undefined; this.restoring = false;
+    this.wakePending = false; this.showingReply = false; this.displayedId = undefined;
   }
 }

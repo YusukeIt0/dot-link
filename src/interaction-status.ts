@@ -12,6 +12,7 @@ export class InteractionStatus {
   private measurements = new Map<string, Measurement>();
   private clock: () => number;
   constructor(clock: () => number = () => performance.now()) { this.clock = clock; }
+  reset(): void { this.phase = 'idle'; this.activeId = undefined; this.measurements.clear(); this.dotConnected = false; }
   setPhase(phase: InteractionPhase): void {
     this.phase = phase;
     if (phase === 'microphone' || phase === 'recording' || phase === 'idle') this.activeId = undefined;
