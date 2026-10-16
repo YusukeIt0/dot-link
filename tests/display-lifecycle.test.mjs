@@ -71,7 +71,7 @@ async function launch(options = {}) {
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
       querySelector: element, querySelectorAll: () => [staticLabel], createComment: element, addEventListener: listen},
-    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak() {}}},
+    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text]); }}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     navigator: {language: options.language ?? 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
     localStorage: local, sessionStorage: local, location: {origin: options.nativePairing ? 'http://127.0.0.1:57157' : 'https://test.invalid', hash: '', pathname: '/', search: ''},
@@ -80,6 +80,8 @@ async function launch(options = {}) {
     setInterval: (fn, ms) => schedule(fn, ms, true), clearInterval: id => timers.delete(id),
     fetch: (url, init) => {
       networkCalls.push(String(url));
+      const custom = options.request?.(String(url), init);
+      if (custom !== undefined) return custom;
       if (String(url).includes('/api/location/')) {
         calls.push(['location-api', String(url), JSON.parse(init.body)]);
         return Promise.resolve({status: 200, ok: true, json: async () => ({locationSharing: true, locationFresh: true})});
@@ -173,10 +175,10 @@ test('recording and recognition stay protected; offline reply-wait releases prot
   assert.ok(app.calls.some(c => c[0] === 'mic' && c[1] === true));
   await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.LONG_PRESS_RELEASE_EVENT}});
   for (const phase of ['recognizing', 'sending']) {
-    await app.evaluate(`progress.begin('job', 'recognizing'); progress.setPhase('${phase}'); progress.connection='offline'; refreshStatus();`);
+    await app.evaluate(`progress.begin('job', 'recognizing'); progress.setPhase('${phase}'); progress.connection='offline'; updateRuntime();`);
     await app.advance(90_000); assert.equal(app.hidden(), false);
   }
-  await app.evaluate("progress.waiting('job'); refreshStatus();");
+  await app.evaluate("progress.waiting('job'); updateRuntime();");
   await app.advance(59_999); assert.equal(app.hidden(),false);
   await app.advance(30_001); assert.equal(app.hidden(),true);
   await app.deliver(app.snapshot([{id: 'job', text: 'Synthetic request', reply: 'Synthetic reply', status: 'replied'}]));
@@ -279,7 +281,7 @@ test('actual text-entry handler only sends text; current STT and client TTS labe
   assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:Whisper small / TTS:iPhone');
   delete state.status.sttProvider; await app.deliver(state);
   assert.equal(app.physical.get(4), '─'.repeat(24) + '\n' + 'STT:— / TTS:iPhone');
-  await app.evaluate("progress.connection = 'offline'; refreshStatus()");
+  await app.evaluate("progress.connection = 'offline'; updateRuntime()");
   assert.equal(app.element('speech-status').textContent, 'STT:— / TTS:iPhone');
 });
 
@@ -392,8 +394,7 @@ test('location toggle reaches native/relay and an OFF blocks late announcements 
 test('whole app waits sixty seconds then uses configured idle interval, preserving late replies and all header fields', async t => {
   const app = await launch({typedInput:true,provider:'soniox'}); t.after(app.close);
   app.element('transcript').value = 'Synthetic waiting question'; await app.element('send').click(); await flush();
-  const stored = vm.runInContext('JSON.parse(JSON.stringify(messages))',app.context);
-  const message = stored[0];
+  const message = vm.runInContext('JSON.parse(JSON.stringify(conversation.selected))',app.context);
   assert.match(app.physical.get(1), /^Dotの返信待ち \(0秒\)$/);
   assert.match(app.physical.get(5), /^未読 \d{2}:\d{2}$/);
   const time = app.physical.get(5).slice(3);
@@ -420,7 +421,7 @@ test('whole app waits sixty seconds then uses configured idle interval, preservi
 test('operation after the delayed notice restarts idle time, including with the phone page hidden', async t => {
   const app = await launch({typedInput:true}); t.after(app.close);
   app.element('transcript').value='Synthetic question'; await app.element('send').click(); await flush();
-  await app.evaluate('document.hidden = true; pageActive = false; refreshStatus();');
+  await app.evaluate('document.hidden = true; pageActive = false; updateRuntime();');
   await app.advance(75_000); assert.equal(app.hidden(),false);
   await app.emit(singleTap);
   await app.advance(29_999); assert.equal(app.hidden(),false);
@@ -545,4 +546,98 @@ test('opening and cancelling the system exit dialog keeps sharing alive', async 
   await app.evaluate('void locationSharing.pump()');
   assert.ok(app.calls.filter(c => c[0] === 'location-api').length > before);
   assert.equal(app.calls.some(c => c[0] === 'location-api' && c[2].enabled === false), false);
+});
+
+
+test('a send response parsed after forgetting cannot restore history or release a newer busy operation', async t => {
+ let releaseBody, parsing=false;
+ const body=new Promise(resolve=>{releaseBody=resolve;});
+ const app=await launch({typedInput:true,request:(url)=>url.endsWith('/api/utterances')
+  ? Promise.resolve({ok:true,status:200,json:()=>{parsing=true;return body;}}) : undefined});
+ t.after(app.close);
+ app.element('transcript').value='Synthetic pending request';
+ const sending=app.element('send').click();
+ for(let i=0;i<20&&!parsing;i++) await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(parsing,true);
+ await app.evaluate("forgetPairing('Reconnect required'); busy=true; progress.connection='connecting';");
+ releaseBody({id:'old',text:'Synthetic pending request',status:'accepted'});await sending;await flush();
+ assert.equal(vm.runInContext('conversation.count',app.context),0);
+ assert.equal(vm.runInContext('busy',app.context),true);
+ assert.equal(app.element('notice').textContent,'Reconnect required');
+ assert.equal(app.element('transcript').value,'Synthetic pending request');
+});
+
+test('forget clears the queued restore/wake state and preserves the unsent draft and user preferences', async t => {
+ const app=await launch({initialMessages:[proactive('history')]});t.after(app.close);
+ app.element('transcript').value='Unsent draft';
+ await app.evaluate("tts=true; pendingId='old'; pendingText='old'; conversation.receive([{id:'queued',text:'',status:'replied',reply:'Old reply'}],false,()=>true);");
+ await app.evaluate("forgetPairing('Reconnect required');");
+ assert.equal(vm.runInContext('conversation.count',app.context),0);
+ assert.equal(vm.runInContext('conversation.unreadCount',app.context),0);
+ assert.equal(vm.runInContext('pendingId',app.context),undefined);
+ assert.equal(vm.runInContext('pendingText',app.context),undefined);
+ assert.equal(vm.runInContext('tts',app.context),true);
+ assert.equal(app.element('transcript').value,'Unsent draft');
+ await app.evaluate('conversation.receive([],true,()=>true); flushPendingDisplay();');
+ assert.equal(vm.runInContext('conversation.visibleId',app.context),undefined);
+});
+
+test('successful pairing releases the send control for a preserved draft', async t => {
+ const origin='https://relay.example.ts.net';
+ const app=await launch({request:url=>url===`${origin}/api/pair`
+  ? Promise.resolve({ok:true,status:200,json:async()=>({token:'p'.repeat(43),expiresAt:Date.now()+86400000})})
+  : url===`${origin}/api/updates`
+   ? Promise.resolve({ok:true,status:200,json:async()=>({revision:'paired',status:{subscribed:true},messages:[]})}) : undefined});
+ t.after(app.close);
+ app.element('transcript').value='Preserved draft';
+ app.element('pair-code').value=JSON.stringify({version:1,origin,code:'c'.repeat(43),expiresAt:Date.now()+60000});
+ await app.element('pair').click(); await flush();
+ assert.equal(vm.runInContext('session.credentials?.origin',app.context),origin);
+ assert.equal(vm.runInContext('busy',app.context),false);
+ assert.equal(app.element('send').disabled,false);
+ assert.equal(app.element('transcript').value,'Preserved draft');
+});
+
+test('presentation refreshes do not flush speech or change input and standby policy', async t => {
+ const app=await launch();t.after(app.close);
+ await app.evaluate(`globalThis.effectCalls=[];
+  const originalContext=recorder.setContext.bind(recorder);
+  recorder.setContext=(...args)=>{effectCalls.push('voice');originalContext(...args);};
+  const originalProtect=standby.protect.bind(standby);
+  standby.protect=value=>{effectCalls.push('standby');originalProtect(value);};
+  tts=true;busy=true;playback.speak(new SpeechSynthesisUtterance('Deferred synthetic reply'));busy=false;
+  for(let i=0;i<20;i++) refreshStatus();
+  display('Presentation only','Synthetic display');
+  languagePreferences.value='en';applyLanguage();`);
+ assert.equal(vm.runInContext('effectCalls.length',app.context),0);
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,0);
+ app.element('transcript').oninput();await flush();
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
+ assert.ok(vm.runInContext("effectCalls.includes('voice') && effectCalls.includes('standby')",app.context));
+});
+
+test('offline waiting protection expires even with presentation refresh disabled',async t=>{
+ const app=await launch();t.after(app.close);
+ await app.evaluate(`progress.begin('wait','sending');progress.waiting('wait');progress.connection='offline';updateRuntime();
+  clearInterval(statusTimer);statusTimer=undefined;refreshStatus=()=>{};`);
+ await app.advance(59999);assert.equal(app.hidden(),false);
+ await app.advance(1);assert.equal(app.hidden(),false);
+ await app.advance(29999);assert.equal(app.hidden(),false);
+ await app.advance(1);assert.equal(app.hidden(),true);
+});
+
+test('a reply deferred during recording is spoken once recording ends without presentation refresh',async t=>{
+ const app=await launch();t.after(app.close);
+ await app.evaluate('tts=true;');
+ await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.LONG_PRESS_EVENT}});
+ assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+ await app.evaluate('refreshStatus=()=>{};');
+ await app.deliver(app.snapshot([proactive('during-recording')]));
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,0);
+ await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.LONG_PRESS_RELEASE_EVENT}});
+ await flush();
+ assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
+ await app.advance(2000);
+ assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
 });
