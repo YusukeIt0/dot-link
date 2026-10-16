@@ -14,7 +14,7 @@ const prepareEnvKeys = new Set([...prepareStep.matchAll(/^          ([A-Z_]+):/g
 const user = {id: 123, login: 'contributor', type: 'User'};
 const issue = {number: 12, title: 'History disappears', body: 'After reopening the app', state: 'open', locked: false, user};
 const pr = {number: 12, state: 'open', draft: false, changed_files: 1,
-  base: {ref: 'main', sha: main}, head: {sha: head, repo: {full_name: 'external/fork'}}};
+  base: {ref: 'main', sha: main, repo: {full_name:'YusukeIt0/dot-link'}}, head: {sha: head, repo: {full_name: 'external/fork'}}};
 const result = {summary: 'Review complete', findings: [{severity: 'medium', file: 'src/main.ts', line: 7,
   title: 'State lost', reason: 'Saved state is overwritten'}], next_steps: 'Verify persistence', limitations: 'Static review only', triage: {priority: 'P1', priority_reason: 'Core state loss', labels: [{name: 'bug', reason: 'State disappears'}]}};
 function fixture(options = {}) {
@@ -37,6 +37,7 @@ if(a.includes('--input')) {
  console.log(JSON.stringify(row));
 } else if(a.includes('Accept: application/vnd.github.diff')) { if(f.failDiff) process.exit(1); process.stdout.write(f.diff); }
 else if(p.endsWith('/commits/main')) { f.mainReads=(f.mainReads||0)+1; if(f.changeAfterMainReads && f.mainReads>f.changeAfterMainReads) f.main='c'.repeat(40); fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify({sha:f.main})); }
+else if(p.includes('/commits/')) { console.log(JSON.stringify({sha:f.baseSha || f.pr.base.sha})); }
 else if(p.includes('/events?')) console.log(JSON.stringify([f.events || []]));
 else if(p.includes('/comments?')) console.log(JSON.stringify([f.comments]));
 else if(p.includes('/issues/comments/')) console.log(JSON.stringify(f.command));
@@ -50,6 +51,14 @@ else {
  fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify(f.issue));
 }
 `, {mode: 0o700});
+  writeFileSync(join(dir, 'git'), `#!/usr/bin/env node
+const fs = require('node:fs'), args=process.argv.slice(2);
+const f=JSON.parse(fs.readFileSync('fixture.json'));
+fs.appendFileSync('git.jsonl',JSON.stringify(args)+'\\n');
+if(args.includes('fetch')) { if(f.failFetch) process.exit(1); }
+else if(args[0]==='diff') process.stdout.write(f.baseDiff || '');
+else process.exit(2);
+`, {mode:0o700});
   writeFileSync(join(dir, 'fixture.json'), JSON.stringify(data));
   let outputs = {};
   const run = (mode, env = {}) => {
@@ -95,10 +104,10 @@ test('external fork PR is accepted; no contributor checkout or execution occurs'
   const live=f.read();const receipt=latestReceipt(live.comments,98765);
   assert.equal(receipt.fingerprint,fingerprintPR({...live.issue,...live.pr},live.main,live.comments));
 });
-test('draft, closed, locked or non-main items do not start a review', t => {
+test('draft, closed, locked or foreign-base items do not start a review', t => {
   for(const opts of [{issue:{...issue,state:'closed'}},{issue:{...issue,locked:true}},
     {issue:{...issue,pull_request:{}},pr:{...pr,draft:true}},
-    {issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'other'}}}]) {
+    {issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,repo:{full_name:'other/repo'}}}}]) {
     const f=use(t,opts); const r=f.run('intake'); success(r); assert.equal(r.outputs.accepted,'false'); assert.equal(f.writes().length,0);
   }
 });
@@ -213,7 +222,7 @@ const transitions = [
   {name:'closed issue', start:{}, change:{issue:{state:'closed'}}, state:'Skipped'},
   {name:'locked issue', start:{}, change:{issue:{locked:true}}, state:'Skipped', noWrite:true},
   {name:'draft PR', start:{issue:{...issue,pull_request:{}}}, change:{pr:{draft:true}}, state:'Skipped'},
-  {name:'retargeted PR', start:{issue:{...issue,pull_request:{}}}, change:{pr:{base:{ref:'other'}}}, state:'Skipped'},
+  {name:'retargeted PR', start:{issue:{...issue,pull_request:{}}}, change:{pr:{base:{...pr.base,ref:'other'}}}, state:'Outdated'},
   {name:'changed PR head', start:{issue:{...issue,pull_request:{}}}, change:{pr:{head:{sha:'c'.repeat(40)}}}, state:'Outdated'},
   {name:'newer run', start:{}, change:{newOwner:'5678:1'}, state:'Superseded', noWrite:true},
 ];
@@ -300,4 +309,38 @@ test('prepare requires the public bot identity but no publishing credential',t=>
  const r=f.run('prepare',{REVIEW_BOT_ID:''});assert.notEqual(r.status,0);assert.match(r.stderr,/bot identity/);
  assert.equal(existsSync(join(f.dir,'summary')),false);
  const prepared=f.run('prepare',{REVIEW_WRITE_TOKEN:''});success(prepared);assert.equal(prepared.outputs.ready,'true');
+});
+
+
+test('child PR review pins the actual target and reads its delta without checking it out', t => {
+ const parent='c'.repeat(40);
+ const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:parent}},baseDiff:'+parent context\n'});
+ success(f.run('intake'));success(f.run('prepare'));success(f.run('report'));
+ const live=f.read(), receipt=latestReceipt(live.comments,98765);
+ assert.deepEqual(receipt.base,{ref:'refactor/parent',sha:parent});
+ assert.equal(receipt.fingerprint,fingerprintPR({...live.issue,...live.pr},live.main,live.comments,receipt.base));
+ assert.equal(readFileSync(join(f.dir,'.review/base-changes.diff'),'utf8'),'+parent context\n');
+ const calls=readFileSync(join(f.dir,'git.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
+ assert.deepEqual(calls,[['-c','core.hooksPath=/dev/null','fetch','--no-tags','origin',parent],
+  ['diff','--no-ext-diff','--no-textconv','--no-renames',main,parent,'--']]);
+});
+for (const stage of ['prepare','report']) test(`parent branch advancement invalidates child ${stage}`,t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}}});
+ success(f.run('intake'));f.update({baseSha:'d'.repeat(40)});success(f.run(stage));
+ assert.match(readFileSync(join(f.dir,'summary'),'utf8'),/Outdated/);
+ assert.doesNotMatch(f.read().comments[0].body,/State lost/);
+});
+test('base context fetch failure remains an infrastructure failure',t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}},failFetch:true});
+ success(f.run('intake'));assert.notEqual(f.run('prepare').status,0);
+ assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
+});
+for(const bytes of [250001,1100000]) test(`oversized base context (${bytes} bytes) reports scope without invoking the model`,t=>{
+ const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}},baseDiff:'x'.repeat(bytes)});
+ success(f.run('intake'));const prep=f.run('prepare');success(prep);
+ assert.equal(prep.outputs.ready,'false');assert.equal(prep.outputs.scope_limited,'true');
+ assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
+ success(f.run('report',{REVIEW_PREPARED:'false',REVIEW_SCOPE_LIMITED:prep.outputs.scope_limited}));
+ assert.match(f.read().comments[0].body,/Needs a smaller scope/);
+ assert.doesNotMatch(f.read().comments[0].body,/Complete|State lost/);
 });
