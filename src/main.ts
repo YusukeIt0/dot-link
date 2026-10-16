@@ -9,8 +9,8 @@ import { WakeNamePreferences } from './wake-name-preferences.ts';
 import { validateWakeName } from './wake-name.ts';
 import { wakeTranscript } from './wake-transcript.ts';
 import { TimingTracker } from './timing.ts';
-import { reconcileHistory, NewReplyQueue } from './message-history.ts';
-import { conversationText, receiptCaption, newReplyCaption, type DisplayMessage } from './conversation-display.ts';
+import { ConversationState, type ConversationMessage as Message } from './conversation-state.ts';
+import { conversationText, receiptCaption, newReplyCaption } from './conversation-display.ts';
 import { wrapHudText } from './hud-text.ts';
 import { LiveUpdates } from './live-updates.ts';
 import { Pairing } from './pairing.ts';
@@ -140,7 +140,6 @@ let hostName = t('接続先');
 let namedHost = false;
 let baseStatus = t('長押しで話してください');
 let renderBaseStatus: () => string = () => t('長押しで話してください');
-let visibleMessageId: string | undefined;
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 let selectedSTT: STTProvider | undefined;
 let selectedSTTModel: unknown;
@@ -187,7 +186,7 @@ function forgetPairing(message: string): void {
   busy = false; clearClip(); progress.setPhase('idle');
   session.forget(); pairing.forget(); pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
-  messages = []; spoken.clear(); newReplies.clear(); browsingHistory = false; historyIndex = -1; pendingHistoryDisplay = false;
+  conversation.forget();
   progress.connection = 'unpaired';
   display(() => t('再接続が必要です'), message);
   el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
@@ -196,19 +195,9 @@ function forgetPairing(message: string): void {
 let busy = false;
 let subscribed = false;
 let tts = false;
-let messages: Message[] = [];
-let historyIndex = -1;
-let pendingHistoryDisplay = false;
-let pendingDisplayId: string | undefined;
-let restoringHistory = false;
-const spoken = new Set<string>();
-const newReplies = new NewReplyQueue();
-let browsingHistory = false;
-let replyWakePending = false;
-let showingReply = false;
+const conversation = new ConversationState();
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
-interface Message extends DisplayMessage { location_sharing_id?: string; location_expires_at?: string; }
 
 async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   const version = session.version;
@@ -241,18 +230,17 @@ function reportTiming(id: string): void {
 }
 
 function showMessage(): void {
-  const message = messages[historyIndex];
+  const message = conversation.selectedForDisplay();
   if (!message) return;
-  newReplies.seen(message.id);
-  const current = () => messages.find(item => item.id === message.id) ?? message;
+  const current = () => conversation.find(message.id) ?? message;
   display(() => {
     const item = current();
-    return item.reply ? `${messages.findIndex(m => m.id === item.id) + 1}/${messages.length}` :
+    return item.reply ? `${conversation.position(item.id)}/${conversation.count}` :
       item.status === 'failed' ? t('送信未確認') : t('{name}の返信待ち').replace('{name}', wakeNamePreferences.assistantName);
   }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id);
 }
-function currentReceipt(): string { return receiptCaption(messages.find(message => message.id === visibleMessageId)); }
-function currentNewReplies(): string { return newReplyCaption(newReplies.count); }
+function currentReceipt(): string { return receiptCaption(conversation.visible); }
+function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
 interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
@@ -263,52 +251,28 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   selectedSTTModel = snapshot.status.sttModel;
   progress.connection = 'online'; progress.dotConnected = subscribed;
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
-  // Restore saved history independently from new announcement eligibility.
-  const selectedId = messages[historyIndex]?.id;
-  const update = reconcileHistory(messages, snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
-  for (const message of update.replies) {
-    if (!message.reply || spoken.has(message.id)) continue;
+  const update = conversation.receive(snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
+  for (const message of update.announcements) {
     progress.complete(message.id);
-    spoken.add(message.id);
-    if (!initial) replyWakePending = true;
-    if (!initial) timing.mark(message.id, 'reply_received');
-    if (!initial && tts && 'speechSynthesis' in window) {
+    timing.mark(message.id, 'reply_received');
+    if (tts && 'speechSynthesis' in window) {
       const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US';
       playback.speak(speech);
     }
   }
-  messages = update.messages;
-  newReplies.retain(messages);
-  if (initial) newReplies.clear(); else newReplies.receive(update.replies);
-  if (selectedId) historyIndex = messages.findIndex(message => message.id === selectedId);
-  const latest = messages.at(-1);
-  if (initial && latest && !latest.reply && !latest.kind && latest.status !== 'failed') progress.restoreWaiting(latest.id, latest.createdAt, Date.now());
-  while (spoken.size > 200) spoken.delete(spoken.values().next().value!);
+  if (update.waiting) progress.restoreWaiting(update.waiting.id, update.waiting.createdAt, Date.now());
   el('dot-status').textContent = `${hostName} · ${subscribed ? t('Dot接続済み') : t('Dot未接続')}`;
-  if (initial && update.displayId) { pendingDisplayId = update.displayId; restoringHistory = true; browsingHistory = false; }
-  pendingHistoryDisplay = true;
   flushPendingDisplay();
   refreshStatus();
 }
 function flushPendingDisplay(): void {
-  if (pendingHistoryDisplay && !busy && recorder.state === 'idle' && !['review', 'error'].includes(progress.phase)) {
-    pendingHistoryDisplay = false;
-    const target = restoringHistory ? pendingDisplayId : newReplies.next(messages,
-      showingReply ? messages.find(message => message.id === visibleMessageId) : undefined, {
-        hidden: standby?.hidden ?? false, browsingHistory,
-        mayAnnounce: message => locationSharing.acceptsAnnouncement(message),
-      });
-    pendingDisplayId = undefined;
-    if (target) historyIndex = messages.findIndex(message => message.id === target);
-    // Metadata and replies can change the selected message without selecting a
-    // different history item. Preserve its ID when sorting late arrivals.
-    if (target) showMessage();
-    else if (visibleMessageId && messages.find(message => message.id === visibleMessageId)?.reply) {
-      newReplies.seen(visibleMessageId); showingReply = true;
-    }
-    restoringHistory = false;
-    if (replyWakePending) { replyWakePending = false; standby?.activity(); }
-  }
+  const effect = conversation.flush({
+    allowed: !busy && recorder.state === 'idle' && !['review', 'error'].includes(progress.phase),
+    hidden: standby?.hidden ?? false,
+    mayAnnounce: message => locationSharing.acceptsAnnouncement(message),
+  });
+  if (effect.display) showMessage();
+  if (effect.wake) standby?.activity();
   refreshStatus();
 }
 
@@ -343,7 +307,7 @@ el('pair').onclick = async () => {
     pairing.forget();
     pendingDelivery = new PendingUtterance(() => localStorage, session.credentials!.origin);
     pendingId = undefined; pendingText = undefined;
-    messages = []; spoken.clear(); historyIndex = -1;
+    conversation.resetHistory();
     const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
@@ -374,8 +338,8 @@ el('tts').onclick = () => {
   else playback.cancel();
   refreshStatus();
 };
-el('previous').onclick = () => { standby?.activity(); historyIndex = Math.max(0, historyIndex - 1); browsingHistory = historyIndex < messages.length - 1; showMessage(); };
-el('next').onclick = () => { standby?.activity(); historyIndex = Math.min(messages.length - 1, historyIndex + 1); browsingHistory = historyIndex < messages.length - 1; showMessage(); };
+el('previous').onclick = () => { standby?.activity(); conversation.navigate(-1); showMessage(); };
+el('next').onclick = () => { standby?.activity(); conversation.navigate(1); showMessage(); };
 let pendingId: string | undefined;
 let pendingText: string | undefined;
 sendButton.onclick = async () => {
@@ -396,12 +360,7 @@ sendButton.onclick = async () => {
     progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();
     transcript.value = ''; pendingId = undefined; pendingText = undefined;
-    const saved = messages.find(item => item.id === message.id);
-    if (!saved) messages = reconcileHistory(messages, [...messages, message], true, () => true).messages;
-    else if (!saved.reply) Object.assign(saved, message);
-    historyIndex = messages.findIndex(item => item.id === message.id);
-    browsingHistory = false;
-    if (messages[historyIndex].reply) progress.complete(message.id);
+    if (conversation.acceptSent(message).reply) progress.complete(message.id);
     showMessage();
     notice.textContent = '';
   } catch (error) {
@@ -426,10 +385,10 @@ function syncVoiceContext(): void {
     !exited && glassesReady && !!session.token);
 }
 function hudCaption(): string {
-  return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, visibleMessageId, wakeNamePreferences.assistantName);
+  return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, conversation.visibleId, wakeNamePreferences.assistantName);
 }
 function keepWakeConversation(): boolean {
-  return recorder.source === 'wake' && !!visibleMessageId && messages.some(message => message.id === visibleMessageId);
+  return recorder.source === 'wake' && !!conversation.visible;
 }
 function idleVoicePrompt(): string {
   return operationPreferences.wakeWord && wakeState === 'listening' ? wakeText('{wake} または長押しで話してください') : t('長押しで話してください');
@@ -493,8 +452,7 @@ function display(state: string | (() => string), text: string | (() => string), 
   if (exited) return;
   renderBaseStatus = typeof state === 'function' ? state : () => state;
   renderDisplayText = typeof text === 'function' ? text : () => text;
-  baseStatus = renderBaseStatus(); visibleMessageId = trace;
-  showingReply = !!messages.find(message => message.id === trace)?.reply;
+  baseStatus = renderBaseStatus(); conversation.present(trace);
   if (trace && !timing.report(trace)) trace = undefined;
   refreshStatus(false);
   lastDisplayText = renderDisplayText();
@@ -593,7 +551,7 @@ const recorder = new VoiceInput({
       if (keepWakeConversation()) refreshStatus();
       else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。'));
     }
-    if (state === 'idle' && pendingHistoryDisplay) flushPendingDisplay();
+    if (state === 'idle' && conversation.hasPendingDisplay) flushPendingDisplay();
     if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
     if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => t('指を離すと停止します')); }
     if (state === 'recording') {
@@ -776,7 +734,7 @@ async function connect(): Promise<void> {
   recordButton.disabled = false;
   // History may finish loading before the Even bridge is ready. Repaint it
   // now: later polls with unchanged history otherwise never update the G2.
-  if (historyIndex >= 0 && messages[historyIndex]) {
+  if (conversation.selected) {
     showMessage();
   } else {
     display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
