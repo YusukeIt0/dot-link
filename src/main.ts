@@ -26,6 +26,7 @@ import { installKeyboardViewport } from './keyboard-viewport.ts';
 import { SpeechPlayback } from './speech-playback.ts';
 import { G2Display } from './g2-display.ts';
 import { RelaySession } from './relay-session.ts';
+import { ExitDiagnostics } from './exit-diagnostics.ts';
 import './style.css';
 
 installKeyboardViewport(document.querySelector<HTMLElement>('main')!);
@@ -117,6 +118,12 @@ el('show-diagnostics').onclick = () => {
   const details = el('connection-diagnostics'); details.hidden = !details.hidden;
   el('show-diagnostics').setAttribute('aria-expanded', String(!details.hidden));
 };
+const exitDiagnostics = new ExitDiagnostics({
+  enabled: import.meta.env.VITE_EXIT_DIAGNOSTICS === '1', storage: () => localStorage,
+  changed: text => { const panel = el('exit-diagnostic'); panel.hidden = false; panel.textContent = text; },
+  log: text => console.info(text),
+});
+exitDiagnostics.record('boot');
 const language = el<HTMLSelectElement>('language'); language.value = languagePreferences.value;
 if (getLanguage() === 'en') transcript.placeholder = 'Transcribed speech, or a message to send';
 language.onchange = () => {
@@ -145,7 +152,12 @@ let pageActive = true;
 const locationSharing = new LocationSharing({
   storage: () => localStorage,
   target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
-  api: (path, body) => session.location(path, body),
+  api: async (path, body) => {
+    const input = body as {enabled?: boolean; fix?: unknown};
+    exitDiagnostics.record(path === '/api/location/control' ? (input.enabled ? 'share-enable' : 'share-disable') : (input.fix ? 'share-fix' : 'share-heartbeat'));
+    try { const result = await session.location(path, body); exitDiagnostics.record('share-ok'); return result; }
+    catch (error) { exitDiagnostics.record('share-failed'); throw error; }
+  },
   changed: () => renderLocationStatus(),
 });
 function renderLocationStatus(): void {
@@ -699,9 +711,10 @@ discardButton.onclick = () => {
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
-window.addEventListener('pagehide', () => { pageActive = false; refreshStatus(false); });
+window.addEventListener('pagehide', () => { exitDiagnostics.record('pagehide'); pageActive = false; refreshStatus(false); });
 function stopSession(): void {
   if (exited) return;
+  exitDiagnostics.record('stop-session');
   void locationSharing.stop();
   exited = true; pageActive = false; session.stop();
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
@@ -736,6 +749,7 @@ async function connect(): Promise<void> {
   startupResult = result;
   if (result !== 0) throw new Error('Glasses page initialization failed');
   startupStage = 'ready'; glassesReady = true;
+  exitDiagnostics.record('ready');
   void Promise.all([operationPreferences.attach(appBridge), wakeNamePreferences.attach(appBridge)]).then(async () => {
     if (exited) return;
     // Preserve an explicitly marked unsaved draft; the wake label below uses
@@ -767,9 +781,14 @@ async function connect(): Promise<void> {
     display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
   }
   appBridge.onEvenHubEvent(event => {
+    exitDiagnostics.observe(event, exited);
     if (exited) return;
     if (event.audioEvent && event.audioEvent.source !== AudioInputSource.Phone) recorder.append(event.audioEvent.audioPcm);
     const eventType = event.sysEvent?.eventType ?? event.textEvent?.eventType ?? event.listEvent?.eventType;
+    if (eventType === OsEventTypeList.SYSTEM_EXIT_EVENT) exitDiagnostics.record('system-exit');
+    if (eventType === OsEventTypeList.ABNORMAL_EXIT_EVENT) exitDiagnostics.record('abnormal-exit');
+    if (eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) exitDiagnostics.record('foreground-enter');
+    if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT) exitDiagnostics.record('foreground-exit');
     if (eventType === OsEventTypeList.SYSTEM_EXIT_EVENT || eventType === OsEventTypeList.ABNORMAL_EXIT_EVENT) { stopSession(); return; }
     if (eventType === OsEventTypeList.IMU_DATA_REPORT || event.sysEvent?.imuData) {
       if (event.sysEvent?.imuData && headRaise.sample(event.sysEvent.imuData, performance.now()) && standby?.hidden) standby.activity();
@@ -791,7 +810,8 @@ async function connect(): Promise<void> {
     if (eventType === OsEventTypeList.SCROLL_TOP_EVENT) el('previous').click();
     if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) el('next').click();
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
-      void appBridge.shutDownPageContainer(1).then(ok => { if (!ok) notice.textContent = t('終了確認を開けませんでした'); }).catch(() => { notice.textContent = t('終了確認を開けませんでした'); });
+      exitDiagnostics.record('dialog-request');
+      void appBridge.shutDownPageContainer(1).then(ok => { exitDiagnostics.record(ok ? 'dialog-opened' : 'dialog-failed'); if (!ok) notice.textContent = t('終了確認を開けませんでした'); }).catch(() => { exitDiagnostics.record('dialog-failed'); notice.textContent = t('終了確認を開けませんでした'); });
     }
     if (eventType === OsEventTypeList.LONG_PRESS_RELEASE_EVENT) void recorder.stop();
   });
@@ -890,10 +910,10 @@ renderLocationStatus();
 showSetup(!session.token);
 if (session.token && !session.credentials?.resumeToken) updates.start(true);
 refreshStatus(false);
-window.addEventListener('pageshow', event => { if (exited) return; pageActive = true; standby?.check(); refreshStatus(); if (event.persisted && session.token) updates.start(); });
+window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); refreshStatus(); if (event.persisted && session.token) updates.start(); });
 window.addEventListener('online', () => { if (session.token && !exited) updates.start(); });
 window.addEventListener('offline', () => { progress.connection = 'offline'; refreshStatus(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
-document.addEventListener('visibilitychange', () => { if (exited) return; standby?.check(); refreshStatus(); if (!document.hidden && session.token) updates.start(); });
+document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); refreshStatus(); if (!document.hidden && session.token) updates.start(); });
 
 void connect().catch(() => {
   const nativeReady = startupStage !== 'bridge';

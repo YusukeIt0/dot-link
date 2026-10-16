@@ -14,7 +14,8 @@ for (const match of source.matchAll(/import\s+\{[^}]*\}\s+from\s+'(\.\/[^']+)'/g
 const script = stripTypeScriptTypes(source
   .replace(/import\s+[\s\S]*?from\s+'[^']+';\n/g, '')
   .replace(/import '\.\/style.css';/, '')
-  .replace('import.meta.env.VITE_APP_VERSION', "'test'"));
+  .replace('import.meta.env.VITE_APP_VERSION', "'test'")
+  .replace('import.meta.env.VITE_EXIT_DIAGNOSTICS', 'exitDiagnosticsFlag'));
 const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
 
 async function launch(options = {}) {
@@ -60,6 +61,7 @@ async function launch(options = {}) {
   const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
+    exitDiagnosticsFlag: options.exitDiagnostics ? '1' : '0',
     // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
     installKeyboardViewport: () => () => {},
     InteractionStatus: class extends dependencies.InteractionStatus { constructor() { super(() => now); } },
@@ -505,4 +507,41 @@ test('a failed older name save cannot overwrite the result of a newer save', asy
   writes.shift()(true); await flush();
   assert.equal(app.element('wake-name-save-status').textContent, '');
   assert.equal(app.element('wake-name-status').textContent, '呼び名を保存しました');
+});
+
+for (const exitType of [sdk.OsEventTypeList.SYSTEM_EXIT_EVENT, sdk.OsEventTypeList.ABNORMAL_EXIT_EVENT]) {
+ test(`confirmed exit ${exitType} after OFF-ON stops the latest location session`, async t => {
+  const app = await launch({exitDiagnostics: true}); t.after(app.close);
+  for (const enabled of [true, false, true]) {
+   app.element('location-share').checked = enabled;
+   app.element('location-share').onchange(); await flush();
+  }
+  const enabled = app.calls.filter(c=>c[0]==='location-api' && c[2].enabled===true);
+  assert.equal(enabled.length,2);
+  assert.notEqual(enabled[0][2].sharing_id,enabled[1][2].sharing_id);
+  await app.emit({sysEvent:{eventType:exitType}});
+  assert.ok(app.calls.some(c=>c[0]==='location-api' && c[2].enabled===false && c[2].sharing_id===enabled[1][2].sharing_id));
+  const trace = JSON.parse(app.saved.get('dot-exit-check-v1')).map(row => row.event);
+  assert.ok(trace.includes(exitType === 7 ? 'system-exit' : 'abnormal-exit'));
+  assert.ok(trace.includes('stop-session'));
+  assert.equal(trace.filter(event => event === 'share-disable').length, 2);
+  const count=app.calls.filter(c=>c[0]==='location-api').length;
+  await app.advance(180000);
+  assert.equal(app.calls.filter(c=>c[0]==='location-api').length,count);
+ });
+}
+
+test('opening and cancelling the system exit dialog keeps sharing alive', async t => {
+  const app = await launch(); t.after(app.close);
+  app.element('location-share').checked = true;
+  app.element('location-share').onchange(); await flush();
+  await app.emit(doubleTap);
+  assert.ok(app.calls.some(c => c[0] === 'exit' && c[1] === 1));
+  await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.FOREGROUND_ENTER_EVENT}});
+  await app.emit({sysEvent: {eventType: sdk.OsEventTypeList.FOREGROUND_EXIT_EVENT}});
+  const before = app.calls.filter(c => c[0] === 'location-api').length;
+  await app.advance(15_000);
+  await app.evaluate('void locationSharing.pump()');
+  assert.ok(app.calls.filter(c => c[0] === 'location-api').length > before);
+  assert.equal(app.calls.some(c => c[0] === 'location-api' && c[2].enabled === false), false);
 });

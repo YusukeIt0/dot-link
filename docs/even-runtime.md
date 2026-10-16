@@ -37,3 +37,14 @@ Do not infer delivery, physical display, or microphone state from a connection i
 `tests/display-lifecycle.test.mjs` exercises the composed application with simulated SDK, network, storage, and time. `tests/runtime-ownership.test.mjs` exercises late callbacks, missing speech completion, queued/stale G2 writes, session replacement during recovery, and location stop during exit. Existing module and HTTP integration tests remain applicable.
 
 Physical acceptance should cover hold/wake input, transcription/review/send, reply/history selection, read-aloud interruption and recovery, standby/tap/head-raise, reconnection, location stop, and explicit exit. Record the source commit and Beta package in the PR. Test completion is not merge or publication authorization.
+
+
+## Investigating confirmed exit (#59)
+
+The confirmed-exit issue was observed on both public 0.3.4 and refactor Beta 0.3.5. Injected system/abnormal exit events stop location sharing in the composed tests; this does not prove native event delivery. The cause remains under investigation.
+
+For a bounded local trace, build with `npm run build -- --mode exit-check`, then run `node scripts/package-beta.mjs` from a clean commit. The receipt records `exitDiagnostics: true`. Ordinary and release builds disable the trace. Use the uploaded private build through the phone app's Developer Hub; local Prototype Mode may differ from the installed lifecycle.
+
+In that build, **Connection details** shows the last 48 lifecycle and location-request labels, UTC times, and random per-launch tags. The same labels are written to the console. Only those allowlisted fields are retained in localStorage; no coordinates, payloads, pairing/session identifiers, audio, conversation, or automatic diagnostic uploads are included. A storage error is shown and must not be treated as a complete trace. The trace can be overwritten after several minutes of updates, so inspect promptly.
+
+Check dialog cancellation first, then sharing OFF/ON followed by confirmed exit. Observe relay status while the app remains closed; reopening may legitimately resume the saved sharing preference. After that observation, reopen and inspect the trace: whether a confirmed-exit event reached the app, whether stop and revoke were attempted, and whether the same launch continued renewals. A successful request is transport evidence, not physical-device proof. Native-event absence or a second running instance must not be inferred solely from stale location timestamps.

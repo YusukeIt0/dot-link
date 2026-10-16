@@ -60,7 +60,11 @@ Ordinary builds show `Beta` beside the numeric app version. `package:beta` produ
 
 Only an explicitly authorized public-release step uses `npm run build:release` to omit the Beta label. This command builds assets; it does not upload or publish them. The Beta packager rejects release-mode assets. Determine the currently public version from the actual Even Hub publication record, not the highest local or Beta version.
 
-Keep the refactor in one work branch and PR until the whole scope, automated checks/reviews, and affected physical verification are complete. Intermediate commits are checkpoints. Merge requires explicit maintainer instruction; build, upload, submission, and publication are separate stages.
+Independent defects discovered during the refactor may use a child fix branch and PR targeting the parent branch. Verify the fix before integrating it and preserve the parent acceptance criteria.
+
+Keep the refactor under one overall outcome and parent PR until the whole scope, automated checks/reviews, and affected physical verification are complete. Intermediate commits are checkpoints. Merge requires explicit maintainer instruction; build, upload, submission, and publication are separate stages.
+
+The in-app Beta label applies to every non-public uploaded build, including diagnostic and fix builds opened through Developer Hub. It does not require a separate beta-tester distribution route. Reuse an uploaded build when it can answer the verification question; upload a new build when changed code or diagnostics require it.
 
 Even Hub publication is separate from Mac Releases. The internal package IDs remain stable for compatibility. Do not rename an installed data directory or recreate pairing when changing a display name.
 
