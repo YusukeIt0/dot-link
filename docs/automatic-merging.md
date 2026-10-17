@@ -52,16 +52,30 @@ change class; stricter governance would need an additional server-side mechanism
 The assessor needs to read branch protection, which requires Administration read
 for an App token. The default `GITHUB_TOKEN` cannot supply that permission. Use a
 dedicated App, installed only on this repository, instead of expanding the model
-reviewer's App. The merge App needs Administration read, Actions read, Contents
-write, Issues read, Pull requests write and Variables read. It must not have a
-branch-protection bypass. Its assessor token is downscoped to read-only Contents
-and Pull requests; only the separately gated merge job mints write permissions.
+reviewer's App. For inactive validation, grant only read access to Administration,
+Actions, Checks, Commit statuses, Contents, Issues, Pull requests and Actions
+variables (plus mandatory Metadata). The current `dotsweeper-merge` installation
+is limited to `dot-link` and remains read-only. It has no branch-protection bypass.
+Only a later, separately approved activation may grant Contents write for the merge
+endpoint. Pull requests remains read-only. The assessor always requests an explicit
+read-only permission set, even if the App later gains Contents write.
 
 Store its client ID in `DOTLINK_MERGE_CLIENT_ID` and private key only in
-`DOTLINK_MERGE_PRIVATE_KEY`. No App or secret is created by this work. Without the
-App the workflow explicitly reports that dry-run validation is blocked; that
-summary is not evidence of a passing assessment. Dedicated App events can trigger
-subsequent normal workflows, unlike many writes made using `GITHUB_TOKEN`.
+`DOTLINK_MERGE_PRIVATE_KEY`. Without the App the workflow explicitly reports that
+dry-run validation is blocked; that summary is not evidence of a passing assessment.
+Dedicated App events can trigger subsequent normal workflows, unlike many writes
+made using `GITHUB_TOKEN`.
+
+GitHub's installation-token API calls the variables permission `actions_variables`.
+The pinned `actions/create-github-app-token` version does not declare that input in
+its metadata, but its [permission parser](https://github.com/actions/create-github-app-token/blob/64ab729a6294000f5aa4a4bc0b73d1f32bc45510/lib/get-permissions-from-inputs.js)
+reads `INPUT_PERMISSION-*` environment entries and converts hyphens to underscores.
+Both token steps therefore pass `INPUT_PERMISSION-ACTIONS-VARIABLES: read` through
+`env`, alongside explicit supported permission inputs. Do not use the invalid
+`permission-variables`, or omit all permissions and inherit the App's future grants.
+Keep the action pinned and its default post-job token revocation enabled. Recheck
+this compatibility mapping when upgrading the action; replace it with a declared
+input once upstream supports one.
 
 After a separately authorized merge of this control-plane PR:
 
