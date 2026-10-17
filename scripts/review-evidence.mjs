@@ -9,6 +9,10 @@ const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const text = (value, max = 4000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
 const list = (value, max) => Array.isArray(value) && value.length <= max;
 export const versionFiles = new Set(['package.json', 'package-lock.json', 'app.json']);
+// Exact shared brand assets consumed only by the website. The Mac .icns and
+// unknown future brand assets are release/runtime content by default.
+export const websiteOnlyAsset = path => ['assets/brand/orbit/mark.svg', 'assets/brand/orbit/mac-1024.png'].includes(path) ||
+  ['assets/readme/', 'assets/film/'].some(root => path.startsWith(root));
 const canonical = value => JSON.stringify(value, (key, val) => val && !Array.isArray(val) && typeof val === 'object'
   ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b))) : val);
 export function versionOnly(path, before, after) {
@@ -170,7 +174,7 @@ export function gatherContext(snapshot, api, paginate) {
       const reusable = ['ahead', 'identical'].includes(comparison.status) &&
         comparison.merge_base_commit?.sha === evidence.commit && Array.isArray(comparison.files) &&
         comparison.files.length < 300 && comparison.files.every(f => f.status !== 'renamed' &&
-          (['docs/', 'tests/', 'site/', 'assets/brand/', 'assets/readme/', 'assets/film/'].some(p => f.filename.startsWith(p)) || f.filename === 'README.md' ||
+          (['docs/', 'tests/', 'site/'].some(p => f.filename.startsWith(p)) || websiteOnlyAsset(f.filename) || f.filename === 'README.md' ||
           f.status === 'modified' && versionFiles.has(f.filename) && versionOnly(f.filename,
             readMetadata(api, f.filename, evidence.commit), readMetadata(api, f.filename, record.head))));
       if (!reusable) context.acceptance = {...context.acceptance, status: 'stale',
@@ -184,17 +188,23 @@ export function gatherContext(snapshot, api, paginate) {
   return context;
 }
 
-export function validateAssessment(value, context, safe = value => value) {
+export function validateAssessment(value, context, safe = value => value, {allowUnknownRequirements = false} = {}) {
   if (!value || !['aligned', 'needs-product-decision', 'unknown'].includes(value.scope) ||
       !['not-required', 'recorded', 'missing'].includes(value.device) || !list(value.requirements, 20) ||
       !list(value.gaps, 10) || !list(value.architecture, 3) || !list(value.related, 8)) throw new Error('Invalid assessment.');
   const known = new Set(context?.acceptance?.record?.requirements.map(x => x.id) || []);
   const seen = new Set();
+  let unknownRequirement = false;
   const requirements = value.requirements.map(x => {
-    if (!known.has(x.id) || seen.has(x.id) || !['covered', 'gap', 'unknown'].includes(x.status) || !text(x.reason)) {
+    if (!/^[A-Z][A-Z0-9_-]{0,31}$/.test(x?.id || '') || (!known.has(x.id) && !allowUnknownRequirements) ||
+        seen.has(x.id) || !['covered', 'gap', 'unknown'].includes(x.status) || !text(x.reason)) {
       throw new Error('Invalid requirement assessment.');
     }
     seen.add(x.id);
+    if (!known.has(x.id)) {
+      unknownRequirement = true;
+      return {id: x.id, status: 'gap', reason: `Evidence gap: this ID is not in a current acceptance record. ${safe(x.reason)}`};
+    }
     return {id: x.id, status: x.status, reason: safe(x.reason)};
   });
   const gaps = value.gaps.map(x => {if (!text(x)) throw new Error('Invalid evidence gap.'); return safe(x);});
@@ -210,7 +220,7 @@ export function validateAssessment(value, context, safe = value => value) {
         !text(x.reason)) throw new Error('Related issue must cite a supplied candidate.');
     return {number: x.number, relationship: x.relationship, reason: safe(x.reason)};
   });
-  return {scope: value.scope, device: value.device, requirements, gaps, architecture, related};
+  return {scope: unknownRequirement ? 'unknown' : value.scope, device: value.device, requirements, gaps, architecture, related};
 }
 
 export function acceptanceBlockers(acceptance, assessment) {

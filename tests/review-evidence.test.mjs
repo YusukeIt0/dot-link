@@ -89,7 +89,8 @@ test('evidence reuse requires ancestor code and a bounded non-runtime diff', () 
   const comparison = {status: 'ahead', merge_base_commit: {sha: before}, files: [{filename: 'docs/guide.md', status: 'modified'}]};
   assert.equal(contextFor(r, {comparison}).acceptance.status, 'ready');
   for (const change of [c => c.status = 'diverged', c => c.merge_base_commit.sha = head,
-    c => c.files[0].filename = 'src/main.ts', c => c.files[0].status = 'renamed',
+    c => c.files[0].filename = 'src/main.ts', c => c.files[0].filename = 'assets/brand/orbit/DotLink.icns',
+    c => c.files[0].filename = 'assets/brand/future-unknown.svg', c => c.files[0].status = 'renamed',
     c => c.files = Array(300).fill(c.files[0])]) {
     const c = structuredClone(comparison); change(c); assert.equal(contextFor(r, {comparison: c}).acceptance.status, 'stale');
   }
@@ -104,6 +105,17 @@ test('scope constraints in human comments reach the reviewer instead of only cha
   assert.equal(context.acceptance.status, 'ready');
   assert.equal(context.scope.discussion[0].body, comments[0].body);
   assert.equal(context.scope.discussion[0].author, owner.login);
+});
+
+test('publisher can retain findings while flagging stale/unknown requirement IDs; merge validation stays strict', () => {
+  const a = assessment();
+  const context = {acceptance: {status: 'stale', reason: 'Wrong head'}, related: []};
+  const published = validateAssessment(a, context, x => x, {allowUnknownRequirements: true});
+  assert.equal(published.requirements[0].status, 'gap');
+  assert.match(published.requirements[0].reason, /not in a current acceptance record/);
+  assert.equal(published.scope, 'unknown');
+  assert.throws(() => validateAssessment(published, context));
+  assert.ok(acceptanceBlockers(context.acceptance, published).length);
 });
 
 test('version-only exception does not allow dependency, script, or permission changes', () => {

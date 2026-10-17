@@ -134,5 +134,7 @@ test('protected paths cover unknown files, renames and version metadata exceptio
     {filename: 'docs/guide.md', previous_filename: 'scripts/tool.mjs'}, {filename: 'tests/auto-merge.test.mjs'},
     {filename: 'app.json', status: 'added'}]) assert.equal(protectedChanges([file]).length, 1);
   assert.equal(deviceAffected([{filename: 'docs/guide.md', previous_filename: 'src/main.ts'}]), true);
-  assert.equal(deviceAffected([{filename: 'assets/brand/logo.svg'}]), false);
+  assert.equal(deviceAffected([{filename: 'assets/brand/orbit/mark.svg'}]), false);
+  assert.equal(deviceAffected([{filename: 'assets/brand/orbit/DotLink.icns'}]), true);
+  assert.equal(deviceAffected([{filename: 'assets/brand/future-unknown.svg'}]), true);
 });

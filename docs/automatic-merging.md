@@ -40,6 +40,10 @@ GitHub provides an exact-head `sha` guard and branch-protection enforcement, not
 an atomic transaction across main, issue comments, scope and evidence. A change
 after the last API read remains a residual race; this is not claimed to be zero
 risk. Serializing coordinator runs does not serialize human edits or other merges.
+The conservative full-snapshot equality check can also hold a PR after unrelated
+repository metadata changes. That is a safe false hold, not evidence that the PR
+is defective. Measure its frequency during the inactive trial before narrowing
+the comparison; it cannot cause an unverified merge.
 Before activation, decide whether this bounded risk is acceptable for the allowed
 change class; stricter governance would need an additional server-side mechanism.
 

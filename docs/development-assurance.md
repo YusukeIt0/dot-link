@@ -69,6 +69,11 @@ cannot silently replace it. Failure and unknown evidence are not passes.
 Both original authorship and the current revision's editor are authenticated;
 editing someone else's acceptance comment does not inherit their authority.
 
+If a model refers to an ID outside the current acceptance record, the published
+review keeps its technical findings and marks that row as an evidence gap with
+unknown scope. The automatic gate still rejects unknown IDs; this recovery does
+not turn stale evidence into acceptance.
+
 The updated workflow starts re-review on trusted-author pushes and trusted
 acceptance-comment creation/editing, in addition to existing review requests.
 Scope issue edits invalidate the gate but do not automatically launch every linked

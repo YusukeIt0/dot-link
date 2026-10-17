@@ -145,7 +145,7 @@ function render(s) {
       if (process.env.REVIEW_CONTEXT_JSON.length > 80_000) throw new Error('Oversized context');
       context = JSON.parse(Buffer.from(process.env.REVIEW_CONTEXT_JSON, 'base64url').toString('utf8'));
       if (context.version !== 1 || context.fingerprint !== s.fingerprint) throw new Error('Context revision changed');
-      assessment = validateAssessment(result.assessment, context, safeText);
+      assessment = validateAssessment(result.assessment, context, safeText, {allowUnknownRequirements: true});
     } catch { throw new InvalidResult('Invalid evidence assessment'); }
   }
   const acceptance = context?.acceptance;

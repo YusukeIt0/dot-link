@@ -119,6 +119,17 @@ live scheduling was not reproduced. Obvious non-acting events now use separate
 groups. A follow-up review caught a whitespace-command classification mismatch,
 also corrected to the documented exact command syntax.
 
+A subsequent Dotsweeper review of `08f2f17` identified two further cases. Packaging
+copies `assets/brand/orbit/DotLink.icns` into the Mac app; the broad website-asset
+exception was therefore narrowed to actual site assets in both device impact and
+evidence reuse. A stale-record requirement returned by the model previously lost
+the whole report; publication now flags it as an evidence gap while the merge gate
+remains strict. Both paths have regression coverage. Actual model frequency of
+the latter case is unknown; the malformed/stale-response behavior is reproducible.
+Unrelated REST metadata can conservatively hold a merge candidate. That optional
+optimization is deferred until the inactive trial measures its frequency; it
+cannot authorize an unsafe merge.
+
 The current revision is authenticated through GraphQL's original author and last
 editor, with body/update-time equality against REST. Live API reads confirmed
 that a completed Dotsweeper comment identifies the bot as both author and editor.

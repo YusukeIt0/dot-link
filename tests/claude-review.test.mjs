@@ -460,3 +460,19 @@ test('workflow concurrency keeps non-acting events out of the authorized item qu
   assert.equal(group('issue_comment', {sender: {...user, type: 'Bot'}}), 'ignored-999');
   assert.equal(group('issue_comment', {sender: user, issue: {number: 12, user}, comment: {user: {id: 456}, body: '/dotlink review'}}), 'ignored-999');
 });
+
+test('stale-head requirement IDs become explicit gaps without discarding technical findings', t => {
+  const owner = {...policy.trustedMaintainers[0], type: 'User'};
+  const record = {version: 1, head: main, scope: {issue: 73, approved: true, digest: 'a'.repeat(64)},
+    requirements: [{id: 'R1', expected: 'Preserve history'}], evidence: [], product_decisions: []};
+  const comment = {id: 40, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``};
+  const f = use(t, {comments: [comment], issue: {...issue, pull_request: {}}, eventName: 'pull_request_target',
+    event: {action: 'opened', pull_request: pr, sender: user}});
+  success(f.run('intake')); const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
+  const assessment = {scope: 'aligned', device: 'not-required', requirements: [{id: 'R1', status: 'covered', reason: 'Old claim'}], gaps: [], architecture: [], related: []};
+  success(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, assessment})}));
+  const body = f.read().comments.at(-1).body;
+  assert.match(body, /Complete/); assert.match(body, /State lost/); assert.match(body, /R1 — gap/);
+  assert.match(body, /not in a current acceptance record/);
+  assert.equal(latestReceipt(f.read().comments, 98765).quality.assessment.scope, 'unknown');
+});

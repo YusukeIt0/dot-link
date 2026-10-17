@@ -4,7 +4,7 @@ import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {latestReceipt, assertReady} from './check-review-before-merge.mjs';
-import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
+import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery, websiteOnlyAsset} from './review-evidence.mjs';
 
 export const repository = 'YusukeIt0/dot-link';
 export {versionOnly};
@@ -12,7 +12,7 @@ export {versionOnly};
 export function deviceAffected(files) {
   return files.some(f => [f.filename, f.previous_filename].filter(Boolean).some(path =>
     ['src/', 'server/', 'native/', 'public/'].some(root => path.startsWith(root)) ||
-    path.startsWith('assets/') && !['assets/brand/', 'assets/readme/', 'assets/film/'].some(root => path.startsWith(root))));
+    path.startsWith('assets/') && !websiteOnlyAsset(path)));
 }
 
 export function protectedChanges(files, versionChanges = {}) {
