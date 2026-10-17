@@ -45,6 +45,10 @@ jobs:
         if: vars.DOTLINK_MERGE_CLIENT_ID != ''
         id: reader
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        # The pinned action parses INPUT_PERMISSION-* dynamically, but its metadata
+        # does not yet expose actions_variables. Keep the explicit permission set.
+        env:
+          INPUT_PERMISSION-ACTIONS-VARIABLES: read
         with:
           client-id: ${{ vars.DOTLINK_MERGE_CLIENT_ID }}
           private-key: ${{ secrets.DOTLINK_MERGE_PRIVATE_KEY }}
@@ -52,10 +56,11 @@ jobs:
           repositories: dot-link
           permission-administration: read
           permission-actions: read
+          permission-checks: read
+          permission-statuses: read
           permission-contents: read
           permission-issues: read
           permission-pull-requests: read
-          permission-variables: read
       - name: Report missing read-only setup
         if: vars.DOTLINK_MERGE_CLIENT_ID == ''
         run: echo 'Dry run is blocked until the dedicated App can read branch protection and variables. No merge was attempted.' >> "$GITHUB_STEP_SUMMARY"
@@ -92,6 +97,10 @@ jobs:
       - name: Create dedicated merge token
         id: merger
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        # The pinned action parses INPUT_PERMISSION-* dynamically, but its metadata
+        # does not yet expose actions_variables. Keep the explicit permission set.
+        env:
+          INPUT_PERMISSION-ACTIONS-VARIABLES: read
         with:
           client-id: ${{ vars.DOTLINK_MERGE_CLIENT_ID }}
           private-key: ${{ secrets.DOTLINK_MERGE_PRIVATE_KEY }}
@@ -99,10 +108,11 @@ jobs:
           repositories: dot-link
           permission-administration: read
           permission-actions: read
+          permission-checks: read
+          permission-statuses: read
           permission-contents: write
           permission-issues: read
-          permission-pull-requests: write
-          permission-variables: read
+          permission-pull-requests: read
       - name: Re-evaluate and merge at most one exact head
         env:
           GH_TOKEN: ${{ steps.merger.outputs.token }}
