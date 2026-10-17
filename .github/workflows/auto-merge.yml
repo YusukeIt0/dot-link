@@ -1,0 +1,117 @@
+name: Automatic merge assessment
+
+on:
+  # Default-branch code only; never download or execute upstream run artifacts.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: [Tests, dotsweeper review]
+    types: [completed]
+  # PR bodies and comments are data; all decisions use fresh API reads.
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened, synchronize, edited, ready_for_review]
+  issue_comment: # zizmor: ignore[dangerous-triggers]
+    types: [created, edited, deleted]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Optional PR number; otherwise inspect trusted-author open PRs
+        type: string
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: dot-link-automatic-merge
+  cancel-in-progress: false
+
+jobs:
+  assess:
+    if: >-
+      github.repository == 'YusukeIt0/dot-link' &&
+      (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+      (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Create read-only policy token
+        if: vars.DOTLINK_MERGE_CLIENT_ID != ''
+        id: reader
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.DOTLINK_MERGE_CLIENT_ID }}
+          private-key: ${{ secrets.DOTLINK_MERGE_PRIVATE_KEY }}
+          owner: YusukeIt0
+          repositories: dot-link
+          permission-administration: read
+          permission-actions: read
+          permission-contents: read
+          permission-issues: read
+          permission-pull-requests: read
+          permission-variables: read
+      - name: Report missing read-only setup
+        if: vars.DOTLINK_MERGE_CLIENT_ID == ''
+        run: echo 'Dry run is blocked until the dedicated App can read branch protection and variables. No merge was attempted.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Evaluate without merging
+        if: vars.DOTLINK_MERGE_CLIENT_ID != ''
+        env:
+          GH_TOKEN: ${{ steps.reader.outputs.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          if [ -n "$PR_NUMBER" ]; then
+            node scripts/auto-merge.mjs --dry-run "$PR_NUMBER"
+          else
+            node scripts/auto-merge.mjs --dry-run
+          fi
+
+  merge:
+    needs: assess
+    # Deliberately inactive until the separate activation decision and App setup.
+    if: >-
+      github.repository == 'YusukeIt0/dot-link' &&
+      vars.DOTLINK_AUTO_MERGE_ENABLED == 'reviewed-policy-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Create dedicated merge token
+        id: merger
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
+        with:
+          client-id: ${{ vars.DOTLINK_MERGE_CLIENT_ID }}
+          private-key: ${{ secrets.DOTLINK_MERGE_PRIVATE_KEY }}
+          owner: YusukeIt0
+          repositories: dot-link
+          permission-administration: read
+          permission-actions: read
+          permission-contents: write
+          permission-issues: read
+          permission-pull-requests: write
+          permission-variables: read
+      - name: Re-evaluate and merge at most one exact head
+        env:
+          GH_TOKEN: ${{ steps.merger.outputs.token }}
+          AUTO_MERGE_TOKEN: ${{ steps.merger.outputs.token }}
+          DOTLINK_AUTO_MERGE_ENABLED: ${{ vars.DOTLINK_AUTO_MERGE_ENABLED }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          if [ -n "$PR_NUMBER" ]; then
+            node scripts/auto-merge.mjs --execute "$PR_NUMBER"
+          else
+            node scripts/auto-merge.mjs --execute
+          fi

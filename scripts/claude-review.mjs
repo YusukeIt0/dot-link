@@ -2,6 +2,7 @@ import {validateTriage, planLabels} from './review-labels.mjs';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
+import {acceptanceMarker, trustedUser, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion} from './review-evidence.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 if (repo !== 'YusukeIt0/dot-link') throw new Error('This workflow is restricted to public Dot Link');
@@ -46,6 +47,13 @@ function snapshot() {
     author: issue.user?.login, kind: pr ? 'pull_request' : 'issue',
     main, head: pr?.head.sha || '', discussion};
   if (pr && pr.base.ref !== 'main') data.base = {ref: pr.base.ref, sha: get(`${root}/commits/${encodeURIComponent(pr.base.ref)}`).sha};
+  const scope = pr && scopeRevision(rows, pr.head.sha, path => get(`${root}/${path}`), path =>
+    JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
+  if (scope) data.scope = scope;
+  if (pr) {
+    const feedback = reviewDiscussion(pr.number, path => JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
+    if (feedback.length) data.reviewDiscussion = feedback;
+  }
   const fingerprint = createHash('sha256').update(JSON.stringify(data)).digest('hex');
   return {issue, pr, rows, data, fingerprint};
 }
@@ -84,7 +92,8 @@ function authorized(s) {
   if (actor?.type !== 'User') return false;
   if (name === 'issue_comment') {
     const live = get(`${root}/issues/comments/${event.comment.id}`);
-    if (live.user?.id !== actor.id || live.body?.trim() !== '/dotlink review' || live.issue_url !== `https://api.github.com/${endpoint}`) return false;
+    const acceptanceUpdate = s.pr && trustedUser(actor) && live.body?.startsWith(acceptanceMarker);
+    if (live.user?.id !== actor.id || (live.body?.trim() !== '/dotlink review' && !acceptanceUpdate) || live.issue_url !== `https://api.github.com/${endpoint}`) return false;
     if (actor.id === s.issue.user.id) return true;
     const p = get(`${root}/collaborators/${encodeURIComponent(actor.login)}/permission`);
     return ['admin', 'maintain', 'write'].includes(p.permission);
@@ -94,7 +103,8 @@ function authorized(s) {
     return ['admin', 'maintain', 'write'].includes(p.permission);
   }
   return (name === 'issues' && event.action === 'opened') ||
-    (name === 'pull_request_target' && ['opened', 'ready_for_review'].includes(event.action));
+    (name === 'pull_request_target' && (['opened', 'ready_for_review'].includes(event.action) ||
+      (event.action === 'synchronize' && trustedUser(s.issue.user) && trustedUser(actor))));
 }
 function boundedInput(s) {
   const input = JSON.stringify(s.data, null, 2);
@@ -128,13 +138,40 @@ function render(s) {
     if (s.pr && (!files.has(f.file) || !Number.isSafeInteger(f.line) || f.line < 1)) throw new InvalidResult('Invalid PR finding location');
     return `### ${f.severity}: ${safeText(f.title)}\n\n${safeText(f.file)}${f.line ? ':' + f.line : ''}\n\n${safeText(f.reason)}`;
   });
+  let context, assessment;
+  if (process.env.REVIEW_CONTEXT_JSON) {
+    try {
+      if (process.env.REVIEW_CONTEXT_JSON.length > 80_000) throw new Error('Oversized context');
+      context = JSON.parse(Buffer.from(process.env.REVIEW_CONTEXT_JSON, 'base64url').toString('utf8'));
+      if (context.version !== 1 || context.fingerprint !== s.fingerprint) throw new Error('Context revision changed');
+      assessment = validateAssessment(result.assessment, context, safeText);
+    } catch { throw new InvalidResult('Invalid evidence assessment'); }
+  }
+  const acceptance = context?.acceptance;
+  const quality = {version: 1, findings: result.findings.length, assessment: assessment || null,
+    acceptance: acceptance ? {status: acceptance.status, comment_id: acceptance.comment_id,
+      digest: acceptance.digest, scope_digest: context.scope?.digest} : null};
+  const qualityMarker = `<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`;
+  const assessmentBlocks = assessment ? [
+    '### Requirements and verification evidence',
+    `Scope: ${assessment.scope}. Physical verification: ${assessment.device}.`,
+    ...assessment.requirements.map(x => `- **${x.id} — ${x.status}:** ${x.reason}`),
+    ...assessment.gaps.map(x => `- Evidence gap: ${x}`),
+    ...(s.pr ? [`Automatic-merge evidence: ${acceptanceBlockers(acceptance, assessment).join(' ') || 'Applicable acceptance records are covered; CI, trust, freshness and protected-path checks remain separate.'}`] : []),
+    'Device/runtime records are attributed observations. This reviewer did not operate a device or run tests.',
+    ...(assessment.architecture.length ? ['### Architecture advice (non-blocking)',
+      ...assessment.architecture.map(x => `- **${x.file}:** ${x.signal}\n  Trigger: ${x.trigger}\n  Impact: ${x.impact}\n  Next step: ${x.next_step}`)] : []),
+    ...(assessment.related.length ? ['### Related issues (proposals only)',
+      ...assessment.related.map(x => `- [#${x.number}](https://github.com/${repo}/issues/${x.number}) — ${x.relationship}: ${x.reason}`)] : []),
+  ] : [];
   const body = [
     '## dotsweeper review · Complete',
     `<!-- dot-link-review-input:head=${s.data.head};main=${s.data.main};input=${s.fingerprint} -->`,
-    ...(s.data.base ? [`<!-- dot-link-review-base:ref=${encodeURIComponent(s.data.base.ref)};sha=${s.data.base.sha} -->`,
-      `Review base: \`${safeText(s.data.base.ref)}\` at \`${s.data.base.sha}\`.`] : []),
+    ...(s.data.base ? [`<!-- dot-link-review-base:ref=${encodeURIComponent(s.data.base.ref)};sha=${s.data.base.sha} -->`] : []),
+    qualityMarker,
+    ...(s.data.base ? [`Review base: \`${safeText(s.data.base.ref)}\` at \`${s.data.base.sha}\`.`] : []),
     `Reviewed ${s.data.kind === 'issue' ? 'main' : 'PR head'}: \`${(s.data.head || s.data.main).slice(0, 12)}\` · [Run](${runUrl})`,
-    safeText(result.summary), ...blocks,
+    safeText(result.summary), ...blocks, ...assessmentBlocks,
     ...(!s.pr ? [`### Classification proposal\n\n${triage.priority || 'No single priority'}: ${triage.priority_reason}\n\n${triage.labels.map(x => `- \`${x.name}\`: ${x.reason}`).join('\n')}`] : []),
     `### Next steps\n\n${safeText(result.next_steps)}`,
     `### Scope and limitations\n\n${safeText(result.limitations)}`,
@@ -181,6 +218,12 @@ if (mode === 'intake') {
     }
     if (Buffer.byteLength(baseDiff) > 250_000) { output('scope_limited', 'true'); process.exit(0); }
   }
+  let context;
+  if (process.env.REVIEW_CONTEXT === '1') {
+    context = gatherContext(s, path => get(`${root}/${path}`), path =>
+      JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
+    if (Buffer.byteLength(JSON.stringify(context)) > 60_000) { output('scope_limited', 'true'); process.exit(0); }
+  }
   // Recheck before writing input or starting the model.
   const fresh = snapshot();
   const changed = disposition(fresh);
@@ -189,6 +232,10 @@ if (mode === 'intake') {
   writeFileSync('.review/input.json', input);
   writeFileSync('.review/changes.diff', diff);
   writeFileSync('.review/base-changes.diff', baseDiff);
+  if (context) {
+    writeFileSync('.review/context.json', JSON.stringify(context, null, 2));
+    output('context', Buffer.from(JSON.stringify(context)).toString('base64url'));
+  }
   output('ready', 'true');
   console.log(`Prepared ${s.data.kind} #${number}`);
 } else if (mode === 'report') {
@@ -201,7 +248,7 @@ if (mode === 'intake') {
   }
   let body, triage;
   if (process.env.REVIEW_OUTCOME === 'success' && process.env.REVIEW_PREPARED === 'false' && process.env.REVIEW_SCOPE_LIMITED === 'true') {
-    body = `## dotsweeper review · Needs a smaller scope\n\nThe main-to-target context exceeds the review input limit. No assessment was completed. Reduce the parent divergence or narrow the work, then request another review.\n\n${help}`;
+    body = `## dotsweeper review · Needs a smaller scope\n\nThe main-to-target or verification context exceeds the review input limit. No assessment was completed. Reduce the parent divergence or narrow the work, then request another review.\n\n${help}`;
   } else if (process.env.REVIEW_OUTCOME !== 'success' || process.env.REVIEW_PREPARED === 'false') {
     const cancelled = process.env.REVIEW_OUTCOME === 'cancelled';
     body = `## dotsweeper review · ${cancelled ? 'Cancelled' : 'Failed'}\n\nNo completed assessment is available. A maintainer can inspect the [run](${runUrl}) for authentication, usage limits, or execution errors.\n\n${help}`;

@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "activationValue": "reviewed-policy-v1",
+  "trustedMaintainers": [{"login": "YusukeIt0", "id": 213780070}],
+  "requiredJobs": ["workflow-lint", "test"],
+  "allowedRoots": ["src/", "server/", "native/", "tests/", "docs/", "site/", "assets/", "public/"],
+  "protectedPaths": [
+    ".github/", "scripts/", "config/", "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md",
+    "docs/ai-review.md", "docs/development.md", "docs/development-assurance.md",
+    "docs/development-process-audit.md", "docs/automatic-merging.md",
+    "tests/claude-review.test.mjs", "tests/review-before-merge.test.mjs",
+    "tests/review-labels.test.mjs", "tests/review-evidence.test.mjs", "tests/auto-merge.test.mjs"
+  ]
+}

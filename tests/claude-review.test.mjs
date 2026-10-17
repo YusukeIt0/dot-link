@@ -1,5 +1,6 @@
 import test from 'node:test';
 import {latestReceipt, fingerprintPR} from '../scripts/check-review-before-merge.mjs';
+import {policy, acceptanceMarker, scopeDigest} from '../scripts/review-evidence.mjs';
 import assert from 'node:assert/strict';
 import {mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -39,7 +40,13 @@ if(a.includes('--input')) {
 else if(p.endsWith('/commits/main')) { f.mainReads=(f.mainReads||0)+1; if(f.changeAfterMainReads && f.mainReads>f.changeAfterMainReads) f.main='c'.repeat(40); fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify({sha:f.main})); }
 else if(p.includes('/commits/')) { console.log(JSON.stringify({sha:f.baseSha || f.pr.base.sha})); }
 else if(p.includes('/events?')) console.log(JSON.stringify([f.events || []]));
+else if(p.includes('/pulls/') && p.includes('/comments?')) console.log(JSON.stringify([f.inlineComments || []]));
+else if(p.includes('/reviews?')) console.log(JSON.stringify([f.reviews || []]));
+else if(p.includes('/issues/73/comments?')) console.log(JSON.stringify([f.scopeComments || []]));
 else if(p.includes('/comments?')) console.log(JSON.stringify([f.comments]));
+else if(p.endsWith('/issues/73')) console.log(JSON.stringify(f.scopeIssue));
+else if(p.includes('/issues?')) console.log(JSON.stringify(f.related || []));
+else if(p.includes('/actions/workflows/ci.yml/runs')) console.log(JSON.stringify({workflow_runs:f.ciRuns || []}));
 else if(p.includes('/issues/comments/')) console.log(JSON.stringify(f.command));
 else if(p.includes('/collaborators/')) console.log(JSON.stringify({permission:f.permission}));
 else if(p.includes('/files?')) console.log(JSON.stringify([{filename:'src/main.ts'}]));
@@ -343,4 +350,54 @@ for(const bytes of [250001,1100000]) test(`oversized base context (${bytes} byte
  success(f.run('report',{REVIEW_PREPARED:'false',REVIEW_SCOPE_LIMITED:prep.outputs.scope_limited}));
  assert.match(f.read().comments[0].body,/Needs a smaller scope/);
  assert.doesNotMatch(f.read().comments[0].body,/Complete|State lost/);
+});
+
+test('evidence context is reviewed and published with a bound machine-readable assessment', t => {
+  const owner = {...policy.trustedMaintainers[0], type: 'User'};
+  const scopeIssue = {number: 73, title: 'Agreed work', body: 'Preserve history', state: 'open'};
+  const record = {version: 1, head, scope: {issue: 73, approved: true, digest: scopeDigest(scopeIssue, [])},
+    requirements: [{id: 'R1', expected: 'History persists'}], evidence: [{kind: 'automated', result: 'pass',
+      requirements: ['R1'], reference: 'test run', details: 'Persistence assertions'}], product_decisions: []};
+  const comment = {id: 40, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``};
+  const f = use(t, {scopeIssue, comments: [comment], issue: {...issue, pull_request: {}},
+    eventName: 'pull_request_target', event: {action: 'opened', pull_request: pr, sender: user}});
+  success(f.run('intake'));
+  const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
+  assert.equal(prepared.outputs.ready, 'true');
+  const context = JSON.parse(Buffer.from(prepared.outputs.context, 'base64url').toString());
+  assert.equal(context.acceptance.status, 'ready');
+  const assessment = {scope: 'aligned', device: 'not-required', requirements: [{id: 'R1', status: 'covered', reason: 'Test covers persistence'}], gaps: [], architecture: [], related: []};
+  success(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, findings: [], assessment})}));
+  const receipt = latestReceipt(f.read().comments, 98765);
+  assert.equal(receipt.quality.findings, 0); assert.equal(receipt.quality.acceptance.comment_id, 40);
+  assert.equal(receipt.quality.assessment.requirements[0].id, 'R1');
+  assert.match(f.read().comments.at(-1).body, /Physical verification: not-required/);
+});
+
+test('inline review edits invalidate an in-flight result', t => {
+  const f = use(t, {issue: {...issue, pull_request: {}}, eventName: 'pull_request_target',
+    event: {action: 'opened', pull_request: pr, sender: user}});
+  success(f.run('intake')); success(f.run('prepare'));
+  f.update({inlineComments: [{id: 15, user, body: 'A new concrete concern', updated_at: '2026-10-18', commit_id: head}]});
+  success(f.run('report')); assert.match(f.read().comments.at(-1).body, /Outdated/);
+});
+
+test('trusted synchronize starts a review but another contributor cannot trigger that automatic path', t => {
+  const owner = {...policy.trustedMaintainers[0], type: 'User'};
+  for (const actor of [owner, user]) {
+    const f = use(t, {issue: {...issue, user: owner, pull_request: {}}, eventName: 'pull_request_target',
+      event: {action: 'synchronize', pull_request: pr, sender: actor}});
+    const r = f.run('intake'); success(r);
+    assert.equal(r.outputs.accepted, actor === owner ? 'true' : 'false');
+  }
+});
+
+test('invented related-item references fail structured publication', t => {
+  const f = use(t, {related: [{number: 30, title: 'History persistence', body: 'Related behavior', state: 'open'}]});
+  success(f.run('intake'));
+  const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
+  const assessment = {scope: 'unknown', device: 'not-required', requirements: [], gaps: [], architecture: [],
+    related: [{number: 999, relationship: 'possible-duplicate', reason: 'Invented'}]};
+  assert.notEqual(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, assessment})}).status, 0);
+  assert.match(f.read().comments.at(-1).body, /Failed/);
 });
