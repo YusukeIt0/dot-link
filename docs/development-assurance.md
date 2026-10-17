@@ -66,6 +66,8 @@ human discussion, formal review or inline feedback change invalidates the review
 receipt. Update the record and re-review after a substantive change. The latest
 trusted record wins, including a malformed or stale one: an older passing record
 cannot silently replace it. Failure and unknown evidence are not passes.
+Both original authorship and the current revision's editor are authenticated;
+editing someone else's acceptance comment does not inherit their authority.
 
 The updated workflow starts re-review on trusted-author pushes and trusted
 acceptance-comment creation/editing, in addition to existing review requests.

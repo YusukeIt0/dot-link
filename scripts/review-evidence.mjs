@@ -32,6 +32,30 @@ export function readMetadata(api, path, ref) {
 }
 export const trustedUser = user => user?.type === 'User' && policy.trustedMaintainers.some(
   row => row.id === user.id && row.login === user.login);
+export const commentRevisionQuery = `query($id:ID!) { node(id:$id) { ... on IssueComment {
+  id body updatedAt lastEditedAt
+  author { __typename login ... on User { databaseId } ... on Bot { databaseId } }
+  editor { __typename login ... on User { databaseId } ... on Bot { databaseId } }
+} } }`;
+const actorIdentity = actor => actor && ({id: actor.databaseId, type: actor.__typename,
+  login: actor.__typename === 'Bot' ? actor.login.replace(/\[bot\]$/, '') + '[bot]' : actor.login});
+// REST's user field identifies the original author, even after another writer
+// edits the comment. Compare the body across APIs and authenticate its last editor.
+export function authenticateComments(rows, readNode, botId) {
+  return rows.map(row => {
+    const relevant = row.body?.startsWith(acceptanceMarker) && trustedUser(row.user) ||
+      row.body?.startsWith('<!-- dot-link-opus-review:v1 -->') && row.user?.type === 'Bot' &&
+      row.user.login === 'dotsweeper[bot]' && String(row.user.id) === String(botId);
+    if (!relevant) return row;
+    if (!row.node_id || typeof readNode !== 'function') return {...row, revision_verified: false};
+    const node = readNode(row.node_id);
+    const author = actorIdentity(node?.author), editor = actorIdentity(node?.editor);
+    const same = node?.id === row.node_id && node.body === row.body && node.updatedAt === row.updated_at &&
+      author?.id === row.user.id && author.login === row.user.login && author.type === row.user.type;
+    const revision = node?.lastEditedAt === null ? author : editor;
+    return {...row, revision_verified: !!(same && revision), revision_author: revision};
+  });
+}
 
 export function scopeDigest(issue, comments) {
   return hash({number: issue.number, title: issue.title, body: issue.body, state: issue.state,
@@ -90,6 +114,8 @@ export function acceptanceFromComments(comments, head) {
   const row = comments.filter(x => trustedUser(x.user) && x.body?.startsWith(acceptanceMarker)).at(-1);
   if (!row) return {status: 'missing', reason: 'No acceptance record from a configured maintainer.'};
   const base = {comment_id: row.id, author: row.user.login};
+  if (!row.revision_verified || !trustedUser(row.revision_author)) return {...base, status: 'invalid',
+    reason: 'The current acceptance revision is not authenticated to a configured maintainer.'};
   try {
     if (Buffer.byteLength(row.body) > 60_000) throw new Error('Acceptance record is too large.');
     const match = row.body.match(/^<!-- dot-link-acceptance:v1 -->\s*```json\s*\n([\s\S]+)\n```\s*$/);
@@ -133,7 +159,9 @@ export function gatherContext(snapshot, api, paginate) {
     if (issue.pull_request || issue.state !== 'open' || digest !== record.scope.digest) {
       context.acceptance = {...context.acceptance, status: 'stale', reason: 'The agreed scope issue changed or is no longer open.'};
     }
-    context.scope = {number: issue.number, title: issue.title, body: issue.body, digest};
+    context.scope = {number: issue.number, title: issue.title, body: issue.body, digest,
+      discussion: comments.filter(x => x.user?.type !== 'Bot').map(x => ({id: x.id,
+        author: x.user?.login, body: x.body, updated_at: x.updated_at}))};
     // Reuse only an ancestor's observations with unchanged runtime. Do not ask
     // testers to repeat a device session merely for docs/tests/version metadata.
     for (const evidence of record.evidence.filter(x => ['runtime', 'device'].includes(x.kind))) {

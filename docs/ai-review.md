@@ -9,7 +9,8 @@ next steps; maintainers decide what to adopt, close or merge.
 - A new issue starts a review, including issues from external contributors.
 - A non-draft PR targeting `main` starts a review, including fork PRs.
 - Marking a draft PR ready starts its first review.
-- Further pushes and ordinary comments do not automatically rerun dotsweeper.
+- Pushes by configured trusted authors start re-review. Trusted acceptance-record
+  creation/editing also starts re-review; ordinary comments do not.
 - The author or a maintainer with write access can request another review by
   posting this exact comment on the open issue or PR:
 
@@ -82,8 +83,8 @@ help use English.
 
 Issue review reads the description, human comments, current public code and
 docs. It distinguishes evidence, possible causes, missing information and
-product decisions. Related issues are not comprehensively searched in this
-initial version; include relevant links and summarize their connection.
+product decisions. Related discovery is bounded to up to eight candidates from
+the latest 100 updated entries; include relevant links and summarize their connection.
 
 PR review reads the diff, discussion and base code for concrete regressions,
 including history retention, lost/duplicate delivery, reconnect/stop behavior,
@@ -99,7 +100,10 @@ approves, merges, implements or closes an item. Issue labeling follows the bound
 becomes mandatory is a future maintainer decision, informed by actual use.
 
 Input limits are 150 KB of issue/PR text and human discussion, 250 KB of PR diff,
-and 50 changed files. Oversized inputs produce an explicit incomplete status,
+60 KB of evidence/related context, and 50 changed files. Human scope-issue
+discussion is included with its body. Rendered output is bounded before posting;
+the machine receipt contains compact decisions, with explanations in visible prose.
+Oversized inputs produce an explicit incomplete status,
 not a partial clean review. Each model job has a 15-minute timeout and 40-turn
 limit. There is no automatic retry or model fallback. Failed authentication,
 usage exhaustion or invalid results must not be interpreted as successful review.
@@ -162,6 +166,13 @@ validate the target, requester, input revision and structured output. Comments
 cannot supply arbitrary prompts, commands or a model choice. Public issue/PR
 content is sent to Anthropic for review, and results appear publicly on GitHub.
 Do not submit secrets or private conversations in an issue or PR.
+
+Current review and acceptance comment revisions are authenticated using GitHub's
+GraphQL last-editor identity as well as original authorship. Their exact body and
+update time must match the REST snapshot. Another repository writer editing a bot
+or maintainer comment cannot inherit that original author's authority. API access
+failure or inconsistent snapshots fail closed. See [development assurance](development-assurance.md)
+for evidence records and [automatic merging](automatic-merging.md) for the disabled coordinator.
 
 The pinned official Claude Code Action uses the read-only workflow `github_token`.
 A private GitHub App named `dotsweeper`, installed only on this public repository,

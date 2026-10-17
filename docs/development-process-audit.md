@@ -97,12 +97,46 @@ exists in code. Reconcile those branch-specific passages with the policy decisio
 
 ## Independent-review comparison and validation
 
-Compare Dotsweeper and an independent model on the same frozen PR commit before
-sharing findings. Record reproducible unique findings, overlap, rejected findings,
-wall time and limitations in the PR. Fix valid findings regardless of severity.
-One control-plane PR cannot establish general precision or a routine cost benefit.
-The [assurance guide](development-assurance.md) defines the optional P0/P1
-comparison extension without installing another permanent reviewer.
+The initial comparison used frozen commit `3e8efcb1d6803e709c61b7cfac3e9a9fd81482c1`
+in [PR #74](https://github.com/YusukeIt0/dot-link/pull/74). Reviewers did not see
+each other's findings before their first reports. Dotsweeper's existing prompt
+used its configured `claude-opus-5-5`; the separate reviewer used GPT-6-astra.
+
+| Reviewer | Initial findings | Incremental evidence | Wall time |
+| --- | --- | --- | --- |
+| Dotsweeper | Oversized published comments; non-acting events can displace a queued review | Concurrency exposure was additional to the other reviewer | 186 s workflow; 143 s model step ([run](https://github.com/YusukeIt0/dot-link/actions/runs/39064887553)) |
+| GPT-6-astra | Editable comment attribution; scope discussion omitted; oversized published comments | Two additional locally reproduced evidence/authenticity gaps | 160 s, including source review and local checks |
+
+There were four distinct initial findings, one overlap, and no rejected initial
+finding after adjudication. Counts alone are not the benefit: the additional
+review demonstrated that editing a bot-authored quality marker could change a
+held decision to eligible, and that a scope-comment constraint was absent from
+the model context. Both were fixed. No live unauthorized edit/merge was attempted
+or observed. The comment-size reproduction produced 72,768 characters from a
+30,774-byte valid model result; compact decisions and a final output bound fix it.
+The scheduling exposure follows the documented one-pending-run concurrency rule;
+live scheduling was not reproduced. Obvious non-acting events now use separate
+groups. A follow-up review caught a whitespace-command classification mismatch,
+also corrected to the documented exact command syntax.
+
+The current revision is authenticated through GraphQL's original author and last
+editor, with body/update-time equality against REST. Live API reads confirmed
+that a completed Dotsweeper comment identifies the bot as both author and editor.
+Tests cover edits by a different repository writer and inconsistent API snapshots.
+Source: [GitHub IssueComment schema](https://docs.github.com/en/graphql/reference/issues#issuecomment).
+
+This sample justifies retaining an optional independent second review for
+consequential fixes/control changes, not a permanent reviewer on every PR.
+One control-plane PR cannot establish general precision, recall or cost benefit.
+No monetary cost was measured. The [assurance guide](development-assurance.md)
+defines the optional P0/P1 extension without installing another service.
+
+Initial cloud CI took 121 s ([run](https://github.com/YusukeIt0/dot-link/actions/runs/39064887581)),
+versus the historical 78 s median; this is not a matched performance experiment.
+The new workflow-lint job took 9 s, including a 4 s checker step. Unit tests took
+66 s in that run versus 35 s in the cited historical run. Additional fixtures and
+runner variation are not isolated, so no overall speedup is claimed. The lint
+step provides earlier configuration detection; full-context review remains.
 
 Current PR checks and the bounded comparison belong in the PR evidence record.
 The new default-branch review prompt and inactive coordinator require live

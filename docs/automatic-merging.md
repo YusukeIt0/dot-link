@@ -22,6 +22,8 @@ publication remain separate decisions.
   Skipped, pending, missing or failed jobs never count as passes.
 - A verified Dotsweeper receipt for current head/main, description, discussion,
   inline/formal review and agreed scope; all intake/review/report jobs succeeded.
+  GraphQL last-editor metadata authenticates the current comment revision; original
+  authorship alone is insufficient after another repository writer edits it.
 - No technical findings, changes-requested review, missing evidence, unverified
   requirement, stale scope, or unresolved product decision. Runtime-affecting
   paths require applicable physical evidence independently of model wording.

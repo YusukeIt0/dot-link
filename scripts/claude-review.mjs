@@ -2,7 +2,7 @@ import {validateTriage, planLabels} from './review-labels.mjs';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {acceptanceMarker, trustedUser, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion} from './review-evidence.mjs';
+import {acceptanceMarker, trustedUser, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 if (repo !== 'YusukeIt0/dot-link') throw new Error('This workflow is restricted to public Dot Link');
@@ -28,7 +28,8 @@ if (['intake', 'report'].includes(mode) && !process.env.REVIEW_WRITE_TOKEN) {
 const owned = row => String(row.user?.id) === botId && row.user?.login === 'dotsweeper[bot]' && row.user?.type === 'Bot' && row.body?.startsWith(marker);
 function comments() {
   const pages = JSON.parse(gh(['api', `${endpoint}/comments?per_page=100`, '--paginate', '--slurp']));
-  return pages.flat();
+  return authenticateComments(pages.flat(), id => JSON.parse(gh(['api', 'graphql', '-f',
+    `query=${commentRevisionQuery}`, '-F', `id=${id}`])).data.node, botId);
 }
 function snapshot() {
   const issue = get(endpoint);
@@ -93,7 +94,7 @@ function authorized(s) {
   if (name === 'issue_comment') {
     const live = get(`${root}/issues/comments/${event.comment.id}`);
     const acceptanceUpdate = s.pr && trustedUser(actor) && live.body?.startsWith(acceptanceMarker);
-    if (live.user?.id !== actor.id || (live.body?.trim() !== '/dotlink review' && !acceptanceUpdate) || live.issue_url !== `https://api.github.com/${endpoint}`) return false;
+    if (live.user?.id !== actor.id || (live.body !== '/dotlink review' && !acceptanceUpdate) || live.issue_url !== `https://api.github.com/${endpoint}`) return false;
     if (actor.id === s.issue.user.id) return true;
     const p = get(`${root}/collaborators/${encodeURIComponent(actor.login)}/permission`);
     return ['admin', 'maintain', 'write'].includes(p.permission);
@@ -148,7 +149,11 @@ function render(s) {
     } catch { throw new InvalidResult('Invalid evidence assessment'); }
   }
   const acceptance = context?.acceptance;
-  const quality = {version: 1, findings: result.findings.length, assessment: assessment || null,
+  // Only machine decisions belong in the receipt. Explanations appear once below.
+  const decision = assessment && {...assessment,
+    requirements: assessment.requirements.map(x => ({id: x.id, status: x.status, reason: 'See published assessment.'})),
+    gaps: assessment.gaps.map((_, i) => `Gap ${i + 1}; see published assessment.`), architecture: [], related: []};
+  const quality = {version: 1, findings: result.findings.length, assessment: decision || null,
     acceptance: acceptance ? {status: acceptance.status, comment_id: acceptance.comment_id,
       digest: acceptance.digest, scope_digest: context.scope?.digest} : null};
   const qualityMarker = `<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`;
@@ -177,6 +182,9 @@ function render(s) {
     `### Scope and limitations\n\n${safeText(result.limitations)}`,
     'Advisory static review; no tests or physical-device checks were run. Maintainers decide adoption and merging.', help,
   ].join('\n\n');
+  // Reserve space for ownership markers and the bounded label-result footer.
+  // Check rendered UTF-8 bytes too: sanitization can expand untrusted text.
+  if (Buffer.byteLength(body) > 55_000) throw new InvalidResult('Rendered review is too large');
   return {body, triage};
 }
 

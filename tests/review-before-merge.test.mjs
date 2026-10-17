@@ -5,7 +5,7 @@ import {latestReceipt, assertReady, fingerprintPR} from '../scripts/check-review
 const head = 'b'.repeat(40), main = 'a'.repeat(40);
 const prData = {number:18,title:'A change',body:'Details',user:{login:'author'},state:'open',draft:false,base:{ref:'main'},head:{sha:head},mergeable:true,mergeable_state:'clean'};
 const fingerprint = fingerprintPR(prData, main, []);
-const comment = {id:10,user:{id:123,login:'dotsweeper[bot]',type:'Bot'},body:
+const comment = {id:10,revision_verified:true,revision_author:{id:123,login:'dotsweeper[bot]',type:'Bot'},user:{id:123,login:'dotsweeper[bot]',type:'Bot'},body:
   `<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:456:1 -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=${head};main=${main};input=${fingerprint} -->\n\nNo findings.`};
 const ready = () => ({
   pr:structuredClone(prData),main,comments:[comment],

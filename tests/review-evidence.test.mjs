@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acceptanceMarker, policy, hash, scopeDigest, acceptanceFromComments, validateAcceptance,
-  validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, versionOnly, trustedUser} from '../scripts/review-evidence.mjs';
+  validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, versionOnly, trustedUser, authenticateComments} from '../scripts/review-evidence.mjs';
 
 const head = 'b'.repeat(40), before = 'a'.repeat(40);
 const owner = {...policy.trustedMaintainers[0], type: 'User'};
@@ -9,7 +9,7 @@ const issue = {number: 73, title: 'Improve state ownership', body: 'Agreed behav
 const record = () => ({version: 1, head, scope: {approved: true, issue: 73, digest: scopeDigest(issue, [])},
   requirements: [{id: 'R1', expected: 'State is preserved'}],
   evidence: [{kind: 'automated', result: 'pass', requirements: ['R1'], reference: 'test run', details: 'Persistence assertions pass'}], product_decisions: []});
-const row = (value = record()) => ({id: 42, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(value)}\n\`\`\``});
+const row = (value = record()) => ({id: 42, user: owner, revision_verified: true, revision_author: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(value)}\n\`\`\``});
 const assessment = () => ({scope: 'aligned', device: 'not-required', requirements: [{id: 'R1', status: 'covered', reason: 'Behavior tested'}], gaps: [], architecture: [], related: []});
 
 test('acceptance authenticates numeric identity and rejects newest malformed/stale declarations', () => {
@@ -26,6 +26,21 @@ test('scope changes invalidate the declaration while bot triage does not', () =>
   assert.notEqual(scopeDigest({...issue, body: 'New UX'}, []), scopeDigest(issue, []));
   assert.notEqual(scopeDigest(issue, [{id: 1, user: owner, body: 'New constraint'}]), scopeDigest(issue, []));
   assert.equal(scopeDigest(issue, [{id: 2, user: {type: 'Bot'}, body: 'Triage'}]), scopeDigest(issue, []));
+});
+
+test('latest editor and the exact cross-API body are authenticated, not just original authorship', () => {
+  const r = {...row(), node_id: 'comment42', updated_at: '2026-10-17T20:00:00Z'};
+  const actor = {__typename: 'User', login: owner.login, databaseId: owner.id};
+  const node = {id: r.node_id, body: r.body, updatedAt: r.updated_at, lastEditedAt: null, author: actor, editor: null};
+  const read = n => authenticateComments([r], () => n, 98765)[0];
+  assert.equal(acceptanceFromComments([read(node)], head).status, 'ready');
+  assert.equal(acceptanceFromComments([read({...node, lastEditedAt: r.updated_at, editor: actor})], head).status, 'ready');
+  for (const n of [null, {...node, body: 'changed between API reads'}, {...node, updatedAt: 'new'},
+    {...node, lastEditedAt: r.updated_at},
+    {...node, lastEditedAt: r.updated_at, editor: {...actor, databaseId: 1, login: 'other-writer'}}]) {
+    assert.equal(acceptanceFromComments([read(n)], head).status, 'invalid');
+  }
+  assert.equal(acceptanceFromComments(authenticateComments([r], undefined, 98765), head).status, 'invalid');
 });
 
 test('records require traceable evidence without pretending unknown/failed results passed', () => {
@@ -65,7 +80,7 @@ function contextFor(r, changes = {}) {
     if (path.startsWith('actions/')) return {workflow_runs: []};
     throw new Error(`Unexpected API: ${path}`);
   };
-  return gatherContext({pr: {head: {sha: head}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => []);
+  return gatherContext({pr: {head: {sha: head}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => changes.comments || []);
 }
 test('evidence reuse requires ancestor code and a bounded non-runtime diff', () => {
   const r = record(); r.evidence.push({kind: 'device', result: 'pass', requirements: ['R1'],
@@ -80,6 +95,15 @@ test('evidence reuse requires ancestor code and a bounded non-runtime diff', () 
   }
   assert.equal(contextFor(record(), {issue: {...issue, state: 'closed'}}).acceptance.status, 'stale');
   assert.equal(contextFor(record(), {issue: {...issue, body: 'Edited'}}).acceptance.status, 'stale');
+});
+
+test('scope constraints in human comments reach the reviewer instead of only changing a digest', () => {
+  const comments = [{id: 7, user: owner, body: 'Additional agreed constraint: never upload raw audio', updated_at: '2026-10-17'}];
+  const r = record(); r.scope.digest = scopeDigest(issue, comments);
+  const context = contextFor(r, {comments});
+  assert.equal(context.acceptance.status, 'ready');
+  assert.equal(context.scope.discussion[0].body, comments[0].body);
+  assert.equal(context.scope.discussion[0].author, owner.login);
 });
 
 test('version-only exception does not allow dependency, script, or permission changes', () => {

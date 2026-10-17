@@ -4,7 +4,7 @@ import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {latestReceipt, assertReady} from './check-review-before-merge.mjs';
-import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata} from './review-evidence.mjs';
+import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 export const repository = 'YusukeIt0/dot-link';
 export {versionOnly};
@@ -87,8 +87,8 @@ export function collect(number, client) {
     throw new Error('PR is not open, ready and targeting main.');
   }
   const main = api('commits/main').sha;
-  const comments = pages(`issues/${number}/comments?per_page=100`);
   const botId = api('actions/variables/DOTSWEEPER_BOT_ID').value;
+  const comments = authenticateComments(pages(`issues/${number}/comments?per_page=100`), client.readNode, botId);
   const receipt = latestReceipt(comments, botId);
   const run = api(`actions/runs/${receipt.runId}`);
   const jobs = pages(`actions/runs/${receipt.runId}/jobs?filter=latest&per_page=100`).flatMap(x => x.jobs);
@@ -139,6 +139,7 @@ function githubClient(env) {
   const command = (args, options = {}) => JSON.parse(execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, ...options}));
   return {
     api: path => command(['api', `repos/${repository}/${path}`]),
+    readNode: id => command(['api', 'graphql', '-f', `query=${commentRevisionQuery}`, '-F', `id=${id}`]).data.node,
     pages: path => command(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat(),
     checks: number => {
       try { return command(['pr', 'checks', String(number), '--repo', repository, '--required', '--json', 'name,state,bucket']); }

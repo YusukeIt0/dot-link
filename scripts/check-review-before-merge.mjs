@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {scopeRevision, reviewDiscussion} from './review-evidence.mjs';
+import {scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repository = 'YusukeIt0/dot-link';
 const marker = '<!-- dot-link-opus-review:v1 -->';
@@ -12,6 +12,10 @@ export function latestReceipt(comments, botId) {
   const row = comments.filter(x => String(x.user?.id) === String(botId) &&
     x.user?.login === 'dotsweeper[bot]' && x.user?.type === 'Bot' && x.body?.startsWith(marker)).at(-1);
   if (!row) throw new Error('No verified dotsweeper comment.');
+  if (!row.revision_verified || row.revision_author?.type !== 'Bot' ||
+      row.revision_author.login !== 'dotsweeper[bot]' || String(row.revision_author.id) !== String(botId)) {
+    throw new Error('Current review comment revision is not authenticated to dotsweeper.');
+  }
   const match = row.body.match(/^<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:([1-9]\d*):([1-9]\d*) -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=([a-f0-9]{40});main=([a-f0-9]{40});input=([a-f0-9]{64}) -->/);
   if (!match) throw new Error('Latest review is incomplete, outdated, failed, or predates revision receipts.');
   const baseMatch = row.body.slice(match[0].length).match(/^\n\n<!-- dot-link-review-base:ref=([^;\s]+);sha=([a-f0-9]{40}) -->/);
@@ -89,7 +93,8 @@ async function main() {
   };
   const api = path => gh(['api', `repos/${repository}/${path}`]);
   const botId = api('actions/variables/DOTSWEEPER_BOT_ID').value;
-  const readComments = () => gh(['api', `repos/${repository}/issues/${number}/comments?per_page=100`, '--paginate', '--slurp']).flat();
+  const readNode = id => gh(['api', 'graphql', '-f', `query=${commentRevisionQuery}`, '-F', `id=${id}`]).data.node;
+  const readComments = () => authenticateComments(gh(['api', `repos/${repository}/issues/${number}/comments?per_page=100`, '--paginate', '--slurp']).flat(), readNode, botId);
   const receipt = latestReceipt(readComments(), botId);
   const run = api(`actions/runs/${receipt.runId}`);
   const jobs = gh(['api', `repos/${repository}/actions/runs/${receipt.runId}/jobs?filter=latest&per_page=100`, '--paginate', '--slurp']).flatMap(x => x.jobs);

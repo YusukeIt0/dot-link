@@ -14,7 +14,7 @@ function fixture() {
   const record = {version: 1, head, scope: {approved: true, issue: 73, digest: scopeDigest(issue, [])},
     requirements: [{id: 'R1', expected: 'Describe the existing behavior accurately'}],
     evidence: [{kind: 'static', result: 'pass', requirements: ['R1'], reference: 'Source inspection', details: 'Guide matches source'}], product_decisions: []};
-  const comments = [{id: 42, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``}];
+  const comments = [{id: 42, node_id: 'comment42', updated_at: '2026-10-17', revision_verified: true, revision_author: owner, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``}];
   const pr = {number: 74, title: 'Document behavior', body: 'Closes #73', user: {...owner}, state: 'open', draft: false,
     changed_files: 1, base: {ref: 'main'}, head: {sha: head, ref: 'work', repo: {full_name: repository}}, mergeable: true, mergeable_state: 'clean'};
   const scope = {number: 73, digest: record.scope.digest};
@@ -22,7 +22,7 @@ function fixture() {
   const acceptance = {status: 'ready', comment_id: 42, author: owner.login, record, digest: hash(record)};
   const assessment = {scope: 'aligned', device: 'not-required', requirements: [{id: 'R1', status: 'covered', reason: 'Matches source'}], gaps: [], architecture: [], related: []};
   const quality = {version: 1, findings: 0, assessment, acceptance: {status: 'ready', comment_id: 42, digest: hash(record), scope_digest: scope.digest}};
-  comments.push({id: 50, user: {id: 98765, login: 'dotsweeper[bot]', type: 'Bot'}, body:
+  comments.push({id: 50, node_id: 'comment50', updated_at: '2026-10-17', revision_verified: true, revision_author: {id: 98765, login: 'dotsweeper[bot]', type: 'Bot'}, user: {id: 98765, login: 'dotsweeper[bot]', type: 'Bot'}, body:
     `<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:456:1 -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=${head};main=${main};input=${fingerprint} -->\n\n<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`});
   const run = {id: 456, path: '.github/workflows/claude-review.yml', repository: {full_name: repository}, status: 'completed', conclusion: 'success', run_attempt: 1};
   const jobs = ['intake', 'review', 'report'].map(name => ({name, status: 'completed', conclusion: 'success'}));
@@ -38,7 +38,12 @@ function fixture() {
 }
 function clientFor(s, change) {
   let reads = 0; const merges = [];
-  return {merges, api(path) {
+  return {merges, readNode(id) {
+    const r = s.comments.find(x => x.node_id === id);
+    const actor = user => ({__typename: user.type, login: user.login, databaseId: user.id});
+    return {id, body: r.body, updatedAt: r.updated_at, lastEditedAt: r.editor ? r.updated_at : null,
+      author: actor(r.user), editor: r.editor ? actor(r.editor) : null};
+  }, api(path) {
     if (path === 'pulls/74') { reads++; change?.(s, reads); return structuredClone(s.pr); }
     if (path === 'commits/main') return {sha: s.main};
     if (path === 'issues/73') return structuredClone(s.issue);
@@ -94,6 +99,16 @@ test('latest associated CI wins even when a previous run succeeded', () => {
   client.pages = path => path.startsWith('actions/runs/790/jobs') ? [{jobs: [{name: 'test', status: 'completed', conclusion: 'failure'}]}] : original(path);
   assert.equal(collect(74, client).ciRun.id, 790);
   assert.equal(evaluate(collect(74, client)).eligible, false);
+});
+test('editing an authentic bot receipt or maintainer record as another writer cannot authorize merging', () => {
+  for (const id of [42, 50]) {
+    const s = fixture();
+    s.comments.find(x => x.id === id).editor = {id: 123, login: 'other-writer', type: 'User'};
+    const client = clientFor(s);
+    if (id === 50) assert.throws(() => collect(74, client), /revision is not authenticated/);
+    else assert.equal(evaluate(collect(74, client)).eligible, false);
+    assert.equal(client.merges.length, 0);
+  }
 });
 test('activation is separately required, including trusted workflow ref', () => {
   assert.doesNotThrow(() => assertActivation(env, policy.activationValue));
