@@ -126,6 +126,17 @@ evidence reuse. A stale-record requirement returned by the model previously lost
 the whole report; publication now flags it as an evidence gap while the merge gate
 remains strict. Both paths have regression coverage. Actual model frequency of
 the latter case is unknown; the malformed/stale-response behavior is reproducible.
+A further review of `bba100b` found that an unsupported advisory relationship
+withheld otherwise valid technical findings, including when a PR cites its own
+closing issue despite having no supplied relationship candidates. Unsupported or
+malformed relationship rows are now omitted, with lifecycle coverage for issues
+and PRs. The quality receipt still contains no advisory relationships; evidence
+gaps and requirement validation remain strict. Live model frequency is unknown.
+The optional suggestion to tolerate malformed evidence gaps was not adopted:
+gaps affect merge eligibility and must fail closed. The pinned zizmor version is
+installed from PyPI without a hash-locked dependency set; that supply-chain limit
+remains in the read-only lint job and is not evidence of an observed compromise.
+
 Unrelated REST metadata can conservatively hold a merge candidate. That optional
 optimization is deferred until the inactive trial measures its frequency; it
 cannot authorize an unsafe merge.

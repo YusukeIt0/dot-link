@@ -401,14 +401,23 @@ test('trusted synchronize starts a review but another contributor cannot trigger
   }
 });
 
-test('invented related-item references fail structured publication', t => {
-  const f = use(t, {related: [{number: 30, title: 'History persistence', body: 'Related behavior', state: 'open'}]});
-  success(f.run('intake'));
-  const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
-  const assessment = {scope: 'unknown', device: 'not-required', requirements: [], gaps: [], architecture: [],
-    related: [{number: 999, relationship: 'possible-duplicate', reason: 'Invented'}]};
-  assert.notEqual(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, assessment})}).status, 0);
-  assert.match(f.read().comments.at(-1).body, /Failed/);
+test('unsupported issue and PR relationships preserve technical findings without publishing invented links', t => {
+  for (const isPR of [false, true]) {
+    const f = use(t, isPR ? {issue: {...issue, body: 'Closes #73', pull_request: {}},
+      eventName: 'pull_request_target', event: {action: 'opened', pull_request: pr, sender: user}} :
+      {related: [{number: 30, title: 'History persistence', body: 'Related behavior', state: 'open'}]});
+    success(f.run('intake'));
+    const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
+    const assessment = {scope: 'unknown', device: 'not-required', requirements: [], gaps: [], architecture: [],
+      related: [{number: isPR ? 73 : 999, relationship: 'possibly-resolved', reason: 'Unsupported relationship'}]};
+    success(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, assessment})}));
+    const body = f.read().comments.at(-1).body;
+    assert.match(body, /Complete/); assert.match(body, /State lost/);
+    assert.doesNotMatch(body, /Unsupported relationship/);
+    const quality = JSON.parse(Buffer.from(body.match(/<!-- dot-link-review-quality:([A-Za-z0-9_-]+) -->/)[1], 'base64url').toString());
+    assert.deepEqual(quality.assessment.related, []);
+    assert.equal(quality.findings, result.findings.length);
+  }
 });
 
 test('large valid assessments publish one explanation and a compact decision receipt', t => {

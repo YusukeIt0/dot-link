@@ -215,11 +215,10 @@ export function validateAssessment(value, context, safe = value => value, {allow
     return Object.fromEntries(['file', 'signal', 'trigger', 'impact', 'next_step'].map(k => [k, safe(x[k])]));
   });
   const candidates = new Set(context?.related?.map(x => x.number) || []);
-  const related = value.related.map(x => {
-    if (!candidates.has(x.number) || !['related', 'possible-duplicate', 'dependency', 'possibly-resolved'].includes(x.relationship) ||
-        !text(x.reason)) throw new Error('Related issue must cite a supplied candidate.');
-    return {number: x.number, relationship: x.relationship, reason: safe(x.reason)};
-  });
+  // Relationships are advisory: discard unsupported rows without losing findings.
+  const related = value.related.filter(x => x && candidates.has(x.number) &&
+    ['related', 'possible-duplicate', 'dependency', 'possibly-resolved'].includes(x.relationship) && text(x.reason))
+    .map(x => ({number: x.number, relationship: x.relationship, reason: safe(x.reason)}));
   return {scope: unknownRequirement ? 'unknown' : value.scope, device: value.device, requirements, gaps, architecture, related};
 }
 

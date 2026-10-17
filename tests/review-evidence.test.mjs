@@ -61,10 +61,9 @@ test('records require traceable evidence without pretending unknown/failed resul
   }
 });
 
-test('review cannot invent requirements or issue references; concrete architecture advice is non-blocking', () => {
+test('review cannot invent requirements; concrete architecture advice is non-blocking', () => {
   const context = {acceptance: acceptanceFromComments([row()], head), related: [{number: 9}]};
   for (const change of [a => a.requirements[0].id = 'R2', a => a.requirements.push(a.requirements[0]),
-    a => a.related.push({number: 99, relationship: 'dependency', reason: 'Invented'}),
     a => a.architecture.push({file: 'src/main.ts', signal: 'Long'})]) {
     const a = assessment(); change(a); assert.throws(() => validateAssessment(a, context));
   }
@@ -132,4 +131,14 @@ test('related discovery is bounded, excludes self/PRs and prioritizes explicit l
   const found = relatedCandidates({...issue, body: 'See #1'}, rows);
   assert.equal(found.length, 8); assert.equal(found[0].number, 1);
   assert.ok(found.every(x => x.body.length <= 1800 && x.number !== 73 && x.number !== 90));
+});
+
+test('unsupported advisory relationships are omitted while supported evidence stays intact', () => {
+  const a = assessment();
+  a.related = [null, {number: 99, relationship: 'dependency', reason: 'Invented'},
+    {number: 9, relationship: 'dependency', reason: 'Verified candidate'},
+    {number: 9, relationship: 'invalid', reason: 'Unsupported'}];
+  const checked = validateAssessment(a, {acceptance: acceptanceFromComments([row()], head), related: [{number: 9}]});
+  assert.deepEqual(checked.related, [a.related[2]]);
+  assert.deepEqual(checked.requirements, a.requirements);
 });

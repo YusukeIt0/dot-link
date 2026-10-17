@@ -193,6 +193,7 @@ jobs:
             introduced defect belongs in findings, not non-blocking architecture advice.
             For issue relationships use only supplied candidate numbers. Give evidence
             for possible duplicate/dependency/resolution; discovery is not exhaustive.
+            PR contexts have no relationship candidates: return an empty related array.
             Never close, merge, implement or authorize work because of a relationship.
             For issues without acceptance records use empty requirement rows and
             scope unknown; do not invent acceptance gaps merely because this is an issue.
