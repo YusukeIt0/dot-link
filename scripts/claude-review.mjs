@@ -145,25 +145,29 @@ function render(s) {
       if (process.env.REVIEW_CONTEXT_JSON.length > 80_000) throw new Error('Oversized context');
       context = JSON.parse(Buffer.from(process.env.REVIEW_CONTEXT_JSON, 'base64url').toString('utf8'));
       if (context.version !== 1 || context.fingerprint !== s.fingerprint) throw new Error('Context revision changed');
-      assessment = validateAssessment(result.assessment, context, safeText, {allowUnknownRequirements: true});
+      // Issue investigation is not PR acceptance. Ignore model-generated acceptance
+      // fields for issues; retain technical findings and grounded advisory content.
+      const input = s.pr ? result.assessment : {...result.assessment,
+        scope: 'unknown', device: 'not-required', requirements: [], gaps: []};
+      assessment = validateAssessment(input, context, safeText, {allowUnknownRequirements: true});
     } catch { throw new InvalidResult('Invalid evidence assessment'); }
   }
   const acceptance = context?.acceptance;
   // Only machine decisions belong in the receipt. Explanations appear once below.
-  const decision = assessment && {...assessment,
+  const decision = s.pr && assessment ? {...assessment,
     requirements: assessment.requirements.map(x => ({id: x.id, status: x.status, reason: 'See published assessment.'})),
-    gaps: assessment.gaps.map((_, i) => `Gap ${i + 1}; see published assessment.`), architecture: [], related: []};
+    gaps: assessment.gaps.map((_, i) => `Gap ${i + 1}; see published assessment.`), architecture: [], related: []} : null;
   const quality = {version: 1, findings: result.findings.length, assessment: decision || null,
     acceptance: acceptance ? {status: acceptance.status, comment_id: acceptance.comment_id,
       digest: acceptance.digest, scope_digest: context.scope?.digest} : null};
   const qualityMarker = `<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`;
   const assessmentBlocks = assessment ? [
-    '### Requirements and verification evidence',
+    ...(s.pr ? ['### Requirements and verification evidence',
     `Scope: ${assessment.scope}. Physical verification: ${assessment.device}.`,
     ...assessment.requirements.map(x => `- **${x.id} — ${x.status}:** ${x.reason}`),
     ...assessment.gaps.map(x => `- Evidence gap: ${x}`),
-    ...(s.pr ? [`Automatic-merge evidence: ${acceptanceBlockers(acceptance, assessment).join(' ') || 'Applicable acceptance records are covered; CI, trust, freshness and protected-path checks remain separate.'}`] : []),
-    'Device/runtime records are attributed observations. This reviewer did not operate a device or run tests.',
+    `Automatic-merge evidence: ${acceptanceBlockers(acceptance, assessment).join(' ') || 'Applicable acceptance records are covered; CI, trust, freshness and protected-path checks remain separate.'}`,
+    'Device/runtime records are attributed observations. This reviewer did not operate a device or run tests.'] : []),
     ...(assessment.architecture.length ? ['### Architecture advice (non-blocking)',
       ...assessment.architecture.map(x => `- **${x.file}:** ${x.signal}\n  Trigger: ${x.trigger}\n  Impact: ${x.impact}\n  Next step: ${x.next_step}`)] : []),
     ...(assessment.related.length ? ['### Related issues (proposals only)',

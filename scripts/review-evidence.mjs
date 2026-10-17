@@ -146,7 +146,7 @@ export function relatedCandidates(issue, rows) {
 }
 
 export function gatherContext(snapshot, api, paginate) {
-  const context = {version: 1, fingerprint: snapshot.fingerprint, related: [], ci: [],
+  const context = {version: 1, kind: snapshot.pr ? 'pull_request' : 'issue', fingerprint: snapshot.fingerprint, related: [], ci: [],
     limitations: ['Related-item discovery is bounded, not an exhaustive search. Device entries are attributed observations, not automated device proof.']};
   if (!snapshot.pr) {
     const rows = api('issues?state=all&per_page=100&sort=updated&direction=desc');
