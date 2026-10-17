@@ -1,16 +1,10 @@
 import { copyFile, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
+import { baseUrl, languages, pageUrl } from '../site/languages.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = resolve(root, '.site/dot-link');
-const baseUrl = 'https://yusukeit0.github.io/dot-link/';
-const languages = [
-  ['en', 'English'], ['ja', '日本語'], ['zh-Hant', '繁體中文'],
-  ['zh-Hans', '简体中文'], ['ko', '한국어'], ['ar', 'العربية'],
-  ['fr', 'Français'], ['de', 'Deutsch'],
-];
-const pageUrl = (lang) => `${baseUrl}${lang === 'en' ? '' : `${lang}/`}`;
 const escapeHtml = (value) => value.replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[char]);

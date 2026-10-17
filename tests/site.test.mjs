@@ -1,17 +1,23 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import test from 'node:test';
+import { baseUrl as base, languages as languageEntries } from '../site/languages.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const output = resolve(root, '.site/dot-link');
-const base = 'https://yusukeit0.github.io/dot-link/';
-const languages = ['en', 'ja', 'zh-Hant', 'zh-Hans', 'ko', 'ar', 'fr', 'de'];
+const languages = languageEntries.map(([code]) => code);
 const urlFor = (lang) => `${base}${lang === 'en' ? '' : `${lang}/`}`;
 
 test('localized static pages are complete, mutually discoverable and use valid local links', () => {
+  assert.equal(new Set(languages).size, languages.length, 'Language codes must be unique');
+  assert.deepEqual(
+    readdirSync(resolve(root, 'site/locales')).filter((file) => file.endsWith('.json')).sort(),
+    languages.map((code) => `${code}.json`).sort(),
+    'Every locale file must have a registered language and every language must have a locale file',
+  );
   execFileSync(process.execPath, ['scripts/build-site.mjs'], { cwd: root });
   const sitemap = readFileSync(resolve(output, 'sitemap.xml'), 'utf8');
   assert.equal((sitemap.match(/<loc>/g) ?? []).length, languages.length);

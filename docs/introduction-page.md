@@ -2,7 +2,7 @@
 
 The introduction site lives in `site/`. English stays at the root URL; Japanese, Traditional Chinese, Simplified Chinese, Korean, Arabic, French and German have their own directories. Keep product claims aligned with the current README and user guide, and equivalent across locales. Link to the English README for detailed setup instead of duplicating instructions. The pages have no application runtime, JavaScript, external fonts, analytics, or additional package dependencies.
 
-`site/index.html` is the shared template. `site/locales/*.json` contains plain-text copy, escaped by the renderer; English is the baseline. The language list in `scripts/build-site.mjs` generates the URLs, reciprocal hreflang links, language navigation and sitemap. There are no automatic language redirects. Arabic uses RTL layout; images, video and English captions are shared.
+`site/index.html` is the shared template. `site/locales/*.json` contains plain-text copy, escaped by the renderer; English is the baseline. `site/languages.mjs` is the single language and base-URL registry, read by both the build and its test. It drives URLs, reciprocal hreflang links, language navigation and the sitemap. The test also checks that locale files and registered languages match. There are no automatic language redirects. Arabic uses RTL layout; images, video and English captions are shared.
 
 ## Preview
 
