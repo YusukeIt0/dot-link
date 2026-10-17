@@ -415,7 +415,8 @@ test('unsupported issue and PR relationships preserve technical findings without
     assert.match(body, /Complete/); assert.match(body, /State lost/);
     assert.doesNotMatch(body, /Unsupported relationship/);
     const quality = JSON.parse(Buffer.from(body.match(/<!-- dot-link-review-quality:([A-Za-z0-9_-]+) -->/)[1], 'base64url').toString());
-    assert.deepEqual(quality.assessment.related, []);
+    if (isPR) assert.deepEqual(quality.assessment.related, []);
+    else assert.equal(quality.assessment, null);
     assert.equal(quality.findings, result.findings.length);
   }
 });
@@ -484,4 +485,48 @@ test('stale-head requirement IDs become explicit gaps without discarding technic
   assert.match(body, /Complete/); assert.match(body, /State lost/); assert.match(body, /R1 — gap/);
   assert.match(body, /not in a current acceptance record/);
   assert.equal(latestReceipt(f.read().comments, 98765).quality.assessment.scope, 'unknown');
+});
+
+
+test('issue publication omits PR acceptance noise but preserves investigation and advisory evidence', t => {
+  const f = use(t, {related: [{number: 30, title: 'History persistence', body: 'Related behavior', state: 'open'}]});
+  success(f.run('intake'));
+  const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
+  const context = JSON.parse(Buffer.from(prepared.outputs.context, 'base64url').toString());
+  assert.equal(context.kind, 'issue');
+  const assessment = {scope: 'needs-product-decision', device: 'missing',
+    requirements: [{id: 'MADE_UP', status: 'gap', reason: 'No acceptance record'}],
+    gaps: ['No current acceptance record was supplied for this issue.'],
+    architecture: [{file: 'src/main.ts', signal: 'Two state writers', trigger: 'Adding another writer', impact: 'Order dependent', next_step: 'Inspect state ownership'}],
+    related: [{number: 30, relationship: 'related', reason: 'Both concern history persistence'}]};
+  success(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, assessment,
+    next_steps: 'Reproduce reopen on the device and record whether history survives.',
+    limitations: 'The reported device behavior remains unverified.'})}));
+  const body = f.read().comments.at(-1).body;
+  assert.match(body, /Complete/); assert.match(body, /State lost/);
+  assert.match(body, /Reproduce reopen on the device/); assert.match(body, /device behavior remains unverified/);
+  assert.match(body, /Two state writers/); assert.match(body, /Both concern history persistence/);
+  assert.doesNotMatch(body, /No current acceptance|No acceptance record|MADE_UP|Requirements and verification|Physical verification|Automatic-merge evidence/);
+  const quality = JSON.parse(Buffer.from(body.match(/<!-- dot-link-review-quality:([A-Za-z0-9_-]+) -->/)[1], 'base64url').toString());
+  assert.equal(quality.assessment, null); assert.equal(quality.acceptance, null);
+  assert.equal(quality.findings, result.findings.length);
+});
+
+test('PR publication retains missing acceptance and physical evidence blockers', t => {
+  const f = use(t, {issue: {...issue, pull_request: {}}, eventName: 'pull_request_target',
+    event: {action: 'opened', pull_request: pr, sender: user}});
+  success(f.run('intake'));
+  const prepared = f.run('prepare', {REVIEW_CONTEXT: '1'}); success(prepared);
+  assert.equal(JSON.parse(Buffer.from(prepared.outputs.context, 'base64url').toString()).kind, 'pull_request');
+  const assessment = {scope: 'unknown', device: 'missing', requirements: [],
+    gaps: ['No current acceptance record was supplied for this PR.'], architecture: [], related: []};
+  success(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, assessment})}));
+  const body = f.read().comments.at(-1).body;
+  assert.match(body, /Requirements and verification evidence/);
+  assert.match(body, /No current acceptance record was supplied for this PR/);
+  assert.match(body, /Physical verification: missing/); assert.match(body, /Automatic-merge evidence:/);
+  const receipt = latestReceipt(f.read().comments, 98765);
+  assert.equal(receipt.quality.assessment.gaps.length, 1);
+  assert.equal(receipt.quality.assessment.device, 'missing');
+  assert.notEqual(receipt.quality.acceptance.status, 'ready');
 });

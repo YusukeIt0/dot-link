@@ -11,6 +11,13 @@ or authorizing main merges, distribution or publication. See the
 
 ## Requirements and evidence
 
+Issue reviews investigate reports and ideas; they do not assess PR acceptance or
+require an acceptance record. The publisher omits PR acceptance fields for issues,
+including any such gaps returned by the model. Concrete investigation unknowns,
+reproduction steps and device checks remain in findings, next steps and limitations;
+grounded architecture and related-issue advice remain available. PR evidence
+assessment and missing-record blockers are unchanged.
+
 The implementing agent keeps a short requirements/evidence mapping in the PR.
 Use observable behavior, not a checklist of internal components. Record test
 results, static inspection, runtime observations, physical observations and unknown
