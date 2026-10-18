@@ -37,7 +37,9 @@ async function launch(options = {}) {
   const clock = {now: () => now, schedule, cancel: id => timers.delete(id)};
   const element = id => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', dataset: {}, checked: false, disabled: false,
-      before() {}, after() {}, setAttribute() {}, removeAttribute() {}, focus() {}, addEventListener() {}, close() {}, pause() {}, showModal() {},
+      before() {}, after() {}, setAttribute() {}, removeAttribute() {}, focus() {}, close() {}, pause() {}, showModal() {},
+      listeners: new Map(), addEventListener(type, callback) { this.listeners.set(type, callback); },
+      dispatchEvent(event) { this.listeners.get(event.type)?.(event); },
       click() { return this.onclick?.(); }});
     return elements.get(id);
   };
@@ -137,6 +139,56 @@ async function launch(options = {}) {
 const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT}};
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
+
+for (const browseHistory of [false, true]) {
+ test(`manual discard restores the ${browseHistory ? 'browsed' : 'latest'} conversation without replay or submission`, async t => {
+  const app = await launch({initialMessages: [proactive('first'), proactive('second')]}); t.after(app.close);
+  if (browseHistory) await app.element('previous').click();
+  const expected = app.element('hud-content').textContent;
+  app.element('transcript').value = 'Unsent draft';
+  await app.evaluate('tts = true;');
+  await app.element('record').click(); await flush();
+  assert.equal(vm.runInContext('recorder.state', app.context), 'recording');
+  await app.element('discard').click(); await flush();
+  await app.advance(1000);
+  assert.equal(app.element('hud-content').textContent, expected);
+  assert.equal(app.physical.get(2), expected);
+  assert.equal(app.element('notice').textContent, '録音を破棄しました。');
+  assert.equal(app.element('transcript').value, 'Unsent draft');
+  assert.equal(app.calls.filter(c => c[0] === 'speech').length, 0);
+  assert.equal(app.networkCalls.some(url => /\/api\/(?:transcribe|utterances)$/.test(url)), false);
+ });
+}
+
+test('manual discard without history keeps the idle prompt', async t => {
+ const app = await launch(); t.after(app.close);
+ await app.element('record').click(); await flush();
+ await app.element('discard').click(); await flush();
+ assert.equal(app.element('hud-content').textContent, '長押しで話してください');
+ assert.equal(app.physical.get(2), '長押しで話してください');
+});
+
+test('discard during transcription restores the conversation and ignores a late transcript', async t => {
+ let resolveTranscript, signal;
+ const response = new Promise(resolve => { resolveTranscript = resolve; });
+ const app = await launch({initialMessages: [proactive('previous')], request: (url, init) => {
+  if (!url.endsWith('/api/transcribe')) return;
+  signal = init.signal;
+  return response;
+ }}); t.after(app.close);
+ app.element('auto-send').checked = true;
+ await app.element('record').click(); await flush();
+ await app.emit({audioEvent: {audioPcm: new Uint8Array(3200)}});
+ await app.element('record').click(); await flush();
+ assert.equal(vm.runInContext('busy', app.context), true);
+ await app.element('discard').click(); await flush();
+ assert.equal(signal.aborted, true);
+ assert.equal(app.physical.get(2), 'Synthetic message previous');
+ resolveTranscript({ok: true, status: 200, json: async () => ({text: 'Cancelled speech'})}); await flush();
+ assert.equal(app.element('hud-content').textContent, 'Synthetic message previous');
+ assert.equal(app.element('transcript').value, '');
+ assert.equal(app.networkCalls.some(url => url.endsWith('/api/utterances')), false);
+});
 
 test('stale local ON cannot speak a fresh reply while native OFF is still restoring', async t => {
   let restore;
@@ -348,9 +400,13 @@ test('language switches preserve the live session, draft, TTS, history position 
   await app.element('tts').click(); await flush();
   const credentials = app.saved.get('g2-device-token');
   const beforeRequests = app.networkCalls.length;
+  app.element('pair-code').value = 'invalid'; app.element('pair-code').oninput();
   for (const locale of ['en', 'ja', 'en']) {
     app.element('language').value = locale; app.element('language').onchange(); await flush();
     assert.equal(app.context.document.documentElement.lang, locale);
+    assert.equal(app.element('pair-notice').textContent, locale === 'en'
+      ? 'The pairing code is invalid or expired. Create a new one on your Mac.'
+      : '接続コードが無効か期限切れです。Macで新しく発行してください。');
     assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : '表示設定');
     assert.match(app.element('tts').textContent, /ON$/);
     assert.equal(app.element('record').disabled, false);
@@ -600,7 +656,8 @@ test('a send response parsed after forgetting cannot restore history or release 
  releaseBody({id:'old',text:'Synthetic pending request',status:'accepted'});await sending;await flush();
  assert.equal(vm.runInContext('conversation.count',app.context),0);
  assert.equal(vm.runInContext('busy',app.context),true);
- assert.equal(app.element('notice').textContent,'Reconnect required');
+ assert.equal(app.element('pair-notice').textContent,'Reconnect required');
+ assert.equal(app.element('notice').textContent,'');
  assert.equal(app.element('transcript').value,'Synthetic pending request');
 });
 
@@ -619,6 +676,25 @@ test('forget clears the queued restore/wake state and preserves the unsent draft
  assert.equal(vm.runInContext('conversation.visibleId',app.context),undefined);
 });
 
+test('pairing failure reopens setup if it was closed while the request was pending', async t => {
+ const origin='https://relay.example.ts.net';
+ let rejectPair;
+ const app=await launch({request:url=>url===`${origin}/api/pair`
+  ? new Promise((resolve,reject)=>{rejectPair=reject;}) : undefined});
+ t.after(app.close);
+ app.element('notice').textContent='Current runtime feedback';
+ app.element('mac-setup').open=true;
+ app.element('pair-code').value=JSON.stringify({version:1,origin,code:'c'.repeat(43),expiresAt:Date.now()+60000});
+ const pending=app.element('pair').click(); await flush();
+ assert.equal(typeof rejectPair,'function');
+ app.element('mac-setup').open=false;
+ app.element('mac-setup').dispatchEvent({type:'toggle'});
+ rejectPair(new Error('Offline')); await pending; await flush();
+ assert.equal(app.element('mac-setup').open,true);
+ assert.equal(app.element('pair-notice').textContent,'Macが停止・スリープ・オフラインの場合は接続できません。');
+ assert.equal(app.element('notice').textContent,'Current runtime feedback');
+});
+
 test('successful pairing releases the send control for a preserved draft', async t => {
  const origin='https://relay.example.ts.net';
  const app=await launch({request:url=>url===`${origin}/api/pair`
@@ -633,7 +709,23 @@ test('successful pairing releases the send control for a preserved draft', async
  assert.equal(vm.runInContext('busy',app.context),false);
  assert.equal(app.element('send').disabled,false);
  assert.equal(app.element('transcript').value,'Preserved draft');
+ assert.equal(app.element('mac-setup').open,false);
+ assert.equal(app.element('pair-notice').textContent,'');
+ assert.match(app.element('notice').textContent,/接続しました/);
 });
+
+for (const paired of [true, false]) {
+ test(`closing setup ${paired ? 'dismisses paired' : 'preserves unpaired'} feedback`, async t => {
+  const app=await launch(); t.after(app.close);
+  if (!paired) await app.evaluate("forgetPairing('Reconnect required')");
+  app.element('pair-notice').textContent='Previous pairing feedback';
+  app.element('notice').textContent='Current runtime feedback';
+  app.element('mac-setup').open=false;
+  app.element('mac-setup').dispatchEvent({type:'toggle'});
+  assert.equal(app.element('pair-notice').textContent,paired ? '' : 'Previous pairing feedback');
+  assert.equal(app.element('notice').textContent,'Current runtime feedback');
+ });
+}
 
 test('presentation refreshes do not flush speech or change input and standby policy', async t => {
  const app=await launch();t.after(app.close);
