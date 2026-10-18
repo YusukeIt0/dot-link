@@ -204,8 +204,9 @@ of the existing merge policy; it does not bypass Dotsweeper, CI, acceptance,
 protected-change restrictions or maintainer merge authority.
 
 This is label-selected review, not a second required CI job for every PR. The
-webhook wakes Grok without continuous polling; execution stays in its own environment. Measure useful unique
-findings, overlap, rejected findings, limitations and duration to assess its value.
+webhook wakes Grok without continuous polling; execution stays in its own
+environment. Measure useful unique findings, overlap, rejected findings, limitations
+and duration to assess its value.
 
 **Rollout:** this section defines the agreed policy. Automatic label assignment
 and the merge-side hold are delivered in a separate implementation PR tracked by
