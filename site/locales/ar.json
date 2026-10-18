@@ -58,5 +58,14 @@
   "privacy": "التعامل مع البيانات (بالإنجليزية)",
   "independent": "مشروع مستقل عن OpenAI وEven Realities وTailscale.",
   "github": "GitHub (بالإنجليزية)",
-  "languages": "اللغات"
+  "languages": "اللغات",
+  "analyticsSettings": "إعدادات التحليلات",
+  "analyticsTitle": "هل تساعد في تحسين الموقع؟",
+  "analyticsDescription": "بموافقتك، يستخدم Google Analytics ملفات تعريف الارتباط لقياس الزيارات والنقرات ومشاهدة الفيديو. لا نستخدمها للإعلانات. يمكنك تغيير اختيارك في أي وقت.",
+  "analyticsAccept": "السماح بالتحليلات",
+  "analyticsReject": "رفض التحليلات",
+  "analyticsClose": "إغلاق",
+  "analyticsInternal": "استبعاد هذا المتصفح من التقارير",
+  "analyticsInternalNote": "ينطبق على هذا المتصفح فقط. يؤدي مسح بيانات الموقع إلى إزالة هذا الإعداد. يجب ضبط الأجهزة الأخرى بشكل منفصل.",
+  "analyticsStorageError": "تعذّر حفظ اختيارك، لذا تم إيقاف التحليلات. اسمح بتخزين بيانات الموقع لتذكّر اختيارك."
 }

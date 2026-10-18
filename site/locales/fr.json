@@ -58,5 +58,14 @@
   "privacy": "Traitement des données (en anglais)",
   "independent": "Projet indépendant d’OpenAI, d’Even Realities et de Tailscale.",
   "github": "GitHub (en anglais)",
-  "languages": "Langues"
+  "languages": "Langues",
+  "analyticsSettings": "Paramètres des statistiques",
+  "analyticsTitle": "Aider à améliorer ce site ?",
+  "analyticsDescription": "Avec votre accord, Google Analytics utilise des cookies pour mesurer les visites, les clics et le visionnage des vidéos. Aucune utilisation publicitaire. Vous pouvez changer votre choix à tout moment.",
+  "analyticsAccept": "Accepter les statistiques",
+  "analyticsReject": "Refuser les statistiques",
+  "analyticsClose": "Fermer",
+  "analyticsInternal": "Exclure ce navigateur des rapports",
+  "analyticsInternalNote": "Ce réglage concerne uniquement ce navigateur. Effacer les données du site le supprime. Les autres appareils doivent être configurés séparément.",
+  "analyticsStorageError": "Votre choix n’a pas pu être enregistré. Les statistiques sont désactivées. Autorisez le stockage du site pour mémoriser votre choix."
 }

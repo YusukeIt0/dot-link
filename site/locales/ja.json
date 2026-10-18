@@ -58,5 +58,14 @@
   "privacy": "データの取り扱い（英語）",
   "independent": "OpenAI、Even Realities、Tailscaleとは独立したプロジェクトです。",
   "github": "GitHub（英語）",
-  "languages": "言語"
+  "languages": "言語",
+  "analyticsSettings": "アクセス解析の設定",
+  "analyticsTitle": "サイトの改善に協力しますか？",
+  "analyticsDescription": "同意いただいた場合、Google AnalyticsがCookieを使って閲覧・クリック・動画の視聴を計測します。広告には使用しません。選択はいつでも変更できます。",
+  "analyticsAccept": "解析を許可",
+  "analyticsReject": "解析を拒否",
+  "analyticsClose": "閉じる",
+  "analyticsInternal": "このブラウザを集計から除外する",
+  "analyticsInternalNote": "このブラウザだけに適用されます。サイトデータを消去すると設定も消えます。他の端末では個別に設定してください。",
+  "analyticsStorageError": "選択を保存できないため、解析はオフです。選択を記憶するにはサイトのデータ保存を許可してください。"
 }
