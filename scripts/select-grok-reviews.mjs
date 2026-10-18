@@ -45,7 +45,8 @@ export async function selectFromComment(id, client, apply = false, notify = noti
   if (!apply) return {number, action: 'would-label-command'};
   if (!authorizedCommand(client.api(path), client.readNode)) return {number, action: 'command-changed'};
   client.addLabel(number, grok.label);
-  await notify({repo: repository, pr: number, head_sha: pr.head.sha});
+  const labeled = client.api(`pulls/${number}`);
+  if (labeled.state === 'open') await notify({repo: repository, pr: number, head_sha: labeled.head.sha});
   return {number, action: 'labeled-command'};
 }
 async function main() {

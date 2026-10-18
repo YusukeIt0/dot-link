@@ -149,3 +149,24 @@ test('a selected PR head update notifies once; unrelated event scans and dry run
   pr.state = 'closed'; await selectPR(90, client, true, notify, true);
   assert.equal(notices.length, 1);
 });
+
+
+test('command notification reads the head after labeling when a push races selection', async () => {
+  let currentHead = head;
+  const notices = [], row = {id: 123, node_id: 'Ncmd', body: '/dotlink review2nd',
+    updated_at: '2026-10-18T07:00:00Z', user: owner,
+    issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/90'};
+  const client = {
+    api(path) {
+      if (path === 'issues/comments/123') return row;
+      if (path === 'issues/90') return {pull_request: {}};
+      if (path === 'pulls/90') return {state: 'open', labels: ['P2'], head: {sha: currentHead}};
+      throw new Error(path);
+    },
+    readNode: () => ({id: row.node_id, body: row.body, updatedAt: row.updated_at, lastEditedAt: null,
+      author: {__typename: 'User', login: owner.login, databaseId: owner.id}}),
+    addLabel: () => {currentHead = 'd'.repeat(40);},
+  };
+  assert.equal((await selectFromComment(row.id, client, true, async p => notices.push(p))).action, 'labeled-command');
+  assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: 'd'.repeat(40)}]);
+});
