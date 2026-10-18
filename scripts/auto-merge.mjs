@@ -206,7 +206,17 @@ export async function runCoordinator(mode, priority, client, env, {recoveryUsed 
     Object.assign(mutation, {attempted: true, number, head: body.sha});
     let result;
     try { result = client.merge(number, body); }
-    catch { throw new AssessmentError('Merge response unavailable; reconcile read-only and never replay the request.', true); }
+    catch (error) {
+      if (error instanceof AssessmentError && error.httpStatus >= 400 && error.httpStatus < 500) {
+        mutation.rejected = true;
+        throw new AssessmentError(`Merge rejected (HTTP ${error.httpStatus}); no additional mutation was attempted.`);
+      }
+      throw new AssessmentError('Merge response unavailable; reconcile read-only and never replay the request.', true);
+    }
+    if (result?.merged === false) {
+      mutation.rejected = true;
+      throw new AssessmentError('GitHub rejected the merge; no additional mutation was attempted.');
+    }
     if (result?.merged !== true || !/^[a-f0-9]{40}$/.test(result.sha || '')) {
       throw new AssessmentError('Merge was not confirmed; reconcile read-only and never replay the request.', true);
     }
@@ -258,7 +268,7 @@ export async function runCoordinator(mode, priority, client, env, {recoveryUsed 
     const attempt = {status: 'running', scans: []};
     attempts.push(attempt);
     try {
-      if (mutation.attempted && !mutation.confirmed) reconcile();
+      if (mutation.attempted && !mutation.confirmed && !mutation.rejected) reconcile();
       const initial = await scan(attempt, mode === '--dry-run' || mutation.attempted);
       const errors = [...initial.errors];
       // A single mutation changes main. Inspect every remaining candidate again
@@ -272,7 +282,7 @@ export async function runCoordinator(mode, priority, client, env, {recoveryUsed 
     } catch (error) {
       attempt.status = 'failed';
       attempt.error = error.message.slice(0, 1500);
-      if (mutation.attempted && !mutation.confirmed) {
+      if (mutation.attempted && !mutation.confirmed && !mutation.rejected) {
         try { reconcile(); }
         catch { mutation.observed = 'unknown'; }
       }
@@ -291,7 +301,8 @@ export function commandFailure(error) {
   const status = String(error.stderr || '').match(/\bHTTP (\d{3})\b/)?.[1];
   const transient = status ? status === '429' || Number(status) >= 500
     : error.code === 'ETIMEDOUT' || /error connecting to|connection reset|TLS handshake timeout|i\/o timeout|unexpected EOF/i.test(String(error.stderr || ''));
-  return new AssessmentError(status ? `GitHub request failed (HTTP ${status}).` : 'GitHub request failed; inspect access or network availability.', transient);
+  return Object.assign(new AssessmentError(status ? `GitHub request failed (HTTP ${status}).` : 'GitHub request failed; inspect access or network availability.', transient),
+    {httpStatus: status ? Number(status) : undefined});
 }
 
 function githubClient(env) {
@@ -337,7 +348,8 @@ async function main() {
       (attempt.error ? `Failure: ${attempt.error}\n\n` : '') +
       attempt.scans.map(scan => `Main: \`${scan.main}\`; ${scan.read_only ? 'read-only' : 'merge checks'}.\n\n` +
         (scan.results.map(x => `- #${x.number}: ${x.merged ? 'merged' : x.status === 'failed' ? 'assessment failed' : x.eligible ? 'eligible, no write' : 'held'}${x.reasons?.length ? ' — ' + x.reasons.join(' ') : ''}`).join('\n') || 'No eligible-author open PRs.')).join('\n\n')).join('\n\n') +
-    (result.mutation.attempted && !result.mutation.confirmed ? '\n\nMerge outcome is unconfirmed. No further mutation was attempted; inspect the PR before manual recovery.' : '') + '\n');
+    (result.mutation.rejected ? '\n\nGitHub rejected the merge. No additional mutation was attempted.' :
+      result.mutation.attempted && !result.mutation.confirmed ? '\n\nMerge outcome is unconfirmed. No further mutation was attempted; inspect the PR before manual recovery.' : '') + '\n');
   if (result.status === 'failed') process.exitCode = 1;
 }
 

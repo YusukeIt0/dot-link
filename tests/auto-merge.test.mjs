@@ -606,3 +606,24 @@ test('global enumeration failure cannot signal a completed scan to the executor'
   assert.equal(result.scan_completed, false);
   assert.equal(client.mutations.length, 0);
 });
+
+
+test('definite merge rejection preserves the recovery allowance and never reports an ambiguous outcome', async () => {
+  for (const status of [403, 405, 409, 429, 200]) {
+    const client = repositoryClient(); let requests = 0;
+    client.merge = () => {
+      requests++;
+      if (status === 200) return {merged: false};
+      throw commandFailure({stderr: `gh: rejected (HTTP ${status})`});
+    };
+    const result = await coordinator(client);
+    assert.equal(requests, 1);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.recovery_used, false);
+    assert.equal(result.mutation.rejected, true);
+    assert.equal(result.mutation.observed, undefined);
+    assert.equal(result.attempts.length, 1);
+    assert.deepEqual(result.attempts[0].scans[0].results.map(x => x.number), [74, 75]);
+    assert.equal(result.attempts[0].scans[0].results[1].eligible, true);
+  }
+});

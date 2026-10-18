@@ -107,7 +107,9 @@ the execution job. Recovery never resets a gate or reuses a prior green decision
 Once a merge request is attempted, all subsequent work in that execution is
 read-only, even if the response is lost. Read-back checks the PR's merged state,
 head and merge commit. An unconfirmed result remains a failed outcome, never a
-reason to resend the merge or merge another PR. A post-merge read failure can
+reason to resend the merge or merge another PR. An explicit rejection (HTTP 4xx
+or `merged: false`) is recorded as rejected, not ambiguous, and does not spend
+the recovery allowance. Other candidates are still inspected read-only. A post-merge read failure can
 spend the remaining recovery allowance, but cannot authorize another mutation.
 
 If a request is rejected before a job starts, setup/runner termination prevents
