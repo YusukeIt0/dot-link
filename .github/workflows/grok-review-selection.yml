@@ -6,32 +6,34 @@ on:
     types: [created, edited]
   issues:
     types: [edited, labeled, unlabeled]
-  # Reconcile manually linked issues and classification changes made by GITHUB_TOKEN.
-  schedule:
-    - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
       pr_number:
         description: Optional PR number; otherwise inspect open PRs
         type: string
         required: false
+      notify_current_head:
+        description: Send one wake-up for an already-selected PR (requires PR number)
+        type: boolean
+        default: false
 permissions: {}
 concurrency:
-  group: dot-link-grok-selection-${{ github.event.comment.id || github.event.pull_request.number || inputs.pr_number || 'all' }}
+  # Keep pushes separate from edits/labels and other heads so they cannot evict a pending wake-up.
+  group: dot-link-grok-selection-${{ github.event_name }}-${{ github.event.action }}-${{ github.event.comment.id || github.event.pull_request.number || inputs.pr_number || 'all' }}-${{ github.event.pull_request.head.sha || 'no-head' }}
   cancel-in-progress: false
 jobs:
   select:
     if: >-
       github.repository == 'YusukeIt0/dot-link' &&
       (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && contains(github.event.comment.body, '/dotlink review2nd'))) &&
-      (github.event_name != 'pull_request_target' || github.event.pull_request.base.ref == 'main') &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       issues: write
-      pull-requests: read
+      # PR label writes require write access to the pull request resource.
+      pull-requests: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -39,7 +41,10 @@ jobs:
           persist-credentials: false
       - name: Add review labels to qualifying fixes
         env:
+          REVIEW_HEAD_CHANGED: ${{ (github.event_name == 'pull_request_target' && github.event.action == 'synchronize') || (github.event_name == 'workflow_dispatch' && inputs.notify_current_head) }}
           COMMENT_ID: ${{ github.event.comment.id }}
+          GROK_REVIEW_WEBHOOK_URL: ${{ secrets.GROK_REVIEW_WEBHOOK_URL }}
+          GROK_REVIEW_WEBHOOK_KEY: ${{ secrets.GROK_REVIEW_WEBHOOK_KEY }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
         run: |

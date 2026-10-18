@@ -7,8 +7,9 @@ both changes; publishing or installing the App does not activate the gate.
 
 ## Discovery and selection
 
-Grok independently lists open PRs labeled `independent-review` in `YusukeIt0/dot-link`.
-It may read number, base/head SHA and labels for discovery. It uses its own local
+Grok wakes on the routine webhook for a selected PR in `YusukeIt0/dot-link`; it
+does not continuously poll for work. The body contains only `repo`, `pr` and
+`head_sha`. It may read number, base/head SHA and labels to verify that input. It uses its own local
 record of completed heads to avoid repeated posts; it must not read PR comments,
 formal/inline reviews, Dotsweeper output or adjudication records to decide what to
 review. Source input is the pinned diff, relevant source/tests and the target
@@ -34,17 +35,28 @@ A configured trusted maintainer may also post the standalone command
 of priority. It fetches the current comment and verifies both author and editor
 against `trustedMaintainers` in `config/development-policy.json` (numeric ID and
 login, currently `YusukeIt0`); bots and other contributors cannot use the command.
-Created and edited comments are supported. This selects a review; it does not
-notify or directly invoke Grok. Grok never reads the command comment.
-The workflow reconciles on PR/issue changes and twice hourly to cover manually
-linked issues and label changes from GitHub's own workflow token. This schedule
-only maintains repository labels; it neither runs Grok nor notifies it. Main-target
-PR events have separate per-PR concurrency groups so unrelated PRs do not replace
-each other in the pending queue. Child PRs targeting other branches are handled
-by the trusted main-branch scheduled scan (or a main-branch manual dispatch),
-not by running privileged selection workflows from a child base branch. Their
-automatic label can therefore wait until the next scan, normally within 30 minutes
-plus GitHub scheduling delay; main-target PRs are selected on creation. The merge
+Created and edited comments are supported. Immediately after adding the label,
+the workflow sends one POST to the routine webhook. Grok never reads the command
+comment. Automatic label additions use the same notification path. A synchronize
+event for an already-selected PR sends one POST with its current head as well.
+
+The workflow evaluates PR creation, reopening, edits, pushes and label changes,
+including child PRs, plus Issue edits and label changes. It has no scheduled scan.
+The workflow and checkout use trusted main even for child PR events; no child-base
+or PR-head code runs with credentials. Concurrency groups include the event type,
+PR and head so unrelated event types or pushes cannot evict a pending push wake-up.
+For failed delivery, manually dispatch on main with `pr_number` and
+`notify_current_head: true` to send one wake-up for that already-selected PR.
+It does not select an otherwise nonqualifying PR or add an automatic retry.
+GitHub suppresses follow-up events for mutations made with `GITHUB_TOKEN`; those
+callers must explicitly dispatch selection, with no polling fallback. Manual
+sidebar fix links may likewise require a main-branch manual dispatch. Direct
+manual label application is not a label write by this workflow and does not
+itself notify. Notification delivery is best-effort, with a 10-second timeout,
+no retries or redirects, and warnings only on missing configuration or failure.
+Use `GROK_REVIEW_WEBHOOK_URL` and the complete Authorization header value in
+`GROK_REVIEW_WEBHOOK_KEY`; never include review content in the request.
+The merge
 coordinator independently checks selection and holds qualifying unlabeled fixes
 while label assignment catches up. API failures, incomplete issue/label pages and
 head races fail closed. The classification uses current labels; maintainers
@@ -56,7 +68,8 @@ should preserve the defect's P0/P1 classification through review.
 - Bot: `dotsweeper2nd[bot]`, numeric user ID `344214582`.
 - Installation: `172605999`, selected repository `YusukeIt0/dot-link` only.
 - Permissions: Pull requests write and Metadata read; no Contents write.
-- Webhook disabled. No xAI API or GitHub-to-Grok delivery. The selection command only adds a label.
+- The GitHub App webhook remains disabled; no xAI API is used. The selection
+  workflow sends wake-ups to the separate Grok routine webhook described above.
 - Private key: maintainer-entered secret in Grok's own environment, used only for
   posting. It is not technically isolated from other processing there. Never put
   it in chat, logs, repository files or repository Actions secrets. Never execute
