@@ -88,7 +88,8 @@ test('incomplete issue/label pagination and head races cannot prove non-selectio
 });
 test('labeler is add-only, honors manual labels and rechecks before mutation', () => {
   const writes = []; let reads = 0;
-  const pr = {number: 90, state: 'open', labels: [], head: {sha: head}};
+  // A trusted-main scan also labels child PRs without running their base workflow.
+  const pr = {number: 90, state: 'open', base: {ref: 'parent'}, labels: [], head: {sha: head}};
   const client = {api: () => {reads++; return structuredClone(pr);}, graphql: () => graph(head, [bug]), addLabel: (...x) => writes.push(x)};
   assert.equal(selectPR(90, client).action, 'would-label'); assert.deepEqual(writes, []);
   assert.equal(selectPR(90, client, true).action, 'labeled'); assert.deepEqual(writes, [[90, 'grok-review']]);

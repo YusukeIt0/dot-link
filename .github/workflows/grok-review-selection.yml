@@ -15,12 +15,13 @@ on:
         required: false
 permissions: {}
 concurrency:
-  group: dot-link-grok-selection
+  group: dot-link-grok-selection-${{ github.event.pull_request.number || inputs.pr_number || 'all' }}
   cancel-in-progress: false
 jobs:
   select:
     if: >-
       github.repository == 'YusukeIt0/dot-link' &&
+      (github.event_name != 'pull_request_target' || github.event.pull_request.base.ref == 'main') &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 10

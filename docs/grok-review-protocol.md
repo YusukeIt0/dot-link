@@ -31,7 +31,13 @@ whether the code actually fixes the problem.
 Manual `grok-review` labels opt in any PR and are never removed by automation.
 The workflow reconciles on PR/issue changes and twice hourly to cover manually
 linked issues and label changes from GitHub's own workflow token. This schedule
-only maintains repository labels; it neither runs Grok nor notifies it. The merge
+only maintains repository labels; it neither runs Grok nor notifies it. Main-target
+PR events have separate per-PR concurrency groups so unrelated PRs do not replace
+each other in the pending queue. Child PRs targeting other branches are handled
+by the trusted main-branch scheduled scan (or a main-branch manual dispatch),
+not by running privileged selection workflows from a child base branch. Their
+automatic label can therefore wait until the next scan, normally within 30 minutes
+plus GitHub scheduling delay; main-target PRs are selected on creation. The merge
 coordinator independently checks selection and holds qualifying unlabeled fixes
 while label assignment catches up. API failures, incomplete issue/label pages and
 head races fail closed. The classification uses current labels; maintainers
