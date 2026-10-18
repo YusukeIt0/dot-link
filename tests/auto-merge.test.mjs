@@ -38,7 +38,7 @@ function fixture() {
 }
 function clientFor(s, change) {
   let reads = 0; const merges = [];
-  return {merges, readNode(id) {
+  return {merges, graphql() { return {data: {repository: {pullRequest: {headRefOid: s.pr.head.sha, closingIssuesReferences: {nodes: [], pageInfo: {hasNextPage: false}}}}}}; }, readNode(id) {
     const r = s.comments.find(x => x.node_id === id);
     const actor = user => ({__typename: user.type, login: user.login, databaseId: user.id});
     return {id, body: r.body, updatedAt: r.updated_at, lastEditedAt: r.editor ? r.updated_at : null,
@@ -224,4 +224,49 @@ test('ordinary blockers and ambiguous merge API failures are not retried', async
   await assert.rejects(mergeWithReassessment(74, failing, env, wait), /connection lost/);
   assert.equal(calls, 1);
   assert.deepEqual(waits, []);
+});
+
+test('Grok selection and labeled holds participate in the final merge decision', () => {
+  const s = fixture(); s.pr.labels = [{name: 'independent-review'}];
+  assert.ok(evaluate(s).reasons.some(x => x.startsWith('Grok review hold:')));
+  assert.equal(mergeEligible(74, clientFor(s), env).merged, false);
+  s.pr.labels = []; s.grokSelection = {automatic: true, fixes: []};
+  assert.ok(evaluate(s).reasons.some(x => x.includes('awaiting the independent-review label')));
+  const t = fixture(), client = clientFor(t, (value, reads) => {
+    if (reads === 2) value.pr.labels = [{name: 'independent-review'}];
+  });
+  assert.equal(mergeEligible(74, client, env).merged, false);
+  assert.equal(client.merges.length, 0);
+});
+
+test('late P0/P1 classification blocks even before asynchronous labeling completes', () => {
+  const s = fixture(), client = clientFor(s);
+  client.graphql = () => ({data: {repository: {pullRequest: {headRefOid: s.pr.head.sha,
+    closingIssuesReferences: {pageInfo: {hasNextPage: false}, nodes: [{number: 26,
+      repository: {nameWithOwner: repository}, labels: {pageInfo: {hasNextPage: false}, nodes: [{name: 'bug'}, {name: 'P1'}]}}]}}}}});
+  assert.equal(mergeEligible(74, client, env).merged, false);
+  assert.equal(client.merges.length, 0);
+});
+
+test('authenticated current-head Grok review and adjudication clear only the additional hold', async () => {
+  const {grok, reviewMarker, adjudicationMarker, reviewDigest} = await import('../scripts/grok-review.mjs');
+  const s = fixture(); s.pr.labels = [{name: 'independent-review'}];
+  const bot = {id: grok.botId, login: grok.login, type: 'Bot'};
+  const body = (marker, record) => `${marker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``;
+  const row = {id: 60, node_id: 'comment60', updated_at: '2026-10-18T06:00:00Z', user: bot,
+    performed_via_github_app: {id: grok.appId}, body: body(reviewMarker, {version: 1, head,
+      reviewer: 'Grok Bot', duration_seconds: 30, read_scope: ['docs/guide.md'], findings: [], limitations: ['Static only']})};
+  s.comments.push(row, {id: 61, node_id: 'comment61', updated_at: row.updated_at, user: owner,
+    body: body(adjudicationMarker, {version: 1, head, review_comment_id: row.id, review_digest: reviewDigest(row), status: 'completed', findings: [], summary: 'No findings; bounded review checked.'})});
+  // A fresh Dotsweeper receipt is independently required after human adjudication.
+  const fingerprint = fingerprintPR(s.pr, main, s.comments, undefined, s.scope, []);
+  s.comments[1].body = s.comments[1].body.replace(/input=[a-f0-9]{64}/, `input=${fingerprint}`);
+  const client = clientFor(s);
+  assert.equal(evaluate(collect(74, client)).eligible, true);
+  assert.equal(mergeEligible(74, client, env).merged, true);
+  assert.equal(client.merges.length, 1);
+  s.comments.at(-1).editor = {...owner, id: 1};
+  const held = clientFor(s);
+  assert.equal(mergeEligible(74, held, env).merged, false);
+  assert.deepEqual(held.merges, []);
 });

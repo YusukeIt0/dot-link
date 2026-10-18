@@ -9,6 +9,6 @@
     "docs/ai-review.md", "docs/development.md", "docs/development-assurance.md",
     "docs/development-process-audit.md", "docs/automatic-merging.md",
     "tests/claude-review.test.mjs", "tests/review-before-merge.test.mjs",
-    "tests/review-labels.test.mjs", "tests/review-evidence.test.mjs", "tests/auto-merge.test.mjs"
+    "tests/review-labels.test.mjs", "tests/review-evidence.test.mjs", "tests/auto-merge.test.mjs", "tests/grok-review.test.mjs", "docs/grok-review-protocol.md"
   ]
 }

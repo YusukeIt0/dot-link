@@ -7,9 +7,11 @@ on:
     types: [completed]
   # PR bodies and comments are data; all decisions use fresh API reads.
   pull_request_target: # zizmor: ignore[dangerous-triggers]
-    types: [opened, reopened, synchronize, edited, ready_for_review]
+    types: [opened, reopened, synchronize, edited, ready_for_review, labeled, unlabeled]
   issue_comment: # zizmor: ignore[dangerous-triggers]
     types: [created, edited, deleted]
+  issues: # zizmor: ignore[dangerous-triggers]
+    types: [edited, labeled, unlabeled]
   workflow_dispatch:
     inputs:
       pr_number:

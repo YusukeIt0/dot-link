@@ -1,3 +1,4 @@
+import {automaticSelection, selected, authenticateGrokComments, grokBlockers, closingIssuesQuery, closingIssues} from './grok-review.mjs';
 // Fail-closed coordinator. Default is read-only; never execute reviewed code.
 import {execFileSync} from 'node:child_process';
 import {appendFileSync} from 'node:fs';
@@ -52,6 +53,8 @@ export function evaluate(snapshot) {
   const {pr, main, protection, files, versionChanges, context, receipt, reviews = [], ciRun, ciJobs, ancestry} = snapshot;
   if (!trustedUser(pr.user) || pr.head.repo?.full_name !== repository) reasons.push('PR author/head is not an explicitly trusted in-repository contributor.');
   if (pr.base?.ref !== 'main') reasons.push('Automatic merging only targets protected main; dependent PRs need their normal integration sequence.');
+  if (snapshot.grokSelection?.automatic && !selected(pr)) reasons.push('Qualifying P0/P1 bug fix is awaiting the independent-review label.');
+  reasons.push(...grokBlockers(pr, snapshot.comments || [], selected(pr) || snapshot.grokSelection?.automatic));
   const sensitive = protectedChanges(files, versionChanges);
   if (sensitive.length) reasons.push(`Human merge decision required for control-plane or unclassified changes: ${sensitive.join(', ')}`);
   if (files.length !== pr.changed_files) reasons.push('Changed-file enumeration is incomplete.');
@@ -89,7 +92,9 @@ export function collect(number, client) {
   }
   const main = api('commits/main').sha;
   const botId = api('actions/variables/DOTSWEEPER_BOT_ID').value;
-  const comments = authenticateComments(pages(`issues/${number}/comments?per_page=100`), client.readNode, botId);
+  const comments = authenticateGrokComments(authenticateComments(pages(`issues/${number}/comments?per_page=100`), client.readNode, botId), client.readNode);
+  const fixes = closingIssues(client.graphql(closingIssuesQuery, number), pr.head.sha);
+  const grokSelection = {automatic: automaticSelection(pr, fixes), fixes};
   const receipt = latestReceipt(comments, botId);
   const run = api(`actions/runs/${receipt.runId}`);
   const jobs = pages(`actions/runs/${receipt.runId}/jobs?filter=latest&per_page=100`).flatMap(x => x.jobs);
@@ -108,7 +113,7 @@ export function collect(number, client) {
     x.event === 'pull_request' && x.pull_requests?.some(p => p.number === pr.number && p.base?.ref === 'main' && p.base?.sha === main))
     .sort((a, b) => b.id - a.id)[0];
   const ciJobs = ciRun ? pages(`actions/runs/${ciRun.id}/jobs?filter=latest&per_page=100`).flatMap(x => x.jobs) : [];
-  return {pr, main, scope, feedback, comments, receipt, run, jobs, files, versionChanges, context, ciRun, ciJobs,
+  return {pr, main, scope, feedback, comments, receipt, run, jobs, files, versionChanges, context, ciRun, ciJobs, grokSelection,
     checks: checks(number), protection: api('branches/main/protection'),
     reviews: pages(`pulls/${number}/reviews?per_page=100`),
     ancestry: api(`compare/${main}...${pr.head.sha}`)};
@@ -173,6 +178,7 @@ function githubClient(env) {
   const command = (args, options = {}) => JSON.parse(execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, ...options}));
   return {
     api: path => command(['api', `repos/${repository}/${path}`]),
+    graphql: (query, number) => command(['api', 'graphql', '-f', `query=${query}`, '-F', `number=${number}`]),
     readNode: id => command(['api', 'graphql', '-f', `query=${commentRevisionQuery}`, '-F', `id=${id}`]).data.node,
     pages: path => command(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat(),
     checks: number => {

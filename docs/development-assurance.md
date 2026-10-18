@@ -117,19 +117,23 @@ and human-label preservation remain unchanged.
 
 Dotsweeper remains the base reviewer. Grok Bot is the maintainer's separate AI
 assistant, operating from its own environment; this integration does not call the
-xAI API. It independently discovers open PRs carrying `grok-review`. Do not add
-GitHub-to-Grok notifications, webhooks or comment-based invocation commands.
+xAI API. It independently discovers open PRs carrying `independent-review`. Do not add
+GitHub-to-Grok notifications or webhooks. The maintainer-only `/dotlink review2nd`
+PR comment command only adds the selection label; it does not invoke or notify Grok.
 
 ### Selection
 
-Every PR that fixes a P0/P1 bug receives `grok-review` automatically when opened.
+Every PR that fixes a P0/P1 bug receives `independent-review` automatically when opened.
 Re-evaluate selection after PR edits, fix-link changes and linked-issue priority
 or category changes, and before merging, so later classification cannot escape
 review. Never remove the label automatically.
 Selection requires a concrete bug-fix relationship and a P0/P1 bug classification;
 a feature proposal or an incidental reference to a high-priority issue is not a
-qualifying fix. The maintainer can also apply `grok-review` manually to any PR,
-including P2/P3 work. Preserve this manual selection. Grok does not add or remove
+qualifying fix. The maintainer can also apply `independent-review` manually to any PR,
+including P2/P3 work, or post `/dotlink review2nd` as a standalone PR comment
+to have the workflow apply it. Only configured trusted maintainers may use this
+command; verify both original author and current editor by numeric identity.
+Preserve this manual selection. Grok does not add or remove
 labels. Label assignment belongs to repository automation and the maintainer.
 
 ### Independent input and publication
@@ -163,7 +167,7 @@ Actions secrets or reuse merger credentials.
 
 ### Adjudication and automatic merge hold
 
-The merge coordinator, not Grok, owns the hold. A PR with `grok-review` is excluded
+The merge coordinator, not Grok, owns the hold. A PR with `independent-review` is excluded
 from automatic merging until **both** an authenticated Grok comment for its current
 head and completed adjudication of that review for the same head exist. Either
 missing item holds the PR. Authenticate the dedicated App's identity and the
@@ -179,7 +183,7 @@ Unresolved findings and unverified blocking claims keep the hold; an empty findi
 list still requires an explicit completed adjudication record.
 
 Any head change invalidates the previous Grok review and adjudication for merge
-purposes, including documentation-only changes. Leave `grok-review` attached after
+purposes, including documentation-only changes. Leave `independent-review` attached after
 completion so a new head is held again. Clearing this hold only permits evaluation
 of the existing merge policy; it does not bypass Dotsweeper, CI, acceptance,
 protected-change restrictions or maintainer merge authority.
