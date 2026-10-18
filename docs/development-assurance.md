@@ -113,25 +113,93 @@ The agent maintains relevant issue relationships during authorized work; the
 reviewer does not close issues or authorize implementation. Existing triage labels
 and human-label preservation remain unchanged.
 
-## Optional independent reviewer for consequential fixes
+## Independent Grok Bot review
 
-Keep Dotsweeper as the base. A P0/P1 fix or disputed concrete safety finding can
-justify a separate model on the same frozen commit. Give it the agreed behavior,
-diff and relevant source; initially withhold the first review's findings. It must
-have no merge authority and must not execute untrusted code with credentials.
+Dotsweeper remains the base reviewer. Grok Bot is the maintainer's separate AI
+assistant, operating from its own environment; this integration does not call the
+xAI API. It independently discovers open PRs carrying `grok-review`. Do not add
+GitHub-to-Grok notifications, webhooks or comment-based invocation commands.
 
-The implementing agent then adjudicates each finding against source/tests. Record
-reviewer/model, exact commit, duration, valid unique findings, overlap, rejected
-findings and unverified claims in the PR. Add a focused regression test or other
-reproduction where meaningful, fix the problem and repeat the relevant checks.
-If independent reviews disagree, investigate the evidence rather than voting.
-This is an extension point, not a new required job, always-on service, or automatic
-implementation permission. A permanent second reviewer needs demonstrated benefit.
+### Selection
+
+Every PR that fixes a P0/P1 bug receives `grok-review` automatically when opened.
+Re-evaluate selection after PR edits, fix-link changes and linked-issue priority
+or category changes, and before merging, so later classification cannot escape
+review. Never remove the label automatically.
+Selection requires a concrete bug-fix relationship and a P0/P1 bug classification;
+a feature proposal or an incidental reference to a high-priority issue is not a
+qualifying fix. The maintainer can also apply `grok-review` manually to any PR,
+including P2/P3 work. Preserve this manual selection. Grok does not add or remove
+labels. Label assignment belongs to repository automation and the maintainer.
+
+### Independent input and publication
+
+Freeze the exact head commit for each review. Grok reads only the diff, relevant
+source and tests, and the target issue's problem definition. PR discovery metadata
+(number, head, base and labels) is permitted for selecting and pinning that input.
+It does not read PR comments, formal or inline review results, or Dotsweeper output.
+Use API projections or source retrieval instead of a PR conversation page. Each
+comment identifies the reviewer/model, exact head, duration, actual files/ranges
+and issue problem definition read, findings with evidence, and limitations.
+Distinguish static inspection from tests actually executed and physical evidence.
+
+Publish in English as an ordinary PR conversation comment using the dedicated
+`dotsweeper2nd` GitHub App. The only repository permissions are
+**Pull requests: Read and write** and mandatory **Metadata: Read-only**. Install it
+only on `YusukeIt0/dot-link`. Keep its App, key and secrets separate from
+`dotsweeper-merge`. Do not submit Approve, Request changes or formal review comments,
+change labels, merge, or alter repository settings. GitHub's PR write permission
+also permits actions beyond ordinary comments: this narrower use is enforced by
+the posting procedure and operating instructions, not by a comment-only GitHub
+permission.
+
+The private key stays in Grok's environment and is entered by the maintainer
+through a dedicated secret input, never a chat message, repository file or log.
+That environment cannot isolate the key from ordinary processing; using it only
+for posting is an operational rule, not a technical isolation guarantee. Read
+sources through the existing read-only access. Do not execute untrusted repository
+code in the credential-bearing environment. Do not place this key in repository
+Actions secrets or reuse merger credentials.
+
+### Adjudication and automatic merge hold
+
+The merge coordinator, not Grok, owns the hold. A PR with `grok-review` is excluded
+from automatic merging until **both** an authenticated Grok comment for its current
+head and completed adjudication of that review for the same head exist. Either
+missing item holds the PR. Authenticate the dedicated App's identity and the
+trusted adjudicator, including edits; an arbitrary comment claiming completion
+is not evidence. Bind adjudication to the specific review revision, so editing or
+replacing a review cannot silently inherit an earlier disposition.
+
+The implementing agent adjudicates every finding against source/tests and records
+valid unique findings, overlap, rejected findings with reasons, and unverified
+claims. Add a focused regression test or reproduction where meaningful, fix the
+problem and repeat relevant checks. Investigate disagreements instead of voting.
+Unresolved findings and unverified blocking claims keep the hold; an empty findings
+list still requires an explicit completed adjudication record.
+
+Any head change invalidates the previous Grok review and adjudication for merge
+purposes, including documentation-only changes. Leave `grok-review` attached after
+completion so a new head is held again. Clearing this hold only permits evaluation
+of the existing merge policy; it does not bypass Dotsweeper, CI, acceptance,
+protected-change restrictions or maintainer merge authority.
+
+This is label-selected review, not a second required CI job for every PR. Grok's
+polling cadence and execution live in its own environment. Measure useful unique
+findings, overlap, rejected findings, limitations and duration to assess its value.
+
+**Rollout:** this section defines the agreed policy. Automatic label assignment
+and the merge-side hold are delivered in a separate implementation PR tracked by
+[#84](https://github.com/YusukeIt0/dot-link/issues/84). App installation and this
+policy document alone do not enable either mechanism. Before using it on a live
+PR, ensure the merge-side hold is deployed or the PR is otherwise excluded by the
+merge operator until review and adjudication finish.
 
 ## Validation boundaries
 
 Workflow lint runs before the required `test` job; a lint skip/failure makes that
-job fail. The model remains read-only, without test execution or posting tokens.
+job fail. The Dotsweeper review model remains read-only, without test execution or posting
+tokens. Grok uses the separate publication arrangement above.
 Protected workflow/script changes receive normal CI and independent review and
 remain excluded from automatic merging. No device acceptance is required for
 this control-plane change because it changes neither device runtime nor packaging.
