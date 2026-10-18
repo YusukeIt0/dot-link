@@ -82,6 +82,9 @@ test('trusted CLI dispatch resends a selected current head once, while dry-run s
     REVIEW_HEAD_CHANGED: 'true', GROK_REVIEW_WEBHOOK_URL: '', GROK_REVIEW_WEBHOOK_KEY: '', GITHUB_STEP_SUMMARY: '',
   }};
   const script = fileURLToPath(new URL('../scripts/select-grok-reviews.mjs', import.meta.url));
+  const missing = spawnSync(process.execPath, [script, '--apply'], options);
+  assert.equal(missing.status, 1); assert.match(missing.stderr, /requires a PR number/);
+  assert.equal(missing.stdout, '');
   const applied = spawnSync(process.execPath, [script, '--apply', String(payload.pr)], options);
   assert.equal(applied.status, 0, applied.stderr);
   assert.equal(JSON.parse(applied.stdout)[0].action, 'notified-head-change');

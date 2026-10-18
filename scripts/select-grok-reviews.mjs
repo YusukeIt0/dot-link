@@ -54,6 +54,7 @@ async function main() {
   const [mode = '--dry-run', target, value] = process.argv.slice(2);
   const commandMode = target === '--comment', number = commandMode ? value : target;
   if (!['--dry-run', '--apply'].includes(mode) || (number && (!(commandMode ? /^[1-9]\d{0,14}$/ : /^[1-9]\d{0,8}$/).test(number) || !Number.isSafeInteger(Number(number)))) || (commandMode && !number) || process.argv.length > (commandMode ? 5 : 4) || (!commandMode && value)) throw new Error('Usage: select-grok-reviews.mjs [--dry-run|--apply] [PR-number | --comment comment-id]');
+  if (process.env.REVIEW_HEAD_CHANGED === 'true' && (!number || commandMode)) throw new Error('Current-head notification requires a PR number.');
   if (mode === '--apply' && (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REPOSITORY !== repository ||
       process.env.GITHUB_WORKFLOW_REF !== `${repository}/.github/workflows/grok-review-selection.yml@refs/heads/main`)) throw new Error('Label writes require the trusted main selection workflow.');
   const command = (args, options = {}) => JSON.parse(execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, ...options}));
