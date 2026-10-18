@@ -15,15 +15,20 @@ on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: Optional PR number; otherwise inspect trusted-author open PRs
+        description: Optional priority PR; every execution still inspects all eligible-author open PRs
         type: string
         required: false
 
 permissions: {}
 
 concurrency:
-  group: dot-link-automatic-merge
-  queue: max
+  # Ignored events cannot replace a pending full scan with a skipped run.
+  group: >-
+    ${{ github.repository == 'YusukeIt0/dot-link' &&
+        (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+        (github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
+        'dot-link-automatic-merge' || format('dot-link-automatic-merge-ignored-{0}', github.run_id) }}
+  queue: single
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +39,8 @@ jobs:
       (github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      recovery_used: ${{ steps.assessment.outputs.recovery_used }}
     permissions:
       contents: read
       issues: read
@@ -66,8 +73,11 @@ jobs:
           permission-pull-requests: read
       - name: Report missing read-only setup
         if: vars.DOTLINK_MERGE_CLIENT_ID == ''
-        run: echo 'Dry run is blocked until the dedicated App can read branch protection and variables. No merge was attempted.' >> "$GITHUB_STEP_SUMMARY"
+        run: |
+          echo 'Assessment failed: dedicated App setup is missing. No merge was attempted.' >> "$GITHUB_STEP_SUMMARY"
+          exit 1
       - name: Evaluate without merging
+        id: assessment
         if: vars.DOTLINK_MERGE_CLIENT_ID != ''
         env:
           GH_TOKEN: ${{ steps.reader.outputs.token }}
@@ -81,7 +91,7 @@ jobs:
 
   merge:
     needs: assess
-    # Deliberately inactive until the separate activation decision and App setup.
+    # Activation is live policy, rechecked before every mutation by the script.
     if: >-
       github.repository == 'YusukeIt0/dot-link' &&
       vars.DOTLINK_AUTO_MERGE_ENABLED == 'reviewed-policy-v1'
@@ -122,6 +132,7 @@ jobs:
           AUTO_MERGE_TOKEN: ${{ steps.merger.outputs.token }}
           DOTLINK_AUTO_MERGE_ENABLED: ${{ vars.DOTLINK_AUTO_MERGE_ENABLED }}
           PR_NUMBER: ${{ inputs.pr_number }}
+          RECOVERY_USED: ${{ needs.assess.outputs.recovery_used }}
         run: |
           if [ -n "$PR_NUMBER" ]; then
             node scripts/auto-merge.mjs --execute "$PR_NUMBER"
