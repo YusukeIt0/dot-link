@@ -13,7 +13,13 @@ curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
   -o "$tools_dir/actionlint.tar.gz"
 printf '%s  %s\n' "$digest" "$tools_dir/actionlint.tar.gz" | shasum -a 256 -c -
 tar -xzf "$tools_dir/actionlint.tar.gz" -C "$tools_dir" actionlint
-"$tools_dir/actionlint"
 python3 -m venv "$tools_dir/python"
-"$tools_dir/python/bin/pip" --disable-pip-version-check --quiet install 'zizmor==1.31.1'
+"$tools_dir/python/bin/pip" --disable-pip-version-check --quiet install 'zizmor==1.31.1' 'PyYAML==6.0.3'
+PYTHONDONTWRITEBYTECODE=1 "$tools_dir/python/bin/python" -m unittest discover -s tests -p 'workflow_queue_test.py'
+PYTHONDONTWRITEBYTECODE=1 "$tools_dir/python/bin/python" scripts/check-workflow-queue.py
+# actionlint 1.7.12 does not yet recognize GitHub's concurrency.queue.
+# Suppress only this exact unsupported-key diagnostic; the check above validates
+# its sole permitted location and complete concurrency policy. All other actionlint
+# diagnostics still fail. Remove this exception when upstream supports queue.
+"$tools_dir/actionlint" -ignore '^unexpected key "queue" for "concurrency" section\. expected one of "cancel-in-progress", "group"$'
 "$tools_dir/python/bin/zizmor" --offline .github/workflows

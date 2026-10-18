@@ -21,6 +21,7 @@ permissions: {}
 
 concurrency:
   group: dot-link-automatic-merge
+  queue: max
   cancel-in-progress: false
 
 jobs:
