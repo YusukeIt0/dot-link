@@ -237,29 +237,36 @@ export async function runCoordinator(mode, priority, client, env, {recoveryUsed 
     }
     const pass = {read_only: readOnly, main, results: []};
     attempt.scans.push(pass);
+    const errors = [];
+    let merged = false;
     for (const number of list) {
       try {
-        const decision = readOnly ? evaluate(collect(number, client))
+        const decision = readOnly || mutation.attempted ? evaluate(collect(number, client))
           : await mergeWithReassessment(number, guarded, env, wait, budget);
         pass.results.push(decision);
-        if (decision.merged) return true;
+        if (decision.merged) { merged = true; break; }
       } catch (error) {
         pass.results.push({number, eligible: false, status: error instanceof AssessmentHeld ? 'held' : 'failed',
           reasons: [error.message.slice(0, 1500)]});
-        if (!(error instanceof AssessmentHeld)) throw error;
+        if (!(error instanceof AssessmentHeld)) errors.push(error);
       }
     }
-    return false;
+    pass.completed = !merged;
+    return {merged, errors};
   };
   for (;;) {
     const attempt = {status: 'running', scans: []};
     attempts.push(attempt);
     try {
       if (mutation.attempted && !mutation.confirmed) reconcile();
-      const merged = await scan(attempt, mode === '--dry-run' || mutation.attempted);
+      const initial = await scan(attempt, mode === '--dry-run' || mutation.attempted);
+      const errors = [...initial.errors];
       // A single mutation changes main. Inspect every remaining candidate again
       // against current main, but never perform a second mutation in this run.
-      if (merged) await scan(attempt, true);
+      if (initial.merged) errors.push(...(await scan(attempt, true)).errors);
+      // A broken candidate must not starve the others. Preserve failures after
+      // the full pass; permanent errors cannot be hidden by a transient one.
+      if (errors.length) throw errors.find(error => !(error instanceof AssessmentError) || !error.retryable) || errors[0];
       attempt.status = 'completed';
       break;
     } catch (error) {
@@ -277,7 +284,7 @@ export async function runCoordinator(mode, priority, client, env, {recoveryUsed 
   }
   const failed = attempts.at(-1).status === 'failed' || mutation.attempted && !mutation.confirmed;
   return {mode, status: failed ? 'failed' : attempts.length > 1 ? 'recovered' : 'completed',
-    recovery_used: recoveryUsed, attempts, mutation};
+    recovery_used: recoveryUsed, scan_completed: attempts.at(-1).scans.at(-1)?.completed === true, attempts, mutation};
 }
 
 export function commandFailure(error) {
@@ -323,7 +330,7 @@ async function main() {
   const client = githubClient(process.env);
   const result = await runCoordinator(mode, priority, client, process.env, {recoveryUsed: process.env.RECOVERY_USED === 'true'});
   console.log(JSON.stringify(result, null, 2));
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `recovery_used=${result.recovery_used}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `recovery_used=${result.recovery_used}\nscan_completed=${result.scan_completed}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
     `## Automatic merge ${mode === '--execute' ? 'execution' : 'dry run'}: ${result.status}\n\n` +
     result.attempts.map((attempt, index) => `### Attempt ${index + 1}: ${attempt.status}\n\n` +

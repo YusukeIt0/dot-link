@@ -87,7 +87,14 @@ workflow execution. The assessor exports whether it used that allowance; the
 executor consumes the same value. Transient API/network failures restart a fresh
 full scan once in the same process. There is no recursive workflow dispatch,
 periodic schedule, or additional write permission. Both attempts and the original
-failure remain in logs/summary; an unrecovered failure exits nonzero. Missing App
+failure remain in logs/summary; an unrecovered failure exits nonzero. A per-PR
+error is recorded while the scan continues to the other candidates. After the
+scan, any such error fails that attempt and may consume the remaining recovery
+allowance. Permanent errors do not trigger recovery. A completed read-only scan
+exports completion even when individual PRs failed: the executor can then
+independently recheck and merge a healthy candidate, while the failed assessor
+keeps the overall workflow failed. Global enumeration/main failures, incomplete
+scans, setup failures and cancellation do not authorize that continuation. Missing App
 setup also fails rather than reporting a successful assessment.
 
 Valid holds (pending/failed CI, missing/stale review, invalid acceptance, revoked

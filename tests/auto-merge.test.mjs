@@ -549,11 +549,60 @@ else { console.error('Unexpected fixture endpoint'); process.exit(1); }
       const report = JSON.parse(result.stdout);
       assert.equal(report.status, status);
       assert.equal(report.attempts.length, attempts);
-      assert.equal(readFileSync(`${prefix}.output`, 'utf8'), `recovery_used=${report.recovery_used}\n`);
+      assert.equal(readFileSync(`${prefix}.output`, 'utf8'), `recovery_used=${report.recovery_used}\nscan_completed=${report.scan_completed}\n`);
       const summary = readFileSync(`${prefix}.summary`, 'utf8');
       assert.ok(summary.includes(status));
       if (failure) assert.match(summary, /Attempt 1: failed/);
       if (status === 'recovered') assert.match(summary, /Attempt 2: completed/);
     }
   } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+
+test('persistent per-PR failure cannot starve healthy PRs across assessor and executor', async () => {
+  const client = repositoryClient([74, 75, 76]), api = client.api;
+  client.api = path => {
+    if (path === 'pulls/74') throw new AssessmentError('Broken PR evidence', true);
+    return api(path);
+  };
+  const assessed = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+  assert.equal(assessed.status, 'failed');
+  assert.equal(assessed.scan_completed, true);
+  assert.equal(assessed.recovery_used, true);
+  assert.equal(assessed.attempts.length, 2);
+  for (const attempt of assessed.attempts) {
+    assert.deepEqual(attempt.scans[0].results.map(x => x.number), [74, 75, 76]);
+    assert.equal(attempt.scans[0].results[0].status, 'failed');
+    assert.equal(attempt.scans[0].results[1].eligible, true);
+  }
+  const executed = await coordinator(client, {recoveryUsed: assessed.recovery_used});
+  assert.equal(executed.status, 'failed');
+  assert.equal(executed.attempts.length, 1);
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+  const after = executed.attempts[0].scans[1];
+  assert.equal(after.read_only, true);
+  assert.equal(after.main, 'c'.repeat(40));
+  assert.deepEqual(after.results.map(x => x.number), [74, 76]);
+});
+
+test('permanent candidate failures continue the scan but do not spend a recovery', async () => {
+  const client = repositoryClient(), api = client.api;
+  client.api = path => {
+    if (path === 'pulls/74') throw new AssessmentError('Malformed PR evidence');
+    return api(path);
+  };
+  const result = await coordinator(client);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.recovery_used, false);
+  assert.equal(result.attempts.length, 1);
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+});
+
+test('global enumeration failure cannot signal a completed scan to the executor', async () => {
+  const client = repositoryClient();
+  client.api = () => { throw new AssessmentError('Global outage', true); };
+  const result = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+  assert.equal(result.status, 'failed');
+  assert.equal(result.scan_completed, false);
+  assert.equal(client.mutations.length, 0);
 });

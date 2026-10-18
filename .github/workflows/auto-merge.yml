@@ -41,6 +41,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       recovery_used: ${{ steps.assessment.outputs.recovery_used }}
+      scan_completed: ${{ steps.assessment.outputs.scan_completed }}
     permissions:
       contents: read
       issues: read
@@ -91,8 +92,12 @@ jobs:
 
   merge:
     needs: assess
-    # Activation is live policy, rechecked before every mutation by the script.
+    # A completed scan with per-PR errors stays failed, but cannot starve healthy
+    # candidates. Setup/global scan failure and cancellation still stop execution.
+    # Activation and every candidate gate are rechecked before mutation.
     if: >-
+      always() && !cancelled() &&
+      needs.assess.outputs.scan_completed == 'true' &&
       github.repository == 'YusukeIt0/dot-link' &&
       vars.DOTLINK_AUTO_MERGE_ENABLED == 'reviewed-policy-v1'
     runs-on: ubuntu-latest
