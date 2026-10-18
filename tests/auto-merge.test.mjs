@@ -38,7 +38,7 @@ function fixture() {
 }
 function clientFor(s, change) {
   let reads = 0; const merges = [];
-  return {merges, readNode(id) {
+  return {merges, graphql() { return {data: {repository: {pullRequest: {headRefOid: s.pr.head.sha, closingIssuesReferences: {nodes: [], pageInfo: {hasNextPage: false}}}}}}; }, readNode(id) {
     const r = s.comments.find(x => x.node_id === id);
     const actor = user => ({__typename: user.type, login: user.login, databaseId: user.id});
     return {id, body: r.body, updatedAt: r.updated_at, lastEditedAt: r.editor ? r.updated_at : null,
@@ -224,4 +224,26 @@ test('ordinary blockers and ambiguous merge API failures are not retried', async
   await assert.rejects(mergeWithReassessment(74, failing, env, wait), /connection lost/);
   assert.equal(calls, 1);
   assert.deepEqual(waits, []);
+});
+
+test('Grok selection and labeled holds participate in the final merge decision', () => {
+  const s = fixture(); s.pr.labels = [{name: 'grok-review'}];
+  assert.ok(evaluate(s).reasons.some(x => x.startsWith('Grok review hold:')));
+  assert.equal(mergeEligible(74, clientFor(s), env).merged, false);
+  s.pr.labels = []; s.grokSelection = {automatic: true, fixes: []};
+  assert.ok(evaluate(s).reasons.some(x => x.includes('awaiting the grok-review label')));
+  const t = fixture(), client = clientFor(t, (value, reads) => {
+    if (reads === 2) value.pr.labels = [{name: 'grok-review'}];
+  });
+  assert.equal(mergeEligible(74, client, env).merged, false);
+  assert.equal(client.merges.length, 0);
+});
+
+test('late P0/P1 classification blocks even before asynchronous labeling completes', () => {
+  const s = fixture(), client = clientFor(s);
+  client.graphql = () => ({data: {repository: {pullRequest: {headRefOid: s.pr.head.sha,
+    closingIssuesReferences: {pageInfo: {hasNextPage: false}, nodes: [{number: 26,
+      repository: {nameWithOwner: repository}, labels: {pageInfo: {hasNextPage: false}, nodes: [{name: 'bug'}, {name: 'P1'}]}}]}}}}});
+  assert.equal(mergeEligible(74, client, env).merged, false);
+  assert.equal(client.merges.length, 0);
 });

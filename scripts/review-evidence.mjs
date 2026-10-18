@@ -45,12 +45,12 @@ const actorIdentity = actor => actor && ({id: actor.databaseId, type: actor.__ty
   login: actor.__typename === 'Bot' ? actor.login.replace(/\[bot\]$/, '') + '[bot]' : actor.login});
 // REST's user field identifies the original author, even after another writer
 // edits the comment. Compare the body across APIs and authenticate its last editor.
-export function authenticateComments(rows, readNode, botId) {
+export function authenticateComments(rows, readNode, botId, additionalRelevant = () => false) {
   return rows.map(row => {
     const relevant = row.body?.startsWith(acceptanceMarker) && trustedUser(row.user) ||
       row.body?.startsWith('<!-- dot-link-opus-review:v1 -->') && row.user?.type === 'Bot' &&
       row.user.login === 'dotsweeper[bot]' && String(row.user.id) === String(botId);
-    if (!relevant) return row;
+    if (!relevant && !additionalRelevant(row)) return row;
     if (!row.node_id || typeof readNode !== 'function') return {...row, revision_verified: false};
     const node = readNode(row.node_id);
     const author = actorIdentity(node?.author), editor = actorIdentity(node?.editor);
