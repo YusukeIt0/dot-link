@@ -117,9 +117,28 @@ and human-label preservation remain unchanged.
 
 Dotsweeper remains the base reviewer. Grok Bot is the maintainer's separate AI
 assistant, operating from its own environment; this integration does not call the
-xAI API. It independently discovers open PRs carrying `independent-review`. Do not add
-GitHub-to-Grok notifications or webhooks. The maintainer-only `/dotlink review2nd`
-PR comment command only adds the selection label; it does not invoke or notify Grok.
+xAI API. After each successful addition of `independent-review`, the selection
+workflow sends one POST to Grok's routine webhook in the same execution, including
+selection by the maintainer-only `/dotlink review2nd` PR comment command.
+Use Actions secrets `GROK_REVIEW_WEBHOOK_URL` for the HTTPS endpoint and
+`GROK_REVIEW_WEBHOOK_KEY` as the complete `Authorization` header value.
+The JSON body contains only `repo`, `pr`, and `head_sha`; never include comments or
+review content. Missing secrets, timeouts and unsuccessful POSTs produce a warning
+only: keep the label and merge hold, and do not fail selection. Do not retry or
+follow redirects. Deliver immediately after the label write, not through a separate
+`labeled` workflow, since labels written using `GITHUB_TOKEN` do not trigger it.
+The same three fields are sent once on a `synchronize` event for an already
+selected PR, using its current head. Selection runs on PR creation, reopening,
+edits, pushes and label changes, including child PRs, and on Issue edits and label
+changes. Issue events re-evaluate open PRs for qualifying fix relationships. There
+is no scheduled scan or polling loop. Event-driven checks of existing labels and
+dry runs do not notify. Direct manual label additions are not label
+writes by this workflow. The merge hold always requires current-head review and
+adjudication, regardless of notification delivery. Push events have separate
+concurrency groups by event type and head, so edits or labels cannot replace a
+pending push wake-up. For a failed delivery, a maintainer can manually dispatch
+this workflow on main with `pr_number` and `notify_current_head: true` to send one
+wake-up for an already-selected PR. This is explicit recovery, not an automatic retry.
 
 ### Selection
 
@@ -188,9 +207,10 @@ completion so a new head is held again. Clearing this hold only permits evaluati
 of the existing merge policy; it does not bypass Dotsweeper, CI, acceptance,
 protected-change restrictions or maintainer merge authority.
 
-This is label-selected review, not a second required CI job for every PR. Grok's
-polling cadence and execution live in its own environment. Measure useful unique
-findings, overlap, rejected findings, limitations and duration to assess its value.
+This is label-selected review, not a second required CI job for every PR. The
+webhook wakes Grok without continuous polling; execution stays in its own
+environment. Measure useful unique findings, overlap, rejected findings, limitations
+and duration to assess its value.
 
 **Rollout:** this section defines the agreed policy. Automatic label assignment
 and the merge-side hold are delivered in a separate implementation PR tracked by
