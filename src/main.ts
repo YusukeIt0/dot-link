@@ -687,6 +687,7 @@ function showDiscarded(): void {
   clearClip(); notice.textContent = t('録音を破棄しました。');
   progress.setPhase('idle');
   if (keepWakeConversation()) updateRuntime();
+  else if (recorder.source === 'manual' && conversation.selected) showMessage();
   else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('長押しで話してください'));
   flushPendingDisplay();
 }

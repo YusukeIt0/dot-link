@@ -138,6 +138,56 @@ const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
 
+for (const browseHistory of [false, true]) {
+ test(`manual discard restores the ${browseHistory ? 'browsed' : 'latest'} conversation without replay or submission`, async t => {
+  const app = await launch({initialMessages: [proactive('first'), proactive('second')]}); t.after(app.close);
+  if (browseHistory) await app.element('previous').click();
+  const expected = app.element('hud-content').textContent;
+  app.element('transcript').value = 'Unsent draft';
+  await app.evaluate('tts = true;');
+  await app.element('record').click(); await flush();
+  assert.equal(vm.runInContext('recorder.state', app.context), 'recording');
+  await app.element('discard').click(); await flush();
+  await app.advance(1000);
+  assert.equal(app.element('hud-content').textContent, expected);
+  assert.equal(app.physical.get(2), expected);
+  assert.equal(app.element('notice').textContent, '録音を破棄しました。');
+  assert.equal(app.element('transcript').value, 'Unsent draft');
+  assert.equal(app.calls.filter(c => c[0] === 'speech').length, 0);
+  assert.equal(app.networkCalls.some(url => /\/api\/(?:transcribe|utterances)$/.test(url)), false);
+ });
+}
+
+test('manual discard without history keeps the idle prompt', async t => {
+ const app = await launch(); t.after(app.close);
+ await app.element('record').click(); await flush();
+ await app.element('discard').click(); await flush();
+ assert.equal(app.element('hud-content').textContent, '長押しで話してください');
+ assert.equal(app.physical.get(2), '長押しで話してください');
+});
+
+test('discard during transcription restores the conversation and ignores a late transcript', async t => {
+ let resolveTranscript, signal;
+ const response = new Promise(resolve => { resolveTranscript = resolve; });
+ const app = await launch({initialMessages: [proactive('previous')], request: (url, init) => {
+  if (!url.endsWith('/api/transcribe')) return;
+  signal = init.signal;
+  return response;
+ }}); t.after(app.close);
+ app.element('auto-send').checked = true;
+ await app.element('record').click(); await flush();
+ await app.emit({audioEvent: {audioPcm: new Uint8Array(3200)}});
+ await app.element('record').click(); await flush();
+ assert.equal(vm.runInContext('busy', app.context), true);
+ await app.element('discard').click(); await flush();
+ assert.equal(signal.aborted, true);
+ assert.equal(app.physical.get(2), 'Synthetic message previous');
+ resolveTranscript({ok: true, status: 200, json: async () => ({text: 'Cancelled speech'})}); await flush();
+ assert.equal(app.element('hud-content').textContent, 'Synthetic message previous');
+ assert.equal(app.element('transcript').value, '');
+ assert.equal(app.networkCalls.some(url => url.endsWith('/api/utterances')), false);
+});
+
 test('stale local ON cannot speak a fresh reply while native OFF is still restoring', async t => {
   let restore;
   const app = await launch({localReadAloud: true, nativeReadAloud: false,
