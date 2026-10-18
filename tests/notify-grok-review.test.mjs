@@ -61,5 +61,32 @@ test('workflow receives child PR events, has no timer, and keeps trusted-main ex
   assert.match(workflow, /issues:\n\s+types: \[edited, labeled, unlabeled\]/);
   assert.doesNotMatch(workflow, /pull_request\.base\.ref/);
   assert.match(workflow, /ref: main\n\s+persist-credentials: false/);
-  assert.match(workflow, /REVIEW_HEAD_CHANGED:.*pull_request_target.*synchronize/);
+  assert.match(workflow, /REVIEW_HEAD_CHANGED:.*pull_request_target.*synchronize.*workflow_dispatch.*inputs.notify_current_head/);
+  assert.match(workflow, /notify_current_head:\n[\s\S]*?type: boolean\n\s+default: false/);
+  const group = workflow.match(/^  group: (.*)$/m)[1];
+  for (const expression of ['github.event_name', 'github.event.action', 'github.event.pull_request.head.sha']) assert.ok(group.includes(expression));
+});
+
+test('trusted CLI dispatch resends a selected current head once, while dry-run stays silent', async t => {
+  const {mkdtempSync, writeFileSync, rmSync} = await import('node:fs');
+  const {tmpdir} = await import('node:os');
+  const {join} = await import('node:path');
+  const {spawnSync} = await import('node:child_process');
+  const {fileURLToPath} = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'grok-notify-cli-'));
+  t.after(() => rmSync(dir, {recursive: true, force: true}));
+  writeFileSync(join(dir, 'gh'), `#!/bin/sh\nprintf '%s' '{"state":"open","labels":["independent-review"],"head":{"sha":"${payload.head_sha}"}}'\n`, {mode: 0o700});
+  const options = {encoding: 'utf8', env: {...process.env, PATH: `${dir}:${process.env.PATH}`,
+    GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: payload.repo,
+    GITHUB_WORKFLOW_REF: `${payload.repo}/.github/workflows/grok-review-selection.yml@refs/heads/main`,
+    REVIEW_HEAD_CHANGED: 'true', GROK_REVIEW_WEBHOOK_URL: '', GROK_REVIEW_WEBHOOK_KEY: '', GITHUB_STEP_SUMMARY: '',
+  }};
+  const script = fileURLToPath(new URL('../scripts/select-grok-reviews.mjs', import.meta.url));
+  const applied = spawnSync(process.execPath, [script, '--apply', String(payload.pr)], options);
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.equal(JSON.parse(applied.stdout)[0].action, 'notified-head-change');
+  assert.equal((applied.stderr.match(/::warning::/g) || []).length, 1);
+  const dry = spawnSync(process.execPath, [script, '--dry-run', String(payload.pr)], options);
+  assert.equal(dry.status, 0, dry.stderr); assert.equal(dry.stderr, '');
+  assert.equal(JSON.parse(dry.stdout)[0].action, 'unchanged');
 });

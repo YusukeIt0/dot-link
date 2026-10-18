@@ -43,7 +43,11 @@ event for an already-selected PR sends one POST with its current head as well.
 The workflow evaluates PR creation, reopening, edits, pushes and label changes,
 including child PRs, plus Issue edits and label changes. It has no scheduled scan.
 The workflow and checkout use trusted main even for child PR events; no child-base
-or PR-head code runs with credentials. PR events have per-PR concurrency groups.
+or PR-head code runs with credentials. Concurrency groups include the event type,
+PR and head so unrelated event types or pushes cannot evict a pending push wake-up.
+For failed delivery, manually dispatch on main with `pr_number` and
+`notify_current_head: true` to send one wake-up for that already-selected PR.
+It does not select an otherwise nonqualifying PR or add an automatic retry.
 GitHub suppresses follow-up events for mutations made with `GITHUB_TOKEN`; those
 callers must explicitly dispatch selection, with no polling fallback. Manual
 sidebar fix links may likewise require a main-branch manual dispatch. Direct

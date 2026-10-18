@@ -134,7 +134,11 @@ changes. Issue events re-evaluate open PRs for qualifying fix relationships. The
 is no scheduled scan or polling loop. Event-driven checks of existing labels and
 dry runs do not notify. Direct manual label additions are not label
 writes by this workflow. The merge hold always requires current-head review and
-adjudication, regardless of notification delivery.
+adjudication, regardless of notification delivery. Push events have separate
+concurrency groups by event type and head, so edits or labels cannot replace a
+pending push wake-up. For a failed delivery, a maintainer can manually dispatch
+this workflow on main with `pr_number` and `notify_current_head: true` to send one
+wake-up for an already-selected PR. This is explicit recovery, not an automatic retry.
 
 ### Selection
 
