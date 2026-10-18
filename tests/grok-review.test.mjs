@@ -170,3 +170,12 @@ test('command notification reads the head after labeling when a push races selec
   assert.equal((await selectFromComment(row.id, client, true, async p => notices.push(p))).action, 'labeled-command');
   assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: 'd'.repeat(40)}]);
 });
+
+
+test('automatic selection notifies the post-label head when a push races the write', async () => {
+  const pr = {state: 'open', labels: ['bug', 'P1'], head: {sha: head}}, notices = [];
+  const client = {api: () => structuredClone(pr), graphql: () => graph(pr.head.sha, [bug]),
+    addLabel: () => {pr.head.sha = 'e'.repeat(40); pr.labels.push('independent-review');}};
+  assert.equal((await selectPR(90, client, true, async p => notices.push(p))).action, 'labeled');
+  assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: 'e'.repeat(40)}]);
+});

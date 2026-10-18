@@ -24,7 +24,8 @@ export async function selectPR(number, client, apply = false, notify = notifyGro
   const currentFixes = closingIssues(client.graphql(closingIssuesQuery, number), current.head.sha);
   if (!automaticSelection(current, currentFixes)) return {number, action: 'not-selected'};
   client.addLabel(number, grok.label);
-  await notify({repo: repository, pr: number, head_sha: current.head.sha});
+  const labeled = client.api(`pulls/${number}`);
+  if (labeled.state === 'open') await notify({repo: repository, pr: number, head_sha: labeled.head.sha});
   return {number, action: 'labeled'};
 }
 export const selectionCommand = '/dotlink review2nd';
