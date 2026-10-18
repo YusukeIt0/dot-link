@@ -47,6 +47,11 @@ The conservative full-snapshot equality check can also hold a PR after unrelated
 repository metadata changes. That is a safe false hold, not evidence that the PR
 is defective. When the final snapshot is still eligible but differs, execution
 waits 30 seconds and then 60 seconds before up to two fresh attempts (three total).
+All candidates share a 90-second wait budget per run, limiting additional attempts
+to at most three across the run. Once the remaining budget cannot cover the next
+delay, that PR stays held for a later run; other candidates still receive their
+initial assessment. This bounds added retry work within the existing 10-minute job
+limit, but does not guarantee completion if GitHub API reads themselves are slow.
 Each attempt rechecks activation and collects and evaluates both snapshots again;
 no previous eligible decision is reused. Persistent churn remains held. Other
 blockers and merge API errors are not automatically retried. Logs identify changed

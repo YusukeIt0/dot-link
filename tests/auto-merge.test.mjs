@@ -181,6 +181,19 @@ test('persistent snapshot churn stops after three attempts without merging', asy
   assert.equal(client.merges.length, 0);
 });
 
+test('multiple churning candidates share one 90-second run budget', async () => {
+  const budget = {remainingMs: 90_000}, waits = [], results = [];
+  for (let candidate = 0; candidate < 4; candidate++) {
+    const client = clientFor(fixture(), (s, reads) => {s.pr.updated_at = String(reads);});
+    results.push(await mergeWithReassessment(74, client, env, async ms => waits.push(ms), budget));
+    assert.equal(client.merges.length, 0);
+  }
+  assert.deepEqual(waits, [30_000, 60_000]);
+  assert.deepEqual(results.map(x => x.attempts), [3, 1, 1, 1]);
+  assert.equal(budget.remainingMs, 0);
+  for (const result of results.slice(1)) assert.match(result.reasons.join(' '), /Run-wide reassessment wait budget exhausted/);
+});
+
 test('reassessment rechecks scope, head, main, CI, protection and activation', async () => {
   for (const change of [s => s.issue.body = 'New scope', s => s.pr.head.sha = 'd'.repeat(40),
     s => s.main = 'd'.repeat(40), s => s.ciRun.conclusion = 'failure',

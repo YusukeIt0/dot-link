@@ -148,7 +148,7 @@ export function mergeEligible(number, client, env) {
   return {...ready, merged: true, merge_commit: result.sha};
 }
 
-export async function mergeWithReassessment(number, client, env, wait = delay) {
+export async function mergeWithReassessment(number, client, env, wait = delay, budget = {remainingMs: 90_000}) {
   const delays = [30_000, 60_000], reassessments = [];
   for (let attempt = 0; ; attempt++) {
     // Never replay a merge mutation: only an explicitly retryable pre-write
@@ -157,6 +157,11 @@ export async function mergeWithReassessment(number, client, env, wait = delay) {
     if (!decision.retryable || attempt === delays.length) {
       return {...decision, attempts: attempt + 1, reassessments};
     }
+    if (budget.remainingMs < delays[attempt]) {
+      return {...decision, attempts: attempt + 1, reassessments,
+        reasons: [...decision.reasons, 'Run-wide reassessment wait budget exhausted; deferred to a later run.']};
+    }
+    budget.remainingMs -= delays[attempt];
     reassessments.push({attempt: attempt + 1, delay_seconds: delays[attempt] / 1000,
       changed_inputs: decision.changed_inputs});
     console.error(`PR #${number}: final inputs changed (${decision.changed_inputs.join(', ')}); reassessing in ${delays[attempt] / 1000}s.`);
@@ -193,9 +198,12 @@ async function main() {
     .filter(x => trustedUser(x.user) && !x.draft).map(x => x.number);
   if (candidates.length > 20) throw new Error('Too many candidates; inspect the backlog or dispatch one PR explicitly.');
   const results = [];
+  // Share the retry allowance across candidates: at most 90 seconds of waits
+  // and three extra attempts per run, rather than 90 seconds for each PR.
+  const reassessmentBudget = {remainingMs: 90_000};
   for (const n of candidates) {
     try {
-      const decision = mode === '--execute' ? await mergeWithReassessment(n, client, process.env) : evaluate(collect(n, client));
+      const decision = mode === '--execute' ? await mergeWithReassessment(n, client, process.env, delay, reassessmentBudget) : evaluate(collect(n, client));
       results.push(decision);
       if (decision.merged) break; // main moved: later work must use new review/CI evidence.
     } catch (error) {
