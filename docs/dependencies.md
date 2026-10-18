@@ -1,4 +1,5 @@
 # Third-party software
+<!-- Temporary independent-review workflow validation marker; remove after the live test. -->
 
 Dot Link's own source is MIT-licensed. Dependencies retain their own licenses and copyright notices.
 
