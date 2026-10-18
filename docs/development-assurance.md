@@ -123,6 +123,9 @@ GitHub-to-Grok notifications, webhooks or comment-based invocation commands.
 ### Selection
 
 Every PR that fixes a P0/P1 bug receives `grok-review` automatically when opened.
+Re-evaluate selection after PR edits, fix-link changes and linked-issue priority
+or category changes, and before merging, so later classification cannot escape
+review. Never remove the label automatically.
 Selection requires a concrete bug-fix relationship and a P0/P1 bug classification;
 a feature proposal or an incidental reference to a high-priority issue is not a
 qualifying fix. The maintainer can also apply `grok-review` manually to any PR,
@@ -141,7 +144,7 @@ and issue problem definition read, findings with evidence, and limitations.
 Distinguish static inspection from tests actually executed and physical evidence.
 
 Publish in English as an ordinary PR conversation comment using the dedicated
-`dot-link-grok-reviewer` GitHub App. The only repository permissions are
+`dotsweeper2nd` GitHub App. The only repository permissions are
 **Pull requests: Read and write** and mandatory **Metadata: Read-only**. Install it
 only on `YusukeIt0/dot-link`. Keep its App, key and secrets separate from
 `dotsweeper-merge`. Do not submit Approve, Request changes or formal review comments,
