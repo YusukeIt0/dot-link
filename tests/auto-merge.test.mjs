@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluate, collect, mergeEligible, assertActivation, protectedChanges, deviceAffected} from '../scripts/auto-merge.mjs';
+import {evaluate, collect, mergeEligible, mergeWithReassessment, assertActivation, protectedChanges, deviceAffected} from '../scripts/auto-merge.mjs';
 import {policy, acceptanceMarker, scopeDigest, hash} from '../scripts/review-evidence.mjs';
 import {fingerprintPR, latestReceipt} from '../scripts/check-review-before-merge.mjs';
 
@@ -137,4 +137,57 @@ test('protected paths cover unknown files, renames and version metadata exceptio
   assert.equal(deviceAffected([{filename: 'assets/brand/orbit/mark.svg'}]), false);
   assert.equal(deviceAffected([{filename: 'assets/brand/orbit/DotLink.icns'}]), true);
   assert.equal(deviceAffected([{filename: 'assets/brand/future-unknown.svg'}]), true);
+});
+
+test('transient metadata change is re-read after a delay and merges only once', async () => {
+  const client = clientFor(fixture(), (s, reads) => {if (reads === 2) s.pr.updated_at = 'changed';});
+  const waits = [];
+  const result = await mergeWithReassessment(74, client, env, async ms => waits.push(ms));
+  assert.equal(result.merged, true);
+  assert.equal(result.attempts, 2);
+  assert.deepEqual(waits, [30_000]);
+  assert.deepEqual(result.reassessments[0].changed_inputs, ['pr']);
+  assert.deepEqual(client.merges, [{number: 74, body: {sha: head, merge_method: 'squash'}}]);
+});
+
+test('persistent snapshot churn stops after three attempts without merging', async () => {
+  const client = clientFor(fixture(), (s, reads) => {s.pr.updated_at = String(reads);});
+  const waits = [];
+  const result = await mergeWithReassessment(74, client, env, async ms => waits.push(ms));
+  assert.equal(result.merged, false);
+  assert.equal(result.attempts, 3);
+  assert.deepEqual(waits, [30_000, 60_000]);
+  assert.equal(client.merges.length, 0);
+});
+
+test('reassessment rechecks scope, head, main, CI, protection and activation', async () => {
+  for (const change of [s => s.issue.body = 'New scope', s => s.pr.head.sha = 'd'.repeat(40),
+    s => s.main = 'd'.repeat(40), s => s.ciRun.conclusion = 'failure',
+    s => s.protection.enforce_admins.enabled = false]) {
+    const s = fixture(), client = clientFor(s, (s, reads) => {if (reads === 2) s.pr.updated_at = 'changed';});
+    const waits = [];
+    const result = await mergeWithReassessment(74, client, env, async ms => {waits.push(ms); change(s);});
+    assert.equal(result.merged, false, change.toString());
+    assert.equal(result.attempts, 2);
+    assert.deepEqual(waits, [30_000]);
+    assert.equal(client.merges.length, 0);
+  }
+  const client = clientFor(fixture(), (s, reads) => {if (reads === 2) s.pr.updated_at = 'changed';});
+  const api = client.api;
+  await assert.rejects(mergeWithReassessment(74, client, env, async () => {
+    client.api = path => path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED' ? {value: 'disabled'} : api(path);
+  }), /not activated/);
+  assert.equal(client.merges.length, 0);
+});
+
+test('ordinary blockers and ambiguous merge API failures are not retried', async () => {
+  const s = fixture(); s.ciRun.conclusion = 'failure';
+  const client = clientFor(s), waits = [];
+  const wait = async ms => waits.push(ms);
+  assert.equal((await mergeWithReassessment(74, client, env, wait)).merged, false);
+  const failing = clientFor(fixture()); let calls = 0;
+  failing.merge = () => {calls++; throw new Error('connection lost after request');};
+  await assert.rejects(mergeWithReassessment(74, failing, env, wait), /connection lost/);
+  assert.equal(calls, 1);
+  assert.deepEqual(waits, []);
 });

@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {setTimeout as delay} from 'node:timers/promises';
 import {latestReceipt, assertReady} from './check-review-before-merge.mjs';
 import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery, websiteOnlyAsset} from './review-evidence.mjs';
 
@@ -127,12 +128,31 @@ export function mergeEligible(number, client, env) {
   // Re-read all live inputs before the mutation; never queue a future merge using
   // a stale green result. GitHub enforces branch protection and exact-head CAS.
   const final = collect(number, client), ready = evaluate(final);
-  if (!ready.eligible || hash(first) !== hash(final)) return {...ready, eligible: false, merged: false,
+  const changed = hash(first) !== hash(final);
+  const changedInputs = Object.keys({...first, ...final}).filter(key => hash({value: first[key]}) !== hash({value: final[key]}));
+  if (!ready.eligible || changed) return {...ready, eligible: false, merged: false,
+    retryable: ready.eligible && changed, changed_inputs: changedInputs,
     reasons: [...ready.reasons, 'Inputs changed during the final merge check.']};
   assertActivation(env, client.api('actions/variables/DOTLINK_AUTO_MERGE_ENABLED').value);
   const result = client.merge(number, {sha: ready.head, merge_method: 'squash'});
   if (result.merged !== true || !/^[a-f0-9]{40}$/.test(result.sha || '')) throw new Error('GitHub did not confirm a merge.');
   return {...ready, merged: true, merge_commit: result.sha};
+}
+
+export async function mergeWithReassessment(number, client, env, wait = delay) {
+  const delays = [30_000, 60_000], reassessments = [];
+  for (let attempt = 0; ; attempt++) {
+    // Never replay a merge mutation: only an explicitly retryable pre-write
+    // snapshot hold reaches this loop. Activation and all gates run afresh.
+    const decision = mergeEligible(number, client, env);
+    if (!decision.retryable || attempt === delays.length) {
+      return {...decision, attempts: attempt + 1, reassessments};
+    }
+    reassessments.push({attempt: attempt + 1, delay_seconds: delays[attempt] / 1000,
+      changed_inputs: decision.changed_inputs});
+    console.error(`PR #${number}: final inputs changed (${decision.changed_inputs.join(', ')}); reassessing in ${delays[attempt] / 1000}s.`);
+    await wait(delays[attempt]);
+  }
 }
 
 function githubClient(env) {
@@ -166,7 +186,7 @@ async function main() {
   const results = [];
   for (const n of candidates) {
     try {
-      const decision = mode === '--execute' ? mergeEligible(n, client, process.env) : evaluate(collect(n, client));
+      const decision = mode === '--execute' ? await mergeWithReassessment(n, client, process.env) : evaluate(collect(n, client));
       results.push(decision);
       if (decision.merged) break; // main moved: later work must use new review/CI evidence.
     } catch (error) {

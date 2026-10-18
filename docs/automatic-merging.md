@@ -42,8 +42,27 @@ after the last API read remains a residual race; this is not claimed to be zero
 risk. Serializing coordinator runs does not serialize human edits or other merges.
 The conservative full-snapshot equality check can also hold a PR after unrelated
 repository metadata changes. That is a safe false hold, not evidence that the PR
-is defective. Measure its frequency during the inactive trial before narrowing
-the comparison; it cannot cause an unverified merge.
+is defective. When the final snapshot is still eligible but differs, execution
+waits 30 seconds and then 60 seconds before up to two fresh attempts (three total).
+Each attempt rechecks activation and collects and evaluates both snapshots again;
+no previous eligible decision is reused. Persistent churn remains held. Other
+blockers and merge API errors are not automatically retried. Logs identify changed
+top-level input categories without publishing their contents. The full comparison
+is preserved; retrying never waives a gate.
+
+The workflow uses a fixed repository-wide concurrency group, `queue: max` and
+`cancel-in-progress: false`. One run executes at a time; waiting runs queue in the
+order they begin waiting, without replacing pending runs or interrupting the active
+run. GitHub limits the queue to 100 pending runs and cancels additional arrivals.
+The bounded reassessment waits inside the active run, retaining its concurrency
+slot. See [GitHub concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency).
+
+Pinned upstream actionlint 1.7.12 does not recognize `concurrency.queue` yet.
+Workflow lint suppresses only that exact unsupported-key diagnostic and separately
+parses the YAML to require the complete concurrency policy above, rejecting queue
+usage elsewhere. Its regression tests and all other actionlint/zizmor checks remain
+required. Remove the diagnostic exception and compatibility check when the pinned
+upstream actionlint supports queue; do not broaden the exception or switch forks.
 Before activation, decide whether this bounded risk is acceptable for the allowed
 change class; stricter governance would need an additional server-side mechanism.
 
