@@ -15,7 +15,11 @@
 body { margin: 0; font-size: 16px; line-height: 1.65; }
 a { color: inherit; text-underline-offset: .25em; }
 a:hover { color: var(--accent); }
-a:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
+[hidden] { display: none !important; }
+button, input { font: inherit; }
+.link-button { border: 0; padding: 0; background: none; color: inherit; text-decoration: underline; text-underline-offset: .25em; cursor: pointer; }
+.link-button:hover { color: var(--accent); }
 img { display: block; max-width: 100%; height: auto; }
 h1, h2, p, figure, dl { margin: 0; }
 h1, h2 { font-weight: 550; letter-spacing: -.045em; line-height: 1.08; text-wrap: balance; }
@@ -107,3 +111,15 @@ html:not([lang="en"]) h2 { max-width: none; }
 .film video:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
 .film-note { color: var(--muted); font-size: 12px; margin-top: 12px; }
 @media (max-width: 680px) { .film { padding-bottom: 40px; } }
+
+.analytics-consent { position: fixed; z-index: 5; inset-inline: 20px; bottom: 20px; width: min(680px, calc(100% - 40px)); margin-inline: auto; padding: 22px; border: 1px solid var(--line); border-radius: 8px; background: #1b221d; box-shadow: 0 8px 40px #0008; max-height: calc(100dvh - 40px); overflow-y: auto; }
+.analytics-consent h2, html:not([lang="en"]) .analytics-consent h2 { font-size: 20px; line-height: 1.4; letter-spacing: -.02em; max-width: none; }
+.analytics-consent p { margin-top: 10px; color: #c8d1c9; font-size: 14px; }
+.analytics-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.analytics-actions > button:not(.link-button) { min-height: 44px; border: 1px solid var(--accent); padding: 9px 18px; border-radius: 6px; background: transparent; color: var(--text); cursor: pointer; }
+.analytics-actions > button:not(.link-button):hover { background: #344637; }
+.analytics-actions .link-button { margin-inline-start: auto; min-height: 44px; }
+#analytics-internal-controls { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 16px; font-size: 14px; }
+#analytics-internal { accent-color: var(--accent); }
+.analytics-consent .analytics-note { font-size: 12px; }
+#analytics-storage-error { color: #f5c9a4; }

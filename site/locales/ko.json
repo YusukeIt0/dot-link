@@ -58,5 +58,14 @@
   "privacy": "데이터 처리 안내(영어)",
   "independent": "OpenAI, Even Realities, Tailscale과는 독립적인 프로젝트입니다.",
   "github": "GitHub(영어)",
-  "languages": "언어"
+  "languages": "언어",
+  "analyticsSettings": "분석 설정",
+  "analyticsTitle": "사이트 개선에 참여하시겠어요?",
+  "analyticsDescription": "동의하시면 Google Analytics가 쿠키를 사용해 방문, 클릭, 동영상 시청을 측정합니다. 광고에는 사용하지 않습니다. 선택은 언제든 변경할 수 있습니다.",
+  "analyticsAccept": "분석 허용",
+  "analyticsReject": "분석 거부",
+  "analyticsClose": "닫기",
+  "analyticsInternal": "이 브라우저를 보고서에서 제외",
+  "analyticsInternalNote": "이 브라우저에만 적용됩니다. 사이트 데이터를 삭제하면 설정도 지워집니다. 다른 기기에서는 별도로 설정해야 합니다.",
+  "analyticsStorageError": "선택을 저장하지 못해 분석이 꺼졌습니다. 선택을 기억하려면 사이트 데이터 저장을 허용해 주세요."
 }

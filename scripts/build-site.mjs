@@ -46,6 +46,7 @@ await writeFile(resolve(output, 'sitemap.xml'),
 
 // Copy only public styling and existing approved artwork, never the app build.
 await copyFile(resolve(root, 'site/style.css'), resolve(output, 'style.css'));
+await copyFile(resolve(root, 'site/analytics.mjs'), resolve(output, 'analytics.mjs'));
 for (const [source, name] of [
   ['assets/brand/orbit/mark.svg', 'mark.svg'],
   ['assets/brand/orbit/mac-1024.png', 'mac-1024.png'],

@@ -58,5 +58,14 @@
   "privacy": "資料處理方式（英文）",
   "independent": "本專案獨立於 OpenAI、Even Realities 與 Tailscale。",
   "github": "GitHub（英文）",
-  "languages": "語言"
+  "languages": "語言",
+  "analyticsSettings": "分析設定",
+  "analyticsTitle": "協助改善這個網站？",
+  "analyticsDescription": "經您同意後，Google Analytics 會使用 Cookie 衡量瀏覽、點擊及影片觀看情況。不用於廣告。您隨時可以變更選擇。",
+  "analyticsAccept": "允許分析",
+  "analyticsReject": "拒絕分析",
+  "analyticsClose": "關閉",
+  "analyticsInternal": "將此瀏覽器排除於報表之外",
+  "analyticsInternalNote": "僅適用於此瀏覽器。清除網站資料會移除此設定。其他裝置需個別設定。",
+  "analyticsStorageError": "無法儲存您的選擇，分析功能已關閉。請允許網站儲存資料，以記住您的選擇。"
 }

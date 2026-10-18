@@ -27,7 +27,18 @@ test('localized static pages are complete, mutually discoverable and use valid l
     assert.ok(page.includes(`<link rel="canonical" href="${urlFor(lang)}">`));
     assert.ok(page.includes(`<meta property="og:url" content="${urlFor(lang)}">`));
     assert.ok(sitemap.includes(`<loc>${urlFor(lang)}</loc>`));
-    assert.doesNotMatch(page, /\{\{|\}\}|<script\b|http-equiv="refresh"/i);
+    assert.doesNotMatch(page, /\{\{|\}\}|http-equiv="refresh"/i);
+    assert.equal((page.match(/<script\b/g) ?? []).length, 1);
+    assert.ok(page.includes(`<script type="module" src="${lang === 'en' ? '' : '../'}analytics.mjs"></script>`));
+    assert.doesNotMatch(page, /googletagmanager\.com|google-analytics\.com/);
+    for (const id of ['analytics-settings', 'analytics-consent', 'analytics-title',
+      'analytics-accept', 'analytics-reject', 'analytics-close', 'analytics-internal',
+      'analytics-internal-controls', 'analytics-storage-error']) {
+      assert.equal((page.match(new RegExp(`id="${id}"`, 'g')) ?? []).length, 1);
+    }
+    assert.equal((page.match(/data-analytics="install"/g) ?? []).length, 2);
+    assert.equal((page.match(/data-analytics="quickstart"/g) ?? []).length, 2);
+    assert.equal((page.match(/data-analytics="watch"/g) ?? []).length, 1);
     assert.equal((page.match(/<h1\b/g) ?? []).length, 1);
     assert.equal((page.match(/aria-current="page"/g) ?? []).length, 1);
     for (const other of languages) {

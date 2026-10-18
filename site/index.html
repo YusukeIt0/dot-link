@@ -21,6 +21,7 @@
   <meta name="twitter:card" content="summary">
   <link rel="icon" href="{{assetPrefix}}assets/mac-1024.png" type="image/png">
   <link rel="stylesheet" href="{{assetPrefix}}style.css">
+  <script type="module" src="{{assetPrefix}}analytics.mjs"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">{{skip}}</a>
@@ -42,9 +43,9 @@
         <h1 id="intro-title">{{heroStart}}<span>{{heroAccent}}</span>{{heroEnd}}</h1>
         <p class="lead">{{lead}}</p>
         <div class="actions">
-          <a class="button" href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">{{get}} <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="https://github.com/YusukeIt0/dot-link#quickstart">{{guide}} <span aria-hidden="true">↗</span></a>
-          <a class="text-link" href="#film">{{watch}} <span aria-hidden="true">↓</span></a>
+          <a class="button" data-analytics="install" data-placement="hero" href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">{{get}} <span aria-hidden="true">↗</span></a>
+          <a class="text-link" data-analytics="quickstart" data-placement="hero" href="https://github.com/YusukeIt0/dot-link#quickstart">{{guide}} <span aria-hidden="true">↗</span></a>
+          <a class="text-link" data-analytics="watch" data-placement="hero" href="#film">{{watch}} <span aria-hidden="true">↓</span></a>
         </div>
         <p class="hero-note">{{heroNote}}<a href="#requirements">{{seeRequirements}}</a></p>
       </div>
@@ -108,7 +109,7 @@
           <li>{{step2}}</li>
           <li>{{step3}}</li>
         </ol>
-        <a class="text-link" href="https://github.com/YusukeIt0/dot-link#quickstart">{{follow}} <span aria-hidden="true">↗</span></a>
+        <a class="text-link" data-analytics="quickstart" data-placement="setup" href="https://github.com/YusukeIt0/dot-link#quickstart">{{follow}} <span aria-hidden="true">↗</span></a>
       </div>
     </section>
   </main>
@@ -116,12 +117,27 @@
   <footer class="site-footer wrap">
     <p>{{license}}</p>
     <div class="footer-links">
-      <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Even Hub</a>
+      <a data-analytics="install" data-placement="footer" href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Even Hub</a>
       <a href="https://github.com/YusukeIt0/dot-link">{{github}}</a>
       <a href="https://github.com/YusukeIt0/dot-link/blob/main/docs/privacy.md">{{privacy}}</a>
+      <button id="analytics-settings" class="link-button" type="button" hidden>{{analyticsSettings}}</button>
     </div>
     <nav class="language-links" aria-label="{{languages}}">{{languageLinks}}</nav>
     <p class="independent">{{independent}}</p>
   </footer>
+  <section id="analytics-consent" class="analytics-consent" aria-labelledby="analytics-title" hidden>
+    <h2 id="analytics-title" tabindex="-1">{{analyticsTitle}}</h2>
+    <p>{{analyticsDescription}} <a href="https://github.com/YusukeIt0/dot-link/blob/main/docs/privacy.md#official-website-analytics">{{privacy}}</a></p>
+    <div class="analytics-actions">
+      <button id="analytics-accept" type="button">{{analyticsAccept}}</button>
+      <button id="analytics-reject" type="button">{{analyticsReject}}</button>
+      <button id="analytics-close" class="link-button" type="button" hidden>{{analyticsClose}}</button>
+    </div>
+    <div id="analytics-internal-controls" hidden>
+      <label><input id="analytics-internal" type="checkbox"> {{analyticsInternal}}</label>
+      <p class="analytics-note">{{analyticsInternalNote}}</p>
+    </div>
+    <p id="analytics-storage-error" role="status" hidden>{{analyticsStorageError}}</p>
+  </section>
 </body>
 </html>
