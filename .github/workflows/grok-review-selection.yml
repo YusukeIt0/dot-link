@@ -1,7 +1,9 @@
-name: Grok review selection
+name: Independent review selection
 on:
   pull_request_target: # zizmor: ignore[dangerous-triggers]
     types: [opened, reopened, edited, synchronize, labeled, unlabeled]
+  issue_comment: # zizmor: ignore[dangerous-triggers]
+    types: [created, edited]
   issues:
     types: [edited, labeled, unlabeled]
   # Reconcile manually linked issues and classification changes made by GITHUB_TOKEN.
@@ -15,12 +17,13 @@ on:
         required: false
 permissions: {}
 concurrency:
-  group: dot-link-grok-selection-${{ github.event.pull_request.number || inputs.pr_number || 'all' }}
+  group: dot-link-grok-selection-${{ github.event.comment.id || github.event.pull_request.number || inputs.pr_number || 'all' }}
   cancel-in-progress: false
 jobs:
   select:
     if: >-
       github.repository == 'YusukeIt0/dot-link' &&
+      (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && contains(github.event.comment.body, '/dotlink review2nd'))) &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.base.ref == 'main') &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
@@ -36,10 +39,13 @@ jobs:
           persist-credentials: false
       - name: Add review labels to qualifying fixes
         env:
+          COMMENT_ID: ${{ github.event.comment.id }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
         run: |
-          if [ -n "$PR_NUMBER" ]; then
+          if [ -n "$COMMENT_ID" ]; then
+            node scripts/select-grok-reviews.mjs --apply --comment "$COMMENT_ID"
+          elif [ -n "$PR_NUMBER" ]; then
             node scripts/select-grok-reviews.mjs --apply "$PR_NUMBER"
           else
             node scripts/select-grok-reviews.mjs --apply

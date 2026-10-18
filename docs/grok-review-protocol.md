@@ -7,7 +7,7 @@ both changes; publishing or installing the App does not activate the gate.
 
 ## Discovery and selection
 
-Grok independently lists open PRs labeled `grok-review` in `YusukeIt0/dot-link`.
+Grok independently lists open PRs labeled `independent-review` in `YusukeIt0/dot-link`.
 It may read number, base/head SHA and labels for discovery. It uses its own local
 record of completed heads to avoid repeated posts; it must not read PR comments,
 formal/inline reviews, Dotsweeper output or adjudication records to decide what to
@@ -18,7 +18,7 @@ substitute PR discussion. Do not open the PR conversation page as review input.
 If the head changes during review, publish only against the SHA actually reviewed;
 the new head needs a new review.
 
-The repository selection workflow adds `grok-review` when a PR is explicitly
+The repository selection workflow adds `independent-review` when a PR is explicitly
 classified with both `bug` and `P0`/`P1`, or has a GitHub closing-issue relationship
 to an issue with both classifications in this repository. A PR classified as
 `enhancement` is a proposal and is not automatically selected. Ordinary mentions,
@@ -28,7 +28,14 @@ closing relationship, or have the maintainer opt in manually. Classification and
 closing relationships express intended fixes; Dotsweeper and Grok still verify
 whether the code actually fixes the problem.
 
-Manual `grok-review` labels opt in any PR and are never removed by automation.
+Manual `independent-review` labels opt in any PR and are never removed by automation.
+A configured trusted maintainer may also post the standalone command
+`/dotlink review2nd` on an open PR. The workflow adds the same label regardless
+of priority. It fetches the current comment and verifies both author and editor
+against `trustedMaintainers` in `config/development-policy.json` (numeric ID and
+login, currently `YusukeIt0`); bots and other contributors cannot use the command.
+Created and edited comments are supported. This selects a review; it does not
+notify or directly invoke Grok. Grok never reads the command comment.
 The workflow reconciles on PR/issue changes and twice hourly to cover manually
 linked issues and label changes from GitHub's own workflow token. This schedule
 only maintains repository labels; it neither runs Grok nor notifies it. Main-target
@@ -49,7 +56,7 @@ should preserve the defect's P0/P1 classification through review.
 - Bot: `dotsweeper2nd[bot]`, numeric user ID `344214582`.
 - Installation: `172605999`, selected repository `YusukeIt0/dot-link` only.
 - Permissions: Pull requests write and Metadata read; no Contents write.
-- Webhook disabled. No xAI API, GitHub-to-Grok delivery or comment invocation.
+- Webhook disabled. No xAI API or GitHub-to-Grok delivery. The selection command only adds a label.
 - Private key: maintainer-entered secret in Grok's own environment, used only for
   posting. It is not technically isolated from other processing there. Never put
   it in chat, logs, repository files or repository Actions secrets. Never execute
@@ -135,6 +142,6 @@ binds the disposition to the comment revision, including prose. Empty findings
 still need an explicit completed record with a summary. A latest malformed,
 stale, untrusted-edited or incomplete adjudication cannot reuse an older pass.
 
-Leave `grok-review` attached. Every head update invalidates the previous evidence,
+Leave `independent-review` attached. Every head update invalidates the previous evidence,
 even for documentation-only commits. Passing this additional gate does not bypass
 any existing acceptance, Dotsweeper, CI, protected-file or merge-authority rule.

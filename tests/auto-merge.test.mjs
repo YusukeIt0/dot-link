@@ -227,13 +227,13 @@ test('ordinary blockers and ambiguous merge API failures are not retried', async
 });
 
 test('Grok selection and labeled holds participate in the final merge decision', () => {
-  const s = fixture(); s.pr.labels = [{name: 'grok-review'}];
+  const s = fixture(); s.pr.labels = [{name: 'independent-review'}];
   assert.ok(evaluate(s).reasons.some(x => x.startsWith('Grok review hold:')));
   assert.equal(mergeEligible(74, clientFor(s), env).merged, false);
   s.pr.labels = []; s.grokSelection = {automatic: true, fixes: []};
-  assert.ok(evaluate(s).reasons.some(x => x.includes('awaiting the grok-review label')));
+  assert.ok(evaluate(s).reasons.some(x => x.includes('awaiting the independent-review label')));
   const t = fixture(), client = clientFor(t, (value, reads) => {
-    if (reads === 2) value.pr.labels = [{name: 'grok-review'}];
+    if (reads === 2) value.pr.labels = [{name: 'independent-review'}];
   });
   assert.equal(mergeEligible(74, client, env).merged, false);
   assert.equal(client.merges.length, 0);
@@ -250,7 +250,7 @@ test('late P0/P1 classification blocks even before asynchronous labeling complet
 
 test('authenticated current-head Grok review and adjudication clear only the additional hold', async () => {
   const {grok, reviewMarker, adjudicationMarker, reviewDigest} = await import('../scripts/grok-review.mjs');
-  const s = fixture(); s.pr.labels = [{name: 'grok-review'}];
+  const s = fixture(); s.pr.labels = [{name: 'independent-review'}];
   const bot = {id: grok.botId, login: grok.login, type: 'Bot'};
   const body = (marker, record) => `${marker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``;
   const row = {id: 60, node_id: 'comment60', updated_at: '2026-10-18T06:00:00Z', user: bot,

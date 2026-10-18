@@ -1,7 +1,7 @@
 // Trusted policy code. Review text is data and must never be executed.
 import {hash, trustedUser, authenticateComments} from './review-evidence.mjs';
 
-export const grok = Object.freeze({appId: 5365493, botId: 344214582, login: 'dotsweeper2nd[bot]', label: 'grok-review'});
+export const grok = Object.freeze({appId: 5365493, botId: 344214582, login: 'dotsweeper2nd[bot]', label: 'independent-review'});
 export const reviewMarker = '<!-- dot-link-grok-review:v1 -->';
 export const adjudicationMarker = '<!-- dot-link-grok-adjudication:v1 -->';
 const sha = x => typeof x === 'string' && /^[a-f0-9]{40}$/.test(x);

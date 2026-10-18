@@ -53,7 +53,7 @@ export function evaluate(snapshot) {
   const {pr, main, protection, files, versionChanges, context, receipt, reviews = [], ciRun, ciJobs, ancestry} = snapshot;
   if (!trustedUser(pr.user) || pr.head.repo?.full_name !== repository) reasons.push('PR author/head is not an explicitly trusted in-repository contributor.');
   if (pr.base?.ref !== 'main') reasons.push('Automatic merging only targets protected main; dependent PRs need their normal integration sequence.');
-  if (snapshot.grokSelection?.automatic && !selected(pr)) reasons.push('Qualifying P0/P1 bug fix is awaiting the grok-review label.');
+  if (snapshot.grokSelection?.automatic && !selected(pr)) reasons.push('Qualifying P0/P1 bug fix is awaiting the independent-review label.');
   reasons.push(...grokBlockers(pr, snapshot.comments || [], selected(pr) || snapshot.grokSelection?.automatic));
   const sensitive = protectedChanges(files, versionChanges);
   if (sensitive.length) reasons.push(`Human merge decision required for control-plane or unclassified changes: ${sensitive.join(', ')}`);

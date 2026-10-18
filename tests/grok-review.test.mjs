@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {grok, reviewMarker, adjudicationMarker, automaticSelection, authenticateGrokComments, grokBlockers, reviewDigest, closingIssues} from '../scripts/grok-review.mjs';
 import {policy} from '../scripts/review-evidence.mjs';
-import {selectPR} from '../scripts/select-grok-reviews.mjs';
+import {selectPR, selectFromComment} from '../scripts/select-grok-reviews.mjs';
 const head = 'b'.repeat(40), owner = {...policy.trustedMaintainers[0], type: 'User'};
 const bot = {id: grok.botId, login: grok.login, type: 'Bot'};
 const encode = (marker, record) => `${marker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\`\n`;
 function fixture(findings = []) {
-  const pr = {number: 90, state: 'open', labels: [{name: 'grok-review'}], head: {sha: head}};
+  const pr = {number: 90, state: 'open', labels: [{name: 'independent-review'}], head: {sha: head}};
   const review = {version: 1, head, reviewer: 'Grok Bot', duration_seconds: 50, read_scope: ['src/a.ts:1-90', 'Issue #26 problem definition'], findings, limitations: ['Static review; tests not executed.']};
   const row = {id: 100, node_id: 'N100', body: encode(reviewMarker, review), updated_at: '2026-10-18T06:00:00Z', user: bot,
     performed_via_github_app: {id: grok.appId}, revision_verified: true, revision_author: bot};
@@ -92,9 +92,40 @@ test('labeler is add-only, honors manual labels and rechecks before mutation', (
   const pr = {number: 90, state: 'open', base: {ref: 'parent'}, labels: [], head: {sha: head}};
   const client = {api: () => {reads++; return structuredClone(pr);}, graphql: () => graph(head, [bug]), addLabel: (...x) => writes.push(x)};
   assert.equal(selectPR(90, client).action, 'would-label'); assert.deepEqual(writes, []);
-  assert.equal(selectPR(90, client, true).action, 'labeled'); assert.deepEqual(writes, [[90, 'grok-review']]);
-  pr.labels = ['grok-review', 'P2']; assert.equal(selectPR(90, client, true).action, 'unchanged'); assert.equal(writes.length, 1);
+  assert.equal(selectPR(90, client, true).action, 'labeled'); assert.deepEqual(writes, [[90, 'independent-review']]);
+  pr.labels = ['independent-review', 'P2']; assert.equal(selectPR(90, client, true).action, 'unchanged'); assert.equal(writes.length, 1);
   pr.labels = []; reads = 0;
   client.api = () => {reads++; return {...pr, head: {sha: reads === 1 ? head : 'c'.repeat(40)}};};
   assert.equal(selectPR(90, client, true).action, 'changed-before-label'); assert.equal(writes.length, 1);
+});
+
+test('review2nd is maintainer-only, authenticates edits and selects lower-priority PRs', () => {
+  const writes = [], row = {id: 6246408503, node_id: 'Ncmd', body: '/dotlink review2nd',
+    updated_at: '2026-10-18T07:00:00Z', user: owner, issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/90'};
+  const actor = u => ({__typename: u.type, login: u.login, databaseId: u.id});
+  const client = {api(path) {
+    if (path === 'issues/comments/6246408503') return structuredClone(row);
+    if (path === 'issues/90') return {pull_request: {}};
+    if (path === 'pulls/90') return {state: 'open', labels: ['P2'], head: {sha: head}};
+    throw new Error(path);
+  }, readNode() {return {id: row.node_id, body: row.body, updatedAt: row.updated_at,
+    lastEditedAt: row.editor ? row.updated_at : null, author: actor(row.user), editor: row.editor && actor(row.editor)};},
+  addLabel: (...args) => writes.push(args)};
+  assert.equal(selectFromComment(row.id, client).action, 'would-label-command');
+  assert.deepEqual(writes, []);
+  assert.equal(selectFromComment(row.id, client, true).action, 'labeled-command');
+  assert.deepEqual(writes, [[90, 'independent-review']]);
+  for (const user of [{...owner, id: 1}, {...owner, login: 'other'}, bot]) {
+    row.user = user; assert.equal(selectFromComment(row.id, client, true).action, 'ignored-command');
+  }
+  row.user = owner; row.editor = {...owner, id: 1};
+  assert.equal(selectFromComment(row.id, client, true).action, 'ignored-command');
+  delete row.editor;
+  for (const body of ['quoted /dotlink review2nd', '/dotlink review', '/dotlink review2nd\nextra']) {
+    row.body = body; assert.equal(selectFromComment(row.id, client, true).action, 'ignored-command');
+  }
+  row.body = '/dotlink review2nd'; let reads = 0; const api = client.api;
+  client.api = path => {if (path === 'issues/comments/6246408503' && ++reads === 2) row.editor = bot; return api(path);};
+  assert.equal(selectFromComment(row.id, client, true).action, 'command-changed');
+  assert.equal(writes.length, 1);
 });

@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {trustedUser, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 import {automaticSelection, selected, grok, closingIssues, closingIssuesQuery} from './grok-review.mjs';
 const repository = 'YusukeIt0/dot-link';
 export function selectPR(number, client, apply = false) {
@@ -19,17 +20,40 @@ export function selectPR(number, client, apply = false) {
   client.addLabel(number, grok.label);
   return {number, action: 'labeled'};
 }
+export const selectionCommand = '/dotlink review2nd';
+export function authorizedCommand(row, readNode) {
+  if (!trustedUser(row?.user) || row.body?.trim() !== selectionCommand) return false;
+  const [verified] = authenticateComments([row], readNode, undefined, () => true);
+  return verified.revision_verified && trustedUser(verified.revision_author);
+}
+export function selectFromComment(id, client, apply = false) {
+  const path = `issues/comments/${id}`, row = client.api(path);
+  if (!authorizedCommand(row, client.readNode)) return {comment: id, action: 'ignored-command'};
+  const match = row.issue_url?.match(/^https:\/\/api\.github\.com\/repos\/YusukeIt0\/dot-link\/issues\/([1-9]\d*)$/);
+  if (!match) throw new Error('Command target cannot be verified.');
+  const number = Number(match[1]), issue = client.api(`issues/${number}`);
+  if (!issue.pull_request) return {number, action: 'not-a-pr'};
+  const pr = client.api(`pulls/${number}`);
+  if (pr.state !== 'open' || selected(pr)) return {number, action: 'unchanged'};
+  if (!apply) return {number, action: 'would-label-command'};
+  if (!authorizedCommand(client.api(path), client.readNode)) return {number, action: 'command-changed'};
+  client.addLabel(number, grok.label);
+  return {number, action: 'labeled-command'};
+}
 function main() {
-  const [mode = '--dry-run', number] = process.argv.slice(2);
-  if (!['--dry-run', '--apply'].includes(mode) || (number && !/^[1-9]\d{0,8}$/.test(number)) || process.argv.length > 4) throw new Error('Usage: select-grok-reviews.mjs [--dry-run|--apply] [PR-number]');
+  const [mode = '--dry-run', target, value] = process.argv.slice(2);
+  const commandMode = target === '--comment', number = commandMode ? value : target;
+  if (!['--dry-run', '--apply'].includes(mode) || (number && (!(commandMode ? /^[1-9]\d{0,14}$/ : /^[1-9]\d{0,8}$/).test(number) || !Number.isSafeInteger(Number(number)))) || (commandMode && !number) || process.argv.length > (commandMode ? 5 : 4) || (!commandMode && value)) throw new Error('Usage: select-grok-reviews.mjs [--dry-run|--apply] [PR-number | --comment comment-id]');
   if (mode === '--apply' && (process.env.GITHUB_ACTIONS !== 'true' || process.env.GITHUB_REPOSITORY !== repository ||
       process.env.GITHUB_WORKFLOW_REF !== `${repository}/.github/workflows/grok-review-selection.yml@refs/heads/main`)) throw new Error('Label writes require the trusted main selection workflow.');
   const command = (args, options = {}) => JSON.parse(execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, ...options}));
   const client = {
     api: path => command(['api', `repos/${repository}/${path}`]),
+    readNode: id => command(['api', 'graphql', '-f', `query=${commentRevisionQuery}`, '-F', `id=${id}`]).data.node,
     graphql: (query, n) => command(['api', 'graphql', '-f', `query=${query}`, '-F', `number=${n}`]),
     addLabel: (n, label) => command(['api', `repos/${repository}/issues/${n}/labels`, '--input', '-'], {input: JSON.stringify({labels: [label]})}),
   };
+  if (commandMode) { console.log(JSON.stringify(selectFromComment(Number(number), client, mode === '--apply'))); return; }
   const prs = number ? [Number(number)] : command(['api', `repos/${repository}/pulls?state=open&per_page=100`, '--paginate', '--slurp']).flat().map(x => x.number);
   if (prs.length > 200) throw new Error('Too many open PRs; dispatch a specific PR.');
   const results = prs.map(n => selectPR(n, client, mode === '--apply'));
