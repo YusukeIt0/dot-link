@@ -5,10 +5,16 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {trustedUser, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 import {automaticSelection, selected, grok, closingIssues, closingIssuesQuery} from './grok-review.mjs';
+import {notifyGrokReview} from './notify-grok-review.mjs';
 const repository = 'YusukeIt0/dot-link';
-export function selectPR(number, client, apply = false) {
+export async function selectPR(number, client, apply = false, notify = notifyGrokReview, headChanged = false) {
   const pr = client.api(`pulls/${number}`);
-  if (pr.state !== 'open' || selected(pr)) return {number, action: 'unchanged'};
+  if (pr.state !== 'open') return {number, action: 'unchanged'};
+  if (selected(pr)) {
+    if (!headChanged || !apply) return {number, action: 'unchanged'};
+    await notify({repo: repository, pr: number, head_sha: pr.head.sha});
+    return {number, action: 'notified-head-change'};
+  }
   const fixes = closingIssues(client.graphql(closingIssuesQuery, number), pr.head.sha);
   if (!automaticSelection(pr, fixes)) return {number, action: 'not-selected'};
   if (!apply) return {number, action: 'would-label'};
@@ -18,6 +24,7 @@ export function selectPR(number, client, apply = false) {
   const currentFixes = closingIssues(client.graphql(closingIssuesQuery, number), current.head.sha);
   if (!automaticSelection(current, currentFixes)) return {number, action: 'not-selected'};
   client.addLabel(number, grok.label);
+  await notify({repo: repository, pr: number, head_sha: current.head.sha});
   return {number, action: 'labeled'};
 }
 export const selectionCommand = '/dotlink review2nd';
@@ -26,7 +33,7 @@ export function authorizedCommand(row, readNode) {
   const [verified] = authenticateComments([row], readNode, undefined, () => true);
   return verified.revision_verified && trustedUser(verified.revision_author);
 }
-export function selectFromComment(id, client, apply = false) {
+export async function selectFromComment(id, client, apply = false, notify = notifyGrokReview) {
   const path = `issues/comments/${id}`, row = client.api(path);
   if (!authorizedCommand(row, client.readNode)) return {comment: id, action: 'ignored-command'};
   const match = row.issue_url?.match(/^https:\/\/api\.github\.com\/repos\/YusukeIt0\/dot-link\/issues\/([1-9]\d*)$/);
@@ -38,9 +45,10 @@ export function selectFromComment(id, client, apply = false) {
   if (!apply) return {number, action: 'would-label-command'};
   if (!authorizedCommand(client.api(path), client.readNode)) return {number, action: 'command-changed'};
   client.addLabel(number, grok.label);
+  await notify({repo: repository, pr: number, head_sha: pr.head.sha});
   return {number, action: 'labeled-command'};
 }
-function main() {
+async function main() {
   const [mode = '--dry-run', target, value] = process.argv.slice(2);
   const commandMode = target === '--comment', number = commandMode ? value : target;
   if (!['--dry-run', '--apply'].includes(mode) || (number && (!(commandMode ? /^[1-9]\d{0,14}$/ : /^[1-9]\d{0,8}$/).test(number) || !Number.isSafeInteger(Number(number)))) || (commandMode && !number) || process.argv.length > (commandMode ? 5 : 4) || (!commandMode && value)) throw new Error('Usage: select-grok-reviews.mjs [--dry-run|--apply] [PR-number | --comment comment-id]');
@@ -53,13 +61,15 @@ function main() {
     graphql: (query, n) => command(['api', 'graphql', '-f', `query=${query}`, '-F', `number=${n}`]),
     addLabel: (n, label) => command(['api', `repos/${repository}/issues/${n}/labels`, '--input', '-'], {input: JSON.stringify({labels: [label]})}),
   };
-  if (commandMode) { console.log(JSON.stringify(selectFromComment(Number(number), client, mode === '--apply'))); return; }
+  if (commandMode) { console.log(JSON.stringify(await selectFromComment(Number(number), client, mode === '--apply'))); return; }
   const prs = number ? [Number(number)] : command(['api', `repos/${repository}/pulls?state=open&per_page=100`, '--paginate', '--slurp']).flat().map(x => x.number);
   if (prs.length > 200) throw new Error('Too many open PRs; dispatch a specific PR.');
-  const results = prs.map(n => selectPR(n, client, mode === '--apply'));
+  const results = [];
+  const headChanged = Boolean(number) && process.env.REVIEW_HEAD_CHANGED === 'true';
+  for (const n of prs) results.push(await selectPR(n, client, mode === '--apply', notifyGrokReview, headChanged));
   console.log(JSON.stringify(results, null, 2));
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, '## Grok review selection\n\n' + (results.map(x => `- #${x.number}: ${x.action}`).join('\n') || 'No open PRs.') + '\n');
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try { main(); } catch (error) { console.error(error.message); process.exitCode = 1; }
+  try { await main(); } catch (error) { console.error(error.message); process.exitCode = 1; }
 }

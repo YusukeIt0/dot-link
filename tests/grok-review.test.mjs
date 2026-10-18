@@ -86,20 +86,27 @@ test('incomplete issue/label pagination and head races cannot prove non-selectio
   assert.throws(() => closingIssues(graph('c'.repeat(40)), head));
   assert.throws(() => closingIssues({...graph(), errors: [{}]}, head));
 });
-test('labeler is add-only, honors manual labels and rechecks before mutation', () => {
-  const writes = []; let reads = 0;
+test('labeler is add-only, honors manual labels and rechecks before mutation', async () => {
+  const writes = [], notices = []; let reads = 0;
+  const notify = async payload => {assert.equal(writes.length, 1); notices.push(payload);};
   // A trusted-main scan also labels child PRs without running their base workflow.
   const pr = {number: 90, state: 'open', base: {ref: 'parent'}, labels: [], head: {sha: head}};
   const client = {api: () => {reads++; return structuredClone(pr);}, graphql: () => graph(head, [bug]), addLabel: (...x) => writes.push(x)};
-  assert.equal(selectPR(90, client).action, 'would-label'); assert.deepEqual(writes, []);
-  assert.equal(selectPR(90, client, true).action, 'labeled'); assert.deepEqual(writes, [[90, 'independent-review']]);
-  pr.labels = ['independent-review', 'P2']; assert.equal(selectPR(90, client, true).action, 'unchanged'); assert.equal(writes.length, 1);
+  assert.equal((await selectPR(90, client, false, notify)).action, 'would-label'); assert.deepEqual(writes, []);
+  assert.equal((await selectPR(90, client, true, notify)).action, 'labeled'); assert.deepEqual(writes, [[90, 'independent-review']]);
+  pr.labels = ['independent-review', 'P2']; assert.equal((await selectPR(90, client, true, notify)).action, 'unchanged'); assert.equal(writes.length, 1);
   pr.labels = []; reads = 0;
   client.api = () => {reads++; return {...pr, head: {sha: reads === 1 ? head : 'c'.repeat(40)}};};
-  assert.equal(selectPR(90, client, true).action, 'changed-before-label'); assert.equal(writes.length, 1);
+  assert.equal((await selectPR(90, client, true, notify)).action, 'changed-before-label'); assert.equal(writes.length, 1);
+  assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: head}]);
+  client.api = () => structuredClone({...pr, head: {sha: head}});
+  client.addLabel = () => {throw new Error('403');};
+  await assert.rejects(selectPR(90, client, true, notify), /403/);
+  assert.equal(notices.length, 1);
 });
 
-test('review2nd is maintainer-only, authenticates edits and selects lower-priority PRs', () => {
+test('review2nd is maintainer-only, authenticates edits and selects lower-priority PRs', async () => {
+  const notices = [], notify = async payload => {assert.equal(writes.length, 1); notices.push(payload);};
   const writes = [], row = {id: 6246408503, node_id: 'Ncmd', body: '/dotlink review2nd',
     updated_at: '2026-10-18T07:00:00Z', user: owner, issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/90'};
   const actor = u => ({__typename: u.type, login: u.login, databaseId: u.id});
@@ -111,21 +118,34 @@ test('review2nd is maintainer-only, authenticates edits and selects lower-priori
   }, readNode() {return {id: row.node_id, body: row.body, updatedAt: row.updated_at,
     lastEditedAt: row.editor ? row.updated_at : null, author: actor(row.user), editor: row.editor && actor(row.editor)};},
   addLabel: (...args) => writes.push(args)};
-  assert.equal(selectFromComment(row.id, client).action, 'would-label-command');
+  assert.equal((await selectFromComment(row.id, client, false, notify)).action, 'would-label-command');
   assert.deepEqual(writes, []);
-  assert.equal(selectFromComment(row.id, client, true).action, 'labeled-command');
+  assert.equal((await selectFromComment(row.id, client, true, notify)).action, 'labeled-command');
   assert.deepEqual(writes, [[90, 'independent-review']]);
   for (const user of [{...owner, id: 1}, {...owner, login: 'other'}, bot]) {
-    row.user = user; assert.equal(selectFromComment(row.id, client, true).action, 'ignored-command');
+    row.user = user; assert.equal((await selectFromComment(row.id, client, true, notify)).action, 'ignored-command');
   }
   row.user = owner; row.editor = {...owner, id: 1};
-  assert.equal(selectFromComment(row.id, client, true).action, 'ignored-command');
+  assert.equal((await selectFromComment(row.id, client, true, notify)).action, 'ignored-command');
   delete row.editor;
   for (const body of ['quoted /dotlink review2nd', '/dotlink review', '/dotlink review2nd\nextra']) {
-    row.body = body; assert.equal(selectFromComment(row.id, client, true).action, 'ignored-command');
+    row.body = body; assert.equal((await selectFromComment(row.id, client, true, notify)).action, 'ignored-command');
   }
   row.body = '/dotlink review2nd'; let reads = 0; const api = client.api;
   client.api = path => {if (path === 'issues/comments/6246408503' && ++reads === 2) row.editor = bot; return api(path);};
-  assert.equal(selectFromComment(row.id, client, true).action, 'command-changed');
+  assert.equal((await selectFromComment(row.id, client, true, notify)).action, 'command-changed');
   assert.equal(writes.length, 1);
+  assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: head}]);
+});
+
+test('a selected PR head update notifies once; unrelated event scans and dry runs stay silent', async () => {
+  const notices = [], pr = {state: 'open', labels: ['independent-review'], head: {sha: 'c'.repeat(40)}};
+  const client = {api: () => structuredClone(pr), addLabel: () => assert.fail('existing label must not be rewritten')};
+  const notify = async data => notices.push(data);
+  assert.equal((await selectPR(90, client, true, notify, true)).action, 'notified-head-change');
+  assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: pr.head.sha}]);
+  await selectPR(90, client, true, notify);
+  await selectPR(90, client, false, notify, true);
+  pr.state = 'closed'; await selectPR(90, client, true, notify, true);
+  assert.equal(notices.length, 1);
 });

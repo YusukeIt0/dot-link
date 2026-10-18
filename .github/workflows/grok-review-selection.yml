@@ -6,9 +6,6 @@ on:
     types: [created, edited]
   issues:
     types: [edited, labeled, unlabeled]
-  # Reconcile manually linked issues and classification changes made by GITHUB_TOKEN.
-  schedule:
-    - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
       pr_number:
@@ -24,7 +21,6 @@ jobs:
     if: >-
       github.repository == 'YusukeIt0/dot-link' &&
       (github.event_name != 'issue_comment' || (github.event.issue.pull_request != null && contains(github.event.comment.body, '/dotlink review2nd'))) &&
-      (github.event_name != 'pull_request_target' || github.event.pull_request.base.ref == 'main') &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -39,7 +35,10 @@ jobs:
           persist-credentials: false
       - name: Add review labels to qualifying fixes
         env:
+          REVIEW_HEAD_CHANGED: ${{ github.event_name == 'pull_request_target' && github.event.action == 'synchronize' }}
           COMMENT_ID: ${{ github.event.comment.id }}
+          GROK_REVIEW_WEBHOOK_URL: ${{ secrets.GROK_REVIEW_WEBHOOK_URL }}
+          GROK_REVIEW_WEBHOOK_KEY: ${{ secrets.GROK_REVIEW_WEBHOOK_KEY }}
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ inputs.pr_number || github.event.pull_request.number }}
         run: |
