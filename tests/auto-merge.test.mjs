@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected} from '../scripts/auto-merge.mjs';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected, runCoordinator, candidates, AssessmentError, commandFailure} from '../scripts/auto-merge.mjs';
 import {policy, acceptanceMarker, scopeDigest, hash} from '../scripts/review-evidence.mjs';
 import {fingerprintPR, latestReceipt} from '../scripts/check-review-before-merge.mjs';
 
@@ -9,13 +14,13 @@ const owner = {...policy.trustedMaintainers[0], type: 'User'};
 const env = {GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: repository,
   GITHUB_WORKFLOW_REF: `${repository}/.github/workflows/auto-merge.yml@refs/heads/main`,
   DOTLINK_AUTO_MERGE_ENABLED: policy.activationValue, AUTO_MERGE_TOKEN: 'fake-token'};
-function fixture() {
+function fixture(number = 74) {
   const issue = {number: 73, title: 'Agreed work', body: 'Document an existing behavior', state: 'open'};
   const record = {version: 1, head, scope: {approved: true, issue: 73, digest: scopeDigest(issue, [])},
     requirements: [{id: 'R1', expected: 'Describe the existing behavior accurately'}],
     evidence: [{kind: 'static', result: 'pass', requirements: ['R1'], reference: 'Source inspection', details: 'Guide matches source'}], product_decisions: []};
   const comments = [{id: 42, node_id: 'comment42', updated_at: '2026-10-17', revision_verified: true, revision_author: owner, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``}];
-  const pr = {number: 74, title: 'Document behavior', body: 'Closes #73', user: {...owner}, state: 'open', draft: false,
+  const pr = {number, title: 'Document behavior', body: 'Closes #73', user: {...owner}, state: 'open', draft: false,
     changed_files: 1, base: {ref: 'main'}, head: {sha: head, ref: 'work', repo: {full_name: repository}}, mergeable: true, mergeable_state: 'clean'};
   const scope = {number: 73, digest: record.scope.digest};
   const fingerprint = fingerprintPR(pr, main, comments, undefined, scope, []);
@@ -44,7 +49,7 @@ function clientFor(s, change) {
     return {id, body: r.body, updatedAt: r.updated_at, lastEditedAt: r.editor ? r.updated_at : null,
       author: actor(r.user), editor: r.editor ? actor(r.editor) : null};
   }, api(path) {
-    if (path === 'pulls/74') { reads++; change?.(s, reads); return structuredClone(s.pr); }
+    if (path === `pulls/${s.pr.number}`) { reads++; change?.(s, reads); return structuredClone(s.pr); }
     if (path === 'commits/main') return {sha: s.main};
     if (path === 'issues/73') return structuredClone(s.issue);
     if (path === 'actions/variables/DOTSWEEPER_BOT_ID') return {value: '98765'};
@@ -55,13 +60,13 @@ function clientFor(s, change) {
     if (path.startsWith('compare/')) return structuredClone(s.ancestry);
     throw new Error(`Unexpected API ${path}`);
   }, pages(path) {
-    if (path.startsWith('issues/74/comments')) return structuredClone(s.comments);
+    if (path.startsWith(`issues/${s.pr.number}/comments`)) return structuredClone(s.comments);
     if (path.startsWith('issues/73/comments')) return [];
     if (path.startsWith('actions/runs/456/jobs')) return [{jobs: structuredClone(s.jobs)}];
     if (path.startsWith('actions/runs/789/jobs')) return [{jobs: structuredClone(s.ciJobs)}];
-    if (path.startsWith('pulls/74/files')) return structuredClone(s.files);
-    if (path.startsWith('pulls/74/reviews')) return structuredClone(s.reviews);
-    if (path.startsWith('pulls/74/comments')) return [];
+    if (path.startsWith(`pulls/${s.pr.number}/files`)) return structuredClone(s.files);
+    if (path.startsWith(`pulls/${s.pr.number}/reviews`)) return structuredClone(s.reviews);
+    if (path.startsWith(`pulls/${s.pr.number}/comments`)) return [];
     throw new Error(`Unexpected pagination ${path}`);
   }, checks: () => structuredClone(s.checks), merge(number, body) {
     merges.push({number, body}); return {merged: true, sha: 'c'.repeat(40)};
@@ -269,4 +274,379 @@ test('authenticated current-head Grok review and adjudication clear only the add
   const held = clientFor(s);
   assert.equal(mergeEligible(74, held, env).merged, false);
   assert.deepEqual(held.merges, []);
+});
+
+// Exercise the real collector, evidence gates and merge checks over a mutable
+// fake GitHub repository. No production credential or merge endpoint is used.
+function repositoryClient(numbers = [74, 75]) {
+  const states = new Map(numbers.map(number => [number, fixture(number)]));
+  const clients = new Map([...states].map(([number, s]) => [number, clientFor(s)]));
+  let active = numbers[0], currentMain = main;
+  const calls = [], mutations = [];
+  const client = {
+    states, calls, mutations,
+    api(path) {
+      calls.push(path);
+      if (path === 'pulls?state=open&base=main&per_page=100') {
+        return [...states.values()].filter(s => s.pr.state === 'open').map(s => structuredClone(s.pr));
+      }
+      if (path === 'commits/main') return {sha: currentMain};
+      if (path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED') return {value: policy.activationValue};
+      const pr = path.match(/^pulls\/(\d+)$/);
+      if (pr) active = Number(pr[1]);
+      if (path === `compare/${currentMain}...${currentMain}`) return {status: 'identical', merge_base_commit: {sha: currentMain}};
+      return clients.get(active).api(path);
+    },
+    pages: path => clients.get(active).pages(path),
+    graphql: (...args) => clients.get(active).graphql(...args),
+    readNode: id => clients.get(active).readNode(id),
+    checks: number => clients.get(number).checks(number),
+    merge(number, body) {
+      mutations.push({number, body});
+      const s = states.get(number);
+      s.pr.state = 'closed'; s.pr.merged = true; s.pr.merge_commit_sha = 'c'.repeat(40);
+      currentMain = s.pr.merge_commit_sha;
+      for (const state of states.values()) state.main = currentMain;
+      return {merged: true, sha: currentMain};
+    },
+  };
+  return client;
+}
+const noWait = async () => assert.fail('These scenarios do not require snapshot-churn waits');
+const coordinator = (client, options = {}, priority) => runCoordinator('--execute', priority, client, env, {wait: noWait, ...options});
+
+test('manual priority always scans other PRs, including unknown or closed priority hints', async () => {
+  for (const [priority, expected] of [[75, [75, 74]], [999, [74, 75]], [undefined, [74, 75]]]) {
+    const client = repositoryClient();
+    const result = await runCoordinator('--dry-run', priority, client, env, {wait: noWait});
+    assert.equal(result.status, 'completed');
+    assert.deepEqual(result.attempts[0].scans[0].results.map(x => x.number), expected);
+    assert.equal(client.mutations.length, 0);
+  }
+  const client = repositoryClient(); client.states.get(75).pr.state = 'closed';
+  assert.deepEqual(candidates(client, 75), [74]);
+});
+
+test('priority cannot bypass trust or the bounded, complete candidate list', () => {
+  const client = repositoryClient(); client.states.get(75).pr.user.id = 1;
+  assert.deepEqual(candidates(client, 75), [74]);
+  client.api = () => Array.from({length: 21}, (_, i) => ({number: i + 1, user: owner}));
+  assert.throws(() => candidates(client, 1), /20 candidates/);
+  client.api = () => Array.from({length: 100}, (_, i) => ({number: i + 1, user: {}}));
+  assert.throws(() => candidates(client), /incomplete/);
+});
+
+test('transient assessment failure gets one immediate full recovery with fresh state', async () => {
+  const client = repositoryClient(), api = client.api; let first = true;
+  client.api = path => {
+    if (path === 'pulls/74' && first) {
+      first = false;
+      // A previously good candidate is revoked while the initial attempt fails.
+      client.states.get(74).ciRun.conclusion = 'failure';
+      throw new AssessmentError('Temporary API outage', true);
+    }
+    return api(path);
+  };
+  const result = await coordinator(client);
+  assert.equal(result.status, 'recovered');
+  assert.equal(result.recovery_used, true);
+  assert.equal(result.attempts.length, 2);
+  assert.equal(result.attempts[0].status, 'failed');
+  assert.match(result.attempts[0].error, /Temporary API outage/);
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+  assert.ok(client.calls.filter(x => x.startsWith('pulls?')).length >= 3); // initial, recovery, post-merge
+  assert.equal(result.attempts[1].scans[0].results[0].eligible, false);
+});
+
+test('a second failure stops without dispatching or attempting a third assessment', async () => {
+  const client = repositoryClient(), api = client.api; let failures = 0;
+  client.api = path => {
+    if (path.startsWith('pulls?')) { failures++; throw new AssessmentError('API unavailable', true); }
+    return api(path);
+  };
+  const result = await coordinator(client);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.attempts.length, 2);
+  assert.equal(failures, 2);
+  assert.equal(client.mutations.length, 0);
+});
+
+test('the assessor and executor share one failure-recovery allowance', async () => {
+  const client = repositoryClient(), api = client.api; let fails = true;
+  client.api = path => {
+    if (path.startsWith('pulls?') && fails) { fails = false; throw new AssessmentError('Read timeout', true); }
+    return api(path);
+  };
+  const assessed = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+  assert.equal(assessed.recovery_used, true);
+  assert.equal(assessed.status, 'recovered');
+  fails = true;
+  const executed = await coordinator(client, {recoveryUsed: assessed.recovery_used});
+  assert.equal(executed.attempts.length, 1);
+  assert.equal(executed.status, 'failed');
+  assert.equal(client.mutations.length, 0);
+});
+
+test('valid holds including missing review are not failures and cannot trigger recovery', async () => {
+  const client = repositoryClient();
+  client.states.get(74).ciRun.conclusion = 'failure';
+  client.states.get(75).comments.pop();
+  const result = await coordinator(client);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.recovery_used, false);
+  assert.equal(result.attempts.length, 1);
+  assert.equal(result.attempts[0].scans[0].results.length, 2);
+  assert.ok(result.attempts[0].scans[0].results.every(x => !x.eligible));
+  assert.equal(client.mutations.length, 0);
+});
+
+test('permanent access errors and disabled activation fail without retry or mutation', async () => {
+  for (const disabled of [false, true]) {
+    const client = repositoryClient(), api = client.api;
+    client.api = path => {
+      if (path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED') {
+        if (disabled) return {value: 'disabled'};
+        throw new AssessmentError('GitHub request failed (HTTP 403).');
+      }
+      return api(path);
+    };
+    const result = await coordinator(client);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.attempts.length, 1);
+    assert.equal(result.recovery_used, false);
+    assert.equal(client.mutations.length, 0);
+  }
+});
+
+test('one merge is followed by a read-only scan against new main, including earlier held PRs', async () => {
+  const client = repositoryClient(); client.states.get(74).ciRun.conclusion = 'failure';
+  const result = await coordinator(client);
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+  const scans = result.attempts[0].scans;
+  assert.equal(scans.length, 2);
+  assert.equal(scans[0].main, main);
+  assert.equal(scans[1].main, 'c'.repeat(40));
+  assert.equal(scans[1].read_only, true);
+  assert.deepEqual(scans[1].results.map(x => x.number), [74]);
+  assert.match(scans[1].results[0].reasons.join(' '), /main changed|current main/);
+});
+
+test('even two initially eligible PRs cannot cause two mutations in one execution', async () => {
+  const client = repositoryClient();
+  const result = await coordinator(client, {}, 75);
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+  assert.equal(result.attempts[0].scans[1].results[0].number, 74);
+  assert.equal(result.attempts[0].scans[1].results[0].eligible, false);
+});
+
+test('post-merge read failure recovers read-only, without another mutation', async () => {
+  const client = repositoryClient(), api = client.api; let failed = false;
+  client.api = path => {
+    if (client.mutations.length && path.startsWith('pulls?') && !failed) {
+      failed = true; throw new AssessmentError('Post-merge read timeout', true);
+    }
+    return api(path);
+  };
+  const result = await coordinator(client);
+  assert.equal(result.status, 'recovered');
+  assert.equal(result.attempts.length, 2);
+  assert.equal(client.mutations.length, 1);
+  assert.ok(result.attempts[1].scans.every(x => x.read_only));
+});
+
+test('an ambiguous merge response is reconciled from PR state without replaying it', async () => {
+  for (const accepted of [false, true]) {
+    const client = repositoryClient(), merge = client.merge; let requests = 0;
+    client.merge = (number, body) => {
+      requests++;
+      if (accepted) merge(number, body);
+      throw new Error('Connection lost after request');
+    };
+    const result = await coordinator(client);
+    assert.equal(requests, 1);
+    assert.equal(result.attempts.length, 2);
+    assert.equal(result.mutation.confirmed, accepted);
+    assert.equal(result.status, accepted ? 'recovered' : 'failed');
+    assert.ok(result.attempts[1].scans.every(x => x.read_only));
+  }
+});
+
+test('manual full execution recovers after previous failures once the service returns', async () => {
+  const client = repositoryClient(), api = client.api; let offline = true;
+  client.api = path => {
+    if (offline) throw new AssessmentError('Read timeout', true);
+    return api(path);
+  };
+  assert.equal((await coordinator(client)).status, 'failed');
+  offline = false;
+  const recovered = await coordinator(client);
+  assert.equal(recovered.status, 'completed');
+  assert.equal(recovered.attempts.length, 1);
+  assert.equal(client.mutations.length, 1);
+});
+
+test('fresh activation and stale scope still hold during failure recovery', async () => {
+  for (const change of ['activation', 'scope']) {
+    const client = repositoryClient([74]), api = client.api; let first = true;
+    client.api = path => {
+      if (path === 'pulls/74' && first) {
+        first = false;
+        client.states.get(74).issue.body = 'Changed scope';
+        throw new AssessmentError('Read timeout', true);
+      }
+      if (change === 'activation' && !first && path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED') return {value: 'disabled'};
+      return api(path);
+    };
+    const result = await coordinator(client);
+    assert.equal(result.attempts.length, 2);
+    assert.equal(client.mutations.length, 0);
+    if (change === 'scope') assert.equal(result.attempts[1].scans[0].results[0].eligible, false);
+    else assert.equal(result.status, 'failed');
+  }
+});
+
+test('only transient transport failures are eligible for automatic recovery', () => {
+  for (const error of [{stderr: 'gh: upstream error (HTTP 503)'}, {stderr: 'gh: rate limit (HTTP 429)'},
+    {code: 'ETIMEDOUT'}, {stderr: 'error connecting to api.github.com'}]) {
+    assert.equal(commandFailure(error).retryable, true);
+  }
+  for (const error of [{stderr: 'gh: forbidden (HTTP 403)'}, {stderr: 'gh: unauthorized (HTTP 401)'},
+    {stderr: 'gh: not found (HTTP 404)'}, {code: 'ENOENT'}]) {
+    assert.equal(commandFailure(error).retryable, false);
+  }
+});
+
+test('CLI reports failure/recovery honestly and exports the shared allowance to the next job', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'merge-cli-'));
+  try {
+    mkdirSync(join(dir, 'bin'));
+    writeFileSync(join(dir, 'bin/gh'), `#!${process.execPath}
+const fs = require('node:fs');
+const count = Number(fs.existsSync(process.env.FAKE_COUNT) ? fs.readFileSync(process.env.FAKE_COUNT, 'utf8') : 0) + 1;
+fs.writeFileSync(process.env.FAKE_COUNT, String(count));
+if (process.env.FAKE_FAILURE === 'persistent' || process.env.FAKE_FAILURE === 'once' && count === 1) {
+  console.error('gh: upstream unavailable (HTTP 503)'); process.exit(1);
+}
+if (process.env.FAKE_FAILURE === 'auth') { console.error('gh: forbidden (HTTP 403)'); process.exit(1); }
+const endpoint = process.argv[3];
+if (endpoint.endsWith('/pulls?state=open&base=main&per_page=100')) console.log('[]');
+else if (endpoint.endsWith('/commits/main')) console.log(JSON.stringify({sha: '${main}'}));
+else { console.error('Unexpected fixture endpoint'); process.exit(1); }
+`, {mode: 0o700});
+    for (const [failure, used, status, attempts, exitCode] of [
+      ['', 'false', 'completed', 1, 0], ['once', 'false', 'recovered', 2, 0],
+      ['persistent', 'false', 'failed', 2, 1], ['persistent', 'true', 'failed', 1, 1],
+      ['auth', 'false', 'failed', 1, 1],
+    ]) {
+      const prefix = join(dir, `${failure}-${used}`);
+      const result = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/auto-merge.mjs', import.meta.url)), '--dry-run', 'invalid-pr-hint'], {
+        encoding: 'utf8', env: {...process.env, PATH: `${join(dir, 'bin')}:${process.env.PATH}`, GH_TOKEN: 'fixture-only',
+          FAKE_FAILURE: failure, FAKE_COUNT: `${prefix}.count`, RECOVERY_USED: used,
+          GITHUB_OUTPUT: `${prefix}.output`, GITHUB_STEP_SUMMARY: `${prefix}.summary`},
+      });
+      assert.equal(result.status, exitCode, result.stderr);
+      const report = JSON.parse(result.stdout);
+      assert.equal(report.status, status);
+      assert.equal(report.attempts.length, attempts);
+      assert.equal(readFileSync(`${prefix}.output`, 'utf8'), `recovery_used=${report.recovery_used}\nscan_completed=${report.scan_completed}\n`);
+      const summary = readFileSync(`${prefix}.summary`, 'utf8');
+      assert.ok(summary.includes(status));
+      if (failure) assert.match(summary, /Attempt 1: failed/);
+      if (status === 'recovered') assert.match(summary, /Attempt 2: completed/);
+    }
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+
+test('persistent per-PR failure cannot starve healthy PRs across assessor and executor', async () => {
+  const client = repositoryClient([74, 75, 76]), api = client.api;
+  client.api = path => {
+    if (path === 'pulls/74') throw new AssessmentError('Broken PR evidence', true);
+    return api(path);
+  };
+  const assessed = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+  assert.equal(assessed.status, 'failed');
+  assert.equal(assessed.scan_completed, true);
+  assert.equal(assessed.recovery_used, true);
+  assert.equal(assessed.attempts.length, 2);
+  for (const attempt of assessed.attempts) {
+    assert.deepEqual(attempt.scans[0].results.map(x => x.number), [74, 75, 76]);
+    assert.equal(attempt.scans[0].results[0].status, 'failed');
+    assert.equal(attempt.scans[0].results[1].eligible, true);
+  }
+  const executed = await coordinator(client, {recoveryUsed: assessed.recovery_used});
+  assert.equal(executed.status, 'failed');
+  assert.equal(executed.attempts.length, 1);
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+  const after = executed.attempts[0].scans[1];
+  assert.equal(after.read_only, true);
+  assert.equal(after.main, 'c'.repeat(40));
+  assert.deepEqual(after.results.map(x => x.number), [74, 76]);
+});
+
+test('permanent candidate failures continue the scan but do not spend a recovery', async () => {
+  const client = repositoryClient(), api = client.api;
+  client.api = path => {
+    if (path === 'pulls/74') throw new AssessmentError('Malformed PR evidence');
+    return api(path);
+  };
+  const result = await coordinator(client);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.recovery_used, false);
+  assert.equal(result.attempts.length, 1);
+  assert.deepEqual(client.mutations.map(x => x.number), [75]);
+});
+
+test('global enumeration failure cannot signal a completed scan to the executor', async () => {
+  const client = repositoryClient();
+  client.api = () => { throw new AssessmentError('Global outage', true); };
+  const result = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+  assert.equal(result.status, 'failed');
+  assert.equal(result.scan_completed, false);
+  assert.equal(client.mutations.length, 0);
+});
+
+
+test('definite merge rejection preserves the recovery allowance and never reports an ambiguous outcome', async () => {
+  for (const status of [403, 405, 409, 429, 200]) {
+    const client = repositoryClient(); let requests = 0;
+    client.merge = () => {
+      requests++;
+      if (status === 200) return {merged: false};
+      throw commandFailure({stderr: `gh: rejected (HTTP ${status})`});
+    };
+    const result = await coordinator(client);
+    assert.equal(requests, 1);
+    assert.equal(result.status, 'failed');
+    assert.equal(result.recovery_used, false);
+    assert.equal(result.mutation.rejected, true);
+    assert.equal(result.mutation.observed, undefined);
+    assert.equal(result.attempts.length, 1);
+    assert.deepEqual(result.attempts[0].scans[0].results.map(x => x.number), [74, 75]);
+    assert.equal(result.attempts[0].scans[0].results[1].eligible, true);
+  }
+});
+
+
+test('a head change during relationship reads is held but malformed or failed reads still fail', async () => {
+  for (const type of ['changed', 'api-error', 'malformed']) {
+    const client = repositoryClient([74, 75]), graphql = client.graphql;
+    client.graphql = (query, number) => {
+      const value = graphql(query, number);
+      if (number === 74) {
+        value.data.repository.pullRequest.headRefOid = type === 'malformed' ? null : 'd'.repeat(40);
+        if (type === 'api-error') value.errors = [{message: 'GraphQL unavailable'}];
+      }
+      return value;
+    };
+    const result = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+    assert.equal(result.status, type === 'changed' ? 'completed' : 'failed');
+    assert.equal(result.recovery_used, false);
+    assert.equal(result.attempts.length, 1);
+    const rows = result.attempts[0].scans[0].results;
+    assert.equal(rows[0].status, type === 'changed' ? 'held' : 'failed');
+    assert.equal(rows[1].eligible, true);
+    assert.equal(client.mutations.length, 0);
+  }
 });

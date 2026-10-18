@@ -11,6 +11,16 @@ import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, val
 export const repository = 'YusukeIt0/dot-link';
 export {versionOnly};
 
+// A valid negative decision is not an infrastructure failure. Only explicitly
+// retryable read failures may spend the one run-wide recovery allowance.
+export class AssessmentHeld extends Error {}
+export class AssessmentError extends Error {
+  constructor(message, retryable = false) {
+    super(message);
+    this.retryable = retryable;
+  }
+}
+
 export function deviceAffected(files) {
   return files.some(f => [f.filename, f.previous_filename].filter(Boolean).some(path =>
     ['src/', 'server/', 'native/', 'public/'].some(root => path.startsWith(root)) ||
@@ -88,18 +98,25 @@ export function collect(number, client) {
   const {api, pages, checks} = client;
   const pr = api(`pulls/${number}`);
   if (!pr.head?.sha || pr.state !== 'open' || pr.draft || pr.base?.ref !== 'main') {
-    throw new Error('PR is not open, ready and targeting main.');
+    throw new AssessmentHeld('PR is not open, ready and targeting main.');
   }
   const main = api('commits/main').sha;
   const botId = api('actions/variables/DOTSWEEPER_BOT_ID').value;
   const comments = authenticateGrokComments(authenticateComments(pages(`issues/${number}/comments?per_page=100`), client.readNode, botId), client.readNode);
-  const fixes = closingIssues(client.graphql(closingIssuesQuery, number), pr.head.sha);
+  const relationships = client.graphql(closingIssuesQuery, number);
+  const relatedHead = relationships?.data?.repository?.pullRequest?.headRefOid;
+  if (!relationships?.errors?.length && /^[a-f0-9]{40}$/.test(relatedHead || '') && relatedHead !== pr.head.sha) {
+    throw new AssessmentHeld('PR head changed while collecting bug-fix relationships.');
+  }
+  const fixes = closingIssues(relationships, pr.head.sha);
   const grokSelection = {automatic: automaticSelection(pr, fixes), fixes};
-  const receipt = latestReceipt(comments, botId);
+  let receipt;
+  try { receipt = latestReceipt(comments, botId); }
+  catch (error) { throw new AssessmentHeld(error.message); }
   const run = api(`actions/runs/${receipt.runId}`);
   const jobs = pages(`actions/runs/${receipt.runId}/jobs?filter=latest&per_page=100`).flatMap(x => x.jobs);
   const files = pages(`pulls/${number}/files?per_page=100`);
-  if (files.length > 100) throw new Error('Automatic merging requires a bounded changed-file set.');
+  if (files.length > 100) throw new AssessmentHeld('Automatic merging requires a bounded changed-file set.');
   const versionChanges = {};
   for (const f of files.filter(x => versionFiles.has(x.filename) && x.status === 'modified')) {
     versionChanges[f.filename] = versionOnly(f.filename, readMetadata(api, f.filename, main), readMetadata(api, f.filename, pr.head.sha));
@@ -174,20 +191,144 @@ export async function mergeWithReassessment(number, client, env, wait = delay, b
   }
 }
 
+export function candidates(client, priority) {
+  const rows = client.api('pulls?state=open&base=main&per_page=100');
+  // Never silently scan a truncated candidate list or let a priority request
+  // bypass the existing capacity bound. A number is an ordering hint only.
+  if (!Array.isArray(rows) || rows.length >= 100) throw new AssessmentError('Candidate enumeration is incomplete.');
+  const numbers = rows.filter(x => trustedUser(x.user) && !x.draft).map(x => x.number);
+  if (numbers.length > 20) throw new AssessmentError('More than 20 candidates; reduce the backlog before a full manual reassessment.');
+  return numbers.sort((a, b) => (b === priority) - (a === priority) || a - b);
+}
+
+export async function runCoordinator(mode, priority, client, env, {recoveryUsed = false, wait = delay} = {}) {
+  const attempts = [], mutation = {attempted: false, confirmed: false};
+  // Snapshot-churn waits and failure recovery are distinct, but the existing
+  // 90-second allowance still spans both recovery passes in this job.
+  const budget = {remainingMs: 90_000};
+  const guarded = {...client, merge(number, body) {
+    if (mutation.attempted) throw new AssessmentError('A merge request was already attempted in this execution.');
+    Object.assign(mutation, {attempted: true, number, head: body.sha});
+    let result;
+    try { result = client.merge(number, body); }
+    catch (error) {
+      if (error instanceof AssessmentError && error.httpStatus >= 400 && error.httpStatus < 500) {
+        mutation.rejected = true;
+        throw new AssessmentError(`Merge rejected (HTTP ${error.httpStatus}); no additional mutation was attempted.`);
+      }
+      throw new AssessmentError('Merge response unavailable; reconcile read-only and never replay the request.', true);
+    }
+    if (result?.merged === false) {
+      mutation.rejected = true;
+      throw new AssessmentError('GitHub rejected the merge; no additional mutation was attempted.');
+    }
+    if (result?.merged !== true || !/^[a-f0-9]{40}$/.test(result.sha || '')) {
+      throw new AssessmentError('Merge was not confirmed; reconcile read-only and never replay the request.', true);
+    }
+    Object.assign(mutation, {confirmed: true, commit: result.sha});
+    return result;
+  }};
+  const reconcile = () => {
+    const pr = client.api(`pulls/${mutation.number}`);
+    mutation.observed = pr.merged === true ? 'merged' : pr.state;
+    if (pr.merged === true && pr.head?.sha === mutation.head && /^[a-f0-9]{40}$/.test(pr.merge_commit_sha || '')) {
+      Object.assign(mutation, {confirmed: true, commit: pr.merge_commit_sha});
+    }
+  };
+  const scan = async (attempt, readOnly) => {
+    if (mode === '--execute' && !readOnly) {
+      assertActivation(env, client.api('actions/variables/DOTLINK_AUTO_MERGE_ENABLED').value);
+    }
+    // Re-enumerate even during recovery and after a merge; never reuse a list or
+    // green decision from the event or a previous attempt.
+    const list = candidates(client, priority);
+    const main = client.api('commits/main').sha;
+    if (!/^[a-f0-9]{40}$/.test(main || '')) throw new AssessmentError('Current main could not be verified.');
+    if (mutation.confirmed && main !== mutation.commit) {
+      const ancestry = client.api(`compare/${mutation.commit}...${main}`);
+      if (!['ahead', 'identical'].includes(ancestry?.status) || ancestry?.merge_base_commit?.sha !== mutation.commit) {
+        throw new AssessmentError('Main has not yet been confirmed to include the completed merge.', true);
+      }
+    }
+    const pass = {read_only: readOnly, main, results: []};
+    attempt.scans.push(pass);
+    const errors = [];
+    let merged = false;
+    for (const number of list) {
+      try {
+        const decision = readOnly || mutation.attempted ? evaluate(collect(number, client))
+          : await mergeWithReassessment(number, guarded, env, wait, budget);
+        pass.results.push(decision);
+        if (decision.merged) { merged = true; break; }
+      } catch (error) {
+        pass.results.push({number, eligible: false, status: error instanceof AssessmentHeld ? 'held' : 'failed',
+          reasons: [error.message.slice(0, 1500)]});
+        if (!(error instanceof AssessmentHeld)) errors.push(error);
+      }
+    }
+    pass.completed = !merged;
+    return {merged, errors};
+  };
+  for (;;) {
+    const attempt = {status: 'running', scans: []};
+    attempts.push(attempt);
+    try {
+      if (mutation.attempted && !mutation.confirmed && !mutation.rejected) reconcile();
+      const initial = await scan(attempt, mode === '--dry-run' || mutation.attempted);
+      const errors = [...initial.errors];
+      // A single mutation changes main. Inspect every remaining candidate again
+      // against current main, but never perform a second mutation in this run.
+      if (initial.merged) errors.push(...(await scan(attempt, true)).errors);
+      // A broken candidate must not starve the others. Preserve failures after
+      // the full pass; permanent errors cannot be hidden by a transient one.
+      if (errors.length) throw errors.find(error => !(error instanceof AssessmentError) || !error.retryable) || errors[0];
+      attempt.status = 'completed';
+      break;
+    } catch (error) {
+      attempt.status = 'failed';
+      attempt.error = error.message.slice(0, 1500);
+      if (mutation.attempted && !mutation.confirmed && !mutation.rejected) {
+        try { reconcile(); }
+        catch { mutation.observed = 'unknown'; }
+      }
+      if (!(error instanceof AssessmentError) || !error.retryable || recoveryUsed) break;
+      recoveryUsed = true;
+      // Immediate, once per workflow (the assessor passes consumption to the
+      // executor). No workflow dispatch, timer, or recursive recovery trigger.
+    }
+  }
+  const failed = attempts.at(-1).status === 'failed' || mutation.attempted && !mutation.confirmed;
+  return {mode, status: failed ? 'failed' : attempts.length > 1 ? 'recovered' : 'completed',
+    recovery_used: recoveryUsed, scan_completed: attempts.at(-1).scans.at(-1)?.completed === true, attempts, mutation};
+}
+
+export function commandFailure(error) {
+  const status = String(error.stderr || '').match(/\bHTTP (\d{3})\b/)?.[1];
+  const transient = status ? status === '429' || Number(status) >= 500
+    : error.code === 'ETIMEDOUT' || /error connecting to|connection reset|TLS handshake timeout|i\/o timeout|unexpected EOF/i.test(String(error.stderr || ''));
+  return Object.assign(new AssessmentError(status ? `GitHub request failed (HTTP ${status}).` : 'GitHub request failed; inspect access or network availability.', transient),
+    {httpStatus: status ? Number(status) : undefined});
+}
+
 function githubClient(env) {
-  const command = (args, options = {}) => JSON.parse(execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, ...options}));
+  const command = (args, options = {}) => {
+    let output;
+    try { output = execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, timeout: 45_000, ...options}); }
+    catch (error) {
+      // gh pr checks uses nonzero exits for valid pending/failed check results.
+      if (args[0] === 'pr' && args[1] === 'checks' && [1, 8].includes(error.status)
+          && error.stdout?.trim().startsWith('[')) output = error.stdout;
+      else throw commandFailure(error);
+    }
+    try { return JSON.parse(output); }
+    catch { throw new AssessmentError('GitHub returned invalid JSON.'); }
+  };
   return {
     api: path => command(['api', `repos/${repository}/${path}`]),
     graphql: (query, number) => command(['api', 'graphql', '-f', `query=${query}`, '-F', `number=${number}`]),
     readNode: id => command(['api', 'graphql', '-f', `query=${commentRevisionQuery}`, '-F', `id=${id}`]).data.node,
     pages: path => command(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat(),
-    checks: number => {
-      try { return command(['pr', 'checks', String(number), '--repo', repository, '--required', '--json', 'name,state,bucket']); }
-      catch (error) {
-        if ([1, 8].includes(error.status) && error.stdout?.trim().startsWith('[')) return JSON.parse(error.stdout);
-        throw error;
-      }
-    },
+    checks: number => command(['pr', 'checks', String(number), '--repo', repository, '--required', '--json', 'name,state,bucket']),
     merge: (number, body) => command(['api', `repos/${repository}/pulls/${number}/merge`, '-X', 'PUT', '--input', '-'],
       {input: JSON.stringify(body), env: {...env, GH_TOKEN: env.AUTO_MERGE_TOKEN}}),
   };
@@ -195,31 +336,26 @@ function githubClient(env) {
 
 async function main() {
   const [mode = '--dry-run', number] = process.argv.slice(2);
-  if (!['--dry-run', '--execute'].includes(mode) || (number && !/^[1-9]\d{0,8}$/.test(number)) || process.argv.length > 4) {
-    throw new Error('Usage: node scripts/auto-merge.mjs [--dry-run|--execute] [PR-number]');
+  if (!['--dry-run', '--execute'].includes(mode) || process.argv.length > 4 ||
+      !['true', 'false'].includes(process.env.RECOVERY_USED || 'false')) {
+    throw new Error('Usage: node scripts/auto-merge.mjs [--dry-run|--execute] [priority-PR-number]');
   }
+  // Invalid/closed priority hints must not replace a valid pending full scan
+  // with a no-op or failed argument check.
+  const priority = /^[1-9]\d{0,8}$/.test(number || '') ? Number(number) : undefined;
   const client = githubClient(process.env);
-  if (mode === '--execute') assertActivation(process.env, client.api('actions/variables/DOTLINK_AUTO_MERGE_ENABLED').value);
-  const candidates = number ? [Number(number)] : client.api('pulls?state=open&base=main&per_page=100')
-    .filter(x => trustedUser(x.user) && !x.draft).map(x => x.number);
-  if (candidates.length > 20) throw new Error('Too many candidates; inspect the backlog or dispatch one PR explicitly.');
-  const results = [];
-  // Share the retry allowance across candidates: at most 90 seconds of waits
-  // and three extra attempts per run, rather than 90 seconds for each PR.
-  const reassessmentBudget = {remainingMs: 90_000};
-  for (const n of candidates) {
-    try {
-      const decision = mode === '--execute' ? await mergeWithReassessment(n, client, process.env, delay, reassessmentBudget) : evaluate(collect(n, client));
-      results.push(decision);
-      if (decision.merged) break; // main moved: later work must use new review/CI evidence.
-    } catch (error) {
-      results.push({number: n, eligible: false, reasons: [error.message.slice(0, 1500)]});
-    }
-  }
-  console.log(JSON.stringify({mode, results}, null, 2));
+  const result = await runCoordinator(mode, priority, client, process.env, {recoveryUsed: process.env.RECOVERY_USED === 'true'});
+  console.log(JSON.stringify(result, null, 2));
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `recovery_used=${result.recovery_used}\nscan_completed=${result.scan_completed}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-    `## Automatic merge ${mode === '--execute' ? 'execution' : 'dry run'}\n\n` +
-    (results.map(x => `- #${x.number}: ${x.merged ? 'merged' : x.eligible ? 'eligible, no write' : 'held'}${x.reasons?.length ? ' — ' + x.reasons.join(' ') : ''}`).join('\n') || 'No eligible-author open PRs.') + '\n');
+    `## Automatic merge ${mode === '--execute' ? 'execution' : 'dry run'}: ${result.status}\n\n` +
+    result.attempts.map((attempt, index) => `### Attempt ${index + 1}: ${attempt.status}\n\n` +
+      (attempt.error ? `Failure: ${attempt.error}\n\n` : '') +
+      attempt.scans.map(scan => `Main: \`${scan.main}\`; ${scan.read_only ? 'read-only' : 'merge checks'}.\n\n` +
+        (scan.results.map(x => `- #${x.number}: ${x.merged ? 'merged' : x.status === 'failed' ? 'assessment failed' : x.eligible ? 'eligible, no write' : 'held'}${x.reasons?.length ? ' — ' + x.reasons.join(' ') : ''}`).join('\n') || 'No eligible-author open PRs.')).join('\n\n')).join('\n\n') +
+    (result.mutation.rejected ? '\n\nGitHub rejected the merge. No additional mutation was attempted.' :
+      result.mutation.attempted && !result.mutation.confirmed ? '\n\nMerge outcome is unconfirmed. No further mutation was attempted; inspect the PR before manual recovery.' : '') + '\n');
+  if (result.status === 'failed') process.exitCode = 1;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

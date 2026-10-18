@@ -6,16 +6,31 @@ the pinned upstream actionlint understands queue. Never broaden the exception.
 from pathlib import Path
 
 
+ADMISSION = " ".join("""
+github.repository == 'YusukeIt0/dot-link' &&
+(github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
+(github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+""".split())
+GROUP = "${{ " + ADMISSION + " && 'dot-link-automatic-merge' || format('dot-link-automatic-merge-ignored-{0}', github.run_id) }}"
+
+
 def validate(path, workflow):
     expected = {
-        "group": "dot-link-automatic-merge",
-        "queue": "max",
+        "group": GROUP,
+        "queue": "single",
         "cancel-in-progress": False,
     }
     concurrency = workflow.get("concurrency")
+    if isinstance(concurrency, dict):
+        concurrency = {**concurrency, "group": " ".join(str(concurrency.get("group", "")).split())}
     if path.name == "auto-merge.yml":
         if concurrency != expected or concurrency.get("cancel-in-progress") is not False:
-            raise ValueError("auto-merge.yml must use the exact serialized, queued, non-cancelling concurrency policy")
+            raise ValueError("auto-merge.yml must use the exact serialized, single-pending, non-cancelling concurrency policy")
+        if " ".join(str(workflow.get("jobs", {}).get("assess", {}).get("if", "")).split()) != ADMISSION:
+            raise ValueError("Assessor admission must match the shared queue admission")
+        events = workflow.get("on", workflow.get(True, {}))
+        if "schedule" in events:
+            raise ValueError("Automatic merge recovery must not use a schedule")
     elif isinstance(concurrency, dict) and "queue" in concurrency:
         raise ValueError(f"{path}: concurrency.queue is only supported in auto-merge.yml")
     for name, job in workflow.get("jobs", {}).items():

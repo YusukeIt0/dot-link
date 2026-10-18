@@ -7,7 +7,7 @@ must come from evidence, not a request for the owner to read and approve code.
 
 This supplements existing development instructions without changing branch policy
 or authorizing main merges, distribution or publication. See the
-[baseline audit](development-process-audit.md) and [inactive merge design](automatic-merging.md).
+[baseline audit](development-process-audit.md) and [automatic merge policy](automatic-merging.md).
 
 ## Requirements and evidence
 
@@ -23,7 +23,7 @@ Use observable behavior, not a checklist of internal components. Record test
 results, static inspection, runtime observations, physical observations and unknown
 behavior separately. A static model cannot claim it ran tests or observed a device.
 
-For the disabled automatic-merge path, the agent can draft a structured record:
+For the automatic-merge path, the agent can draft a structured record:
 
 ```sh
 node scripts/prepare-acceptance.mjs <PR-number> <agreed-scope-issue> > /tmp/acceptance.md
