@@ -600,7 +600,8 @@ test('a send response parsed after forgetting cannot restore history or release 
  releaseBody({id:'old',text:'Synthetic pending request',status:'accepted'});await sending;await flush();
  assert.equal(vm.runInContext('conversation.count',app.context),0);
  assert.equal(vm.runInContext('busy',app.context),true);
- assert.equal(app.element('notice').textContent,'Reconnect required');
+ assert.equal(app.element('pair-notice').textContent,'Reconnect required');
+ assert.equal(app.element('notice').textContent,'');
  assert.equal(app.element('transcript').value,'Synthetic pending request');
 });
 
