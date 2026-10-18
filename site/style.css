@@ -36,6 +36,7 @@ h2 { font-size: clamp(1.85rem, 2.5vw, 2.4rem); max-width: 14ch; }
 .hero { display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 56px; padding-block: 88px 96px; }
 .eyebrow { color: var(--muted); font-size: 12px; letter-spacing: .13em; text-transform: uppercase; margin-bottom: 22px; }
 .lead { max-width: 42ch; font-size: 18px; line-height: 1.65; color: #c8d1c9; margin-top: 26px; }
+.philosophy { max-width: 48ch; font-size: 15px; line-height: 1.65; color: var(--muted); margin-top: 18px; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 24px; margin-top: 30px; }
 .button { display: inline-flex; align-items: center; justify-content: space-between; gap: 22px; padding: 14px 20px; border-radius: 6px; background: var(--accent); color: #152013; font-size: 15px; font-weight: 600; text-decoration: none; }
 .button:hover { background: #e0f5da; color: #152013; }
@@ -87,6 +88,7 @@ html:not([lang="en"]) h2 { max-width: none; }
   .hero { grid-template-columns: 1fr; gap: 42px; padding-block: 48px; }
   h1 { font-size: clamp(2.7rem, 9.6vw, 4rem); max-width: 15ch; }
   .lead { font-size: 16px; margin-top: 22px; }
+  .philosophy { font-size: 14px; margin-top: 14px; }
   .actions { gap: 18px; margin-top: 26px; }
   .hero-note { font-size: 12px; }
   .experience, .requirements, .setup { grid-template-columns: 1fr; gap: 30px; padding-block: 40px; }
