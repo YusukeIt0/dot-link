@@ -148,3 +148,17 @@ test('failed writes, cross-tab withdrawal, and expired consent stop collection',
     assert.equal(f.reloads(), 1);
   }
 });
+
+test('a choice in another tab dismisses unanswered banners but preserves deliberately opened settings', () => {
+  for (const choice of ['granted', 'denied']) {
+    for (const settingsOpen of [false, true]) {
+      const f = fixture();
+      if (settingsOpen) f.nodes.settings.emit('click');
+      f.values.set(consentKey, JSON.stringify({ choice, expires: Date.now() + 10000 }));
+      f.win.emit('storage', { key: consentKey });
+      assert.equal(f.nodes.consent.hidden, !settingsOpen);
+      assert.equal(f.nodes.close.hidden, false);
+      assert.equal(f.scripts.length, choice === 'granted' ? 1 : 0);
+    }
+  }
+});

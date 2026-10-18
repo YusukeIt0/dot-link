@@ -16,7 +16,7 @@ Configured in the Google Analytics UI on October 18, 2026:
 | Website | `https://yusukeit0.github.io/dot-link/` and its seven translated pages |
 | Reporting time zone / currency | Bangkok, UTC+7 / JPY |
 | Event and user retention | 14 months; user retention resets on new activity |
-| Enhanced measurement | Page views, scrolls, outbound clicks |
+| Enhanced measurement | Page-load views, scrolls, outbound clicks; history-based page changes off |
 | Disabled enhanced features | Site search, forms, automatic video, file downloads |
 | Advertising | Google signals and user-provided data off; ad personalization disallowed in all regions; no ad links |
 | Key event | `install_click`, once per event, no default monetary value |
@@ -84,8 +84,10 @@ After the authorized deployment, the analyst should:
    collection requests appear. Reject and reload: the site remains usable with no
    analytics requests.
 2. Allow analytics and use Google Tag Assistant to enable debugging. Check the
-   intended measurement ID, one page view, and `site_lang` in the network payload
+   JavaScript MIME type for `analytics.mjs`, the intended measurement ID, one page view, and `site_lang` in the network payload
    and GA4 DebugView. Check automatic scroll/outbound events as well as custom ones.
+   In-page anchors must not create extra page views or send URL fragments; the
+   stream's browser-history page-change measurement is disabled.
 3. Click both install placements, both Quickstart placements, the video anchor,
    and a different language. Verify the names/parameters above and source language.
    The destination page view must use the destination language.

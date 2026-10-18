@@ -186,7 +186,13 @@ export function initAnalytics(win, doc) {
       stop();
       panel.hidden = false;
       close.hidden = true;
-    } else if (consent.choice === 'granted') start();
+    } else {
+      // A choice in another tab also dismisses an unanswered banner. Keep an
+      // intentionally opened settings panel available, including its close button.
+      close.hidden = false;
+      if (!returnFocus) panel.hidden = true;
+      if (consent.choice === 'granted') start();
+    }
     armExpiry();
   }
 
