@@ -56,7 +56,9 @@ figcaption { color: var(--muted); font-size: 11px; line-height: 1.6; margin-top:
 .requirements-list strong, .requirements-list span { display: block; }
 .requirements-list strong { font-size: 16px; font-weight: 550; }
 .requirements-list span { color: #bec5bf; font-size: 14px; margin-top: 3px; }
-.requirement-note { color: var(--muted); font-size: 13px; line-height: 1.7; margin-top: 26px; max-width: 58ch; }
+.requirement-note { color: #919d93; font-size: 12px; line-height: 1.6; margin-top: 16px; }
+.requirement-note a { text-decoration-color: #59665c; }
+.requirement-note a:hover, .requirement-note a:focus-visible { color: var(--accent); text-decoration-color: currentColor; }
 .setup-steps { margin: 0 0 18px; padding-inline-start: 1.5em; display: grid; gap: 12px; }
 .setup-steps li { padding-inline-start: 8px; font-size: 16px; }
 .setup-steps li::marker { color: var(--muted); }
