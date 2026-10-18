@@ -627,3 +627,26 @@ test('definite merge rejection preserves the recovery allowance and never report
     assert.equal(result.attempts[0].scans[0].results[1].eligible, true);
   }
 });
+
+
+test('a head change during relationship reads is held but malformed or failed reads still fail', async () => {
+  for (const type of ['changed', 'api-error', 'malformed']) {
+    const client = repositoryClient([74, 75]), graphql = client.graphql;
+    client.graphql = (query, number) => {
+      const value = graphql(query, number);
+      if (number === 74) {
+        value.data.repository.pullRequest.headRefOid = type === 'malformed' ? null : 'd'.repeat(40);
+        if (type === 'api-error') value.errors = [{message: 'GraphQL unavailable'}];
+      }
+      return value;
+    };
+    const result = await runCoordinator('--dry-run', undefined, client, env, {wait: noWait});
+    assert.equal(result.status, type === 'changed' ? 'completed' : 'failed');
+    assert.equal(result.recovery_used, false);
+    assert.equal(result.attempts.length, 1);
+    const rows = result.attempts[0].scans[0].results;
+    assert.equal(rows[0].status, type === 'changed' ? 'held' : 'failed');
+    assert.equal(rows[1].eligible, true);
+    assert.equal(client.mutations.length, 0);
+  }
+});

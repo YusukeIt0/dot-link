@@ -103,7 +103,12 @@ export function collect(number, client) {
   const main = api('commits/main').sha;
   const botId = api('actions/variables/DOTSWEEPER_BOT_ID').value;
   const comments = authenticateGrokComments(authenticateComments(pages(`issues/${number}/comments?per_page=100`), client.readNode, botId), client.readNode);
-  const fixes = closingIssues(client.graphql(closingIssuesQuery, number), pr.head.sha);
+  const relationships = client.graphql(closingIssuesQuery, number);
+  const relatedHead = relationships?.data?.repository?.pullRequest?.headRefOid;
+  if (!relationships?.errors?.length && /^[a-f0-9]{40}$/.test(relatedHead || '') && relatedHead !== pr.head.sha) {
+    throw new AssessmentHeld('PR head changed while collecting bug-fix relationships.');
+  }
+  const fixes = closingIssues(relationships, pr.head.sha);
   const grokSelection = {automatic: automaticSelection(pr, fixes), fixes};
   let receipt;
   try { receipt = latestReceipt(comments, botId); }
