@@ -15,8 +15,8 @@ button { border: 1px solid #435446; padding: 13px 18px; border-radius: 10px; bac
 button:disabled { opacity: .4; cursor: default; }
 #discard { background: transparent; color: #d0d7d1; }
 .note { color: #9ea8a0; font-size: 13px; line-height: 1.8; }
-#notice { min-height: 48px; line-height: 1.65; }
-#notice:empty { display: none; }
+#notice, #pair-notice { min-height: 48px; line-height: 1.65; }
+#notice:empty, #pair-notice:empty { display: none; }
 
 textarea, input[type=password] { width:100%; margin:8px 0; padding:12px; border:1px solid #435446; border-radius:8px; background:#1c2420; color:inherit; font:inherit; }
 details { margin:20px 0; }

@@ -53,6 +53,7 @@ let standby: DisplayStandby | undefined;
 el('app-version').textContent = `v${import.meta.env.VITE_APP_VERSION}`;
 const connection = el('connection');
 const notice = el('notice');
+const pairingNotice = el('pair-notice');
 const recordButton = el<HTMLButtonElement>('record');
 const discardButton = el<HTMLButtonElement>('discard');
 const sendButton = el<HTMLButtonElement>('send');
@@ -88,23 +89,16 @@ el('copy-mac-url').onclick = async () => {
     showCopyToast(t('コピーできませんでした'));
   }
 };
-const noticeHome = document.createComment('notice-home');
-notice.before(noticeHome);
-function placeSetupNotice(): void {
-  if (setupPanel.open) {
-    el<HTMLDetailsElement>('display-settings').open = false;
-    el('pair-notice-slot').after(notice);
-  } else {
-    noticeHome.after(notice);
-  }
-}
-setupPanel.addEventListener('toggle', placeSetupNotice);
+// Hide the fixed display-settings action bar while working in setup.
+setupPanel.addEventListener('toggle', () => {
+  if (setupPanel.open) el<HTMLDetailsElement>('display-settings').open = false;
+});
 function showSetup(unpaired: boolean): void {
   document.body.dataset.pairState = unpaired ? 'unpaired' : 'paired';
   setupPanel.open = unpaired;
   el('forget-pairing').hidden = unpaired;
   el('pair').hidden = !offeredInvite;
-  placeSetupNotice();
+  if (unpaired) el<HTMLDetailsElement>('display-settings').open = false;
 }
 let pendingDelivery = new PendingUtterance(() => localStorage, session.credentials?.origin ?? location.origin);
 let exited = false;
@@ -207,7 +201,8 @@ function forgetPairing(message: string): void {
   showSetup(true);
   progress.connection = 'unpaired'; syncRuntimeEffects();
   display(() => t('再接続が必要です'), message);
-  el('dot-status').textContent = t('再接続が必要です'); notice.textContent = message;
+  el('dot-status').textContent = t('再接続が必要です');
+  notice.textContent = ''; pairingNotice.textContent = message;
   setupPanel.open = true;
 }
 let busy = false;
@@ -307,17 +302,17 @@ function offerInvite(raw: string): void {
   offeredInvite = parseInvite(raw);
   el('pair-destination').textContent = offeredInvite.origin;
   el('pair').hidden = false;
-  notice.textContent = t('接続先を確認して「接続」を押してください。');
+  pairingNotice.textContent = t('接続先を確認して「接続」を押してください。');
 }
 pairingInput.oninput = () => {
   offeredInvite = undefined; el('pair-destination').textContent = ''; el('pair').hidden = true;
-  try { offerInvite(pairingInput.value); } catch { notice.textContent = t('接続コードが無効か期限切れです。Macで新しく発行してください。'); }
+  try { offerInvite(pairingInput.value); } catch { pairingNotice.textContent = t('接続コードが無効か期限切れです。Macで新しく発行してください。'); }
 };
 el('pair').onclick = async () => {
   if (busy || recorder.state !== 'idle' || exited) return;
   let invite: PairingInvite;
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
-  catch { notice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
+  catch { pairingNotice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
   connectionTransitions.beginPairing();
   const version = session.version;
@@ -330,13 +325,14 @@ el('pair').onclick = async () => {
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
     if (version !== session.version || exited) return;
+    pairingNotice.textContent = '';
     notice.textContent = nativeRetained && credentials.resumeToken ? t('接続しました。更新後の再接続情報も保存しました。') : retained ? t('接続しました。更新後の自動復元は未確認です。') : t('接続しました。この画面では設定を保存できないため、閉じた後は新しい接続コードで接続してください。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? '接続確認成功' : 'Connection verified';
     showSetup(false);
   } catch (error) {
     if (version !== session.version || exited) return;
     progress.connection = session.token ? 'offline' : 'unpaired'; updateRuntime();
-    notice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
+    pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
     if (session.token) updates.start(true);
   } finally { if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
