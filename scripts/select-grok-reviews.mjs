@@ -7,6 +7,15 @@ import {trustedUser, authenticateComments, commentRevisionQuery} from './review-
 import {automaticSelection, selected, grok, closingIssues, closingIssuesQuery} from './grok-review.mjs';
 import {notifyGrokReview} from './notify-grok-review.mjs';
 const repository = 'YusukeIt0/dot-link';
+async function notifyAfterLabel(number, client, notify) {
+  try {
+    const labeled = client.api(`pulls/${number}`);
+    if (labeled.state === 'open') await notify({repo: repository, pr: number, head_sha: labeled.head.sha});
+  } catch {
+    // Label assignment already succeeded. A wake-up lookup must not abort other selections.
+    console.warn('::warning::Grok notification skipped: current head could not be read. Review hold retained; use manual recovery.');
+  }
+}
 export async function selectPR(number, client, apply = false, notify = notifyGrokReview, headChanged = false) {
   const pr = client.api(`pulls/${number}`);
   if (pr.state !== 'open') return {number, action: 'unchanged'};
@@ -24,8 +33,7 @@ export async function selectPR(number, client, apply = false, notify = notifyGro
   const currentFixes = closingIssues(client.graphql(closingIssuesQuery, number), current.head.sha);
   if (!automaticSelection(current, currentFixes)) return {number, action: 'not-selected'};
   client.addLabel(number, grok.label);
-  const labeled = client.api(`pulls/${number}`);
-  if (labeled.state === 'open') await notify({repo: repository, pr: number, head_sha: labeled.head.sha});
+  await notifyAfterLabel(number, client, notify);
   return {number, action: 'labeled'};
 }
 export const selectionCommand = '/dotlink review2nd';
@@ -46,8 +54,7 @@ export async function selectFromComment(id, client, apply = false, notify = noti
   if (!apply) return {number, action: 'would-label-command'};
   if (!authorizedCommand(client.api(path), client.readNode)) return {number, action: 'command-changed'};
   client.addLabel(number, grok.label);
-  const labeled = client.api(`pulls/${number}`);
-  if (labeled.state === 'open') await notify({repo: repository, pr: number, head_sha: labeled.head.sha});
+  await notifyAfterLabel(number, client, notify);
   return {number, action: 'labeled-command'};
 }
 async function main() {

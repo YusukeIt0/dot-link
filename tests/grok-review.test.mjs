@@ -179,3 +179,33 @@ test('automatic selection notifies the post-label head when a push races the wri
   assert.equal((await selectPR(90, client, true, async p => notices.push(p))).action, 'labeled');
   assert.deepEqual(notices, [{repo: 'YusukeIt0/dot-link', pr: 90, head_sha: 'e'.repeat(40)}]);
 });
+
+
+test('post-label lookup failure is warning-only on both paths and preserves the hold', async t => {
+  const warnings = [], warn = t.mock.method(console, 'warn', x => warnings.push(x));
+  const row = {id: 123, node_id: 'Ncmd', body: '/dotlink review2nd',
+    updated_at: '2026-10-18T07:00:00Z', user: owner,
+    issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/90'};
+  for (const command of [false, true]) {
+    const pr = {state: 'open', labels: ['bug', 'P1'], head: {sha: head}};
+    let written = false;
+    const client = {
+      api(path) {
+        if (path === 'issues/comments/123') return row;
+        if (path === 'issues/90') return {pull_request: {}};
+        if (written) throw new Error('private API error');
+        return structuredClone(pr);
+      },
+      graphql: () => graph(head, [bug]),
+      readNode: () => ({id: row.node_id, body: row.body, updatedAt: row.updated_at, lastEditedAt: null,
+        author: {__typename: 'User', login: owner.login, databaseId: owner.id}}),
+      addLabel: () => {written = true; pr.labels.push('independent-review');},
+    };
+    const notify = () => assert.fail('do not send an unverified head');
+    const result = command ? await selectFromComment(row.id, client, true, notify) : await selectPR(90, client, true, notify);
+    assert.equal(result.action, command ? 'labeled-command' : 'labeled');
+    assert.equal(grokBlockers(pr, []).length, 1);
+  }
+  assert.equal(warn.mock.callCount(), 2);
+  assert.ok(warnings.every(x => x.includes('Review hold retained') && !x.includes('private')));
+});
