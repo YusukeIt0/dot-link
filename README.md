@@ -37,8 +37,8 @@ You need an **Apple Silicon Mac**, **Even G2**, an **iPhone**, **Tailscale**, an
 ## Requirements
 
 - **Apple Silicon Mac**, macOS 13 or later, kept awake and online during use.
-- **Even G2 and an iPhone** with the Even Realities app.
-- **Your existing ChatGPT Dot**, with access to OpenAI tunnels and custom MCP connections. Installing Dot Link does not grant this account access.
+- **Even G2 and an iPhone** with the Even Realities app. Android is not supported.
+- **ChatGPT with [Dot](https://help.openai.com/en/articles/20001530-getting-started-with-your-dot)**, with access to an [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) and custom MCP connections. Installing Dot Link does not grant this account access.
 - **Tailscale** on both Mac and iPhone, signed in to the same account.
 
 ## Quickstart

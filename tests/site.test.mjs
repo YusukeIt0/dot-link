@@ -59,5 +59,13 @@ test('localized static pages are complete, mutually discoverable and use valid l
     for (const requirement of ['Apple Silicon', 'Tailscale', 'OpenAI', 'MCP', 'iPhone']) {
       assert.ok(page.includes(requirement), `${lang}: missing ${requirement}`);
     }
+    const requirements = page.match(/<section[^>]+id="requirements"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(requirements, `${lang}: missing requirements section`);
+    for (const href of [
+      'https://help.openai.com/en/articles/20001530-getting-started-with-your-dot',
+      'https://developers.openai.com/api/docs/guides/secure-mcp-tunnels',
+    ]) {
+      assert.ok(requirements.includes(`href="${href}"`), `${lang}: missing provider reference ${href}`);
+    }
   }
 });
