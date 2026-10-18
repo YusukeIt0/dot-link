@@ -333,6 +333,7 @@ el('pair').onclick = async () => {
   } catch (error) {
     if (version !== session.version || exited) return;
     progress.connection = session.token ? 'offline' : 'unpaired'; updateRuntime();
+    setupPanel.open = true;
     pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
     if (session.token) updates.start(true);

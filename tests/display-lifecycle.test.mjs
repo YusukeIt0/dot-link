@@ -676,6 +676,25 @@ test('forget clears the queued restore/wake state and preserves the unsent draft
  assert.equal(vm.runInContext('conversation.visibleId',app.context),undefined);
 });
 
+test('pairing failure reopens setup if it was closed while the request was pending', async t => {
+ const origin='https://relay.example.ts.net';
+ let rejectPair;
+ const app=await launch({request:url=>url===`${origin}/api/pair`
+  ? new Promise((resolve,reject)=>{rejectPair=reject;}) : undefined});
+ t.after(app.close);
+ app.element('notice').textContent='Current runtime feedback';
+ app.element('mac-setup').open=true;
+ app.element('pair-code').value=JSON.stringify({version:1,origin,code:'c'.repeat(43),expiresAt:Date.now()+60000});
+ const pending=app.element('pair').click(); await flush();
+ assert.equal(typeof rejectPair,'function');
+ app.element('mac-setup').open=false;
+ app.element('mac-setup').dispatchEvent({type:'toggle'});
+ rejectPair(new Error('Offline')); await pending; await flush();
+ assert.equal(app.element('mac-setup').open,true);
+ assert.equal(app.element('pair-notice').textContent,'Macが停止・スリープ・オフラインの場合は接続できません。');
+ assert.equal(app.element('notice').textContent,'Current runtime feedback');
+});
+
 test('successful pairing releases the send control for a preserved draft', async t => {
  const origin='https://relay.example.ts.net';
  const app=await launch({request:url=>url===`${origin}/api/pair`
