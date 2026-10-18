@@ -348,9 +348,13 @@ test('language switches preserve the live session, draft, TTS, history position 
   await app.element('tts').click(); await flush();
   const credentials = app.saved.get('g2-device-token');
   const beforeRequests = app.networkCalls.length;
+  app.element('pair-code').value = 'invalid'; app.element('pair-code').oninput();
   for (const locale of ['en', 'ja', 'en']) {
     app.element('language').value = locale; app.element('language').onchange(); await flush();
     assert.equal(app.context.document.documentElement.lang, locale);
+    assert.equal(app.element('pair-notice').textContent, locale === 'en'
+      ? 'The pairing code is invalid or expired. Create a new one on your Mac.'
+      : '接続コードが無効か期限切れです。Macで新しく発行してください。');
     assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : '表示設定');
     assert.match(app.element('tts').textContent, /ON$/);
     assert.equal(app.element('record').disabled, false);
