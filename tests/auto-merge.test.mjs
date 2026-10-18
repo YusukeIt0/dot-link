@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {evaluate, collect, mergeEligible, mergeWithReassessment, assertActivation, protectedChanges, deviceAffected} from '../scripts/auto-merge.mjs';
+import {evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected} from '../scripts/auto-merge.mjs';
 import {policy, acceptanceMarker, scopeDigest, hash} from '../scripts/review-evidence.mjs';
 import {fingerprintPR, latestReceipt} from '../scripts/check-review-before-merge.mjs';
 
@@ -148,6 +148,27 @@ test('transient metadata change is re-read after a delay and merges only once', 
   assert.deepEqual(waits, [30_000]);
   assert.deepEqual(result.reassessments[0].changed_inputs, ['pr']);
   assert.deepEqual(client.merges, [{number: 74, body: {sha: head, merge_method: 'squash'}}]);
+});
+
+test('API object-key order alone cannot hold an otherwise unchanged PR', async () => {
+  const reverseKeys = x => Array.isArray(x) ? x.map(reverseKeys)
+    : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).reverse().map(key => [key, reverseKeys(x[key])])) : x;
+  const original = fixture(), reordered = reverseKeys(original);
+  assert.notEqual(hash(original), hash(reordered)); // Reproduces the old comparison bug.
+  assert.equal(snapshotHash(original), snapshotHash(reordered));
+  const client = clientFor(fixture(), (s, reads) => {if (reads === 2) s.pr = reverseKeys(s.pr);});
+  const result = await mergeWithReassessment(74, client, env, async () => assert.fail('Key order must not require a retry'));
+  assert.equal(result.merged, true);
+  assert.equal(result.attempts, 1);
+  assert.equal(client.merges.length, 1);
+});
+
+test('snapshot normalization retains all values, array order and missing-field differences', () => {
+  for (const [before, after] of [[{a: 1}, {a: 2}], [{a: 1}, {a: 1, b: null}],
+    [{items: [{id: 1}, {id: 2}]}, {items: [{id: 2}, {id: 1}]}],
+    [{nested: {state: 'success'}}, {nested: {state: 'failure'}}]]) {
+    assert.notEqual(snapshotHash(before), snapshotHash(after));
+  }
 });
 
 test('persistent snapshot churn stops after three attempts without merging', async () => {

@@ -31,7 +31,10 @@ publication remain separate decisions.
   advice is not a defect and does not veto merging by itself.
 
 The coordinator reads everything again immediately before an exact-head squash
-merge and requires both snapshots to match. It merges at most one PR per run;
+merge and requires both snapshots to match. JSON object keys are sorted recursively
+before comparison: GitHub can change their serialization order without changing
+any input values. No evidence fields are excluded, and array order is preserved.
+It merges at most one PR per run;
 other PRs must be reviewed/tested against the resulting main. It does not queue
 GitHub native auto-merge on the basis of an old green snapshot. See
 [`development-policy.json`](../config/development-policy.json) for the bounded policy.
@@ -47,8 +50,8 @@ waits 30 seconds and then 60 seconds before up to two fresh attempts (three tota
 Each attempt rechecks activation and collects and evaluates both snapshots again;
 no previous eligible decision is reused. Persistent churn remains held. Other
 blockers and merge API errors are not automatically retried. Logs identify changed
-top-level input categories without publishing their contents. The full comparison
-is preserved; retrying never waives a gate.
+top-level input categories without publishing their contents. Full input values
+are still compared; retrying never waives a gate.
 
 The workflow uses a fixed repository-wide concurrency group, `queue: max` and
 `cancel-in-progress: false`. One run executes at a time; waiting runs queue in the

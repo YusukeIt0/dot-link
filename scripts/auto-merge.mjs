@@ -121,6 +121,15 @@ export function assertActivation(env, activation) {
       !env.AUTO_MERGE_TOKEN) throw new Error('Automatic merging is not activated for this trusted main workflow.');
 }
 
+// GitHub can return the same JSON objects with different property insertion
+// orders, including under the same App token. Compare every value while treating
+// object-key order as immaterial. Array order and element values remain intact.
+export function snapshotHash(value) {
+  const canonical = x => Array.isArray(x) ? x.map(canonical)
+    : x && typeof x === 'object' ? Object.fromEntries(Object.keys(x).sort().map(key => [key, canonical(x[key])])) : x;
+  return hash(canonical(value));
+}
+
 export function mergeEligible(number, client, env) {
   assertActivation(env, client.api('actions/variables/DOTLINK_AUTO_MERGE_ENABLED').value);
   const first = collect(number, client), decision = evaluate(first);
@@ -128,8 +137,8 @@ export function mergeEligible(number, client, env) {
   // Re-read all live inputs before the mutation; never queue a future merge using
   // a stale green result. GitHub enforces branch protection and exact-head CAS.
   const final = collect(number, client), ready = evaluate(final);
-  const changed = hash(first) !== hash(final);
-  const changedInputs = Object.keys({...first, ...final}).filter(key => hash({value: first[key]}) !== hash({value: final[key]}));
+  const changed = snapshotHash(first) !== snapshotHash(final);
+  const changedInputs = Object.keys({...first, ...final}).filter(key => snapshotHash({value: first[key]}) !== snapshotHash({value: final[key]}));
   if (!ready.eligible || changed) return {...ready, eligible: false, merged: false,
     retryable: ready.eligible && changed, changed_inputs: changedInputs,
     reasons: [...ready.reasons, 'Inputs changed during the final merge check.']};
