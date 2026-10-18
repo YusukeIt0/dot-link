@@ -37,7 +37,9 @@ async function launch(options = {}) {
   const clock = {now: () => now, schedule, cancel: id => timers.delete(id)};
   const element = id => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', dataset: {}, checked: false, disabled: false,
-      before() {}, after() {}, setAttribute() {}, removeAttribute() {}, focus() {}, addEventListener() {}, close() {}, pause() {}, showModal() {},
+      before() {}, after() {}, setAttribute() {}, removeAttribute() {}, focus() {}, close() {}, pause() {}, showModal() {},
+      listeners: new Map(), addEventListener(type, callback) { this.listeners.set(type, callback); },
+      dispatchEvent(event) { this.listeners.get(event.type)?.(event); },
       click() { return this.onclick?.(); }});
     return elements.get(id);
   };
@@ -688,7 +690,23 @@ test('successful pairing releases the send control for a preserved draft', async
  assert.equal(vm.runInContext('busy',app.context),false);
  assert.equal(app.element('send').disabled,false);
  assert.equal(app.element('transcript').value,'Preserved draft');
+ assert.equal(app.element('mac-setup').open,false);
+ assert.equal(app.element('pair-notice').textContent,'');
+ assert.match(app.element('notice').textContent,/接続しました/);
 });
+
+for (const paired of [true, false]) {
+ test(`closing setup ${paired ? 'dismisses paired' : 'preserves unpaired'} feedback`, async t => {
+  const app=await launch(); t.after(app.close);
+  if (!paired) await app.evaluate("forgetPairing('Reconnect required')");
+  app.element('pair-notice').textContent='Previous pairing feedback';
+  app.element('notice').textContent='Current runtime feedback';
+  app.element('mac-setup').open=false;
+  app.element('mac-setup').dispatchEvent({type:'toggle'});
+  assert.equal(app.element('pair-notice').textContent,paired ? '' : 'Previous pairing feedback');
+  assert.equal(app.element('notice').textContent,'Current runtime feedback');
+ });
+}
 
 test('presentation refreshes do not flush speech or change input and standby policy', async t => {
  const app=await launch();t.after(app.close);

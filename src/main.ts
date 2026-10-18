@@ -92,6 +92,7 @@ el('copy-mac-url').onclick = async () => {
 // Hide the fixed display-settings action bar while working in setup.
 setupPanel.addEventListener('toggle', () => {
   if (setupPanel.open) el<HTMLDetailsElement>('display-settings').open = false;
+  else if (session.token) pairingNotice.textContent = '';
 });
 function showSetup(unpaired: boolean): void {
   document.body.dataset.pairState = unpaired ? 'unpaired' : 'paired';
