@@ -12,7 +12,9 @@ It may read number, base/head SHA and labels for discovery. It uses its own loca
 record of completed heads to avoid repeated posts; it must not read PR comments,
 formal/inline reviews, Dotsweeper output or adjudication records to decide what to
 review. Source input is the pinned diff, relevant source/tests and the target
-issue problem definition. Do not open the PR conversation page as review input.
+issue problem definition. If a manually selected PR has no target issue, record
+that absence in limitations and review only the allowed available input; do not
+substitute PR discussion. Do not open the PR conversation page as review input.
 If the head changes during review, publish only against the SHA actually reviewed;
 the new head needs a new review.
 
