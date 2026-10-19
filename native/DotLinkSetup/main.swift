@@ -63,8 +63,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var busy = false
     var helper: Process?
     var message = ""
-    var setupFailureDetails: SetupFailureDetails?
-    var setupDiagnosticsCopied = false
+    var setupFailure = SetupFailurePresentation()
     var progressLabel: NSTextField?
     var progress: NSProgressIndicator?
     var tunnelID = ""
@@ -321,14 +320,16 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if step != "pair" && !yes("lifecycleStopped") { add(tr("1  Macの準備   →   2  Dotとの連携   →   3  iPhoneの接続", "1  Prepare Mac   →   2  Connect Dot   →   3  Pair iPhone"), size: 13, bold: true) }
         space()
         if !message.isEmpty {
-            let l = label(setupFailureDetails?.message(language: language) ?? message); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
+            let l = label(message); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
             l.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         }
-        if setupFailureDetails != nil && !busy {
-            if setupFailureDetails?.code == "TAILSCALE_SERVE_APPROVAL_REQUIRED" {
+        if let failure = setupFailure.details, !busy {
+            let l = label(failure.message(language: language)); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
+            l.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+            if setupFailure.details?.code == "TAILSCALE_SERVE_APPROVAL_REQUIRED" {
                 button(tr("TailscaleのDNS設定を開く", "Open Tailscale DNS settings")) { [weak self] in self?.open("https://login.tailscale.com/admin/dns") }
             }
-            let copy = button(setupDiagnosticsCopied ? tr("診断情報をコピーしました", "Diagnostics copied") : tr("診断情報をコピー", "Copy diagnostics")) { [weak self] in self?.copySetupDiagnostics() }
+            let copy = button(setupFailure.copied ? tr("診断情報をコピーしました", "Diagnostics copied") : tr("診断情報をコピー", "Copy diagnostics")) { [weak self] in self?.copySetupDiagnostics() }
             copy.toolTip = tr("失敗した処理・エラーコード・アプリの版番号のみ。キーや会話は含みません。", "Only the failed step, error codes and app version. No keys or conversations.")
         }
         progressLabel = nil; progress = nil; tunnelField = nil; secretField = nil; originField = nil; codeField = nil; expiryLabel = nil; copyButton = nil
@@ -476,13 +477,13 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         } else { expiryLabel?.stringValue = tr("残り\(seconds)秒・1回限り", "\(seconds) seconds remaining · one use") }
     }
     func copySetupDiagnostics() {
-        guard let text = setupFailureDetails?.copyText(appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) else { return }
+        guard let text = setupFailure.details?.copyText(appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) else { return }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
-        setupDiagnosticsCopied = true; render()
+        setupFailure.copied = true; render()
     }
     func perform(_ action: String, input: [String: String] = [:]) {
         guard !busy, appUpdater?.preparing != true else { return }; busy = true; currentAction = action; message = ""
-        setupFailureDetails = nil; setupDiagnosticsCopied = false
+        setupFailure.begin(action)
         if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
         render()
         let task = Process(); task.executableURL = payload.appendingPathComponent(".runtime/bin/node"); task.arguments = [payload.appendingPathComponent("scripts/mac-setup.mjs").path, action]; task.currentDirectoryURL = payload
@@ -568,9 +569,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if currentAction == "activate" {
                 message = tr("中継の準備を完了できませんでした。状態を確認してから再試行してください。", "Relay setup could not complete. Check the current status before retrying.") + " (\(code))"
                 if let failure = value["failure"] as? [String: Any] {
-                    setupFailureDetails = SetupFailureDetails(value: failure, catalogURL: payload.appendingPathComponent("scripts/lib/setup-errors.json"))
+                    setupFailure.details = SetupFailureDetails(value: failure, catalogURL: payload.appendingPathComponent("scripts/lib/setup-errors.json"))
                 }
-                if let details = setupFailureDetails { message = details.message(language: language) }
+                if setupFailure.details != nil { message = "" } // Render the retained failure separately from transient status messages.
             }
             if currentAction == "stt-select" { message = tr("切り替えに失敗しました。もう一度お試しください。", "Could not switch services. Please try again.") }
             if ["shutdown", "pause", "uninstall"].contains(currentAction) {

@@ -1,5 +1,18 @@
 import Foundation
 
+// Status refreshes cannot resolve an activation failure. Keep its diagnostics
+// until the user starts another setup/lifecycle operation (or retries).
+struct SetupFailurePresentation {
+    var details: SetupFailureDetails?
+    var copied = false
+
+    mutating func begin(_ action: String) {
+        guard action != "inspect" else { return }
+        details = nil
+        copied = false
+    }
+}
+
 // Only the shared, bundled catalog defines displayable codes and stage names.
 // Never display/copy a helper's free-form messages, stdout or stderr.
 struct SetupFailureDetails {

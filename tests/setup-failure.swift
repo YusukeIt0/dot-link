@@ -14,6 +14,22 @@ import Foundation
         precondition(json["exitCode"] as? Int == 7)
         precondition(json["appVersion"] as? String == "0.4.7")
         precondition(!details.copyText(appVersion: "sk-private", build: "sk-private")!.contains("private"))
+        // The user can refresh repeatedly and still copy the original failure.
+        var presentation = SetupFailurePresentation(details: details, copied: true)
+        for _ in 0..<3 {
+            presentation.begin("inspect")
+            precondition(presentation.copied)
+            precondition(presentation.details?.message(language: "ja") == details.message(language: "ja"))
+            precondition(presentation.details?.message(language: "en") == details.message(language: "en"))
+            precondition(presentation.details?.copyText(appVersion: "0.4.7", build: "75") == copy)
+        }
+        // Starting a retry or changing setup invalidates the previous failure,
+        // so a successful completion cannot leave stale diagnostics visible.
+        for action in ["activate", "save-tunnel", "pause", "resume", "shutdown", "uninstall"] {
+            presentation = SetupFailurePresentation(details: details, copied: true)
+            presentation.begin(action)
+            precondition(presentation.details == nil && !presentation.copied)
+        }
         var invalid = raw; invalid["code"] = "SK_PRIVATE"
         precondition(SetupFailureDetails(value: invalid, catalogURL: catalogURL) == nil)
         invalid = raw; invalid["stage"] = "sk-private"
