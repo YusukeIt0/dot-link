@@ -83,7 +83,7 @@ Use **Connection details** in the Even companion to inspect connection status. F
 
 **Copy diagnostics** appears after a Start relay setup failure. It copies only the failed step, a known error code, available command exit/signal information, and the Mac app version/build. It does not copy keys, hostnames, paths, command output or conversations. The last activation failure is also saved locally in `~/Library/Application Support/Dot Link/.runtime/setup-failure.json` when the installation has been located and that folder is writable; it includes the failure time. Dot Link removes it after activation completes without an error when file permissions allow. This is separate from connection-status checks and is not uploaded automatically. A failed step can have made partial progress, so check the current status before retrying.
 
-Mac 0.4.7 may show only `SETUP_FAILED` and do not provide this diagnostic record. That code alone does not identify Tailscale, API-key permissions or any other specific cause. Avoid deleting settings or repeatedly reinstalling based on that code alone.
+Mac 0.4.7 may show only `SETUP_FAILED` and does not provide this diagnostic record. That code alone does not identify Tailscale, API-key permissions or any other specific cause. Avoid deleting settings or repeatedly reinstalling based on that code alone.
 
 ## Pause, quit and uninstall
 
