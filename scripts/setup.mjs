@@ -65,7 +65,8 @@ async function install() {
       try { await access(path); }
       catch (error) {
         if (error.code !== 'ENOENT') throw error;
-        throw setupError(path === '.runtime/tunnel.yaml' ? 'TUNNEL_CONFIG_MISSING' : 'SETUP_FILES_MISSING');
+        throw setupError(path === '.runtime/tunnel.yaml' ? 'TUNNEL_CONFIG_MISSING'
+          : path === '.runtime/models/ggml-small.bin' ? 'SPEECH_MODEL_MISSING' : 'SETUP_FILES_MISSING');
       }
     }
     if (!await executable([resolve('.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client'])) throw setupError('TUNNEL_CLIENT_MISSING');
@@ -79,7 +80,7 @@ async function install() {
   }
   await setupStage('config', () => writeFile('.runtime/device-config.json', JSON.stringify({ version: 1, origin: ts.origin }), { mode: 0o600 }));
   const changed = await setupStage('services', () => prepareAgents(resolve('.'), ts.origin, { install: true, menu: !voiceOnly }));
-  if (!voiceOnly) await setupStage('config', () => run(process.execPath, ['scripts/pair-device.mjs', ts.origin]));
+  if (!voiceOnly) await setupStage('pairing', () => run(process.execPath, ['scripts/pair-device.mjs', ts.origin]));
   return { changed, message: '接続先を自動設定し、ログイン時の自動起動を登録しました。' };
 }
 try {
@@ -96,7 +97,9 @@ try {
 } catch (error) {
   if (process.argv[2] === 'install') {
     const failure = setupFailure(error);
-    await output({ ready: false, failure, issues: [setupFailureMessage(failure)] });
+    // The legacy notification menu is Japanese-only and displays issues directly.
+    // The current Mac app uses --voice-only and localizes the structured failure.
+    await output({ ready: false, failure, issues: [setupFailureMessage(failure, voiceOnly ? 'en' : 'ja')] });
     process.exitCode = 1;
   } else {
     const message = error.code || error.stdout !== undefined ? '設定を完了できませんでした。接続と導入手順を確認してください。' : error.message;

@@ -34,7 +34,7 @@ async function installFixture(t, scenario) {
       return {bin:'/fake/tailscale',origin:'https://private-host.ts.net',state:scenario==='conflict'?'conflict':scenario==='funnel'?'public':'missing'};
     };
     export const executable = async () => scenario==='client' ? undefined : '/fake/client';
-    export const run = async () => { if(scenario==='init') throw raw(); return ''; };
+    export const run = async (_, args) => { if(scenario==='init' || (scenario==='pair' && args[0]==='scripts/pair-device.mjs')) throw raw(); return ''; };
     export const runTailscale = async () => {
       if(scenario==='https') throw raw();
       if(scenario==='timeout') throw Object.assign(raw(), {code:null, killed:true, signal:'SIGTERM'});
@@ -51,9 +51,13 @@ async function installFixture(t, scenario) {
   await mkdir(join(root, 'dist'));
   for (const file of ['.runtime/tunnel.yaml', '.runtime/models/ggml-small.bin', 'dist/index.html']) {
     if (scenario === 'missing' && file === '.runtime/tunnel.yaml') continue;
+    if (scenario === 'model' && file === '.runtime/models/ggml-small.bin') continue;
     await writeFile(join(root, file), secret);
   }
-  return { root, execute: () => run(process.execPath, [join(scripts, 'setup.mjs'), 'install', '--voice-only', '--directory', root]) };
+  const legacyApp = join(root, '.runtime/notification-menu/Dot Notification Lab.app/Contents/MacOS');
+  await mkdir(legacyApp, { recursive: true });
+  await writeFile(join(legacyApp, 'DotNotificationLab'), 'fixture');
+  return { root, execute: (voiceOnly = true) => run(process.execPath, [join(scripts, 'setup.mjs'), 'install', ...(voiceOnly ? ['--voice-only'] : []), '--directory', root]) };
 }
 
 test('real setup install failures survive nonzero exit through the activation parent without raw output', async t => {
@@ -63,6 +67,7 @@ test('real setup install failures survive nonzero exit through the activation pa
     ['conflict','TAILSCALE_SERVE_CONFLICT','tailscale'],
     ['funnel','TAILSCALE_FUNNEL_ENABLED','tailscale'],
     ['missing','TUNNEL_CONFIG_MISSING','prerequisites'],
+    ['model','SPEECH_MODEL_MISSING','prerequisites'],
     ['client','TUNNEL_CLIENT_MISSING','prerequisites'],
     ['init','SETUP_COMMAND_FAILED','initialize'],
     ['https','TAILSCALE_HTTPS_FAILED','https'],
@@ -152,4 +157,23 @@ test('generic failures remain honest and every known failure has English and Jap
   for(const table of [catalog.codes,catalog.stages]) for(const entry of Object.values(table)) {
     assert.ok(entry.en.length); assert.ok(entry.ja.length);
   }
+});
+
+
+test('legacy notification menu retains Japanese install guidance and a distinct pairing stage', async t => {
+  const missing = await installFixture(t, 'missing');
+  await assert.rejects(missing.execute(false), error => {
+    const result = JSON.parse(error.stdout);
+    assert.match(result.issues[0], /Tunnel接続設定/);
+    assert.equal(result.failure.code, 'TUNNEL_CONFIG_MISSING');
+    return true;
+  });
+  const pairing = await installFixture(t, 'pair');
+  await assert.rejects(pairing.execute(false), error => {
+    const result = JSON.parse(error.stdout);
+    assert.equal(result.failure.stage, 'pairing');
+    assert.match(result.issues[0], /接続コードの作成/);
+    assert.doesNotMatch(error.stdout, /sk-test|private-host/);
+    return true;
+  });
 });

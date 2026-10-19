@@ -44,8 +44,9 @@ export async function setupStage(stage, operation, fallback = 'SETUP_FAILED') {
   catch (error) { throw failureError(setupFailure(error, stage, fallback)); }
 }
 
-export function setupFailureMessage(failure) {
-  return `${catalog.stages[failure.stage].en}: ${catalog.codes[failure.code].en}`;
+export function setupFailureMessage(failure, language = 'en') {
+  const locale = language === 'ja' ? 'ja' : 'en';
+  return `${catalog.stages[failure.stage][locale]}: ${catalog.codes[failure.code][locale]}`;
 }
 
 export async function runSetupInstall(execute) {

@@ -73,12 +73,12 @@
       "ja": "中継を起動する前に、セットアップでDotのTunnel接続設定を保存してください。"
     },
     "SETUP_FILES_MISSING": {
-      "en": "Setup files are missing. Return to Prepare this Mac and complete preparation.",
-      "ja": "導入に必要なファイルがありません。「Macの準備」を完了してください。"
+      "en": "Required setup files are missing. Copy diagnostics for help; keep your saved settings.",
+      "ja": "導入に必要なファイルがありません。設定を消さず、診断情報をコピーしてお問い合わせください。"
     },
     "TUNNEL_CLIENT_MISSING": {
-      "en": "The Dot connection component is missing. Complete Prepare this Mac before retrying.",
-      "ja": "Dotへの接続部品がありません。「Macの準備」を完了して再試行してください。"
+      "en": "The Dot connection component is unavailable. Copy diagnostics for help; keep your saved settings.",
+      "ja": "Dotへの接続部品を利用できません。設定を消さず、診断情報をコピーしてお問い合わせください。"
     },
     "EXISTING_SERVICE_UNREADABLE": {
       "en": "Could not verify existing login services. Copy diagnostics before changing them.",
@@ -155,6 +155,10 @@
     "SERVICE_STILL_STOPPING": {
       "en": "A relay process is still stopping. Wait a moment, then try again.",
       "ja": "中継プロセスが終了待ちです。少し待ってから再試行してください。"
+    },
+    "SPEECH_MODEL_MISSING": {
+      "en": "The speech model is missing. Return to Prepare this Mac to download it.",
+      "ja": "音声認識モデルがありません。「Macの準備」に戻ってダウンロードしてください。"
     }
   },
   "stages": {
@@ -213,6 +217,10 @@
     "health": {
       "en": "Check relay connection",
       "ja": "中継接続の確認"
+    },
+    "pairing": {
+      "en": "Create pairing code",
+      "ja": "接続コードの作成"
     }
   }
 }
