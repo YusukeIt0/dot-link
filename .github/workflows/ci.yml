@@ -33,3 +33,4 @@ jobs:
       - run: npm run test:http
       - run: npm run build
       - run: sh scripts/test-notification-native.sh
+      - run: sh scripts/test-setup-native.sh

@@ -2,10 +2,11 @@ import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tailscale, run, runTailscale, prepareAgents, executable, assertOwnedAgents } from './lib/setup.mjs';
+import { setupError, setupStage, setupFailure, setupFailureMessage } from './lib/setup-failure.mjs';
 
 // Output contains no keys, subprocess stderr, QR contents, or conversations.
 const directoryIndex = process.argv.indexOf('--directory');
-process.chdir(directoryIndex >= 0 ? resolve(process.argv[directoryIndex + 1]) : fileURLToPath(new URL('..', import.meta.url)));
+const directory = directoryIndex >= 0 ? resolve(process.argv[directoryIndex + 1]) : fileURLToPath(new URL('..', import.meta.url));
 const exists = path => access(path).then(() => true, () => false);
 const voiceOnly = process.argv.includes('--voice-only');
 async function output(result) {
@@ -50,27 +51,40 @@ async function inspect() {
   return { version: 1, ready: issues.length === 0, origin: ts?.origin, bridge, subscribed, notificationSubscribed, device, tunnel, issues };
 }
 async function install() {
-  await assertOwnedAgents(resolve('.'));
-  const ts = await tailscale();
-  if (ts.state === 'public' || ts.state === 'conflict') throw new Error('既存のTailscale設定と競合しています。自動変更せず停止しました。');
-  const required = ['.runtime/tunnel.yaml', '.runtime/models/ggml-small.bin', 'dist/index.html'];
-  if (!voiceOnly) required.push('.runtime/notification-menu/Dot Notification Lab.app/Contents/MacOS/DotNotificationLab');
-  for (const path of required)
-    if (!await exists(path)) throw new Error('初回導入が未完了です。導入手順を開いて不足項目を確認してください。');
-  if (!await executable([resolve('.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client'])) throw new Error('tunnel-clientを導入してください。');
-  await mkdir('.runtime', { recursive: true, mode: 0o700 });
-  await run(process.execPath, ['server/init.ts']);
+  await setupStage('ownership', () => assertOwnedAgents(resolve('.')));
+  const ts = await setupStage('tailscale', async () => {
+    const state = await tailscale();
+    if (state.state === 'public') throw setupError('TAILSCALE_FUNNEL_ENABLED');
+    if (state.state === 'conflict') throw setupError('TAILSCALE_SERVE_CONFLICT');
+    return state;
+  });
+  await setupStage('prerequisites', async () => {
+    const required = ['.runtime/tunnel.yaml', '.runtime/models/ggml-small.bin', 'dist/index.html'];
+    if (!voiceOnly) required.push('.runtime/notification-menu/Dot Notification Lab.app/Contents/MacOS/DotNotificationLab');
+    for (const path of required) {
+      try { await access(path); }
+      catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        throw setupError(path === '.runtime/tunnel.yaml' ? 'TUNNEL_CONFIG_MISSING' : 'SETUP_FILES_MISSING');
+      }
+    }
+    if (!await executable([resolve('.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client'])) throw setupError('TUNNEL_CLIENT_MISSING');
+  });
+  await setupStage('initialize', async () => {
+    await mkdir('.runtime', { recursive: true, mode: 0o700 });
+    await run(process.execPath, ['server/init.ts']);
+  });
   if (ts.state !== 'ready') {
-    try { await runTailscale(ts.bin, ['serve', '--bg', '--https=443', 'http://127.0.0.1:3462']); }
-    catch { throw new Error('TailscaleのHTTPSを有効にできません。Tailscale側でHTTPSの許可を確認してください。'); }
+    await setupStage('https', () => runTailscale(ts.bin, ['serve', '--bg', '--https=443', 'http://127.0.0.1:3462']), 'TAILSCALE_HTTPS_FAILED');
   }
-  await writeFile('.runtime/device-config.json', JSON.stringify({ version: 1, origin: ts.origin }), { mode: 0o600 });
-  const changed = await prepareAgents(resolve('.'), ts.origin, { install: true, menu: !voiceOnly });
-  if (!voiceOnly) await run(process.execPath, ['scripts/pair-device.mjs', ts.origin]);
+  await setupStage('config', () => writeFile('.runtime/device-config.json', JSON.stringify({ version: 1, origin: ts.origin }), { mode: 0o600 }));
+  const changed = await setupStage('services', () => prepareAgents(resolve('.'), ts.origin, { install: true, menu: !voiceOnly }));
+  if (!voiceOnly) await setupStage('config', () => run(process.execPath, ['scripts/pair-device.mjs', ts.origin]));
   return { changed, message: '接続先を自動設定し、ログイン時の自動起動を登録しました。' };
 }
 try {
   const action = process.argv[2] ?? 'status';
+  await setupStage('discover', async () => process.chdir(directory));
   if (action === 'status') await output(await inspect());
   else if (action === 'install') await output(await install());
   else if (action === 'pair') {
@@ -80,6 +94,12 @@ try {
     await output({ ready: true });
   } else throw new Error('不明な操作です。');
 } catch (error) {
-  const message = error.code || error.stdout !== undefined ? '設定を完了できませんでした。接続と導入手順を確認してください。' : error.message;
-  await output({ ready: false, issues: [message] }); process.exitCode = 1;
+  if (process.argv[2] === 'install') {
+    const failure = setupFailure(error);
+    await output({ ready: false, failure, issues: [setupFailureMessage(failure)] });
+    process.exitCode = 1;
+  } else {
+    const message = error.code || error.stdout !== undefined ? '設定を完了できませんでした。接続と導入手順を確認してください。' : error.message;
+    await output({ ready: false, issues: [message] }); process.exitCode = 1;
+  }
 }
