@@ -325,6 +325,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             l.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         }
         if setupFailureDetails != nil && !busy {
+            if setupFailureDetails?.code == "TAILSCALE_SERVE_APPROVAL_REQUIRED" {
+                button(tr("TailscaleのDNS設定を開く", "Open Tailscale DNS settings")) { [weak self] in self?.open("https://login.tailscale.com/admin/dns") }
+            }
             let copy = button(setupDiagnosticsCopied ? tr("診断情報をコピーしました", "Diagnostics copied") : tr("診断情報をコピー", "Copy diagnostics")) { [weak self] in self?.copySetupDiagnostics() }
             copy.toolTip = tr("失敗した処理・エラーコード・アプリの版番号のみ。キーや会話は含みません。", "Only the failed step, error codes and app version. No keys or conversations.")
         }

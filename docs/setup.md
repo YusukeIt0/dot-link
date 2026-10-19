@@ -16,6 +16,19 @@ Dot Link is not Apple-notarized. If macOS says it cannot verify the developer an
 
 The app and installer use Japanese on Japanese Macs and English otherwise. The Even companion also supports Japanese; this guide uses the English labels.
 
+## Tailscale HTTPS setup
+
+Connect the Mac and iPhone to the same Tailscale network. Before starting the relay, enable HTTPS for that network:
+
+1. Open **DNS** in the [Tailscale admin console](https://login.tailscale.com/admin/dns).
+2. Enable **MagicDNS** if it is off.
+3. Under **HTTPS Certificates**, choose **Enable HTTPS** and review the confirmation that certificate names (including the machine name and tailnet DNS name) will be recorded in the public Certificate Transparency ledger. Ask your network administrator if you cannot change this setting.
+4. Return to Dot Link and choose **Start relay** again.
+
+Dot Link uses Tailscale Serve to provision the certificate automatically; you do not need to run `tailscale cert`. The connection stays within your Tailscale network; do not enable Funnel for Dot Link. See Tailscale's [HTTPS instructions](https://tailscale.com/docs/how-to/set-up-https-certificates) and [Serve documentation](https://tailscale.com/docs/features/tailscale-serve).
+
+If Serve is waiting for permission, Dot Link shows `TAILSCALE_SERVE_APPROVAL_REQUIRED` with the steps above, including when the command reaches its timeout. If you run Serve manually and it prints a `https://login.tailscale.com/f/serve…` authorization link, you can also follow that link to grant permission. Dot Link does not include that device-specific link in copied diagnostics.
+
 ## Dot connection
 
 Your account needs OpenAI tunnels and custom MCP connections in ChatGPT. Dot Link uses your existing Dot and does not provision access to these features. Setup on a fresh account is still being validated.

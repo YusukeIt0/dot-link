@@ -27,7 +27,13 @@ export function setupFailure(error, stage = 'install', fallback = 'SETUP_FAILED'
   const source = error?.cause ?? error;
   let code = known(catalog.codes, error?.setupCode) ? error.setupCode
     : known(catalog.codes, error?.message) ? error.message : fallback;
-  if (source?.killed === true && source?.signal === 'SIGTERM' && source?.code == null) code = 'SETUP_TIMEOUT';
+  // Only interpret output from the Serve setup stage. Retain the actionable
+  // approval reason even when Serve waits until the command timeout kills it.
+  // Never retain the approval URL (which can contain device identifiers).
+  const serveApproval = stage === 'https' && fallback === 'TAILSCALE_HTTPS_FAILED'
+    && [source?.stdout, source?.stderr].some(output => typeof output === 'string' && output.includes('login.tailscale.com/f/serve'));
+  if (serveApproval) code = 'TAILSCALE_SERVE_APPROVAL_REQUIRED';
+  else if (source?.killed === true && source?.signal === 'SIGTERM' && source?.code == null) code = 'SETUP_TIMEOUT';
   else if (['EACCES', 'EPERM'].includes(source?.code)) code = 'SETUP_PERMISSION_DENIED';
   else if (source?.code === 'ENOSPC') code = 'SETUP_DISK_FULL';
   else if (code === 'SETUP_FAILED' && (source?.code !== undefined || source?.stdout !== undefined)) code = 'SETUP_COMMAND_FAILED';

@@ -36,6 +36,10 @@ async function installFixture(t, scenario) {
     export const executable = async () => scenario==='client' ? undefined : '/fake/client';
     export const run = async (_, args) => { if(scenario==='init' || (scenario==='pair' && args[0]==='scripts/pair-device.mjs')) throw raw(); return ''; };
     export const runTailscale = async () => {
+      if(scenario.startsWith('approval-')) throw Object.assign(raw(), {
+        [scenario.includes('stderr') ? 'stderr' : 'stdout']: 'Enable Serve: https://login.tailscale.com/f/serve?node=private-host&token=' + ${JSON.stringify(secret)},
+        ...(scenario.endsWith('timeout') ? {code:null, killed:true, signal:'SIGTERM'} : {})
+      });
       if(scenario==='https') throw raw();
       if(scenario==='timeout') throw Object.assign(raw(), {code:null, killed:true, signal:'SIGTERM'});
       return '';
@@ -72,6 +76,10 @@ test('real setup install failures survive nonzero exit through the activation pa
     ['init','SETUP_COMMAND_FAILED','initialize'],
     ['https','TAILSCALE_HTTPS_FAILED','https'],
     ['timeout','SETUP_TIMEOUT','https'],
+    ['approval-stdout','TAILSCALE_SERVE_APPROVAL_REQUIRED','https'],
+    ['approval-stderr','TAILSCALE_SERVE_APPROVAL_REQUIRED','https'],
+    ['approval-stdout-timeout','TAILSCALE_SERVE_APPROVAL_REQUIRED','https'],
+    ['approval-stderr-timeout','TAILSCALE_SERVE_APPROVAL_REQUIRED','https'],
     ['services','SERVICE_REGISTRATION_FAILED','services'],
     ['permission','SETUP_PERMISSION_DENIED','services'],
   ];
@@ -95,6 +103,16 @@ test('successful install still returns changes and an empty change list is valid
   const f = await installFixture(t, 'success');
   assert.deepEqual((await runSetupInstall(f.execute)).changed, ['bridge','device','tunnel']);
   assert.deepEqual(await runSetupInstall(async () => '{"changed":[]}'), { changed: [] });
+});
+
+test('Serve approval output is interpreted only at the HTTPS Serve stage', () => {
+  const error = { code: null, killed: true, signal: 'SIGTERM', stderr: 'https://login.tailscale.com/f/serve?node=private-host' };
+  assert.equal(setupFailure(error, 'install').code, 'SETUP_TIMEOUT');
+  assert.equal(setupFailure(error, 'tailscale', 'TAILSCALE_STATUS_FAILED').code, 'SETUP_TIMEOUT');
+  const failure = setupFailure(error, 'https', 'TAILSCALE_HTTPS_FAILED');
+  assert.equal(failure.code, 'TAILSCALE_SERVE_APPROVAL_REQUIRED');
+  assert.equal(failure.signal, 'SIGTERM');
+  assert.doesNotMatch(JSON.stringify(failure), /login\.tailscale|private-host/);
 });
 
 test('malformed, legacy, success-looking failed children and timed out children never look successful', async () => {
