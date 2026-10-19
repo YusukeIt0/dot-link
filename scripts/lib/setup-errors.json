@@ -1,0 +1,230 @@
+{
+  "codes": {
+    "SETUP_FAILED": {
+      "en": "Could not complete this step. Copy diagnostics if retrying does not help.",
+      "ja": "この処理を完了できませんでした。再試行しても続く場合は診断情報をコピーしてください。"
+    },
+    "SETUP_TIMEOUT": {
+      "en": "This step timed out. Check the connection, then try again.",
+      "ja": "この処理が時間内に終わりませんでした。接続を確認して再試行してください。"
+    },
+    "SETUP_PERMISSION_DENIED": {
+      "en": "macOS denied access to a required file or command. Copy diagnostics to identify the step.",
+      "ja": "必要なファイルやコマンドへのアクセスが拒否されました。診断情報で処理箇所を確認できます。"
+    },
+    "SETUP_DISK_FULL": {
+      "en": "There is not enough disk space. Free up space on this Mac, then try again.",
+      "ja": "ディスクの空き容量が不足しています。このMacの空き容量を増やして再試行してください。"
+    },
+    "SETUP_COMMAND_FAILED": {
+      "en": "A setup command failed. Copy diagnostics if retrying does not help.",
+      "ja": "設定コマンドが失敗しました。再試行しても続く場合は診断情報をコピーしてください。"
+    },
+    "SETUP_INVALID_RESPONSE": {
+      "en": "The setup helper returned an unreadable result. Copy diagnostics and check for an app update.",
+      "ja": "設定処理の結果を読み取れませんでした。診断情報をコピーし、アプリの更新を確認してください。"
+    },
+    "TAILSCALE_NOT_INSTALLED": {
+      "en": "Install Tailscale and sign in, then try again.",
+      "ja": "Tailscaleをインストールしてログインし、再試行してください。"
+    },
+    "TAILSCALE_LOGIN_REQUIRED": {
+      "en": "Open Tailscale and sign in to the same network as your iPhone.",
+      "ja": "Tailscaleを開き、iPhoneと同じネットワークにログインしてください。"
+    },
+    "TAILSCALE_APPROVAL_REQUIRED": {
+      "en": "Approve this Mac in the Tailscale admin console, then try again.",
+      "ja": "Tailscaleの管理画面でこのMacの参加を承認してから再試行してください。"
+    },
+    "TAILSCALE_STOPPED": {
+      "en": "Open Tailscale and turn the connection on.",
+      "ja": "Tailscaleが停止しています。Tailscaleを開いて接続をオンにしてください。"
+    },
+    "TAILSCALE_NOT_READY": {
+      "en": "Wait for Tailscale to connect, then try again.",
+      "ja": "Tailscaleの接続が完了してから再試行してください。"
+    },
+    "TAILSCALE_DNS_UNAVAILABLE": {
+      "en": "Check MagicDNS and HTTPS Certificates under DNS in the Tailscale admin console.",
+      "ja": "Tailscale管理画面のDNSでMagicDNSとHTTPS Certificatesを確認してください。"
+    },
+    "TAILSCALE_STATUS_FAILED": {
+      "en": "Could not read Tailscale status. Open Tailscale and check its connection.",
+      "ja": "Tailscaleの状態を読み取れません。Tailscaleを開いて接続を確認してください。"
+    },
+    "TAILSCALE_SERVE_STATUS_FAILED": {
+      "en": "Could not read Tailscale Serve settings. Check Tailscale before retrying.",
+      "ja": "Tailscale Serveの設定を読み取れません。Tailscaleの状態を確認して再試行してください。"
+    },
+    "TAILSCALE_SERVE_CONFLICT": {
+      "en": "Another Tailscale Serve configuration uses this address. Review it before retrying; Dot Link has not replaced it.",
+      "ja": "別のTailscale Serve設定がこの接続先を使用しています。設定を確認してください。Dot Linkは上書きしていません。"
+    },
+    "TAILSCALE_FUNNEL_ENABLED": {
+      "en": "Tailscale Funnel is enabled. Review the public sharing settings before retrying; Dot Link requires a private connection.",
+      "ja": "Tailscale Funnelが有効です。公開設定を確認してください。Dot Linkには専用ネットワーク内の接続が必要です。"
+    },
+    "TAILSCALE_SERVE_APPROVAL_REQUIRED": {
+      "en": "Tailscale Serve needs approval. Use the button below to open Tailscale DNS settings, choose Enable HTTPS under HTTPS Certificates, then try Start relay again. Ask your network administrator if you cannot change this setting.",
+      "ja": "Tailscale Serveの許可が必要です。下のボタンでTailscaleのDNS設定を開き、HTTPS CertificatesのEnable HTTPSを押してから、「中継を起動する」をもう一度押してください。変更できない場合はネットワーク管理者に依頼してください。"
+    },
+    "TAILSCALE_HTTPS_FAILED": {
+      "en": "Could not enable Tailscale HTTPS. Check HTTPS Certificates and Serve access in Tailscale, then try again.",
+      "ja": "TailscaleのHTTPSを有効にできません。HTTPS CertificatesとServeの利用許可を確認して再試行してください。"
+    },
+    "TUNNEL_CONFIG_MISSING": {
+      "en": "Save your Dot tunnel connection in setup before starting the relay.",
+      "ja": "中継を起動する前に、セットアップでDotのTunnel接続設定を保存してください。"
+    },
+    "SETUP_FILES_MISSING": {
+      "en": "Required setup files are missing. Copy diagnostics for help; keep your saved settings.",
+      "ja": "導入に必要なファイルがありません。設定を消さず、診断情報をコピーしてお問い合わせください。"
+    },
+    "TUNNEL_CLIENT_MISSING": {
+      "en": "The Dot connection component is unavailable. Copy diagnostics for help; keep your saved settings.",
+      "ja": "Dotへの接続部品を利用できません。設定を消さず、診断情報をコピーしてお問い合わせください。"
+    },
+    "EXISTING_SERVICE_UNREADABLE": {
+      "en": "Could not verify existing login services. Copy diagnostics before changing them.",
+      "ja": "既存の自動起動設定を確認できません。変更する前に診断情報をコピーしてください。"
+    },
+    "EXISTING_SERVICE_CONFLICT": {
+      "en": "Another installation owns these login services. Review the existing installation before retrying.",
+      "ja": "別の配置先が自動起動設定を使用しています。既存のインストールを確認してください。"
+    },
+    "SERVICE_REGISTRATION_FAILED": {
+      "en": "Could not register a login service. Check System Settings > General > Login Items, then try again while logged in to this Mac.",
+      "ja": "自動起動を登録できません。「システム設定」→「一般」→「ログイン項目」を確認し、このMacにログインした状態で再試行してください。"
+    },
+    "SERVICE_STOP_TIMEOUT": {
+      "en": "The previous service is still stopping. Wait a moment, then try again.",
+      "ja": "以前の起動処理が終了待ちです。少し待ってから再試行してください。"
+    },
+    "INSTALL_FIRST": {
+      "en": "Complete Prepare this Mac before starting the relay.",
+      "ja": "中継を起動する前に「Macの準備」を完了してください。"
+    },
+    "MULTIPLE_INSTALLATIONS": {
+      "en": "More than one installation was found. Review the existing installations before retrying.",
+      "ja": "複数のインストールが見つかりました。既存の配置先を確認してください。"
+    },
+    "INSTALL_FOLDER_OCCUPIED": {
+      "en": "The setup folder is already in use. Review the existing installation before retrying.",
+      "ja": "導入先フォルダが使用されています。既存のインストールを確認してください。"
+    },
+    "APP_BUNDLE_INVALID": {
+      "en": "Could not verify the Mac app. Replace only the app with an official download; keep your Application Support data.",
+      "ja": "Macアプリを確認できません。Application Supportのデータは残し、公式配布のアプリだけを入れ替えてください。"
+    },
+    "APP_BUNDLE_CONFLICT": {
+      "en": "Another app occupies the destination. Review the app in your Applications folder before retrying.",
+      "ja": "配置先が別のアプリに使用されています。ユーザーのApplicationsフォルダを確認してください。"
+    },
+    "MENU_SERVICE_CONFLICT": {
+      "en": "Another login entry uses the app service. Review Login Items before retrying.",
+      "ja": "別のログイン項目がアプリの起動設定を使用しています。ログイン項目を確認してください。"
+    },
+    "SERVICE_SETUP_REQUIRED": {
+      "en": "Login services are incomplete. Check the status and retry Start relay.",
+      "ja": "自動起動の設定が未完了です。状態を確認して中継の起動を再試行してください。"
+    },
+    "UNSAFE_INSTALL_PATH": {
+      "en": "Could not verify the installation location. Copy diagnostics before changing it.",
+      "ja": "インストール先の安全性を確認できません。変更する前に診断情報をコピーしてください。"
+    },
+    "LIFECYCLE_STATE_UNREADABLE": {
+      "en": "Could not read the saved relay state. Copy diagnostics before changing settings.",
+      "ja": "中継の保存状態を読み取れません。設定を変更する前に診断情報をコピーしてください。"
+    },
+    "UPDATE_APP_INVALID": {
+      "en": "Could not verify the installed Mac app. Replace only the app with an official download; keep your Application Support data.",
+      "ja": "インストール済みアプリを確認できません。Application Supportのデータは残し、公式配布のアプリだけを入れ替えてください。"
+    },
+    "UPDATE_ALREADY_PREPARED": {
+      "en": "A previous runtime change is unfinished. Check the app status for recovery.",
+      "ja": "以前の実行環境の切り替えが未完了です。アプリの状態を確認して復旧してください。"
+    },
+    "UPDATE_SETUP_CHANGED": {
+      "en": "Setup changed during activation. Check the status before retrying.",
+      "ja": "起動中に設定状態が変わりました。状態を確認してから再試行してください。"
+    },
+    "UPDATE_JOURNAL_INVALID": {
+      "en": "Could not verify runtime recovery data. Copy diagnostics before changing settings.",
+      "ja": "実行環境の復旧情報を確認できません。設定を変更する前に診断情報をコピーしてください。"
+    },
+    "UPDATE_RECOVERY_REQUIRED": {
+      "en": "The relay did not become ready after switching its runtime. Use the recovery options shown below.",
+      "ja": "実行環境の切り替え後、中継の準備が完了しませんでした。下の復旧操作を使ってください。"
+    },
+    "SERVICE_STILL_STOPPING": {
+      "en": "A relay process is still stopping. Wait a moment, then try again.",
+      "ja": "中継プロセスが終了待ちです。少し待ってから再試行してください。"
+    },
+    "SPEECH_MODEL_MISSING": {
+      "en": "The speech model is missing. Return to Prepare this Mac to download it.",
+      "ja": "音声認識モデルがありません。「Macの準備」に戻ってダウンロードしてください。"
+    }
+  },
+  "stages": {
+    "discover": {
+      "en": "Find installation",
+      "ja": "インストール先の確認"
+    },
+    "install": {
+      "en": "Install relay services",
+      "ja": "中継サービスの設定"
+    },
+    "ownership": {
+      "en": "Check existing login services",
+      "ja": "既存の自動起動設定の確認"
+    },
+    "tailscale": {
+      "en": "Check Tailscale",
+      "ja": "Tailscaleの確認"
+    },
+    "prerequisites": {
+      "en": "Check setup files",
+      "ja": "導入ファイルの確認"
+    },
+    "initialize": {
+      "en": "Initialize relay data",
+      "ja": "中継データの準備"
+    },
+    "https": {
+      "en": "Enable Tailscale HTTPS",
+      "ja": "Tailscale HTTPSの有効化"
+    },
+    "config": {
+      "en": "Save connection settings",
+      "ja": "接続設定の保存"
+    },
+    "services": {
+      "en": "Register relay login services",
+      "ja": "中継の自動起動登録"
+    },
+    "app-install": {
+      "en": "Install Mac app",
+      "ja": "Macアプリの配置"
+    },
+    "app-register": {
+      "en": "Register Mac app at login",
+      "ja": "Macアプリの自動起動登録"
+    },
+    "runtime-prepare": {
+      "en": "Prepare relay runtime",
+      "ja": "中継実行環境の準備"
+    },
+    "runtime-finish": {
+      "en": "Switch relay runtime",
+      "ja": "中継実行環境の切り替え"
+    },
+    "health": {
+      "en": "Check relay connection",
+      "ja": "中継接続の確認"
+    },
+    "pairing": {
+      "en": "Create pairing code",
+      "ja": "接続コードの作成"
+    }
+  }
+}

@@ -14,7 +14,7 @@ await mkdir(join(contents,'MacOS'),{recursive:true});await mkdir(payload,{recurs
 for(const name of ['package.json','package-lock.json','server','src','dist'])await cp(join(root,name),join(payload,name),{recursive:true});
 await mkdir(join(payload,'scripts/lib'),{recursive:true});
 for(const name of ['mac-setup.mjs','setup-status.mjs','manage.mjs','setup.mjs','prepare-tunnel.mjs','beta-pair.mjs','mac-runtime-manifest.json'])await cp(join(root,'scripts',name),join(payload,'scripts',name));
-for(const name of ['setup.mjs','service-management.mjs','mac-install.mjs','menu-install.mjs','notification-migration.mjs','pairing-status.mjs','app-lifecycle.mjs','app-uninstall.mjs','app-update.mjs'])await cp(join(root,'scripts/lib',name),join(payload,'scripts/lib',name));
+for(const name of ['setup.mjs','setup-failure.mjs','setup-errors.json','service-management.mjs','mac-install.mjs','menu-install.mjs','notification-migration.mjs','pairing-status.mjs','app-lifecycle.mjs','app-uninstall.mjs','app-update.mjs'])await cp(join(root,'scripts/lib',name),join(payload,'scripts/lib',name));
 await mkdir(join(payload,'.runtime'),{recursive:true});
 await cp(join(root,'.runtime/vendor/runtime/bin'),join(payload,'.runtime/bin'),{recursive:true});
 await cp(join(root,'.runtime/vendor/runtime/licenses'),join(contents,'Resources/licenses'),{recursive:true});
@@ -52,7 +52,7 @@ for(const [key,type,value] of [
 ])run('/usr/libexec/PlistBuddy',['-c',`Add :${key} ${type} ${value}`,info]);
 await cp('assets/brand/orbit/DotLink.icns',join(contents,'Resources/DotLink.icns'));
 await mkdir('.runtime/swift-module-cache',{recursive:true});
-run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
+run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/SetupFailure.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
 for(const name of ['node','tunnel-client','whisper-cli'])run('/usr/bin/codesign',['--force','--sign','-',join(payload,'.runtime/bin',name)]);
 run('/usr/bin/codesign',['--force','--sign','-','--identifier','app.tripsurf.dotlink.mac',output]);
 run('/usr/bin/codesign',['--verify','--deep','--strict',output]);

@@ -5,6 +5,7 @@ import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { ownedService, serviceNames } from './service-management.mjs';
+import { setupError } from './setup-failure.mjs';
 
 const execute = promisify(execFile);
 export const run = async (file, args, options = {}) => (await execute(file, args, { timeout: 12000, maxBuffer: 256000, ...options })).stdout.trim();
@@ -18,15 +19,15 @@ export async function executable(candidates) {
 export function privateOrigin(value) {
   const url = new URL(value);
   if (url.protocol !== 'https:' || !url.hostname.endsWith('.ts.net') || url.port || url.username || url.password || url.pathname !== '/' || url.search || url.hash)
-    throw new Error('TailscaleのHTTPS接続先を確認してください。');
+    throw setupError('TAILSCALE_DNS_UNAVAILABLE', 'TailscaleのHTTPS接続先を確認してください。');
   return url.origin;
 }
 export function originFromStatus(status) {
-  if (status.BackendState === 'NeedsLogin') throw new Error('Tailscaleを開いてログインしてください。iPhoneでも同じアカウントを使います。');
-  if (status.BackendState === 'NeedsMachineAuth') throw new Error('Tailscaleの管理画面で、このMacの参加を承認してください。');
-  if (status.BackendState === 'Stopped') throw new Error('Tailscaleが停止しています。Tailscaleを開いて接続をオンにしてください。');
-  if (status.BackendState !== 'Running') throw new Error('Tailscaleの起動を待っています。続く場合はTailscaleを開いて確認してください。');
-  if (!status.Self?.DNSName) throw new Error('Tailscaleの端末名を取得できません。管理画面でMagicDNSとHTTPSを確認してください。');
+  if (status.BackendState === 'NeedsLogin') throw setupError('TAILSCALE_LOGIN_REQUIRED', 'Tailscaleを開いてログインしてください。iPhoneでも同じアカウントを使います。');
+  if (status.BackendState === 'NeedsMachineAuth') throw setupError('TAILSCALE_APPROVAL_REQUIRED', 'Tailscaleの管理画面で、このMacの参加を承認してください。');
+  if (status.BackendState === 'Stopped') throw setupError('TAILSCALE_STOPPED', 'Tailscaleが停止しています。Tailscaleを開いて接続をオンにしてください。');
+  if (status.BackendState !== 'Running') throw setupError('TAILSCALE_NOT_READY', 'Tailscaleの起動を待っています。続く場合はTailscaleを開いて確認してください。');
+  if (!status.Self?.DNSName) throw setupError('TAILSCALE_DNS_UNAVAILABLE', 'Tailscaleの端末名を取得できません。管理画面でMagicDNSとHTTPSを確認してください。');
   return privateOrigin(`https://${status.Self.DNSName.replace(/\.$/, '')}`);
 }
 export function serveState(config, origin) {
@@ -40,15 +41,15 @@ export function serveState(config, origin) {
 }
 export async function tailscale({ candidates = ['/Applications/Tailscale.app/Contents/MacOS/Tailscale', join(homedir(), 'Applications/Tailscale.app/Contents/MacOS/Tailscale'), '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale'], execute = runTailscale } = {}) {
   const bin = await executable(candidates);
-  if (!bin) throw new Error('Tailscaleをインストールしてログインしてください。');
+  if (!bin) throw setupError('TAILSCALE_NOT_INSTALLED', 'Tailscaleをインストールしてログインしてください。');
   let status, config;
   try { status = JSON.parse(await execute(bin, ['status', '--json'])); }
   catch (error) {
     // The CLI can exit nonzero while returning a valid NeedsLogin state.
-    try { status = JSON.parse(error.stdout); } catch { throw new Error('Tailscaleを開いて接続してください。'); }
+    try { status = JSON.parse(error.stdout); } catch { throw setupError('TAILSCALE_STATUS_FAILED', 'Tailscaleを開いて接続してください。', error); }
   }
   const origin = originFromStatus(status);
-  try { config = JSON.parse(await execute(bin, ['serve', 'status', '--json'])); } catch { throw new Error('Tailscaleの接続設定を読み取れません。Tailscaleを開いて確認してください。'); }
+  try { config = JSON.parse(await execute(bin, ['serve', 'status', '--json'])); } catch (error) { throw setupError('TAILSCALE_SERVE_STATUS_FAILED', 'Tailscaleの接続設定を読み取れません。Tailscaleを開いて確認してください。', error); }
   return { bin, origin, state: serveState(config, origin) };
 }
 const xml = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
@@ -69,12 +70,13 @@ export function launchAgent(label, args, directory, environment = {}, menu = fal
 export async function activateAgent(domain, label, path, { execute = run, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   // bootout returns before launchd has always finished releasing the old job.
   // A retry must inspect the label first, rather than spawn a second process.
+  let lastError;
   for (let attempt = 0; attempt < 6; attempt++) {
     if (await execute('/bin/launchctl', ['print', `${domain}/${label}`]).then(() => true, () => false)) return;
     try { await execute('/bin/launchctl', ['bootstrap', domain, path]); return; }
-    catch { if (attempt < 5) await wait(200 * (attempt + 1)); }
+    catch (error) { lastError = error; if (attempt < 5) await wait(200 * (attempt + 1)); }
   }
-  throw new Error('自動起動を登録できませんでした。Macにログインした状態で、もう一度設定してください。');
+  throw setupError('SERVICE_REGISTRATION_FAILED', '自動起動を登録できませんでした。Macにログインした状態で、もう一度設定してください。', lastError);
 }
 export async function unloadAgent(target, { execute = run, wait = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   await execute('/bin/launchctl', ['bootout', target]);
@@ -84,7 +86,7 @@ export async function unloadAgent(target, { execute = run, wait = ms => new Prom
     if (!await execute('/bin/launchctl', ['print', target]).then(() => true, () => false)) return;
     await wait(500);
   }
-  throw new Error('以前の起動処理が終了待ちです。少し待ってから接続設定を整えてください。');
+  throw setupError('SERVICE_STOP_TIMEOUT', '以前の起動処理が終了待ちです。少し待ってから接続設定を整えてください。');
 }
 export async function assertOwnedAgents(directory, { destination = join(homedir(), 'Library/LaunchAgents'), execute = run } = {}) {
   for (const name of serviceNames) {
@@ -92,15 +94,15 @@ export async function assertOwnedAgents(directory, { destination = join(homedir(
     try { await access(path); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
     let plist;
     try { plist = JSON.parse(await execute('/usr/bin/plutil', ['-convert','json','-o','-',path])); }
-    catch { throw new Error('既存の起動設定を確認できません。設定は変更していません。 / Cannot verify an existing login service; no changes made.'); }
-    if (!ownedService(plist,directory,name)) throw new Error('別の配置先が起動設定を使用しています。設定は変更していません。 / Another installation owns these login services; no changes made.');
+    catch { throw setupError('EXISTING_SERVICE_UNREADABLE', '既存の起動設定を確認できません。設定は変更していません。 / Cannot verify an existing login service; no changes made.'); }
+    if (!ownedService(plist,directory,name)) throw setupError('EXISTING_SERVICE_CONFLICT', '別の配置先が起動設定を使用しています。設定は変更していません。 / Another installation owns these login services; no changes made.');
   }
 }
 export async function prepareAgents(directory, origin, { install = false, menu = false } = {}) {
   origin = privateOrigin(origin);
   await assertOwnedAgents(directory);
   const tunnel = await executable([join(directory, '.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client']);
-  if (!tunnel) throw new Error('Dot接続用のtunnel-clientがありません。導入手順を確認してください。');
+  if (!tunnel) throw setupError('TUNNEL_CLIENT_MISSING', 'Dot接続用のtunnel-clientがありません。導入手順を確認してください。');
   // Prefer stable installation links over a versioned Homebrew Cellar path.
   const node = await executable([join(directory, '.runtime/bin/node'), '/opt/homebrew/bin/node', '/usr/local/bin/node']) ?? process.execPath;
   const entries = [

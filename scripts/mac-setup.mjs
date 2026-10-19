@@ -12,11 +12,13 @@ import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
 import { pairingStatus } from './lib/pairing-status.mjs';
 import { legacyNotificationState, retireLegacyNotifications } from './lib/notification-migration.mjs';
 import { tailscale, run, executable, assertOwnedAgents } from './lib/setup.mjs';
+import { setupStage, setupFailure, runSetupInstall, activateRelay, saveSetupFailure, clearSetupFailure } from './lib/setup-failure.mjs';
 
 const payload = fileURLToPath(new URL('..', import.meta.url));
 const action = process.argv[2] ?? 'inspect';
 const appBundle = resolve(payload, '../../..');
 const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
+let activationDirectory;
 let inputText = '';
 for await (const chunk of process.stdin) {
   inputText += chunk;
@@ -129,15 +131,22 @@ try {
     await resumeServices(found.directory);
     result = await waitForRelay(inspect);
   } else if (action === 'activate') {
-    const found = await discoverInstallation();
-    if (!found.installed) throw new Error('INSTALL_FIRST');
-    const response = JSON.parse(await run(process.execPath, [join(payload, 'scripts/setup.mjs'), 'install', '--voice-only', '--directory', found.directory], { cwd: found.directory, timeout: 120000 }));
-    if (!response.changed && !response.message) throw new Error('SERVICE_START_FAILED');
-    const menuApp = await installMenuApp(resolve(payload, '../../..'));
-    await registerMenuApp(menuApp);
-    await prepareUpdate(found.directory, {bootstrap:true});
-    await finishUpdate(found.directory);
-    result = await waitForRelay(inspect);
+    const found = await setupStage('discover', async () => {
+      const installation = await discoverInstallation();
+      if (!installation.installed) throw new Error('INSTALL_FIRST');
+      return installation;
+    });
+    activationDirectory = found.directory;
+    let menuApp;
+    result = await activateRelay({
+      install: () => runSetupInstall(() => run(process.execPath, [join(payload, 'scripts/setup.mjs'), 'install', '--voice-only', '--directory', found.directory], { cwd: found.directory, timeout: 120000 })),
+      'app-install': async () => { menuApp = await installMenuApp(resolve(payload, '../../..')); },
+      'app-register': () => registerMenuApp(menuApp),
+      'runtime-prepare': () => prepareUpdate(found.directory, {bootstrap:true}),
+      'runtime-finish': () => finishUpdate(found.directory),
+      health: () => waitForRelay(inspect),
+    });
+    await clearSetupFailure(found.directory);
   } else if (action === 'migrate-notifications') {
     const found = await discoverInstallation();
     if (!found.installed) throw new Error('INSTALL_FIRST');
@@ -165,6 +174,12 @@ try {
   } else throw new Error('UNKNOWN_ACTION');
   emit({ kind: 'result', ...result });
 } catch (error) {
-  const safe = typeof error.message === 'string' && /^[A-Z_]{3,60}$/.test(error.message) ? error.message : 'SETUP_FAILED';
-  emit({ kind: 'error', code: safe }); process.exitCode = 1;
+  if (action === 'activate') {
+    const failure = setupFailure(error, 'discover');
+    const diagnosticSaved = activationDirectory ? await saveSetupFailure(activationDirectory, failure) : false;
+    emit({ kind: 'error', code: failure.code, failure, diagnosticSaved }); process.exitCode = 1;
+  } else {
+    const safe = typeof error.message === 'string' && /^[A-Z_]{3,60}$/.test(error.message) ? error.message : 'SETUP_FAILED';
+    emit({ kind: 'error', code: safe }); process.exitCode = 1;
+  }
 }

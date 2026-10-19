@@ -16,6 +16,19 @@ Dot Link is not Apple-notarized. If macOS says it cannot verify the developer an
 
 The app and installer use Japanese on Japanese Macs and English otherwise. The Even companion also supports Japanese; this guide uses the English labels.
 
+## Tailscale HTTPS setup
+
+Connect the Mac and iPhone to the same Tailscale network. Before starting the relay, enable HTTPS for that network:
+
+1. Open **DNS** in the [Tailscale admin console](https://login.tailscale.com/admin/dns).
+2. Enable **MagicDNS** if it is off.
+3. Under **HTTPS Certificates**, choose **Enable HTTPS** and review the confirmation that certificate names (including the machine name and tailnet DNS name) will be recorded in the public Certificate Transparency ledger. Ask your network administrator if you cannot change this setting.
+4. Return to Dot Link and choose **Start relay** again.
+
+Dot Link uses Tailscale Serve to provision the certificate automatically; you do not need to run `tailscale cert`. The connection stays within your Tailscale network; do not enable Funnel for Dot Link. See Tailscale's [HTTPS instructions](https://tailscale.com/docs/how-to/set-up-https-certificates) and [Serve documentation](https://tailscale.com/docs/features/tailscale-serve).
+
+If Serve is waiting for permission, Dot Link shows `TAILSCALE_SERVE_APPROVAL_REQUIRED` with the steps above, including when the command reaches its timeout. If you run Serve manually and it prints a `https://login.tailscale.com/f/serve…` authorization link, you can also follow that link to grant permission. Dot Link does not include that device-specific link in copied diagnostics.
+
 ## Dot connection
 
 Your account needs OpenAI tunnels and custom MCP connections in ChatGPT. Dot Link uses your existing Dot and does not provision access to these features. Setup on a fresh account is still being validated.
@@ -72,6 +85,7 @@ Updates preserve connection settings, pairing and history. You do not need to re
 
 | Problem | What to check |
 | --- | --- |
+| Start relay fails | Follow the failed step and guidance shown in the Mac app. For Tailscale errors, check that Tailscale is connected and review MagicDNS, HTTPS Certificates and Serve access in the Tailscale admin console. An existing Serve/Funnel configuration is not replaced automatically. If it still fails, choose **Copy diagnostics** and include that text in your issue. |
 | Mac cannot reach Dot | Confirm tunnel ID, API-key permissions and the connection selected in your existing Dot. Send the Mac app's setup message and choose **Check connection to Dot**. |
 | Even cannot connect | Keep the Mac awake, resume Dot Link, and connect Mac and iPhone to the same Tailscale network. Generate a fresh code and paste it in full within two minutes. |
 | Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. |
@@ -79,6 +93,10 @@ Updates preserve connection settings, pairing and history. You do not need to re
 | Mac 0.3.0 or 0.3.1 waits for Even to close before Dot was ever connected | Quit Dot Link and replace only the app in `~/Applications` with the latest ZIP. Keep Application Support data; do not uninstall. |
 
 Use **Connection details** in the Even companion to inspect connection status. For unresolved problems, [open an issue](https://github.com/YusukeIt0/dot-link/issues) with the versions, symptoms and steps to reproduce. Exclude credentials, pairing codes, private conversations and unreviewed diagnostic files.
+
+**Copy diagnostics** appears after a Start relay setup failure. The failure guidance and copy button remain available after refreshing the status or returning from Advanced settings. They clear when you start another setup operation, including retrying Start relay. It copies only the failed step, a known error code, available command exit/signal information, and the Mac app version/build. It does not copy keys, hostnames, paths, command output or conversations. The last activation failure is also saved locally in `~/Library/Application Support/Dot Link/.runtime/setup-failure.json` when the installation has been located and that folder is writable; it includes the failure time. Dot Link removes it after activation completes without an error when file permissions allow. This is separate from connection-status checks and is not uploaded automatically. A failed step can have made partial progress, so check the current status before retrying.
+
+Mac 0.4.7 may show only `SETUP_FAILED` and does not provide this diagnostic record. That code alone does not identify Tailscale, API-key permissions or any other specific cause. Avoid deleting settings or repeatedly reinstalling based on that code alone.
 
 ## Pause, quit and uninstall
 
