@@ -7,7 +7,7 @@ struct SetupFailurePresentation {
     var copied = false
 
     mutating func begin(_ action: String) {
-        guard action != "inspect" else { return }
+        guard action != "inspect" && action != "uninstall-plan" else { return }
         details = nil
         copied = false
     }

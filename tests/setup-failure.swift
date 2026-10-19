@@ -16,8 +16,8 @@ import Foundation
         precondition(!details.copyText(appVersion: "sk-private", build: "sk-private")!.contains("private"))
         // The user can refresh repeatedly and still copy the original failure.
         var presentation = SetupFailurePresentation(details: details, copied: true)
-        for _ in 0..<3 {
-            presentation.begin("inspect")
+        for action in ["inspect", "uninstall-plan", "inspect"] {
+            presentation.begin(action)
             precondition(presentation.copied)
             precondition(presentation.details?.message(language: "ja") == details.message(language: "ja"))
             precondition(presentation.details?.message(language: "en") == details.message(language: "en"))
