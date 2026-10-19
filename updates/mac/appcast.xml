@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.7</title><sparkle:version>75</sparkle:version><sparkle:shortVersionString>0.4.7</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Improved ChatGPT connection setup with clear, numbered steps and matching Japanese and English labels.
-Added the missing plugin name, authentication, and message-sending instructions.
-Simplified the setup message sent to Dot.
-
-ChatGPTとの接続手順を、画面の表記に合わせた3段階の案内に改善しました。
-名前・認証の設定と、Dotへのメッセージ送信手順を追加しました。
-Dotに送る設定メッセージを簡潔にしました。
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.7-75/Dot-Link-0.4.7-75-arm64.zip" sparkle:installationType="application" sparkle:edSignature="wP2eBwJ9s6xL6dK0zcKCIYgBc9vkn3Pcf5aR3XRzADmb42noXwuBA+tEMoY5lwl6NrWBEOJ7jn+SHagFmNHpCg==" length="50954184" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: QwXgfeKGmwHMIHqkrfXOGe3cuPLHfynB9HWysofSRvYLZFrKT8iY5YlZ7a/KI+h0LxZ/dML53mVDtGjpZdS+Dw==
-length: 1507
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.8</title><sparkle:version>76</sparkle:version><sparkle:shortVersionString>0.4.8</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved Start relay errors with the failed step and specific recovery instructions.
+- Added guidance for enabling Tailscale HTTPS when relay setup needs authorization.
+- Added Copy diagnostics to share setup error details without credentials or private connection information.
+- Kept setup error guidance and diagnostic controls visible when refreshing status or returning from settings.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.8-76/Dot-Link-0.4.8-76-arm64.zip" sparkle:installationType="application" sparkle:edSignature="KnxQbfSrH8NpiUIgOXZPN5Wmui7vFfN2gO6aaIUGqS/FdrfvdpItyOciJm34x2pO8oMJms6hXt9NzCDCxBHMDQ==" length="59089403" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: Dl7tKAX3mPSxU70mOotkA4p48iL2XmJRceBoLeJdswRnLJoQG1aYz81xde8YD3iP8u9M/7tuwvFEPqcNS5Q/Cw==
+length: 1417
 -->
