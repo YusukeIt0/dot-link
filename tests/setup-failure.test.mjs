@@ -169,6 +169,9 @@ test('diagnostics are allowlisted, private, replace a symlink safely and clear a
 
 test('generic failures remain honest and every known failure has English and Japanese guidance', () => {
   assert.deepEqual(setupFailure(new Error(secret),'runtime-prepare'),fail('SETUP_FAILED','runtime-prepare'));
+  for (const code of ['ENOENT', 'EIO', 'ENOTDIR']) {
+    assert.deepEqual(setupFailure(Object.assign(new Error(secret), {code}), 'app-install'), fail('SETUP_FAILED', 'app-install'));
+  }
   assert.deepEqual(setupFailure(Object.assign(new Error(secret),{code:'ENOSPC'}),'config'),fail('SETUP_DISK_FULL','config'));
   assert.equal(setupFailure({code:'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',killed:true,signal:'SIGTERM'},'install').code,'SETUP_COMMAND_FAILED');
   assert.deepEqual(setupFailure(setupError('TAILSCALE_LOGIN_REQUIRED'),'tailscale'),fail('TAILSCALE_LOGIN_REQUIRED','tailscale'));

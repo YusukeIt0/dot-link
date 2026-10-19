@@ -36,7 +36,7 @@ export function setupFailure(error, stage = 'install', fallback = 'SETUP_FAILED'
   else if (source?.killed === true && source?.signal === 'SIGTERM' && source?.code == null) code = 'SETUP_TIMEOUT';
   else if (['EACCES', 'EPERM'].includes(source?.code)) code = 'SETUP_PERMISSION_DENIED';
   else if (source?.code === 'ENOSPC') code = 'SETUP_DISK_FULL';
-  else if (code === 'SETUP_FAILED' && (source?.code !== undefined || source?.stdout !== undefined)) code = 'SETUP_COMMAND_FAILED';
+  else if (code === 'SETUP_FAILED' && (Number.isInteger(source?.code) || typeof source?.stdout === 'string' || source?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER')) code = 'SETUP_COMMAND_FAILED';
   return readSetupFailure({ version: 1, code, stage, exitCode: source?.code, signal: source?.signal })
     ?? { version: 1, code: 'SETUP_FAILED', stage: 'install' };
 }
