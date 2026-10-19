@@ -562,8 +562,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if code == "UPDATE_RECOVERY_REQUIRED" { state["step"] = "updateRecovery" }
             if ["MULTIPLE_INSTALLATIONS", "EXISTING_SERVICE_CONFLICT", "EXISTING_SERVICE_UNREADABLE", "INSTALL_FOLDER_OCCUPIED"].contains(code) { state["step"] = "conflict" }
             message = tr("準備を完了できませんでした。既存の設定は保持しています。もう一度状態を確認してください。", "Setup could not complete. Existing settings have been preserved. Check the status again.") + " (\(code))"
-            if currentAction == "activate", let failure = value["failure"] as? [String: Any] {
-                setupFailureDetails = SetupFailureDetails(value: failure, catalogURL: payload.appendingPathComponent("scripts/lib/setup-errors.json"))
+            if currentAction == "activate" {
+                message = tr("中継の準備を完了できませんでした。状態を確認してから再試行してください。", "Relay setup could not complete. Check the current status before retrying.") + " (\(code))"
+                if let failure = value["failure"] as? [String: Any] {
+                    setupFailureDetails = SetupFailureDetails(value: failure, catalogURL: payload.appendingPathComponent("scripts/lib/setup-errors.json"))
+                }
                 if let details = setupFailureDetails { message = details.message(language: language) }
             }
             if currentAction == "stt-select" { message = tr("切り替えに失敗しました。もう一度お試しください。", "Could not switch services. Please try again.") }
