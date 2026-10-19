@@ -65,8 +65,8 @@
       "ja": "Tailscale Funnelが有効です。公開設定を確認してください。Dot Linkには専用ネットワーク内の接続が必要です。"
     },
     "TAILSCALE_SERVE_APPROVAL_REQUIRED": {
-      "en": "Tailscale Serve needs approval. Open https://login.tailscale.com/admin/dns → HTTPS Certificates → Enable HTTPS, then try Start relay again. Ask your network administrator if you cannot change this setting.",
-      "ja": "Tailscale Serveの許可が必要です。https://login.tailscale.com/admin/dns のHTTPS Certificates → Enable HTTPSを有効にして、中継の起動を再試行してください。変更できない場合はネットワーク管理者に依頼してください。"
+      "en": "Tailscale Serve needs approval. Use the button below to open Tailscale DNS settings, choose Enable HTTPS under HTTPS Certificates, then try Start relay again. Ask your network administrator if you cannot change this setting.",
+      "ja": "Tailscale Serveの許可が必要です。下のボタンでTailscaleのDNS設定を開き、HTTPS CertificatesのEnable HTTPSを押してから、「中継を起動する」をもう一度押してください。変更できない場合はネットワーク管理者に依頼してください。"
     },
     "TAILSCALE_HTTPS_FAILED": {
       "en": "Could not enable Tailscale HTTPS. Check HTTPS Certificates and Serve access in Tailscale, then try again.",
