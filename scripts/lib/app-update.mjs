@@ -80,6 +80,9 @@ export async function prepareUpdate(directory,{home=homedir(),execute=run,app=jo
 }
 export async function finishUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),rollback=false,verify,...options}={}){
  let journal;try{journal=JSON.parse(await readFile(journalPath(directory),'utf8'));}catch(e){if(e.code==='ENOENT')return {recovered:false};throw e;}
+ // A live host has taken recovery back from Sparkle. Disarm the exit watcher
+ // even if ownership/health checks fail, so a later explicit Quit is respected.
+ if(rollback&&journal.schema===1){journal.exitRecoveryCancelled=true;await save(journalPath(directory),journal);}
  // Revalidate every destination before restoring a journal; never trust its paths.
  const jobs=await ownedJobs(directory,{home,execute,app,includeUI:true});
  if(journal.schema!==1||!Array.isArray(journal.originals)||journal.originals.some(j=>!jobs.some(p=>p.path===j.path)))throw new Error('UPDATE_JOURNAL_INVALID');

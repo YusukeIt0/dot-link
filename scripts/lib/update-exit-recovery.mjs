@@ -42,7 +42,7 @@ export async function watchUpdateExit({directory,app,backup,hostPID,uid=process.
  const original=await identity(hostPID);
  if(!original.endsWith(join(app,'Contents/MacOS/DotLink'))||!await installing())throw new Error('UPDATE_WATCH_NOT_READY');
  const current=async()=>{
-  try{return (await readJournal()).backup===backup;}
+  try{const journal=await readJournal();return journal.backup===backup&&journal.exitRecoveryCancelled!==true;}
   catch(error){if(error.code==='ENOENT')return false;throw error;}
  };
  if(!await current())throw new Error('UPDATE_WATCH_JOURNAL_CHANGED');

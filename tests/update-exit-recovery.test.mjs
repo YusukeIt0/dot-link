@@ -46,6 +46,12 @@ test('changed journal cancels the old watcher',async()=>{
  // The watcher's expected identity is captured at invocation, not this object.
  assert.equal(await watchUpdateExit({...args},options),'recovered');assert.equal(state.opened,0);
 });
+test('live-host rollback cancels fallback even if its recovery failed and the user quits',async()=>{
+ const {args,state,options}=fixture();let cancelled=false;
+ options.readJournal=async()=>({backup:args.backup,exitRecoveryCancelled:cancelled});
+ options.wait=async ms=>{state.time+=ms;cancelled=true;state.host=false;state.installer=false;};
+ assert.equal(await watchUpdateExit(args,options),'recovered');assert.equal(state.opened,0);
+});
 test('uncertain process state fails closed before readiness and during observation',async()=>{
  for(const when of ['before','after']){
   const {args,state,options}=fixture();

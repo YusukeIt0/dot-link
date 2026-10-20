@@ -177,3 +177,11 @@ test('watcher startup failure rolls preparation back instead of permitting an un
  assert.equal(await readFile(f.plists.device,'utf8'),original);
  await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
 });
+
+test('live-host rollback cancels exit recovery before ownership checks can fail',async t=>{
+ const f=await fixture(t);await prepareUpdate(f.directory,{...f,interrupt:true});
+ await writeFile(f.plists.device,JSON.stringify({Label:'foreign'}));
+ await assert.rejects(finishUpdate(f.directory,{...f,rollback:true}),/CONFLICT/);
+ const journal=JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8'));
+ assert.equal(journal.exitRecoveryCancelled,true);assert.equal(journal.stopped,false);
+});
