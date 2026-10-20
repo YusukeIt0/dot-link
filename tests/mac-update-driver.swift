@@ -7,6 +7,11 @@ final class ActionButton: NSButton {
 }
 let app = NSApplication.shared
 let driver = AppUpdater(automaticUpdatesEnabled: true)
+var blockedQuitAlerts = 0
+driver.runAlert = { alert in
+    precondition(alert.messageText.contains("終わるまでお待ちください"))
+    blockedQuitAlerts += 1; return .alertFirstButtonReturn
+}
 func buttons(_ view: NSView) -> [NSButton] { (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons) }
 precondition(!buttons(driver.settingsView()).contains { $0.title.contains("キー") || $0.title.contains("access") }, "Public channel must not show credential controls")
 driver.canCheck = { true }
@@ -27,11 +32,12 @@ driver.dismissUpdateInstallation()
 driver.updater.automaticallyChecksForUpdates = true
 var preparation: ((String) -> Void)?
 var recovered = false
-driver.prepare = { preparation = $0 }
-driver.recover = { recovered = true }
+driver.prepare = { interrupt, reply in precondition(!interrupt); preparation = reply }
+driver.recover = { reply in recovered = true; reply(true) }
 choice = nil
 driver.showReady(toInstallAndRelaunch: { choice = $0 })
 precondition(driver.preparing && !driver.cancelForQuit())
+precondition(blockedQuitAlerts == 2, "Verification and preparation must explain why quit is blocked")
 driver.updater.automaticallyChecksForUpdates = false
 preparation?("prepared")
 precondition(recovered && choice == .skip && !driver.prepared, "Turning off during preparation must restore services and cancel")
@@ -72,7 +78,7 @@ locked.updater.automaticallyChecksForUpdates = true // Stale preferences cannot 
 precondition(!locked.automatic)
 var lockedChoice: SPUUserUpdateChoice?
 var preparedWhileLocked = false
-locked.prepare = { _ in preparedWhileLocked = true }
+locked.prepare = { _, _ in preparedWhileLocked = true }
 locked.showReady(toInstallAndRelaunch: { lockedChoice = $0 })
 precondition(lockedChoice == .skip && !preparedWhileLocked)
 func labels(_ view: NSView) -> [String] { (view as? NSTextField).map { [$0.stringValue] } ?? view.subviews.flatMap(labels) }
@@ -97,3 +103,116 @@ if CommandLine.arguments.contains("--preview") {
     window.center(); window.makeKeyAndOrderFront(nil); app.activate(ignoringOtherApps: true)
     withExtendedLifetime(window) { app.run() }
 }
+
+let manual = AppUpdater(automaticUpdatesEnabled: false)
+manual.tr = { _, en in en }
+manual.canCheck = { true }
+manual.runAlert = { alert in
+    precondition(alert.informativeText.contains("interrupts the connection and any conversation"))
+    return .alertSecondButtonReturn
+}
+manual.confirmManualUpdate(version: "1.0", notes: "Fixture release notes")
+manual.runAlert = { alert in
+    precondition(alert.messageText == "Wait for update preparation to finish")
+    return .alertFirstButtonReturn
+}
+var manualChoice: SPUUserUpdateChoice?
+var manualAttempts = 0
+var finishManual: ((String) -> Void)?
+manual.prepare = { interrupt, reply in
+    precondition(interrupt, "Explicit manual approval must reach the service helper")
+    manualAttempts += 1; finishManual = reply
+}
+manual.showReady(toInstallAndRelaunch: { manualChoice = $0 })
+precondition(manual.blocksActions && !manual.cancelForQuit())
+manual.check(); precondition(manualAttempts == 1, "No second prepare during an active attempt")
+finishManual?("waiting")
+precondition(manualChoice == nil && !manual.blocksActions && manual.message.contains("settings operation"))
+manual.check(); finishManual?("failed")
+precondition(manualChoice == nil && manualAttempts == 2, "Failure keeps the verified installer")
+precondition(buttons(manual.settingsView()).contains { $0.title == "Retry update" && $0.isEnabled })
+var manualQuitAlerts = 0
+manual.runAlert = { alert in
+    precondition(alert.informativeText.contains("Quitting discards") || alert.messageText == "Wait for connection recovery to finish")
+    manualQuitAlerts += 1; return .alertFirstButtonReturn
+}
+precondition(!manual.cancelForQuit() && manualChoice == nil, "Keeping the app open preserves the verified installer")
+precondition(manualQuitAlerts == 1, "Keep open must not show another wait alert")
+manual.check(); finishManual?("recovery-required")
+var recoveryReply: ((Bool) -> Void)?
+manual.recover = { recoveryReply = $0 }
+manual.check()
+precondition(manual.recovering && manual.blocksActions && !manual.cancelForQuit())
+precondition(manualQuitAlerts == 2, "Recovery must explain why quit is blocked")
+manual.check(); precondition(manualAttempts == 3)
+recoveryReply?(false)
+precondition(manual.recoveryRequired && !manual.recovering)
+precondition(buttons(manual.settingsView()).contains { $0.title == "Retry recovery" && $0.isEnabled })
+manual.check(); recoveryReply?(true)
+precondition(!manual.recoveryRequired && manualChoice == nil)
+manual.check(); finishManual?("prepared")
+precondition(manual.prepared && manualChoice == .install && manualAttempts == 4)
+precondition(manual.cancelForQuit(), "Sparkle's prepared relaunch can terminate")
+var installerFailureAlerts = 0
+manual.runAlert = { alert in
+    precondition(alert.messageText == "Update failed", "Failure alert must not use the changing recovery status")
+    installerFailureAlerts += 1; return .alertFirstButtonReturn
+}
+manual.showUpdaterError(NSError(domain: "fixture", code: 0)) {}
+precondition(manual.recovering && !manual.prepared && installerFailureAlerts == 1)
+manual.dismissUpdateInstallation()
+precondition(manual.blocksActions && manual.working, "Sparkle dismissal must not unblock recovery")
+recoveryReply?(false)
+precondition(manual.recoveryRequired && manual.message.contains("Retry recovery"))
+manual.check(); recoveryReply?(true)
+precondition(!manual.blocksActions && !manual.recoveryRequired)
+print("PASS: manual interruption consent, bounded settings wait, retained installer retry, recovery gate, installer failure recovery")
+
+let abandoned = AppUpdater(automaticUpdatesEnabled: false)
+abandoned.runAlert = { _ in .alertSecondButtonReturn }
+abandoned.confirmManualUpdate(version: "1.0", notes: nil)
+abandoned.prepare = { _, reply in reply("failed") }
+var abandonedChoice: SPUUserUpdateChoice?
+abandoned.showReady(toInstallAndRelaunch: { abandonedChoice = $0 })
+precondition(abandonedChoice == nil)
+precondition(abandoned.cancelForQuit() && abandonedChoice == .skip, "Explicit discard cancels install-on-exit")
+print("PASS: explicit quit explains and discards the pending installer")
+
+let failedRecovery = AppUpdater(automaticUpdatesEnabled: false)
+failedRecovery.tr = { _, en in en }
+failedRecovery.runAlert = { _ in .alertSecondButtonReturn }
+failedRecovery.confirmManualUpdate(version: "1.0", notes: nil)
+failedRecovery.prepare = { _, reply in reply("recovery-required") }
+failedRecovery.showReady(toInstallAndRelaunch: { _ in preconditionFailure("Recovery must precede installation") })
+failedRecovery.runAlert = { alert in
+    precondition(alert.messageText == "Update failed"); return .alertFirstButtonReturn
+}
+failedRecovery.showUpdaterError(NSError(domain: "fixture", code: 0)) {}
+precondition(failedRecovery.recoveryRequired && failedRecovery.message.contains("Retry recovery"))
+precondition(failedRecovery.checkTitle == "Retry recovery")
+print("PASS: installer errors preserve the recovery guidance and use a fixed failure title")
+
+let uninstall = AppUpdater(automaticUpdatesEnabled: false)
+uninstall.runAlert = { _ in .alertSecondButtonReturn }
+uninstall.confirmManualUpdate(version: "1.0", notes: nil)
+uninstall.prepare = { _, reply in reply("failed") }
+var uninstallChoice: SPUUserUpdateChoice?
+uninstall.showReady(toInstallAndRelaunch: { uninstallChoice = $0 })
+uninstall.runAlert = { _ in preconditionFailure("Uninstall already confirmed discarding the app") }
+precondition(uninstall.cancelForQuit(discardConfirmed: true) && uninstallChoice == .skip)
+print("PASS: confirmed uninstall cancels the retained installer without a quit dialog")
+
+let interruptedPreparation = AppUpdater(automaticUpdatesEnabled: false)
+interruptedPreparation.runAlert = { _ in .alertSecondButtonReturn }
+interruptedPreparation.confirmManualUpdate(version: "1.0", notes: nil)
+var delayedPreparation: ((String) -> Void)?
+var restoredAfterError = false
+interruptedPreparation.prepare = { _, reply in delayedPreparation = reply }
+interruptedPreparation.recover = { reply in restoredAfterError = true; reply(true) }
+interruptedPreparation.showReady(toInstallAndRelaunch: { _ in preconditionFailure("Failed installer must never install") })
+interruptedPreparation.showUpdaterError(NSError(domain: "fixture", code: 0)) {}
+interruptedPreparation.dismissUpdateInstallation()
+precondition(interruptedPreparation.blocksActions, "Keep service operations blocked until the helper returns")
+delayedPreparation?("prepared")
+precondition(restoredAfterError && !interruptedPreparation.prepared && !interruptedPreparation.blocksActions)
+print("PASS: installer error during preparation restores services after the helper returns")
