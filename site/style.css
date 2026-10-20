@@ -72,7 +72,7 @@ figcaption { color: var(--muted); font-size: 11px; line-height: 1.6; margin-top:
 .creator-link { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; border-left: 1px solid var(--muted); padding-left: 24px; text-decoration: none; }
 .creator-name { text-decoration: underline; text-underline-offset: .25em; }
 .creator-link svg { flex-shrink: 0; }
-.linkedin-icon { flex-shrink: 0; display: block; padding: 4px; border-radius: 2px; background: #fff; }
+.linkedin-icon { flex-shrink: 0; display: block; padding: 4px; }
 .linkedin-icon img { width: auto; height: 22px; }
 html:not([lang="en"]) h1 { max-width: none; font-size: clamp(2.4rem, 4vw, 4rem); overflow-wrap: anywhere; }
 html:not([lang="en"]) h2 { max-width: none; }
