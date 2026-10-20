@@ -180,7 +180,7 @@ try {
   } else if (action === 'pair') {
     const state = await inspect();
     if (state.step !== 'pair') throw new Error('RELAY_NOT_READY');
-    await run(process.execPath, [join(state.directory, 'scripts/beta-pair.mjs')], { cwd: state.directory });
+    await run(process.execPath, [join(payload, 'scripts/beta-pair.mjs')], { cwd: state.directory });
     const code = await readFile(join(state.directory, '.runtime/beta-pairing.txt'), 'utf8');
     const invitation = JSON.parse(code);
     result = { ...state, pairingCode: code, expiresAt: invitation.expiresAt };
