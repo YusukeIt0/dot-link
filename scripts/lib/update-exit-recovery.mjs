@@ -36,7 +36,9 @@ export async function watchUpdateExit({directory,app,backup,hostPID,uid=process.
   if(await execute('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(app,'Contents/Info.plist')])!==bundleID)throw new Error('UPDATE_APP_INVALID');
   await execute('/usr/bin/codesign',['--verify','--deep','--strict',app]);
   // LaunchServices keeps a concurrent normal relaunch a single app instance.
-  await execute('/usr/bin/open',['-g','-j',app,'--args','--background']);
+  // --background suppresses our startup window. Do not use open -j: hiding the
+  // application also hides later user-requested modal update confirmations.
+  await execute('/usr/bin/open',['-g',app,'--args','--background']);
  }
 }={}){
  const original=await identity(hostPID);
