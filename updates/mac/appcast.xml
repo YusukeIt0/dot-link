@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.8</title><sparkle:version>76</sparkle:version><sparkle:shortVersionString>0.4.8</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved Start relay errors with the failed step and specific recovery instructions.
-- Added guidance for enabling Tailscale HTTPS when relay setup needs authorization.
-- Added Copy diagnostics to share setup error details without credentials or private connection information.
-- Kept setup error guidance and diagnostic controls visible when refreshing status or returning from settings.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.8-76/Dot-Link-0.4.8-76-arm64.zip" sparkle:installationType="application" sparkle:edSignature="KnxQbfSrH8NpiUIgOXZPN5Wmui7vFfN2gO6aaIUGqS/FdrfvdpItyOciJm34x2pO8oMJms6hXt9NzCDCxBHMDQ==" length="59089403" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: Dl7tKAX3mPSxU70mOotkA4p48iL2XmJRceBoLeJdswRnLJoQG1aYz81xde8YD3iP8u9M/7tuwvFEPqcNS5Q/Cw==
-length: 1417
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.9</title><sparkle:version>77</sparkle:version><sparkle:shortVersionString>0.4.9</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Remove all saved Even connections from the Mac app, including while the relay is paused.
+- See connection status update automatically after pairing, with clear guidance for reconnecting.
+- Stop location sharing when an Even connection is removed, while keeping ChatGPT settings and saved conversations.
+- Update the Mac app while the relay is active, with clearer interruption guidance and automatic recovery if installation fails.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.9-77/Dot-Link-0.4.9-77-arm64.zip" sparkle:installationType="application" sparkle:edSignature="VcLiijz2YrPnRAEJjvIVnmYSoCxEM/0s81j1dcdqGrmCitQxj7JhgzMxa2t05sx4vhUXvFL1mXag8j6iOPoOBg==" length="59110064" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: Tm/UjF+grsFYxjwsHKJgqY3A763dP4aCDYkrHU6wvD5Tb0C2Oy/JzuzNTI81tOabHMA3UUgTTs4WaLK2p1cgDA==
+length: 1460
 -->
