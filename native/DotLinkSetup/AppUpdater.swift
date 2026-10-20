@@ -112,7 +112,14 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         manualCheck = true; updater.checkForUpdates()
     }
     @discardableResult func cancelForQuit() -> Bool {
-        if extracting || preparing || recovering { return false }
+        if extracting || preparing || recovering {
+            let alert = NSAlert()
+            alert.messageText = recovering ? tr("接続の復旧が終わるまでお待ちください", "Wait for connection recovery to finish")
+                : extracting ? tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish")
+                : tr("更新の準備が終わるまでお待ちください", "Wait for update preparation to finish")
+            _ = runAlert(alert)
+            return false
+        }
         if readyReply != nil && manuallyApproved {
             let alert = NSAlert()
             alert.messageText = tr("更新せずに終了しますか？", "Quit without updating?")

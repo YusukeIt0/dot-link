@@ -219,7 +219,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if appUpdater?.silentRelaunch == true { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateBackgroundRelaunchAt") }
             notifications?.shutdown(); return .terminateNow
         }
-        if appUpdater?.blocksActions == true { return .terminateCancel }
+        if appUpdater?.blocksActions == true { _ = appUpdater?.cancelForQuit(); return .terminateCancel }
         if allowTermination { notifications?.shutdown(); return .terminateNow }
         if quitting { return .terminateLater }
         if busy {
@@ -250,7 +250,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alert.accessoryView = box; alert.addButton(withTitle: tr("キャンセル", "Cancel")); alert.addButton(withTitle: tr("アンインストール", "Uninstall"))
         guard alert.runModal() == .alertSecondButtonReturn else { return }
         if appUpdater?.cancelForQuit() == false {
-            let alert = NSAlert(); alert.messageText = tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish"); alert.runModal(); return
+            return
         }
         performSpeechCredential("delete-all") { [weak self] in self?.perform("uninstall", input: ["token": token, "deleteData": "true"]) }
     }

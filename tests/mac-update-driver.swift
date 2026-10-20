@@ -7,6 +7,11 @@ final class ActionButton: NSButton {
 }
 let app = NSApplication.shared
 let driver = AppUpdater(automaticUpdatesEnabled: true)
+var blockedQuitAlerts = 0
+driver.runAlert = { alert in
+    precondition(alert.messageText.contains("終わるまでお待ちください"))
+    blockedQuitAlerts += 1; return .alertFirstButtonReturn
+}
 func buttons(_ view: NSView) -> [NSButton] { (view as? NSButton).map { [$0] } ?? view.subviews.flatMap(buttons) }
 precondition(!buttons(driver.settingsView()).contains { $0.title.contains("キー") || $0.title.contains("access") }, "Public channel must not show credential controls")
 driver.canCheck = { true }
@@ -32,6 +37,7 @@ driver.recover = { reply in recovered = true; reply(true) }
 choice = nil
 driver.showReady(toInstallAndRelaunch: { choice = $0 })
 precondition(driver.preparing && !driver.cancelForQuit())
+precondition(blockedQuitAlerts == 2, "Verification and preparation must explain why quit is blocked")
 driver.updater.automaticallyChecksForUpdates = false
 preparation?("prepared")
 precondition(recovered && choice == .skip && !driver.prepared, "Turning off during preparation must restore services and cancel")
@@ -106,6 +112,10 @@ manual.runAlert = { alert in
     return .alertSecondButtonReturn
 }
 manual.confirmManualUpdate(version: "1.0", notes: "Fixture release notes")
+manual.runAlert = { alert in
+    precondition(alert.messageText == "Wait for update preparation to finish")
+    return .alertFirstButtonReturn
+}
 var manualChoice: SPUUserUpdateChoice?
 var manualAttempts = 0
 var finishManual: ((String) -> Void)?
@@ -121,15 +131,19 @@ precondition(manualChoice == nil && !manual.blocksActions && manual.message.cont
 manual.check(); finishManual?("failed")
 precondition(manualChoice == nil && manualAttempts == 2, "Failure keeps the verified installer")
 precondition(buttons(manual.settingsView()).contains { $0.title == "Retry update" && $0.isEnabled })
+var manualQuitAlerts = 0
 manual.runAlert = { alert in
-    precondition(alert.informativeText.contains("Quitting discards")); return .alertFirstButtonReturn
+    precondition(alert.informativeText.contains("Quitting discards") || alert.messageText == "Wait for connection recovery to finish")
+    manualQuitAlerts += 1; return .alertFirstButtonReturn
 }
 precondition(!manual.cancelForQuit() && manualChoice == nil, "Keeping the app open preserves the verified installer")
+precondition(manualQuitAlerts == 1, "Keep open must not show another wait alert")
 manual.check(); finishManual?("recovery-required")
 var recoveryReply: ((Bool) -> Void)?
 manual.recover = { recoveryReply = $0 }
 manual.check()
 precondition(manual.recovering && manual.blocksActions && !manual.cancelForQuit())
+precondition(manualQuitAlerts == 2, "Recovery must explain why quit is blocked")
 manual.check(); precondition(manualAttempts == 3)
 recoveryReply?(false)
 precondition(manual.recoveryRequired && !manual.recovering)
