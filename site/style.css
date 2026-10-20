@@ -69,7 +69,7 @@ figcaption { color: var(--muted); font-size: 11px; line-height: 1.6; margin-top:
 .language-links { display: flex; flex-wrap: wrap; gap: 12px 24px; }
 .language-links a { padding-block: 6px; }
 .language-links [aria-current="page"] { color: var(--text); font-weight: 600; text-decoration: none; }
-.creator-link { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; border-left: 1px solid var(--muted); padding-left: 24px; text-decoration: none; }
+.creator-link { display: inline-flex; align-items: center; gap: 10px; min-height: 32px; text-decoration: none; }
 .creator-name { text-decoration: underline; text-underline-offset: .25em; }
 .creator-link svg { flex-shrink: 0; }
 .linkedin-icon { flex-shrink: 0; display: block; position: relative; padding: 4px; }
@@ -84,6 +84,7 @@ html:not([lang="en"]) h2 { max-width: none; }
 .brand, video { direction: ltr; }
 @media (max-width: 900px) {
   .wrap { width: calc(100% - 56px); }
+  .footer-secondary { flex-direction: column; align-items: flex-start; }
   .hero { gap: 32px; }
   .experience, .requirements, .setup { gap: 40px; }
 }
