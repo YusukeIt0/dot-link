@@ -153,8 +153,13 @@ precondition(!manual.recoveryRequired && manualChoice == nil)
 manual.check(); finishManual?("prepared")
 precondition(manual.prepared && manualChoice == .install && manualAttempts == 4)
 precondition(manual.cancelForQuit(), "Sparkle's prepared relaunch can terminate")
+var installerFailureAlerts = 0
+manual.runAlert = { alert in
+    precondition(alert.messageText == "Update failed", "Failure alert must not use the changing recovery status")
+    installerFailureAlerts += 1; return .alertFirstButtonReturn
+}
 manual.showUpdaterError(NSError(domain: "fixture", code: 0)) {}
-precondition(manual.recovering && !manual.prepared)
+precondition(manual.recovering && !manual.prepared && installerFailureAlerts == 1)
 manual.dismissUpdateInstallation()
 precondition(manual.blocksActions && manual.working, "Sparkle dismissal must not unblock recovery")
 recoveryReply?(false)
@@ -172,6 +177,30 @@ abandoned.showReady(toInstallAndRelaunch: { abandonedChoice = $0 })
 precondition(abandonedChoice == nil)
 precondition(abandoned.cancelForQuit() && abandonedChoice == .skip, "Explicit discard cancels install-on-exit")
 print("PASS: explicit quit explains and discards the pending installer")
+
+let failedRecovery = AppUpdater(automaticUpdatesEnabled: false)
+failedRecovery.tr = { _, en in en }
+failedRecovery.runAlert = { _ in .alertSecondButtonReturn }
+failedRecovery.confirmManualUpdate(version: "1.0", notes: nil)
+failedRecovery.prepare = { _, reply in reply("recovery-required") }
+failedRecovery.showReady(toInstallAndRelaunch: { _ in preconditionFailure("Recovery must precede installation") })
+failedRecovery.runAlert = { alert in
+    precondition(alert.messageText == "Update failed"); return .alertFirstButtonReturn
+}
+failedRecovery.showUpdaterError(NSError(domain: "fixture", code: 0)) {}
+precondition(failedRecovery.recoveryRequired && failedRecovery.message.contains("Retry recovery"))
+precondition(failedRecovery.checkTitle == "Retry recovery")
+print("PASS: installer errors preserve the recovery guidance and use a fixed failure title")
+
+let uninstall = AppUpdater(automaticUpdatesEnabled: false)
+uninstall.runAlert = { _ in .alertSecondButtonReturn }
+uninstall.confirmManualUpdate(version: "1.0", notes: nil)
+uninstall.prepare = { _, reply in reply("failed") }
+var uninstallChoice: SPUUserUpdateChoice?
+uninstall.showReady(toInstallAndRelaunch: { uninstallChoice = $0 })
+uninstall.runAlert = { _ in preconditionFailure("Uninstall already confirmed discarding the app") }
+precondition(uninstall.cancelForQuit(discardConfirmed: true) && uninstallChoice == .skip)
+print("PASS: confirmed uninstall cancels the retained installer without a quit dialog")
 
 let interruptedPreparation = AppUpdater(automaticUpdatesEnabled: false)
 interruptedPreparation.runAlert = { _ in .alertSecondButtonReturn }

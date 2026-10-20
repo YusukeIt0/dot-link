@@ -249,7 +249,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         box.widthAnchor.constraint(equalToConstant: 480).isActive = true; box.setFrameSize(box.fittingSize)
         alert.accessoryView = box; alert.addButton(withTitle: tr("キャンセル", "Cancel")); alert.addButton(withTitle: tr("アンインストール", "Uninstall"))
         guard alert.runModal() == .alertSecondButtonReturn else { return }
-        if appUpdater?.cancelForQuit() == false {
+        if appUpdater?.cancelForQuit(discardConfirmed: true) == false {
             return
         }
         performSpeechCredential("delete-all") { [weak self] in self?.perform("uninstall", input: ["token": token, "deleteData": "true"]) }

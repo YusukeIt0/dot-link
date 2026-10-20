@@ -111,7 +111,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         if readyReply != nil { attemptInstall(); return }
         manualCheck = true; updater.checkForUpdates()
     }
-    @discardableResult func cancelForQuit() -> Bool {
+    @discardableResult func cancelForQuit(discardConfirmed: Bool = false) -> Bool {
         if extracting || preparing || recovering {
             let alert = NSAlert()
             alert.messageText = recovering ? tr("接続の復旧が終わるまでお待ちください", "Wait for connection recovery to finish")
@@ -120,7 +120,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             _ = runAlert(alert)
             return false
         }
-        if readyReply != nil && manuallyApproved {
+        if readyReply != nil && manuallyApproved && !discardConfirmed {
             let alert = NSAlert()
             alert.messageText = tr("更新せずに終了しますか？", "Quit without updating?")
             alert.informativeText = tr("ダウンロード済みの更新は破棄されます。再ダウンロードせずに再試行するには、Dot Linkを開いたままにしてください。", "Quitting discards the downloaded update. Keep Dot Link open to retry without downloading again.")
@@ -185,13 +185,19 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         acknowledgement()
     }
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
+        let showAlert = manualCheck || manuallyApproved
         extracting = false
         retry?.invalidate(); retry = nil; readyReply = nil
         if prepared {
             UserDefaults.standard.removeObject(forKey: "updateBackgroundRelaunchAt"); prepared = false
             restoreService()
+        } else if recoveryRequired {
+            if !recovering { status("接続を復旧できませんでした。「復旧を再試行」を押してください。", "The connection could not be restored. Click Retry recovery.") }
         } else { status("更新できませんでした。「アップデートを確認」で再試行してください。", "Update failed. Click Check for updates to retry.") }
-        if manualCheck { let alert = NSAlert(); alert.messageText = message; alert.informativeText = error.localizedDescription; _ = runAlert(alert) }
+        if showAlert {
+            let alert = NSAlert(); alert.messageText = tr("更新できませんでした", "Update failed")
+            alert.informativeText = error.localizedDescription; _ = runAlert(alert)
+        }
         acknowledgement()
     }
     func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0; cancelDownload = cancellation; status("更新をダウンロード中…", "Downloading update…", working: true) }
