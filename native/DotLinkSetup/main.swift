@@ -77,6 +77,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var expiryLabel: NSTextField?
     var copyButton: NSButton?
     var timer: Timer?
+    var pairingRefreshPending = false
+    var pairingRefreshAt = Date.distantPast
+    var pairingRefreshGeneration = 0
     var language = UserDefaults.standard.string(forKey: "setupLanguage") ?? (Locale.preferredLanguages.first?.hasPrefix("ja") == true ? "ja" : "en")
     let payload = Bundle.main.resourceURL!.appendingPathComponent("payload")
     var step: String { state["step"] as? String ?? "checking" }
@@ -101,7 +104,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         automaticResumePending = !CommandLine.arguments.contains("--background")
         configureUpdater()
         perform("update-recover")
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.updateExpiry() }
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateExpiry()
+            self?.refreshVisiblePairing()
+        }
     }
     func configureUpdater() {
         let updater = AppUpdater(); appUpdater = updater
@@ -460,6 +466,34 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = sender.indexOfSelectedItem == 0 ? "ja" : "en"; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); render() }
     func inspect() { perform("inspect") }
+    func refreshVisiblePairing() {
+        guard showingPairing, window.isVisible, yes("installed"), !busy,
+              !pairingRefreshPending, appUpdater?.blocksActions != true,
+              Date().timeIntervalSince(pairingRefreshAt) >= 3 else { return }
+        pairingRefreshPending = true; pairingRefreshAt = Date()
+        let generation = pairingRefreshGeneration
+        updateHelper("inspect") { [weak self] value in
+            guard let self else { return }
+            self.pairingRefreshPending = false
+            guard generation == self.pairingRefreshGeneration, !self.busy, self.showingPairing else { return }
+            let keys = ["evenPairingKnown", "evenPaired", "evenPairingCount", "evenInvitationCount"]
+            let previousCount = self.state["evenPairingCount"] as? Int ?? 0
+            let refreshed: [String: Any] = value["kind"] as? String == "result" ? value : ["evenPairingKnown": false]
+            var changed = false
+            for key in keys {
+                guard let next = refreshed[key] as? NSNumber else { continue }
+                if (self.state[key] as? NSNumber) != next { changed = true; self.state[key] = next }
+            }
+            if refreshed["evenPairingKnown"] as? Bool == true,
+               (refreshed["evenPairingCount"] as? Int ?? 0) > previousCount,
+               self.pairingCode != nil, (refreshed["evenInvitationCount"] as? Int ?? 0) == 0 {
+                self.pairingCode = nil; self.pairingExpiry = 0
+                self.message = self.tr("Evenが接続されました。", "Even connected.")
+                changed = true
+            }
+            if changed { self.render() }
+        }
+    }
     func renderPairingSettings() {
         add(tr("Evenの接続設定", "Even connection settings"), size: 22, bold: true)
         button(tr("接続状況に戻る", "Back to connection status")) { [weak self] in self?.showHome() }
@@ -527,6 +561,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func perform(_ action: String, input: [String: String] = [:]) {
         guard !busy, appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; message = ""
+        pairingRefreshGeneration += 1
         setupFailure.begin(action)
         if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
         render()
