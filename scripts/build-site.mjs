@@ -49,6 +49,7 @@ await copyFile(resolve(root, 'site/style.css'), resolve(output, 'style.css'));
 await copyFile(resolve(root, 'site/analytics.mjs'), resolve(output, 'analytics.mjs'));
 for (const [source, name] of [
   ['assets/brand/orbit/mark.svg', 'mark.svg'],
+  ['assets/brand/linkedin/LI-In-Bug.png', 'LI-In-Bug.png'],
   ['assets/brand/orbit/mac-1024.png', 'mac-1024.png'],
   ['assets/readme/conversation-en.png', 'conversation-en.png'],
   ['assets/film/dot-link-introduction.mp4', 'dot-link-introduction.mp4'],
