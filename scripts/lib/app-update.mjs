@@ -4,6 +4,7 @@ import {homedir} from 'node:os';
 import {ownedJobs,lifecycleState,suspendServices,resumeServices,regularPath} from './app-lifecycle.mjs';
 import {run,launchAgent} from './setup.mjs';
 import {serviceNames} from './service-management.mjs';
+import {armUpdateExitRecovery} from './update-exit-recovery.mjs';
 const journalPath=d=>join(d,'.runtime/app-update.json');
 async function save(path,value){const temp=path+'.tmp';await writeFile(temp,JSON.stringify(value),{mode:0o600});await rename(temp,path);}
 export function bundledJob(p,name,app,directory){
@@ -39,7 +40,7 @@ async function initialSetupReady(directory,{home,execute,app,uid=process.getuid(
  }
  return true;
 }
-export async function prepareUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),bootstrap=false,interrupt=false,...options}={}){
+export async function prepareUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),bootstrap=false,interrupt=false,hostPID,armRecovery=armUpdateExitRecovery,...options}={}){
  const context={home,execute,app,...options};
  const jobs=await ownedJobs(directory,{home,execute,app,includeUI:true});
  const initialSetup=jobs.length===0&&await initialSetupReady(directory,context);
@@ -60,6 +61,7 @@ export async function prepareUpdate(directory,{home=homedir(),execute=run,app=jo
  try{
   if(initialSetup){
    if(!await initialSetupReady(directory,context))throw new Error('UPDATE_SETUP_CHANGED');
+   if(hostPID!==undefined)await armRecovery(directory,{app,backup,hostPID,uid:options.uid});
    return {prepared:true};
   }
   if(!bootstrap&&!interrupt&&!await updateReadiness(directory)){await unlink(journalPath(directory));return {waiting:true};}
@@ -68,6 +70,7 @@ export async function prepareUpdate(directory,{home=homedir(),execute=run,app=jo
    const p=JSON.parse(await execute('/usr/bin/plutil',['-convert','json','-o','-',job.path]));
    await writeFile(job.path,bundledJob(p,job.name,app,directory),{mode:0o600});
   }
+  if(hostPID!==undefined)await armRecovery(directory,{app,backup,hostPID,uid:options.uid});
   return {prepared:true};
  }catch(e){
   try{await finishUpdate(directory,{home,execute,app,rollback:true,...options});}

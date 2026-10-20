@@ -132,6 +132,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func updateHelper(_ action: String, completion: @escaping ([String: Any]) -> Void) {
         let p = Process(); p.executableURL = payload.appendingPathComponent(".runtime/bin/node")
         p.arguments = [payload.appendingPathComponent("scripts/mac-setup.mjs").path, action]
+        if ["update-prepare", "update-prepare-manual"].contains(action) {
+            p.arguments?.append(String(ProcessInfo.processInfo.processIdentifier))
+        }
         let output = Pipe(); p.standardOutput = output; p.standardError = FileHandle.nullDevice; p.standardInput = FileHandle.nullDevice
         p.terminationHandler = { process in
             let data = output.fileHandleForReading.readDataToEndOfFile()
