@@ -106,16 +106,27 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func configureUpdater() {
         let updater = AppUpdater(); appUpdater = updater
         updater.tr = { [weak self] ja, en in self?.tr(ja, en) ?? ja }
-        updater.canCheck = { [weak self] in guard let self else { return false }; return self.yes("installed") && !self.busy && Bundle.main.bundleURL.path == NSHomeDirectory() + "/Applications/Dot Link.app" }
+        updater.canCheck = { [weak self] in guard let self else { return false }; return self.yes("installed") && !self.busy && self.appUpdater?.blocksActions != true && Bundle.main.bundleURL.path == NSHomeDirectory() + "/Applications/Dot Link.app" }
         updater.changed = { [weak self] in self?.refreshUpdateAnimation(); self?.updateMenu() }
-        updater.prepare = { [weak self] reply in
+        updater.prepare = { [weak self] interrupt, reply in
             guard let self, !self.busy else { reply("waiting"); return }
             self.notifications?.setRelaySuspended(true)
-            self.updateHelper("update-prepare") { result in
-                if result["prepared"] as? Bool == true { self.notifications?.setRelaySuspended(true); reply("prepared") } else { self.notifications?.setRelaySuspended(self.yes("lifecycleStopped") || !self.yes("bridge")); reply(result["waiting"] as? Bool == true ? "waiting" : "failed") }
+            self.updateHelper(interrupt ? "update-prepare-manual" : "update-prepare") { result in
+                if result["prepared"] as? Bool == true { reply("prepared"); return }
+                let recoveryRequired = result["kind"] == nil || ["UPDATE_RECOVERY_REQUIRED", "UPDATE_ALREADY_PREPARED"].contains(result["code"] as? String ?? "")
+                reply(recoveryRequired ? "recovery-required" : result["waiting"] as? Bool == true ? "waiting" : "failed")
+                if !recoveryRequired { self.inspect() }
             }
         }
-        updater.recover = { [weak self] in self?.updateHelper("update-abort") { _ in self?.inspect() } }
+        updater.recover = { [weak self] reply in
+            guard let self, !self.busy else { reply(false); return }
+            self.notifications?.setRelaySuspended(true)
+            self.updateHelper("update-abort") { result in
+                let succeeded = result["kind"] as? String == "result"
+                reply(succeeded)
+                if succeeded { self.inspect() }
+            }
+        }
         updater.start()
     }
     func updateHelper(_ action: String, completion: @escaping ([String: Any]) -> Void) {
@@ -184,7 +195,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.button?.setAccessibilityLabel("Dot Link: " + (appUpdater?.working == true ? appUpdater!.message : status))
         let menu = NSMenu()
         let info = NSMenuItem(title: "Dot Link · " + status, action: nil, keyEquivalent: ""); info.isEnabled = false; menu.addItem(info)
-        func item(_ title: String, _ action: Selector, enabled: Bool = true) { let i = NSMenuItem(title: title, action: action, keyEquivalent: ""); i.target = self; i.isEnabled = enabled && !busy && appUpdater?.preparing != true; menu.addItem(i) }
+        func item(_ title: String, _ action: Selector, enabled: Bool = true) { let i = NSMenuItem(title: title, action: action, keyEquivalent: ""); i.target = self; i.isEnabled = enabled && !busy && appUpdater?.blocksActions != true; menu.addItem(i) }
         menu.autoenablesItems = false
         item(tr("Dot Linkを開く", "Open Dot Link"), #selector(showHome))
         item(tr("音声入力…", "Speech input…"), #selector(menuSpeech), enabled: yes("installed"))
@@ -197,7 +208,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         item(tr("一時停止", "Pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
         item(tr("再開", "Resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
         menu.addItem(.separator())
-        item(tr("アップデートを確認…", "Check for updates…"), #selector(menuCheckUpdate))
+        item(appUpdater?.checkTitle ?? tr("アップデートを確認", "Check for updates"), #selector(menuCheckUpdate))
         if let updater = appUpdater, !updater.message.isEmpty { let update = NSMenuItem(title: updater.message, action: nil, keyEquivalent: ""); update.isEnabled = false; menu.addItem(update) }
         menu.addItem(.separator())
         let quit = NSMenuItem(title: tr("Dot Linkを終了", "Quit Dot Link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
@@ -208,7 +219,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if appUpdater?.silentRelaunch == true { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateBackgroundRelaunchAt") }
             notifications?.shutdown(); return .terminateNow
         }
-        if appUpdater?.preparing == true { return .terminateCancel }
+        if appUpdater?.blocksActions == true { return .terminateCancel }
         if allowTermination { notifications?.shutdown(); return .terminateNow }
         if quitting { return .terminateLater }
         if busy {
@@ -217,7 +228,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             alert.runModal(); return .terminateCancel
         }
         if appUpdater?.cancelForQuit() == false {
-            let alert = NSAlert(); alert.messageText = tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish"); alert.runModal(); return .terminateCancel
+            return .terminateCancel
         }
         quitting = true
         notifications?.setRelaySuspended(true)
@@ -482,7 +493,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupFailure.copied = true; render()
     }
     func perform(_ action: String, input: [String: String] = [:]) {
-        guard !busy, appUpdater?.preparing != true else { return }; busy = true; currentAction = action; message = ""
+        guard !busy, appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; message = ""
         setupFailure.begin(action)
         if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
         render()

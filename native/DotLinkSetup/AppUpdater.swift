@@ -8,8 +8,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     var changed: (() -> Void)?
     var tr: (String, String) -> String = { ja, _ in ja }
     var canCheck: () -> Bool = { false }
-    var prepare: (@escaping (String) -> Void) -> Void = { $0("failed") }
-    var recover: () -> Void = {}
+    var prepare: (Bool, @escaping (String) -> Void) -> Void = { _, reply in reply("failed") }
+    var recover: (@escaping (Bool) -> Void) -> Void = { $0(false) }
+    var runAlert: (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() }
     var prepared = false
     var working = false
     var message = ""
@@ -23,7 +24,14 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private var received: UInt64 = 0
     private var expected: UInt64 = 0
     private var statusLabel: NSTextField?
+    private var checkButton: NSButton?
+    private(set) var recoveryRequired = false
+    private(set) var recovering = false
     private(set) var preparing = false
+    var blocksActions: Bool { preparing || recovering || prepared }
+    var checkTitle: String {
+        recoveryRequired ? tr("復旧を再試行", "Retry recovery") : readyReply != nil ? tr("更新を再試行", "Retry update") : tr("アップデートを確認", "Check for updates")
+    }
     private let repository = Bundle.main.object(forInfoDictionaryKey: "DotLinkUpdateRepository") as? String ?? ""
     var silentRelaunch: Bool { !manuallyApproved }
     var automatic: Bool { automaticUpdatesEnabled && (updater?.automaticallyChecksForUpdates ?? false) }
@@ -60,15 +68,20 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private func status(_ ja: String, _ en: String, working: Bool = false) {
         statusText = (ja, en)
         let next = tr(ja, en); if message == next && self.working == working { return }
-        self.working = working; message = next; statusLabel?.stringValue = message; changed?()
+        self.working = working; message = next; statusLabel?.stringValue = message; refreshCheckButton(); changed?()
     }
-    func refreshLanguage() { if let (ja, en) = statusText { message = tr(ja, en); statusLabel?.stringValue = message; changed?() } }
+    private func refreshCheckButton() {
+        checkButton?.title = checkTitle
+        checkButton?.isEnabled = !blocksActions && !extracting
+    }
+    func refreshLanguage() { if let (ja, en) = statusText { message = tr(ja, en); statusLabel?.stringValue = message; refreshCheckButton(); changed?() } }
     func settingsView() -> NSView {
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") + ((Bundle.main.object(forInfoDictionaryKey: "DotLinkBeta") as? Bool == true) ? " Beta" : "")
         let title = NSTextField(labelWithString: tr("バージョン：", "Version: ") + version); title.font = .systemFont(ofSize: 15, weight: .semibold); box.addArrangedSubview(title)
         let toggle = NSButton(checkboxWithTitle: tr("自動更新", "Automatic updates"), target: self, action: #selector(toggleAutomatic(_:))); toggle.state = automatic ? .on : .off; toggle.isEnabled = automaticUpdatesEnabled; toggle.toolTip = automaticUpdatesEnabled ? nil : tr("自動更新は一時的に利用できません。手動で更新できます。", "Automatic updates are temporarily unavailable. You can update manually."); box.addArrangedSubview(toggle)
-        box.addArrangedSubview(ActionButton(tr("アップデートを確認", "Check for updates")) { [weak self] in self?.check() })
+        let check = ActionButton(tr("アップデートを確認", "Check for updates")) { [weak self] in self?.check() }
+        checkButton = check; refreshCheckButton(); box.addArrangedSubview(check)
         let detail = NSTextField(wrappingLabelWithString: message.isEmpty ? tr("自動更新は、Evenを使っていない間に適用します。", "Automatic updates install while Even is not in use.") : message); detail.font = .systemFont(ofSize: 12); detail.textColor = .secondaryLabelColor; box.addArrangedSubview(detail); statusLabel = detail
         let guidance = NSTextField(wrappingLabelWithString: tr(
             "自動更新は一時停止中です。更新する場合は「アップデートを確認」を押してください。\n更新後、通知を共有できなくなった場合：\nシステム設定 → プライバシーとセキュリティ → アクセシビリティで、Dot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。",
@@ -93,10 +106,21 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         }
     }
     func check() {
+        guard !blocksActions && !extracting else { return }
+        if recoveryRequired { restoreService(); return }
+        if readyReply != nil { attemptInstall(); return }
         manualCheck = true; updater.checkForUpdates()
     }
     @discardableResult func cancelForQuit() -> Bool {
-        if extracting || preparing { return false }
+        if extracting || preparing || recovering { return false }
+        if readyReply != nil && manuallyApproved {
+            let alert = NSAlert()
+            alert.messageText = tr("更新せずに終了しますか？", "Quit without updating?")
+            alert.informativeText = tr("ダウンロード済みの更新は破棄されます。再ダウンロードせずに再試行するには、Dot Linkを開いたままにしてください。", "Quitting discards the downloaded update. Keep Dot Link open to retry without downloading again.")
+            alert.addButton(withTitle: tr("開いたままにする", "Keep open"))
+            alert.addButton(withTitle: tr("更新せず終了", "Quit without updating"))
+            guard runAlert(alert) == .alertSecondButtonReturn else { return false }
+        }
         retry?.invalidate(); retry = nil
         if !prepared { let reply = readyReply; readyReply = nil; reply?(.skip); cancelDownload?(); cancelDownload = nil }
         return true
@@ -128,14 +152,23 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         cancelDownload = nil; manuallyApproved = false
         status("新しいバージョンがあります · " + appcastItem.displayVersionString, "Update available · " + appcastItem.displayVersionString)
         guard !appcastItem.isInformationOnlyUpdate else { reply(.dismiss); return }
-        if !state.userInitiated && automatic { reply(.install); return }
-        guard state.userInitiated else { reply(.dismiss); return }
-        let alert = NSAlert(); alert.messageText = tr("新しいバージョンがあります", "An update is available") + " · " + appcastItem.displayVersionString
-        alert.informativeText = String((appcastItem.itemDescription ?? tr("Dot Linkを更新します。設定と履歴は引き継ぎます。", "Update Dot Link. Your settings and history are preserved.")).prefix(4000))
+        if !state.userInitiated && automatic {
+            if state.stage == .installing { showReady(toInstallAndRelaunch: reply) } else { reply(.install) }
+            return
+        }
+        guard state.userInitiated else { reply(state.stage == .installing ? .skip : .dismiss); return }
+        confirmManualUpdate(version: appcastItem.displayVersionString, notes: appcastItem.itemDescription)
+        if state.stage == .installing {
+            if manuallyApproved { showReady(toInstallAndRelaunch: reply) } else { reply(.skip) }
+        } else { reply(manuallyApproved ? .install : .dismiss) }
+    }
+    func confirmManualUpdate(version: String, notes: String?) {
+        let alert = NSAlert(); alert.messageText = tr("新しいバージョンがあります", "An update is available") + " · " + version
+        alert.informativeText = String((notes ?? tr("Dot Linkを更新します。設定と履歴は引き継ぎます。", "Update Dot Link. Your settings and history are preserved.")).prefix(4000))
+        alert.informativeText += "\n\n" + tr("更新時に接続と進行中の会話を中断し、アプリを再起動します。更新後は元の接続状態に戻ります。送信できなかった発言は、もう一度話しかけてください。", "Updating interrupts the connection and any conversation in progress, then restarts the app. Your previous connection state is restored afterward. Please repeat anything that was not sent.")
         alert.addButton(withTitle: tr("あとで", "Later")); alert.addButton(withTitle: tr("更新する", "Update"))
-        manuallyApproved = alert.runModal() == .alertSecondButtonReturn
+        manuallyApproved = runAlert(alert) == .alertSecondButtonReturn
         if !manuallyApproved { status("更新はあとで適用できます", "You can install this update later") }
-        reply(manuallyApproved ? .install : .dismiss)
     }
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
@@ -146,9 +179,12 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
         extracting = false
-        status("更新できませんでした。あとで再確認してください。", "Update failed. Check again later.")
-        if prepared { UserDefaults.standard.removeObject(forKey: "updateBackgroundRelaunchAt"); prepared = false; recover() }
-        if manualCheck { let alert = NSAlert(); alert.messageText = message; alert.informativeText = error.localizedDescription; alert.runModal() }
+        retry?.invalidate(); retry = nil; readyReply = nil
+        if prepared {
+            UserDefaults.standard.removeObject(forKey: "updateBackgroundRelaunchAt"); prepared = false
+            restoreService()
+        } else { status("更新できませんでした。「アップデートを確認」で再試行してください。", "Update failed. Click Check for updates to retry.") }
+        if manualCheck { let alert = NSAlert(); alert.messageText = message; alert.informativeText = error.localizedDescription; _ = runAlert(alert) }
         acknowledgement()
     }
     func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0; cancelDownload = cancellation; status("更新をダウンロード中…", "Downloading update…", working: true) }
@@ -162,27 +198,56 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         attemptInstall()
     }
     private func attemptInstall() {
-        guard readyReply != nil, !preparing else { return }
+        guard readyReply != nil, !blocksActions, !recoveryRequired else { return }
+        retry?.invalidate(); retry = nil
         preparing = true
-        prepare { [weak self] result in
+        status("更新の準備中…", "Preparing update…", working: true)
+        prepare(manuallyApproved) { [weak self] result in
             guard let self else { return }; self.preparing = false
+            // An installer error may arrive while the helper is still stopping services.
+            // Its callback must recover, not leave a completed preparation orphaned.
+            guard self.readyReply != nil else {
+                if result == "prepared" || result == "recovery-required" { self.restoreService() }
+                else { self.refreshCheckButton(); self.changed?() }
+                return
+            }
             if result == "prepared" && !self.automatic && !self.manuallyApproved {
-                self.recover(); let reply = self.readyReply; self.readyReply = nil; reply?(.skip)
-                self.status("自動更新はオフです", "Automatic updates are off")
+                let reply = self.readyReply; self.readyReply = nil; reply?(.skip)
+                self.restoreService()
             } else if result == "prepared" {
-                self.prepared = true; self.retry?.invalidate(); self.retry = nil
+                self.prepared = true
                 self.status("更新を適用中…", "Installing update…", working: true)
                 let reply = self.readyReply; self.readyReply = nil; reply?(.install)
             } else if result == "waiting" {
-                self.status("Evenを閉じると更新を適用します", "Close Even to apply the update")
-                if self.retry == nil { self.retry = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.attemptInstall() } }
+                if self.manuallyApproved {
+                    self.status("設定の操作が終わったら「更新を再試行」を押してください。ダウンロードは保持しています。", "Finish the current settings operation, then click Retry update. The download is kept.")
+                } else {
+                    self.status("Evenを閉じると更新を適用します", "Close Even to apply the update")
+                    self.retry = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.attemptInstall() }
+                }
+            } else if result == "recovery-required" {
+                self.recoveryRequired = true
+                self.status("接続を復旧できませんでした。「復旧を再試行」を押してください。", "The connection could not be restored. Click Retry recovery.")
             } else {
-                let reply = self.readyReply; self.readyReply = nil; reply?(.skip)
-                self.status("更新の準備に失敗しました。あとで再確認してください。", "Update preparation failed. Check again later.")
+                // Keep the verified installer for an in-session retry. Dismiss is unsafe:
+                // Sparkle can install on exit before service preparation has succeeded.
+                self.status("更新を準備できませんでした。「更新を再試行」を押してください。ダウンロードは保持しています。", "Update preparation failed. Click Retry update. The download is kept.")
             }
+        }
+    }
+    private func restoreService() {
+        guard !recovering else { return }
+        recovering = true; recoveryRequired = true
+        status("接続を復旧中…", "Restoring connection…", working: true)
+        recover { [weak self] success in
+            guard let self else { return }
+            self.recovering = false; self.recoveryRequired = !success
+            if !success { self.status("接続を復旧できませんでした。「復旧を再試行」を押してください。", "The connection could not be restored. Click Retry recovery.") }
+            else if self.readyReply != nil { self.status("元の接続状態に戻しました。「更新を再試行」を押してください。", "Previous connection state restored. Click Retry update.") }
+            else { self.status("元の接続状態に戻しました。「アップデートを確認」で再試行してください。", "Previous connection state restored. Click Check for updates to retry.") }
         }
     }
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) { status("更新を適用中…", "Installing update…", working: true) }
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) { acknowledgement() }
-    func dismissUpdateInstallation() { extracting = false; cancelDownload = nil; retry?.invalidate(); retry = nil; readyReply = nil; manualCheck = false; manuallyApproved = false; working = false; changed?() }
+    func dismissUpdateInstallation() { extracting = false; cancelDownload = nil; retry?.invalidate(); retry = nil; readyReply = nil; manualCheck = false; manuallyApproved = false; working = recovering; refreshCheckButton(); changed?() }
 }

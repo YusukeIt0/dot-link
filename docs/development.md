@@ -33,6 +33,18 @@ Output: `.runtime/mac-app/Dot Link.app`. Runtime downloads and Sparkle are pinne
 
 The app uses one public update feed at `https://raw.githubusercontent.com/YusukeIt0/dot-link/main/updates/mac/appcast.xml`. Release ZIPs are downloaded from this repository's public GitHub Releases. Users need no GitHub account, token, or development-channel setting.
 
+### Manual update behavior
+
+Choosing **Update** explicitly permits interrupting the connection and conversation in progress. After Sparkle verifies the download, the Mac app uses `update-prepare-manual` to journal the prior running/paused state, back up the app, and stop its owned services through the normal lifecycle. It does not wait for a device long-poll, transcription, or pending reply to become idle. Pairing, credentials, and persisted messages are retained; unsent speech may need to be repeated. A stopped relay remains stopped after relaunch, while a running relay is restored and health-checked.
+
+The automatic path retains its idle checks; automatic updates remain disabled. Manual approval does not bypass app verification, service ownership checks, service termination, or recovery.
+
+If preparation fails, **Retry update** reuses the verified installer while Dot Link stays open. A failed rollback exposes **Retry recovery** before another installation attempt. Quitting with a retained installer requires explicit confirmation that the download will be discarded. Sparkle's ready-to-install `dismiss` choice is not a safe cache operation: it can install on application exit before service preparation. See the [Sparkle user driver contract](https://sparkle-project.org/documentation/api-reference/Protocols/SPUUserDriver.html).
+
+For changes to this path, run `node --test tests/app-update.test.mjs tests/app-lifecycle.test.mjs` and `node scripts/test-mac-update-driver.mjs` (requires macOS AppKit access). These fixture checks do not establish physical update success. Before merge, test a configured Mac using a PR-commit build as the **starting updater** and a separately prepared test target. Updating an old production app to the PR build still runs the old updater and does not validate this change.
+
+Record the source commit, starting/target build identities, pairing/settings comparison, and outcomes for: connected idle, interrupted speech/transcription/reply, initially paused, preparation failure and retained-download retry, install failure and recovery, and quit while a verified installer is retained. Keep physical observations separate from injected failures and fixture results.
+
 ## Maintainer release
 
 The maintainer needs authenticated `gh`, write access to this repository, and the existing Ed25519 signing key at `.runtime/update-signing/ed25519.key` with mode 600. This key is never included in a build, commit, or workflow. Contributors can build and test without the release key; only the maintainer signs official updates.

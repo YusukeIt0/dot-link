@@ -39,12 +39,14 @@ async function initialSetupReady(directory,{home,execute,app,uid=process.getuid(
  }
  return true;
 }
-export async function prepareUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),bootstrap=false,...options}={}){
+export async function prepareUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),bootstrap=false,interrupt=false,...options}={}){
  const context={home,execute,app,...options};
  const jobs=await ownedJobs(directory,{home,execute,app,includeUI:true});
  const initialSetup=jobs.length===0&&await initialSetupReady(directory,context);
  if(!initialSetup&&!['bridge','device','tunnel'].every(n=>jobs.some(j=>j.name===n)))throw new Error('SERVICE_SETUP_REQUIRED');
- if(!initialSetup&&!bootstrap&&!await updateReadiness(directory))return {waiting:true};
+ // An explicitly approved manual update interrupts active work, but still
+ // requires a verified backup, recovery journal, and the normal service stop.
+ if(!initialSetup&&!bootstrap&&!interrupt&&!await updateReadiness(directory))return {waiting:true};
  await regularPath(app);
  if((await execute('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(app,'Contents/Info.plist')]))!=='app.tripsurf.dotlink.mac')throw new Error('UPDATE_APP_INVALID');
  await execute('/usr/bin/codesign',['--verify','--deep','--strict',app]);
@@ -60,14 +62,18 @@ export async function prepareUpdate(directory,{home=homedir(),execute=run,app=jo
    if(!await initialSetupReady(directory,context))throw new Error('UPDATE_SETUP_CHANGED');
    return {prepared:true};
   }
-  if(!bootstrap&&!await updateReadiness(directory)){await unlink(journalPath(directory));return {waiting:true};}
+  if(!bootstrap&&!interrupt&&!await updateReadiness(directory)){await unlink(journalPath(directory));return {waiting:true};}
   await suspendServices(directory,{home,execute,app,...options});
   for(const job of jobs.filter(j=>['bridge','device','tunnel'].includes(j.name))){
    const p=JSON.parse(await execute('/usr/bin/plutil',['-convert','json','-o','-',job.path]));
    await writeFile(job.path,bundledJob(p,job.name,app,directory),{mode:0o600});
   }
   return {prepared:true};
- }catch(e){await finishUpdate(directory,{home,execute,app,rollback:true,...options});throw e;}
+ }catch(e){
+  try{await finishUpdate(directory,{home,execute,app,rollback:true,...options});}
+  catch{throw new Error('UPDATE_RECOVERY_REQUIRED');}
+  throw e;
+ }
 }
 export async function finishUpdate(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),rollback=false,verify,...options}={}){
  let journal;try{journal=JSON.parse(await readFile(journalPath(directory),'utf8'));}catch(e){if(e.code==='ENOENT')return {recovered:false};throw e;}

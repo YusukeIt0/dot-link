@@ -105,3 +105,56 @@ test('initial setup changed before recovery retains its journal and never starts
  assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).initialSetup,true);
  assert.equal(f.calls.some(([cmd,action])=>cmd==='/bin/launchctl'&&action!=='print'),false);
 });
+
+test('only explicit manual interruption stops a busy relay; recovery preserves queued work and pairing',async t=>{
+ const f=await fixture(t),now=Date.now();
+ await writeFile(join(f.runtime,'update-activity.json'),JSON.stringify({at:now,lastClient:now,active:3}));
+ const messages=JSON.stringify({messages:[{id:'fixture-pending',status:'pending'},{id:'fixture-accepted',status:'accepted'}]});
+ await writeFile(join(f.runtime,'bridge-state.json'),messages);
+ await writeFile(join(f.runtime,'pairing.json'),'fixture-pairing');
+ assert.deepEqual(await prepareUpdate(f.directory,f),{waiting:true});
+ assert.equal(f.loaded.size,4);
+ assert.deepEqual(await prepareUpdate(f.directory,{...f,interrupt:true}),{prepared:true});
+ assert.deepEqual([...f.loaded],['setup-ui']);
+ assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).stopped,false);
+ await finishUpdate(f.directory,f);
+ assert.equal(f.loaded.size,4);assert.equal(f.disabled.size,0);
+ assert.equal(await readFile(join(f.runtime,'bridge-state.json'),'utf8'),messages);
+ assert.equal(await readFile(join(f.runtime,'pairing.json'),'utf8'),'fixture-pairing');
+});
+
+test('manual update keeps an already paused relay paused',async t=>{
+ const f=await fixture(t);
+ await writeFile(join(f.runtime,'lifecycle.json'),JSON.stringify({stopped:true,reason:'pause'}));
+ f.loaded.clear();f.loaded.add('setup-ui');
+ await prepareUpdate(f.directory,{...f,interrupt:true});
+ assert.deepEqual(await finishUpdate(f.directory,f),{recovered:true,stopped:true});
+ assert.deepEqual([...f.loaded],['setup-ui']);
+ assert.equal(JSON.parse(await readFile(join(f.runtime,'lifecycle.json'),'utf8')).reason,'pause');
+});
+
+test('manual interruption still verifies the app before stopping services',async t=>{
+ const f=await fixture(t),execute=f.execute;
+ f.execute=async(cmd,args)=>{if(cmd==='/usr/bin/codesign')throw new Error('INVALID_SIGNATURE');return execute(cmd,args);};
+ await assert.rejects(prepareUpdate(f.directory,{...f,interrupt:true}),/INVALID_SIGNATURE/);
+ assert.equal(f.disabled.size,0);assert.equal(f.loaded.size,4);
+ await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
+});
+
+test('failed manual preparation restores running services and original files',async t=>{
+ const f=await fixture(t),execute=f.execute,original=await readFile(f.plists.bridge,'utf8');let failed=false;
+ f.execute=async(cmd,args)=>{if(!failed&&cmd==='/bin/launchctl'&&args[0]==='bootout'){failed=true;throw new Error('STOP_FAILED');}return execute(cmd,args);};
+ await assert.rejects(prepareUpdate(f.directory,{...f,interrupt:true}),/STOP_FAILED/);
+ assert.equal(f.loaded.size,4);assert.equal(f.disabled.size,0);
+ assert.equal(await readFile(f.plists.bridge,'utf8'),original);
+ await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
+});
+
+test('failed rollback is actionable and retains the journal for recovery',async t=>{
+ const f=await fixture(t),execute=f.execute;
+ f.execute=async(cmd,args)=>{if(cmd==='/bin/launchctl'&&['bootout','enable'].includes(args[0]))throw new Error('SERVICE_FAILED');return execute(cmd,args);};
+ await assert.rejects(prepareUpdate(f.directory,{...f,interrupt:true}),/UPDATE_RECOVERY_REQUIRED/);
+ assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).stopped,false);
+ f.execute=execute;
+ assert.deepEqual(await finishUpdate(f.directory,{...f,rollback:true}),{recovered:true,stopped:false});
+});
