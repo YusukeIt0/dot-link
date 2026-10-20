@@ -111,8 +111,10 @@ async function saveTunnel() {
 
 try {
   let result;
-  if (action === 'update-prepare') { const found = await discoverInstallation(); result = await prepareUpdate(found.directory); }
-  else if (action === 'update-prepare-manual') { const found = await discoverInstallation(); result = await prepareUpdate(found.directory, {interrupt:true}); }
+  if (['update-prepare','update-prepare-manual'].includes(action)) {
+    const found = await discoverInstallation();
+    result = await prepareUpdate(found.directory, {interrupt:action==='update-prepare-manual',...(process.argv[3]!==undefined?{hostPID:Number(process.argv[3])}:{})});
+  }
   else if (action === 'update-adopt') { const found = await discoverInstallation(); await prepareUpdate(found.directory, {bootstrap:true}); await finishUpdate(found.directory); result = await inspect(); }
   else if (action === 'update-recover') { const found = await discoverInstallation(); await finishUpdate(found.directory); result = await inspect(); }
   else if (action === 'update-abort') { const found = await discoverInstallation(); result = await finishUpdate(found.directory, {rollback:true}); }

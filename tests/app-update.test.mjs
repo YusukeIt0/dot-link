@@ -158,3 +158,30 @@ test('failed rollback is actionable and retains the journal for recovery',async 
  f.execute=execute;
  assert.deepEqual(await finishUpdate(f.directory,{...f,rollback:true}),{recovered:true,stopped:false});
 });
+
+test('GUI preparation arms post-exit recovery before handing installation to Sparkle',async t=>{
+ const f=await fixture(t);let armed=false;
+ await prepareUpdate(f.directory,{...f,interrupt:true,hostPID:123,armRecovery:async(directory,context)=>{
+  assert.equal(directory,f.directory);assert.equal(context.hostPID,123);
+  assert.equal(context.app,f.app);assert.deepEqual([...f.loaded],['setup-ui']);
+  assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).backup,context.backup);
+  armed=true;
+ }});
+ assert.equal(armed,true);
+});
+
+test('watcher startup failure rolls preparation back instead of permitting an unprotected update',async t=>{
+ const f=await fixture(t),original=await readFile(f.plists.device,'utf8');
+ await assert.rejects(prepareUpdate(f.directory,{...f,interrupt:true,hostPID:123,armRecovery:async()=>{throw new Error('UPDATE_WATCH_NOT_READY');}}),/UPDATE_WATCH_NOT_READY/);
+ assert.equal(f.loaded.size,4);assert.equal(f.disabled.size,0);
+ assert.equal(await readFile(f.plists.device,'utf8'),original);
+ await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
+});
+
+test('live-host rollback cancels exit recovery before ownership checks can fail',async t=>{
+ const f=await fixture(t);await prepareUpdate(f.directory,{...f,interrupt:true});
+ await writeFile(f.plists.device,JSON.stringify({Label:'foreign'}));
+ await assert.rejects(finishUpdate(f.directory,{...f,rollback:true}),/CONFLICT/);
+ const journal=JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8'));
+ assert.equal(journal.exitRecoveryCancelled,true);assert.equal(journal.stopped,false);
+});
