@@ -30,7 +30,7 @@ test('beta CORS, single-use exchange, session revocation, and legacy-key boundar
   assert.equal((await invoke('/api/pair', 'OPTIONS', {Origin:newSource,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'})).status,204);
   assert.equal((await invoke('/api/pair', 'OPTIONS', {Origin:newSource,'Access-Control-Request-Method':'GET'})).status,403);
   assert.equal((await invoke('/api/pair', 'OPTIONS', {Origin:newSource,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'authorization'})).status,403);
-  assert.equal((await invoke('/api/status', 'GET', {Origin:newSource})).status,403);
+  assert.equal((await invoke('/api/status', 'GET', {Origin:newSource})).status,401, 'packaged clients can read denial, never data');
   assert.equal((await invoke('/api/pair', 'POST', {Origin:newSource,'Content-Type':'application/json'},JSON.stringify({code:'z'.repeat(43)}))).status,401);
   assert.equal((await invoke('/api/pair', 'POST', {Origin:newSource,'Content-Type':'application/json'},JSON.stringify({code:unbound.code}))).status,200);
   assert.equal((await invoke('/api/status', 'GET', {Origin:newSource})).status,401);

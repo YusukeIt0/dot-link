@@ -14,7 +14,7 @@ await mkdir(join(contents,'MacOS'),{recursive:true});await mkdir(payload,{recurs
 for(const name of ['package.json','package-lock.json','server','src','dist'])await cp(join(root,name),join(payload,name),{recursive:true});
 await mkdir(join(payload,'scripts/lib'),{recursive:true});
 for(const name of ['mac-setup.mjs','setup-status.mjs','manage.mjs','setup.mjs','prepare-tunnel.mjs','beta-pair.mjs','mac-runtime-manifest.json'])await cp(join(root,'scripts',name),join(payload,'scripts',name));
-for(const name of ['setup.mjs','setup-failure.mjs','setup-errors.json','service-management.mjs','mac-install.mjs','menu-install.mjs','notification-migration.mjs','pairing-status.mjs','app-lifecycle.mjs','app-uninstall.mjs','app-update.mjs','update-exit-recovery.mjs'])await cp(join(root,'scripts/lib',name),join(payload,'scripts/lib',name));
+for(const name of ['setup.mjs','setup-failure.mjs','setup-errors.json','service-management.mjs','mac-install.mjs','menu-install.mjs','notification-migration.mjs','pairing-status.mjs','pairing-removal.mjs','app-lifecycle.mjs','app-uninstall.mjs','app-update.mjs','update-exit-recovery.mjs'])await cp(join(root,'scripts/lib',name),join(payload,'scripts/lib',name));
 await mkdir(join(payload,'.runtime'),{recursive:true});
 await cp(join(root,'.runtime/vendor/runtime/bin'),join(payload,'.runtime/bin'),{recursive:true});
 await cp(join(root,'.runtime/vendor/runtime/licenses'),join(contents,'Resources/licenses'),{recursive:true});

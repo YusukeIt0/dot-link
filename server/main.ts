@@ -6,6 +6,8 @@ import { safePost, WebhookSender } from './webhook.ts';
 import { NotificationInbox } from './notifications.ts';
 import { LatencyLog } from './latency.ts';
 import { LocationContext } from './location.ts';
+import { PairingAuthority } from './pairing-authority.ts';
+import { createHash } from 'node:crypto';
 
 const tokens = {
   mcp: readFileSync(resolve('.runtime/mcp-key'), 'utf8').trim(),
@@ -18,7 +20,11 @@ const port = Number(process.env.DOT_BRIDGE_PORT ?? 3460);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid port');
 const bridge = new Bridge(resolve('.runtime/bridge-state.json'), new WebhookSender(safePost(hosts)), hosts, new LatencyLog(resolve('.runtime/latency-bridge.jsonl')));
 const notifications = tokens.notification ? new NotificationInbox(resolve('.runtime/notification-state.json'), new WebhookSender(safePost(hosts)), hosts) : undefined;
-const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts, (input, guard, context) => bridge.sendMessage(input, guard, context));
+const pairing = new PairingAuthority(resolve('.runtime/pairing'));
+const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
+const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts,
+  (input, guard, context) => bridge.sendMessage(input, guard, context), Date.now,
+  owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner));
 const server = bridgeServer(bridge, tokens, notifications, locations);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;

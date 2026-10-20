@@ -70,9 +70,12 @@ export class LocationContext {
   private hosts: string[];
   private announce: (input: { message_id: string; text: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}) => Promise<unknown>;
   private now: () => number;
+  private ownerAuthorized: (owner: string) => boolean;
   constructor(path: string, sender: WebhookSender, hosts: string[],
-    announce: (input: { message_id: string; text: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}) => Promise<unknown>, now = Date.now) {
+    announce: (input: { message_id: string; text: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}) => Promise<unknown>, now = Date.now,
+    ownerAuthorized: (owner: string) => boolean = () => true) {
     this.path = path; this.sender = sender; this.hosts = hosts; this.announce = announce; this.now = now;
+    this.ownerAuthorized = ownerAuthorized;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     try { this.disk = diskSchema.parse(JSON.parse(readFileSync(path, 'utf8'))); }
     catch (error) {
@@ -82,8 +85,12 @@ export class LocationContext {
   }
   private save() { writeFileSync(`${this.path}.tmp`, JSON.stringify(this.disk), { mode: 0o600 }); renameSync(`${this.path}.tmp`, this.path); }
   private active(): Subscription | undefined { const sub = this.disk.subscription; return sub && sub.expiresAt > this.now() ? sub : undefined; }
-  private usable() { return !!this.sharingId && this.leaseUntil > this.now() && freshLocation(this.latest?.fix, this.now()); }
+  private checkOwner() {
+    if (this.owner && !this.ownerAuthorized(this.owner)) this.clear();
+  }
+  private usable() { this.checkOwner(); return !!this.sharingId && this.leaseUntil > this.now() && freshLocation(this.latest?.fix, this.now()); }
   status() {
+    this.checkOwner();
     return { locationSubscribed: !!this.active(), locationSharing: !!this.sharingId && this.leaseUntil > this.now(),
       locationFresh: this.usable(), locationReceivedAt: this.latest ? new Date(this.latest.receivedAt).toISOString() : null,
       locationMeasuredAt: this.latest?.fix.measured_at ?? null, locationAccuracy: this.latest?.fix.accuracy ?? null,
@@ -92,6 +99,7 @@ export class LocationContext {
       locationReceivedCount: this.received, locationEventCount: this.delivered, locationAnnouncementCount: this.sent };
   }
   control(raw: unknown, owner: string) {
+    this.checkOwner();
     const p = z.object({ sharing_id: z.string().uuid(), enabled: z.boolean() }).strict().parse(raw);
     if (!p.enabled) {
       if (this.sharingId === p.sharing_id && this.owner !== owner) throw new Error('Sharing belongs to another device');
@@ -100,6 +108,7 @@ export class LocationContext {
       if (this.sharingId === p.sharing_id && this.owner === owner) this.clear();
       return { enabled: false };
     }
+    if (!this.ownerAuthorized(owner)) throw new Error('Pairing revoked');
     if (this.disk.revoked.includes(p.sharing_id)) throw new Error('Sharing session revoked');
     if (this.sharingId && this.owner !== owner && this.leaseUntil > this.now()) throw new Error('Another device is sharing');
     if (this.sharingId !== p.sharing_id || this.owner !== owner) {
@@ -114,6 +123,8 @@ export class LocationContext {
     return {enabled: false};
   }
   update(raw: unknown, owner: string) {
+    this.checkOwner();
+    if (!this.ownerAuthorized(owner)) throw new Error('Pairing revoked');
     const p = z.object({ sharing_id: z.string().uuid(), sequence: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER), fix: fixSchema.optional() }).strict().parse(raw);
     if (this.disk.revoked.includes(p.sharing_id) || p.sharing_id !== this.sharingId || owner !== this.owner) throw new Error('Sharing not enabled');
     if (p.sequence <= this.sequence) return { accepted: false, ...this.status() };

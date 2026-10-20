@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appOrigin, relayOrigin, type PairingInvite } from '../src/relay-origin.ts';
+import { pairingGeneration, currentPairingGeneration } from './pairing-generation.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const valid = (value: string) => /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -28,30 +29,34 @@ export class PairingAuthority {
   private path(kind: 'invitations' | 'sessions' | 'recoveries', secret: string): string { return join(this.directory, kind, `${digest(secret)}.json`); }
   private prune(kind: 'invitations' | 'sessions' | 'recoveries'): number {
     let active = 0;
+    const generation = pairingGeneration(this.directory);
     for (const name of readdirSync(join(this.directory, kind))) {
       if (!fileName.test(name)) continue;
       const path = join(this.directory, kind, name);
       try {
         const data = JSON.parse(readFileSync(path, 'utf8'));
-        if (!Number.isFinite(data.expiresAt) || data.expiresAt <= this.clock()) unlinkSync(path);
+        if (!currentPairingGeneration(data, generation) || !Number.isFinite(data.expiresAt) || data.expiresAt <= this.clock()) unlinkSync(path);
         else active++;
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     }
     return active;
   }
   issue(origin: string, allowedAppOrigin?: string): PairingInvite {
+    const generation = pairingGeneration(this.directory);
     origin = relayOrigin(origin);
     if (allowedAppOrigin !== undefined) allowedAppOrigin = appOrigin(allowedAppOrigin);
     if (this.prune('invitations') >= 5) throw new Error('Too many active pairing invitations');
     const code = randomBytes(32).toString('base64url');
     const expiresAt = this.clock() + INVITE_LIFETIME;
-    writeFileSync(this.path('invitations', code), JSON.stringify({ expiresAt, origin: allowedAppOrigin }), { mode: 0o600, flag: 'wx' });
+    writeFileSync(this.path('invitations', code), JSON.stringify({ expiresAt, origin: allowedAppOrigin, generation }), { mode: 0o600, flag: 'wx' });
     return { version: 1, origin, code, expiresAt };
   }
   exchange(code: string, origin: string): { token: string; expiresAt: number; resumeToken?: string } | undefined {
     if (!valid(code)) return;
-    let invitation: { expiresAt: number; origin?: string };
+    let invitation: { expiresAt: number; origin?: string; generation?: string };
     try { invitation = JSON.parse(readFileSync(this.path('invitations', code), 'utf8')); } catch { return; }
+    if (!currentPairingGeneration(invitation, pairingGeneration(this.directory))) return;
+    const generation = invitation.generation ?? 'initial';
     if (invitation.expiresAt <= this.clock() || !Number.isFinite(invitation.expiresAt)) return;
     if (invitation.origin === undefined ? !packagedSource(origin) : invitation.origin !== origin) return;
     this.prune('recoveries');
@@ -64,19 +69,21 @@ export class PairingAuthority {
     // It cannot access data; sessions still bind to one exact source port.
     const resumeToken = packagedSource(origin) ? randomBytes(32).toString('base64url') : undefined;
     const recoveryHash = resumeToken ? digest(resumeToken) : undefined;
-    writeFileSync(this.path('sessions', token), JSON.stringify({ origin, expiresAt, recoveryHash }), { mode: 0o600, flag: 'wx' });
-    if (resumeToken) writeFileSync(this.path('recoveries', resumeToken), JSON.stringify({ currentSession: digest(token), expiresAt }), { mode: 0o600, flag: 'wx' });
+    writeFileSync(this.path('sessions', token), JSON.stringify({ origin, expiresAt, recoveryHash, generation }), { mode: 0o600, flag: 'wx' });
+    if (resumeToken) writeFileSync(this.path('recoveries', resumeToken), JSON.stringify({ currentSession: digest(token), expiresAt, generation }), { mode: 0o600, flag: 'wx' });
     return { token, expiresAt, ...(resumeToken ? { resumeToken } : {}) };
   }
   authorized(token: string, origin: string): boolean {
     if (!valid(token)) return false;
     try {
       const session = JSON.parse(readFileSync(this.path('sessions', token), 'utf8'));
+      const generation = pairingGeneration(this.directory);
+      if (!currentPairingGeneration(session, generation)) return false;
       if (session.origin !== origin || !Number.isFinite(session.expiresAt) || session.expiresAt <= this.clock()) return false;
       if (session.recoveryHash) {
         if (!/^[a-f0-9]{64}$/.test(session.recoveryHash)) return false;
         const recovery = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${session.recoveryHash}.json`), 'utf8'));
-        if (recovery.currentSession !== digest(token) || recovery.expiresAt !== session.expiresAt) return false;
+        if (!currentPairingGeneration(recovery, generation) || recovery.currentSession !== digest(token) || recovery.expiresAt !== session.expiresAt) return false;
       }
       return true;
     } catch { return false; }
@@ -97,6 +104,27 @@ export class PairingAuthority {
       return session.recoveryHash ?? digest(token);
     } catch { return; }
   }
+  /** The bridge can validate a sharing owner without possessing a phone token.
+   * Older sessions use their session hash; recovery-capable sessions keep their
+   * owner through port rotation. Never expose either hash in a status response. */
+  authorizedSubject(subject: string): boolean {
+    if (!fileName.test(`${subject}.json`)) return false;
+    try {
+      const generation = pairingGeneration(this.directory);
+      let sessionHash = subject;
+      let recovery: { currentSession: string; expiresAt: number; generation?: string } | undefined;
+      try {
+        recovery = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${subject}.json`), 'utf8'));
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false; }
+      if (recovery) {
+        if (!currentPairingGeneration(recovery, generation) || !fileName.test(`${recovery.currentSession}.json`)) return false;
+        sessionHash = recovery.currentSession;
+      }
+      const session = JSON.parse(readFileSync(join(this.directory, 'sessions', `${sessionHash}.json`), 'utf8'));
+      return currentPairingGeneration(session, generation) && Number.isFinite(session.expiresAt) && session.expiresAt > this.clock()
+        && (recovery ? session.recoveryHash === subject && session.expiresAt === recovery.expiresAt : !session.recoveryHash);
+    } catch { return false; }
+  }
   /** Recovery is a distinct 256-bit capability, not an existing data token.
    * Retrying after a lost response issues a fresh session and revokes the prior
    * one. The original 90-day expiry never extends. Atomic pointer replacement
@@ -104,16 +132,18 @@ export class PairingAuthority {
    */
   resume(secret: string, origin: string): { token: string; expiresAt: number; resumeToken: string } | undefined {
     if (!valid(secret) || !packagedSource(origin)) return;
-    let record: { currentSession: string; expiresAt: number };
+    let record: { currentSession: string; expiresAt: number; generation?: string };
     try { record = JSON.parse(readFileSync(this.path('recoveries', secret), 'utf8')); } catch { return; }
+    if (!currentPairingGeneration(record, pairingGeneration(this.directory))) return;
+    const generation = record.generation ?? 'initial';
     if (!Number.isFinite(record.expiresAt) || record.expiresAt <= this.clock() || !/^[a-f0-9]{64}$/.test(record.currentSession)) return;
     const token = randomBytes(32).toString('base64url');
     const sessionPath = this.path('sessions', token);
-    writeFileSync(sessionPath, JSON.stringify({ origin, expiresAt: record.expiresAt, recoveryHash: digest(secret) }), { mode: 0o600, flag: 'wx' });
+    writeFileSync(sessionPath, JSON.stringify({ origin, expiresAt: record.expiresAt, recoveryHash: digest(secret), generation }), { mode: 0o600, flag: 'wx' });
     const recoveryPath = this.path('recoveries', secret);
     const temporary = `${recoveryPath}.next`;
     try {
-      writeFileSync(temporary, JSON.stringify({ currentSession: digest(token), expiresAt: record.expiresAt }), { mode: 0o600 });
+      writeFileSync(temporary, JSON.stringify({ currentSession: digest(token), expiresAt: record.expiresAt, generation }), { mode: 0o600 });
       renameSync(temporary, recoveryPath);
     } catch (error) { try { unlinkSync(sessionPath); } catch {} throw error; }
     try { unlinkSync(join(this.directory, 'sessions', `${record.currentSession}.json`)); } catch {}
@@ -132,7 +162,7 @@ export class PairingAuthority {
       if (!fileName.test(name)) continue;
       try {
         const data = JSON.parse(readFileSync(join(this.directory, 'invitations', name), 'utf8'));
-        if (data.origin === undefined && Number.isFinite(data.expiresAt) && data.expiresAt > this.clock()) return true;
+        if (currentPairingGeneration(data, pairingGeneration(this.directory)) && data.origin === undefined && Number.isFinite(data.expiresAt) && data.expiresAt > this.clock()) return true;
       } catch {}
     }
     return false;
@@ -145,17 +175,41 @@ export class PairingAuthority {
         if (!fileName.test(name)) continue;
         try {
           const data = JSON.parse(readFileSync(join(this.directory, kind, name), 'utf8'));
-          if (data.origin === origin && Number.isFinite(data.expiresAt) && data.expiresAt > this.clock()) return true;
+          if (currentPairingGeneration(data, pairingGeneration(this.directory)) && data.origin === origin && Number.isFinite(data.expiresAt) && data.expiresAt > this.clock()) return true;
         } catch {}
       }
     }
     return false;
   }
-  revokeAll(): void {
-    for (const kind of ['invitations', 'sessions', 'recoveries']) {
-      for (const name of readdirSync(join(this.directory, kind))) {
-        if (fileName.test(name)) { try { unlinkSync(join(this.directory, kind, name)); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; } }
-      }
+  revokeAll(): { cleanupComplete: boolean } {
+    // One atomic replacement revokes every existing capability, even if a
+    // process crashes or a record cannot be deleted. Issuance/resume that raced
+    // with this change keeps its original generation and cannot restore access.
+    const generation = randomBytes(32).toString('hex');
+    const path = join(this.directory, 'generation.json');
+    const temporary = `${path}.${randomBytes(8).toString('hex')}.tmp`;
+    try {
+      writeFileSync(temporary, JSON.stringify({ generation }), { mode: 0o600, flag: 'wx' });
+      renameSync(temporary, path);
+    } catch (error) {
+      try { unlinkSync(temporary); } catch {}
+      throw error;
     }
+    let cleanupComplete = true;
+    for (const kind of ['invitations', 'sessions', 'recoveries']) {
+      try {
+        for (const name of readdirSync(join(this.directory, kind))) {
+          if (!fileName.test(name)) continue;
+          const recordPath = join(this.directory, kind, name);
+          try {
+            // Do not delete a new registration created after revocation.
+            const record = JSON.parse(readFileSync(recordPath, 'utf8'));
+            if (currentPairingGeneration(record, generation)) continue;
+            unlinkSync(recordPath);
+          } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupComplete = false; }
+        }
+      } catch { cleanupComplete = false; }
+    }
+    return { cleanupComplete };
   }
 }

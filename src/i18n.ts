@@ -56,7 +56,7 @@ const translations = {
   '接続しました。次回も自動で接続します。': 'Connected. This device will reconnect automatically.',
   '接続しました。この画面では設定を保存できないため、閉じた後は新しい接続コードで接続してください。': 'Connected, but storage is unavailable. Pair again after closing the app.',
   '接続を解除しました。': 'Pairing revoked and removed.',
-  '端末の設定を削除しました。Macに接続できなかったため、Mac側でも接続を解除してください。': 'Removed settings from this device. The Mac was unreachable; also revoke this device on the Mac.',
+  'この端末の接続設定を削除しました。Mac側の解除は未確認です。Macの「Evenの接続設定」→「Evenの接続をすべて解除」で解除してください。ほかのEven接続も解除されます。': 'Connection settings were removed from this device. Mac-side removal is unconfirmed. On your Mac, open Even connection settings → Remove all Even connections. This also removes other Even connections.',
   '読み上げ': 'Read aloud',
   '読み上げをオンにしました': 'Read aloud is on',
   '配送を確認できませんでした。同じ発話は重複送信しません。': 'Delivery was not confirmed. Retrying the same message will not duplicate it.',

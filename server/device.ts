@@ -47,7 +47,12 @@ export function deviceServer(options: { token: string; origin: string; directory
       ['OPTIONS', 'POST'].includes(request.method ?? '') && !!options.pairing?.allowsPairingOrigin(requestOrigin);
     const resumeBootstrap = requestOrigin !== undefined && path === '/api/pair/resume' &&
       ['OPTIONS', 'POST'].includes(request.method ?? '') && !!options.pairing?.allowsResumeOrigin(requestOrigin);
-    if (request.headers.host !== origin.host || (crossOrigin && !appOrigins.has(requestOrigin) && !options.pairing?.allowsOrigin(requestOrigin) && !pairingBootstrap && !resumeBootstrap)) {
+    // A removed phone must be able to read the 401 on its next status poll.
+    // CORS is not authorization: the exact origin/token check below still
+    // guards all data, and other origins/routes retain the existing policy.
+    const statusProbe = requestOrigin !== undefined && ['/api/status', '/api/updates'].includes(path) &&
+      ['OPTIONS', 'GET'].includes(request.method ?? '') && !!options.pairing?.allowsResumeOrigin(requestOrigin);
+    if (request.headers.host !== origin.host || (crossOrigin && !appOrigins.has(requestOrigin) && !options.pairing?.allowsOrigin(requestOrigin) && !pairingBootstrap && !resumeBootstrap && !statusProbe)) {
       json(403, { error: 'Origin rejected' }); return;
     }
     if (crossOrigin) {
@@ -100,7 +105,8 @@ export function deviceServer(options: { token: string; origin: string; directory
               headers: {Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json', 'X-G2-Location-Owner': subject},
               body: '{}', signal: AbortSignal.timeout(3000)}); } catch { /* The short location lease also fails closed. */ }
           }
-          options.pairing.revoke(credential, requestOrigin!); response.writeHead(204); response.end(); return;
+          if (!options.pairing.revoke(credential, requestOrigin!)) { json(500, { error: 'Pairing removal could not be confirmed' }); return; }
+          response.writeHead(204); response.end(); return;
         }
         if (path === '/api/transcribe' && request.method === 'POST') {
           if (request.headers['content-type'] !== 'audio/wav') { json(415, { error: 'WAV required' }); return; }

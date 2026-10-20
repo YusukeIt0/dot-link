@@ -13,7 +13,7 @@ const session='a'.repeat(64), recovery='b'.repeat(64);
 const save=(root,kind,name,value)=>writeFile(join(root,'.runtime/pairing',kind,name+'.json'),JSON.stringify(value));
 test('missing, expired and revoked pairing are not configured; inspection does not prune',async t=>{
  const root=await fixture(t);
- assert.deepEqual(await pairingStatus(root,100),{evenPairingKnown:true,evenPaired:false});
+ assert.deepEqual(await pairingStatus(root,100),{evenPairingKnown:true,evenPaired:false,evenPairingCount:0,evenInvitationCount:0});
  await save(root,'sessions',session,{origin:'http://127.0.0.1:5555',expiresAt:99});
  assert.equal((await pairingStatus(root,100)).evenPaired,false);
  assert.ok(await readFile(join(root,'.runtime/pairing/sessions',session+'.json')));
@@ -24,14 +24,14 @@ test('current recovered pairing is configured; stale and foreign sessions are ex
  const root=await fixture(t);
  await save(root,'sessions',session,{origin:'http://127.0.0.1:5555',expiresAt:200,recoveryHash:recovery});
  await save(root,'recoveries',recovery,{currentSession:session,expiresAt:200});
- assert.deepEqual(await pairingStatus(root,100),{evenPairingKnown:true,evenPaired:true});
+ assert.deepEqual(await pairingStatus(root,100),{evenPairingKnown:true,evenPaired:true,evenPairingCount:1,evenInvitationCount:0});
  await save(root,'recoveries',recovery,{currentSession:'c'.repeat(64),expiresAt:200});
  assert.equal((await pairingStatus(root,100)).evenPaired,false);
- await save(root,'sessions',session,{origin:'https://example.com',expiresAt:200});
+ await save(root,'sessions',session,{origin:'http://192.168.1.2:5555',expiresAt:200});
  assert.equal((await pairingStatus(root,100)).evenPaired,false);
 });
 test('unreadable records produce unknown instead of claiming unpaired',async t=>{
  const root=await fixture(t);
  await writeFile(join(root,'.runtime/pairing/sessions',session+'.json'),'{');
- assert.deepEqual(await pairingStatus(root,100),{evenPairingKnown:false,evenPaired:false});
+ assert.deepEqual(await pairingStatus(root,100),{evenPairingKnown:false,evenPaired:false,evenPairingCount:0,evenInvitationCount:0});
 });
