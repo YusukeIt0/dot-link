@@ -77,6 +77,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var expiryLabel: NSTextField?
     var copyButton: NSButton?
     var timer: Timer?
+    var pairingRefreshPending = false
+    var pairingRefreshAt = Date.distantPast
+    var pairingRefreshGeneration = 0
     var language = UserDefaults.standard.string(forKey: "setupLanguage") ?? (Locale.preferredLanguages.first?.hasPrefix("ja") == true ? "ja" : "en")
     let payload = Bundle.main.resourceURL!.appendingPathComponent("payload")
     var step: String { state["step"] as? String ?? "checking" }
@@ -101,7 +104,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         automaticResumePending = !CommandLine.arguments.contains("--background")
         configureUpdater()
         perform("update-recover")
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.updateExpiry() }
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.updateExpiry()
+            self?.refreshVisiblePairing()
+        }
     }
     func configureUpdater() {
         let updater = AppUpdater(); appUpdater = updater
@@ -165,7 +171,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false; showingSpeechOutput = false; pairingCode = nil; pairingExpiry = 0
         render(); showWindow(); inspect()
     }
-    @objc func menuPair() { showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
+    @objc func menuPair() { showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
     @objc func menuNotifications() { showingSpeech = false; showingSpeechOutput = false; showingNotifications = true; render(); showWindow() }
     @objc func menuNotificationPause() { notifications?.togglePause() }
     func connectNotifications() {
@@ -201,6 +207,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         func item(_ title: String, _ action: Selector, enabled: Bool = true) { let i = NSMenuItem(title: title, action: action, keyEquivalent: ""); i.target = self; i.isEnabled = enabled && !busy && appUpdater?.blocksActions != true; menu.addItem(i) }
         menu.autoenablesItems = false
         item(tr("Dot Linkを開く", "Open Dot Link"), #selector(showHome))
+        item(tr("Evenの接続設定…", "Even connection settings…"), #selector(menuPair), enabled: yes("installed"))
         item(tr("音声入力…", "Speech input…"), #selector(menuSpeech), enabled: yes("installed"))
         item(tr("音声出力…", "Speech output…"), #selector(menuSpeechOutput), enabled: yes("installed"))
         item(tr("Macの通知…", "Mac notifications…"), #selector(menuNotifications), enabled: notifications != nil)
@@ -331,7 +338,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             else { add(tr("Macの準備が終わると通知を設定できます。", "Finish Mac setup to configure notifications.")) }
             return
         }
-        if step != "pair" && !yes("lifecycleStopped") { add(tr("1  Macの準備   →   2  Dotとの連携   →   3  iPhoneの接続", "1  Prepare Mac   →   2  Connect Dot   →   3  Pair iPhone"), size: 13, bold: true) }
+        if !showingPairing && step != "pair" && !yes("lifecycleStopped") { add(tr("1  Macの準備   →   2  Dotとの連携   →   3  iPhoneの接続", "1  Prepare Mac   →   2  Connect Dot   →   3  Pair iPhone"), size: 13, bold: true) }
         space()
         if !message.isEmpty {
             let l = label(message); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
@@ -348,9 +355,13 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         progressLabel = nil; progress = nil; tunnelField = nil; secretField = nil; originField = nil; codeField = nil; expiryLabel = nil; copyButton = nil
         if busy {
-            let progressText = ["pause", "shutdown"].contains(currentAction) ? tr("Dot Linkを停止しています…", "Stopping Dot Link…") : currentAction == "uninstall" ? tr("Dot Linkを取り除いています…", "Removing Dot Link…") : currentAction == "resume" ? tr("Dot Linkを再開しています…", "Resuming Dot Link…") : tr("状態を確認しています…", "Checking…")
+            let progressText = currentAction == "revoke-pairings" ? tr("Evenの接続を解除しています…", "Removing Even connections…") : ["pause", "shutdown"].contains(currentAction) ? tr("Dot Linkを停止しています…", "Stopping Dot Link…") : currentAction == "uninstall" ? tr("Dot Linkを取り除いています…", "Removing Dot Link…") : currentAction == "resume" ? tr("Dot Linkを再開しています…", "Resuming Dot Link…") : tr("状態を確認しています…", "Checking…")
             let l = label(progressText, size: 18, bold: true); progressLabel = l; stack.addArrangedSubview(l)
             let p = NSProgressIndicator(); p.style = .bar; p.isIndeterminate = true; p.startAnimation(nil); p.widthAnchor.constraint(equalToConstant: 470).isActive = true; stack.addArrangedSubview(p); progress = p
+            return
+        }
+        if showingPairing && yes("installed") && step != "conflict" {
+            renderPairingSettings()
             return
         }
         switch step {
@@ -412,33 +423,21 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             add(tr("Dotから設定完了の返事が来たら、下のボタンを押します。", "When your dot confirms setup is complete, click below."))
             button(tr("Dotとの接続を確認", "Check connection to Dot"), primary: true) { [weak self] in self?.inspect() }
         case "pair":
-            add(showingPairing ? tr("Evenの接続設定", "Even connection settings") : tr("接続状況", "Connections"), size: 22, bold: true)
+            add(tr("接続状況", "Connections"), size: 22, bold: true)
             connectionCards()
-            if showingPairing {
-                button(tr("接続状況に戻る", "Back to connection status")) { [weak self] in self?.showHome() }
-                button(yes("evenPaired") ? tr("接続を変更・追加", "Change or add a connection") : tr("接続コードを作成", "Create pairing code"), primary: true) { [weak self] in self?.perform("pair") }
-                if let code = pairingCode, pairingExpiry > Date().timeIntervalSince1970 * 1000 {
-                    let f = field(""); f.stringValue = code; f.isEditable = false; f.font = .monospacedSystemFont(ofSize: 12, weight: .regular); codeField = f
-                    copyButton = button(tr("接続コードをコピー", "Copy pairing code")) { [weak self] in self?.copyPairing() }
-                    let l = label(""); expiryLabel = l; stack.addArrangedSubview(l)
-                    add(tr("コード全体をEvenアプリのDot Linkに貼り付けて「接続」を押してください。既存の接続設定は保持されます。", "Paste the full code into Dot Link in the Even app and tap Connect. Existing pairings are preserved."))
-                    updateExpiry()
-                }
-            } else {
-                let actions = NSStackView(); actions.orientation = .horizontal; actions.spacing = 12
-                let pairing = ActionButton(yes("evenPaired") ? tr("Evenの接続設定", "Even connection settings") : tr("Evenを接続", "Connect Even")) { [weak self] in self?.menuPair() }
-                pairing.controlSize = .large; pairing.keyEquivalent = "\r"; actions.addArrangedSubview(pairing)
-                let notificationSettings = ActionButton(tr("通知設定", "Notifications")) { [weak self] in self?.menuNotifications() }
-                notificationSettings.controlSize = .large; notificationSettings.image = NSImage(systemSymbolName: "bell", accessibilityDescription: nil); notificationSettings.imagePosition = .imageLeading
-                notificationSettings.isEnabled = notifications != nil; actions.addArrangedSubview(notificationSettings)
-                let speechSettings = ActionButton(tr("音声入力", "Speech input")) { [weak self] in self?.menuSpeech() }
-                speechSettings.controlSize = .large; speechSettings.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil); speechSettings.imagePosition = .imageLeading
-                actions.addArrangedSubview(speechSettings)
-                let outputSettings = ActionButton(tr("音声出力", "Speech output")) { [weak self] in self?.menuSpeechOutput() }
-                outputSettings.controlSize = .large; outputSettings.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil); outputSettings.imagePosition = .imageLeading
-                actions.addArrangedSubview(outputSettings)
-                stack.addArrangedSubview(actions)
-            }
+            let actions = NSStackView(); actions.orientation = .horizontal; actions.spacing = 12
+            let pairing = ActionButton(yes("evenPaired") ? tr("Evenの接続設定", "Even connection settings") : tr("Evenを接続", "Connect Even")) { [weak self] in self?.menuPair() }
+            pairing.controlSize = .large; pairing.keyEquivalent = "\r"; actions.addArrangedSubview(pairing)
+            let notificationSettings = ActionButton(tr("通知設定", "Notifications")) { [weak self] in self?.menuNotifications() }
+            notificationSettings.controlSize = .large; notificationSettings.image = NSImage(systemSymbolName: "bell", accessibilityDescription: nil); notificationSettings.imagePosition = .imageLeading
+            notificationSettings.isEnabled = notifications != nil; actions.addArrangedSubview(notificationSettings)
+            let speechSettings = ActionButton(tr("音声入力", "Speech input")) { [weak self] in self?.menuSpeech() }
+            speechSettings.controlSize = .large; speechSettings.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil); speechSettings.imagePosition = .imageLeading
+            actions.addArrangedSubview(speechSettings)
+            let outputSettings = ActionButton(tr("音声出力", "Speech output")) { [weak self] in self?.menuSpeechOutput() }
+            outputSettings.controlSize = .large; outputSettings.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil); outputSettings.imagePosition = .imageLeading
+            actions.addArrangedSubview(outputSettings)
+            stack.addArrangedSubview(actions)
         case "updateRecovery":
             add(tr("更新後の中継を確認できません", "The relay has not recovered after the update"), size: 23, bold: true)
             add(tr("設定と履歴は保持しています。ネットワーク接続を確認して、復旧を再試行してください。", "Your settings and history are preserved. Check the network connection and retry recovery."))
@@ -467,6 +466,71 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = sender.indexOfSelectedItem == 0 ? "ja" : "en"; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); render() }
     func inspect() { perform("inspect") }
+    func refreshVisiblePairing() {
+        guard showingPairing, window.isVisible, yes("installed"), !busy,
+              !pairingRefreshPending, appUpdater?.blocksActions != true,
+              Date().timeIntervalSince(pairingRefreshAt) >= 3 else { return }
+        pairingRefreshPending = true; pairingRefreshAt = Date()
+        let generation = pairingRefreshGeneration
+        updateHelper("inspect") { [weak self] value in
+            guard let self else { return }
+            self.pairingRefreshPending = false
+            guard generation == self.pairingRefreshGeneration, !self.busy, self.showingPairing else { return }
+            let keys = ["evenPairingKnown", "evenPaired", "evenPairingCount", "evenInvitationCount"]
+            let previousCount = self.state["evenPairingCount"] as? Int ?? 0
+            let refreshed: [String: Any] = value["kind"] as? String == "result" ? value : ["evenPairingKnown": false]
+            var changed = false
+            for key in keys {
+                guard let next = refreshed[key] as? NSNumber else { continue }
+                if (self.state[key] as? NSNumber) != next { changed = true; self.state[key] = next }
+            }
+            if refreshed["evenPairingKnown"] as? Bool == true,
+               (refreshed["evenPairingCount"] as? Int ?? 0) > previousCount,
+               self.pairingCode != nil, (refreshed["evenInvitationCount"] as? Int ?? 0) == 0 {
+                self.pairingCode = nil; self.pairingExpiry = 0
+                self.message = self.tr("Evenが接続されました。", "Even connected.")
+                changed = true
+            }
+            if changed { self.render() }
+        }
+    }
+    func renderPairingSettings() {
+        add(tr("Evenの接続設定", "Even connection settings"), size: 22, bold: true)
+        button(tr("接続状況に戻る", "Back to connection status")) { [weak self] in self?.showHome() }
+        let count = state["evenPairingCount"] as? Int ?? 0
+        let invitations = state["evenInvitationCount"] as? Int ?? 0
+        add(yes("evenPairingKnown") ? (count > 0 ? tr("保存済みの接続：\(count)件", "Saved connections: \(count)") : tr("保存済みの接続はありません", "No saved connections")) : tr("保存済みの接続を確認できません", "Saved connections could not be checked"), size: 16, bold: true)
+        if count > 1 { add(tr("同じ端末の古い登録を含む場合があります。端末の台数ではありません。", "This may include older registrations for the same device. It is not a device count.")) }
+        if step == "pair" {
+            button(count > 0 ? tr("接続を変更・追加", "Change or add a connection") : tr("接続コードを作成", "Create pairing code"), primary: true) { [weak self] in self?.perform("pair") }
+            if let code = pairingCode, pairingExpiry > Date().timeIntervalSince1970 * 1000 {
+                let f = field(""); f.stringValue = code; f.isEditable = false; f.font = .monospacedSystemFont(ofSize: 12, weight: .regular); codeField = f
+                copyButton = button(tr("接続コードをコピー", "Copy pairing code")) { [weak self] in self?.copyPairing() }
+                let l = label(""); expiryLabel = l; stack.addArrangedSubview(l)
+                add(tr("コード全体をEvenアプリのDot Linkに貼り付けて「接続」を押してください。既存の接続設定は保持されます。", "Paste the full code into Dot Link in the Even app and tap Connect. Existing pairings are preserved."))
+                updateExpiry()
+            }
+        } else {
+            add(tr("再接続するには、接続状況に戻ってMacとDotの準備を完了してください。接続の解除はこのまま行えます。", "To pair again, return to connection status and finish Mac and Dot setup. You can still remove connections here."))
+        }
+        if invitations > 0 { add(tr("使用前の接続コード：\(invitations)件", "Unused pairing codes: \(invitations)"), size: 12) }
+        space()
+        if count > 0 || invitations > 0 || !yes("evenPairingKnown") {
+            button(tr("Evenの接続をすべて解除…", "Remove all Even connections…")) { [weak self] in self?.confirmPairingRemoval() }
+        }
+        button(tr("状態を再確認", "Refresh status")) { [weak self] in self?.inspect() }
+    }
+    func confirmPairingRemoval() {
+        guard !busy, appUpdater?.blocksActions != true else { return }
+        let alert = NSAlert(); alert.alertStyle = .warning
+        alert.messageText = tr("Evenの接続をすべて解除しますか？", "Remove all Even connections?")
+        alert.informativeText = tr("このMacの接続コードで登録したすべてのEven接続と、使用前のコードを無効にします。会話の送受信と位置共有が止まり、使う端末は接続し直す必要があります。\n\nChatGPT側の接続設定と保存済みの会話は残ります。", "This invalidates all Even connections registered with this Mac's pairing codes, including unused codes. Messaging and location sharing stop, and each device must pair again.\n\nYour ChatGPT connection settings and saved conversations are kept.")
+        alert.addButton(withTitle: tr("すべて解除", "Remove all"))
+        alert.addButton(withTitle: tr("キャンセル", "Cancel"))
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        if alert.runModal() == .alertFirstButtonReturn { perform("revoke-pairings") }
+    }
     func openTailscale() {
         for path in ["/Applications/Tailscale.app", NSHomeDirectory() + "/Applications/Tailscale.app"] {
             if FileManager.default.fileExists(atPath: path) { NSWorkspace.shared.open(URL(fileURLWithPath: path)); return }
@@ -497,6 +561,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func perform(_ action: String, input: [String: String] = [:]) {
         guard !busy, appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; message = ""
+        pairingRefreshGeneration += 1
         setupFailure.begin(action)
         if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
         render()
@@ -556,6 +621,19 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
+            if currentAction == "revoke-pairings" {
+                pairingCode = nil; pairingExpiry = 0
+                switch value["pairingRemoval"] as? String {
+                case "removed":
+                    message = tr("Evenの接続をすべて解除しました。再接続するには、新しい接続コードを使ってください。iPhoneには次にMacへ接続したときに反映されます。", "All Even connections were removed. Use a new pairing code to reconnect. Your iPhone will show the change when it next reaches this Mac.")
+                case "changed":
+                    message = tr("解除後に新しい接続またはコードが見つかりました。現在の保存状況を確認してください。", "A new connection or code was found after removal. Review the current saved connections.")
+                case "failed":
+                    message = tr("接続を解除できませんでした。解除済みとは確認できていません。もう一度お試しください。", "Connections could not be removed. Removal is not confirmed. Please try again.")
+                default:
+                    message = tr("解除処理後の状態を確認できません。状態を再確認してから、必要なら解除を再試行してください。", "The state after removal could not be verified. Refresh the status, then retry removal if needed.")
+                }
+            }
             if currentAction == "stt-select" {
                 message = "" // The active provider is already shown at the top of Speech input.
             }
@@ -588,6 +666,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if setupFailure.details != nil { message = "" } // Render the retained failure separately from transient status messages.
             }
             if currentAction == "stt-select" { message = tr("切り替えに失敗しました。もう一度お試しください。", "Could not switch services. Please try again.") }
+            if currentAction == "revoke-pairings" {
+                pairingCode = nil; pairingExpiry = 0
+                state["evenPairingKnown"] = false
+                message = tr("解除の結果を確認できません。状態を再確認してから、必要なら解除を再試行してください。", "The removal result could not be confirmed. Refresh the status, then retry removal if needed.")
+            }
             if ["shutdown", "pause", "uninstall"].contains(currentAction) {
                 message = tr("処理を完了できませんでした。Dot Linkは開いたままです。停止・削除の状況を確認してから再試行してください。", "The operation could not complete. Dot Link remains open. Check the stop or removal status before retrying.") + " (\(code))"
             }

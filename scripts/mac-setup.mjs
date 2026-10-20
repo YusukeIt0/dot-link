@@ -10,6 +10,7 @@ import { prepareUpdate, finishUpdate } from './lib/app-update.mjs';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
 import { pairingStatus } from './lib/pairing-status.mjs';
+import { removeEvenPairings } from './lib/pairing-removal.mjs';
 import { legacyNotificationState, retireLegacyNotifications } from './lib/notification-migration.mjs';
 import { tailscale, run, executable, assertOwnedAgents } from './lib/setup.mjs';
 import { setupStage, setupFailure, runSetupInstall, activateRelay, saveSetupFailure, clearSetupFailure } from './lib/setup-failure.mjs';
@@ -167,10 +168,19 @@ try {
     const found = await discoverInstallation();
     if (input.deleteData !== 'true') throw new Error('INVALID_UNINSTALL_OPTION');
     result = await uninstallApp(found.directory, appBundle, {token:input.token,deleteData:input.deleteData === 'true'});
+  } else if (action === 'revoke-pairings') {
+    const found = await discoverInstallation();
+    if (!found.installed) throw new Error('INSTALLATION_REQUIRED');
+    const removal = await removeEvenPairings(found.directory);
+    const state = await inspect();
+    const pairingRemoval = removal.pairingRemoval === 'failed' ? 'failed'
+      : !state.evenPairingKnown ? 'unverified'
+      : state.evenPairingCount || state.evenInvitationCount ? 'changed' : 'removed';
+    result = { ...state, pairingRemoval, pairingCleanupComplete: removal.pairingCleanupComplete };
   } else if (action === 'pair') {
     const state = await inspect();
     if (state.step !== 'pair') throw new Error('RELAY_NOT_READY');
-    await run(process.execPath, [join(state.directory, 'scripts/beta-pair.mjs')], { cwd: state.directory });
+    await run(process.execPath, [join(payload, 'scripts/beta-pair.mjs')], { cwd: state.directory });
     const code = await readFile(join(state.directory, '.runtime/beta-pairing.txt'), 'utf8');
     const invitation = JSON.parse(code);
     result = { ...state, pairingCode: code, expiresAt: invitation.expiresAt };

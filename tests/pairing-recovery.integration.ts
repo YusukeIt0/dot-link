@@ -8,7 +8,7 @@ import { request } from 'node:http';
 import { PairingAuthority } from '../server/pairing-authority.ts';
 import { deviceServer } from '../server/device.ts';
 
-test('recovery-only preflight requires a distinct secret, binds the new port and never opens data CORS globally', async t => {
+test('recovery requires a distinct secret, binds the new port and permits only readable status denial before authorization', async t => {
  const root=await mkdtemp(join(tmpdir(),'g2-recovery-http-'));
  const authority=new PairingAuthority(join(root,'pairing'));
  const server=deviceServer({token:'m'.repeat(43),origin:'https://mac.tailtest.ts.net',directory:root,pairing:authority,transcribe:async()=> 'synthetic'});
@@ -20,7 +20,7 @@ test('recovery-only preflight requires a distinct secret, binds the new port and
   const q=request({host:'127.0.0.1',port:address.port,path,method,agent:false,headers:{Host:'mac.tailtest.ts.net',Origin:origin,'Content-Type':'application/json',...extra}},res=>{const chunks:Buffer[]=[];res.on('data',x=>chunks.push(x));res.on('end',()=>{const raw=Buffer.concat(chunks).toString();resolve({status:res.statusCode!,body:raw?JSON.parse(raw):null,cors:res.headers['access-control-allow-origin']});});});q.on('error',reject);q.end(method==='POST'?JSON.stringify(body):undefined);
  });
  const paired=await call('/api/pair',old,'POST',{code:authority.issue('https://mac.tailtest.ts.net').code});assert.equal(paired.status,200);
- assert.equal((await call('/api/status',updated,'GET')).status,403);
+ assert.equal((await call('/api/status',updated,'GET')).status,401);
  assert.equal((await call('/api/pair/resume','https://evil.example','POST',{resumeToken:paired.body.resumeToken})).status,403);
  const preflight=await call('/api/pair/resume',updated,'OPTIONS',{}, {'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type'});
  assert.equal(preflight.status,204);assert.equal(preflight.cors,updated);
@@ -32,9 +32,9 @@ test('recovery-only preflight requires a distinct secret, binds the new port and
  const restored=await call('/api/pair/resume',updated,'POST',{resumeToken:paired.body.resumeToken});assert.equal(restored.status,200);
  assert.equal(authority.authorized(restored.body.token,updated),true);
  assert.equal(authority.authorized(paired.body.token,old),false);
- assert.equal((await call('/api/status',old,'GET',{}, {Authorization:`Bearer ${paired.body.token}`})).status,403);
+ assert.equal((await call('/api/status',old,'GET',{}, {Authorization:`Bearer ${paired.body.token}`})).status,401);
  assert.equal((await call('/api/status',updated,'GET',{}, {Authorization:`Bearer ${paired.body.resumeToken}`})).status,401);
- assert.equal((await call('/api/status','http://127.0.0.1:57158','GET',{}, {Authorization:`Bearer ${restored.body.token}`})).status,403);
+ assert.equal((await call('/api/status','http://127.0.0.1:57158','GET',{}, {Authorization:`Bearer ${restored.body.token}`})).status,401);
  assert.equal((await call('/api/pair/revoke',updated,'POST',{}, {Authorization:`Bearer ${restored.body.token}`})).status,204);
  assert.equal((await call('/api/pair/resume',old,'POST',{resumeToken:paired.body.resumeToken})).status,401);
 });

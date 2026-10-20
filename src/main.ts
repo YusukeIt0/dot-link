@@ -345,7 +345,7 @@ el('forget-pairing').onclick = async () => {
   try { if (session.credentials) { await api('/api/pair/revoke', 'POST'); revoked = true; } }
   catch {} finally {
     if (exited || !session.isCurrent(version)) return;
-    forgetPairing(revoked ? t('接続を解除しました。') : t('端末の設定を削除しました。Macに接続できなかったため、Mac側でも接続を解除してください。'));
+    forgetPairing(revoked ? t('接続を解除しました。') : t('この端末の接続設定を削除しました。Mac側の解除は未確認です。Macの「Evenの接続設定」→「Evenの接続をすべて解除」で解除してください。ほかのEven接続も解除されます。'));
     busy = false; display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
   }
 };
