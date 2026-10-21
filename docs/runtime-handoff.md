@@ -1,6 +1,6 @@
 # Runtime handoff
 
-Status: implementation plan for #124; not a released capability.
+Status: implemented on the #124 integration branch; integrated review and physical acceptance are pending. Not a released capability.
 
 ## Outcome
 
@@ -74,10 +74,12 @@ preserve shared pairing. Revocation still prevents future acquisition.
 
 A successful authentication refresh retries the failed update inside the same
 operation. For other transient failures after a successful connection, allow a
-short, bounded recovery interval before showing offline. A timer must reveal a
+two-second recovery interval after the first failed poll before showing offline. A timer must reveal a
 sustained failure even if the retry hangs. Initial connection, explicit browser
 network loss, revocation and supersession are distinct states and must not be
-hidden by the grace interval. Keep normal input/delivery semantics and retry
+hidden by the grace interval. The interval is additional to the existing transport
+timeout; it is not a guarantee of detecting silent network loss within two seconds.
+Keep normal input/delivery semantics and retry
 idempotency; do not turn uncertain delivery into a duplicate send.
 
 ## Acceptance
@@ -92,8 +94,9 @@ Automated checks must cover:
   and global revoke; no stale owner can restore revoked access.
 - Existing legacy records, legacy-before-adoption, old callers after adoption,
   new-client/old-server negotiation, and malformed protocol envelopes.
-- Late asynchronous work cannot erase pairing, change consent, overwrite the new
-  display or close native resources belonging to the replacement runtime.
+- After supersession is received, queued asynchronous work cannot erase pairing,
+  change consent, dispatch more display writes or close native resources belonging
+  to the replacement runtime.
 - Successful recovery without offline flicker; sustained failure becomes visible
   within the bounded interval; cancellation removes timers and stale callbacks.
 
@@ -102,6 +105,14 @@ Even and Mac surfaces. Run one bounded session covering reopen, repeated reopen,
 background use, normal voice/text/reply delivery, temporary network interruption,
 recovery and explicit disconnect. Check in-flight work for loss or duplication;
 do not claim seamless handoff of native recording without physical evidence.
+The SDK cannot cancel a native operation already dispatched before supersession.
+The old runtime learns of ownership loss through its next failed request/poll;
+server authorization fences access immediately, but native retirement is not an
+instantaneous cross-WebView transaction. Physical checks must include a reopen
+while recording, processing speech, displaying a reply and sharing location.
+Unsent text remains selectable in a retired view. An in-progress recording is not
+transferred between runtimes, and no seamless recording handoff is claimed.
+
 The initial acceptance ends only when the integrated behavior is assessed and
 passed, failed and unverified checks are recorded together.
 

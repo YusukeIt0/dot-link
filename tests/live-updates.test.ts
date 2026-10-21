@@ -44,3 +44,40 @@ test('completed restores stay incremental on reconnect; explicit new sessions re
   loop.start(false,'externally-applied');calls[6]({revision:'incremental'});await tick();
   assert.deepEqual(flags,[true,false,true,false]);
 });
+
+const microtasks = async () => { for (let n = 0; n < 30; n++) await Promise.resolve(); };
+function recoveryFixture() {
+  const calls: {resolve(value: {revision: string}): void; reject(error: Error): void}[] = [];
+  let failures = 0;
+  const loop = new LiveUpdates<{revision: string}>(() => new Promise((resolve, reject) => calls.push({resolve, reject})), () => {}, () => failures++);
+  return {loop, calls, failures: () => failures};
+}
+test('brief recovery stays online; a hanging retry becomes visible within the grace interval', async t => {
+  t.mock.timers.enable({apis: ['setTimeout', 'Date'], now: 10000});
+  const f = recoveryFixture(); t.after(() => f.loop.stop());
+  f.loop.start(); f.calls[0].resolve({revision: 'first'}); await microtasks();
+  f.calls[1].reject(new Error('temporary')); await microtasks();
+  assert.equal(f.failures(), 0);
+  t.mock.timers.tick(1000); await microtasks();
+  f.calls[2].resolve({revision: 'recovered'}); await microtasks();
+  t.mock.timers.tick(2000); assert.equal(f.failures(), 0);
+  f.calls[3].reject(new Error('long outage')); await microtasks();
+  t.mock.timers.tick(1000); await microtasks(); // retry now hangs
+  t.mock.timers.tick(999); assert.equal(f.failures(), 0);
+  t.mock.timers.tick(1); assert.equal(f.failures(), 1);
+  t.mock.timers.tick(10000); assert.equal(f.failures(), 1);
+});
+test('initial failure is immediate; foreground restarts cannot extend the grace and stop removes it', async t => {
+  t.mock.timers.enable({apis: ['setTimeout', 'Date'], now: 10000});
+  const f = recoveryFixture(); t.after(() => f.loop.stop());
+  f.loop.start(true); f.calls[0].reject(new Error('initial')); await microtasks();
+  assert.equal(f.failures(), 1);
+  f.loop.start(); f.calls[1].resolve({revision: 'connected'}); await microtasks();
+  f.calls[2].reject(new Error('outage')); await microtasks();
+  t.mock.timers.tick(1500); await microtasks(); f.loop.start();
+  t.mock.timers.tick(499); assert.equal(f.failures(), 1);
+  t.mock.timers.tick(1); assert.equal(f.failures(), 2);
+  f.calls.at(-1)!.resolve({revision: 'again'}); await microtasks();
+  f.calls.at(-1)!.reject(new Error('cancelled outage')); await microtasks();
+  f.loop.stop(); t.mock.timers.tick(10000); assert.equal(f.failures(), 2);
+});

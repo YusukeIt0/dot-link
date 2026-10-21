@@ -1,5 +1,7 @@
 export type Language = 'ja' | 'en';
 const translations = {
+  '新しい画面へ接続を引き継ぎました': 'Connection moved to the new view',
+  'この画面は停止しました。続きは新しく開いたDot Linkで行ってください。未送信のテキストはこの画面からコピーできます。': 'This view has stopped. Continue in the newly opened Dot Link. You can copy unsent text from this view.',
   'スマートフォンでテキストを入力してください': 'Type a message on your phone',
   '長押し録音は無効です': 'Hold-to-record is disabled',
   '録音ボタンで停止します': 'Use the recording button to stop',

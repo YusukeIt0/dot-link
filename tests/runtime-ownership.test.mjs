@@ -77,7 +77,12 @@ function relayFixture(fetcher, saved = credentials) {
   const map = new Map(), rejected = [];
   const settings = new RelaySettings(() => ({getItem: k => map.get(k) ?? null, setItem: (k, v) => map.set(k, v), removeItem: k => map.delete(k)}));
   if (saved) settings.save(saved);
-  const session = new RelaySession({settings, legacyToken: '', appOrigin: 'https://app.example', fetch: fetcher,
+  const legacyFetch = (url, init) => {
+    if (url.endsWith('/api/pair/resume') && JSON.parse(init.body).runtime?.action === 'inspect')
+      return Promise.resolve(Response.json({error: 'Invalid pairing request'}, {status: 400}));
+    return fetcher(url, init);
+  };
+  const session = new RelaySession({settings, legacyToken: '', appOrigin: 'https://app.example', fetch: legacyFetch,
     rejected: reason => rejected.push(reason), persistenceFailed() {}});
   return {session, settings, rejected};
 }
@@ -116,4 +121,15 @@ test('location stop captures credentials and survives the ordinary session exit'
   s.session.stop(); s.session.forget(); assert.equal(init.signal.aborted, false);
   assert.equal(init.headers.Authorization, `Bearer ${credentials.token}`);
   resolve(new Response('{}')); await stop;
+});
+
+test('retirement fences each queued status container after an in-flight write', async () => {
+  const s = displayFixture(), release = s.gate();
+  s.display.refreshStatus(); await flush(); s.display.stop(); release(); await flush();
+  assert.equal(s.calls.length, 1);
+});
+test('handoff drops local playback queues without cancelling replacement native speech', () => {
+  const s = speechFixture(); let cancelled = 0; s.synthesis.cancel = () => cancelled++;
+  const old = {}; s.playback.speak(old); s.playback.stop(false); old.onerror();
+  assert.equal(cancelled, 0); assert.equal(s.timers.size, 0); assert.equal(s.failures(), 0);
 });

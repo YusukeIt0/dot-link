@@ -53,12 +53,12 @@ export class SpeechPlayback {
     this.generation++; this.count = 0;
     this.options.synthesis()?.cancel(); this.finishCooldown();
   }
-  stop(): void {
+  stop(cancelNative = true): void {
     if (this.stopped) return;
     this.stopped = true;
     this.options.cancelTimer(this.cooldownTimer); this.options.cancelTimer(this.recoveryTimer);
     this.generation++; this.count = 0; this.deferred.length = 0;
-    this.options.synthesis()?.cancel();
+    if (cancelNative) this.options.synthesis()?.cancel();
   }
   private monitorCompletion(): void {
     this.options.cancelTimer(this.recoveryTimer);

@@ -40,6 +40,7 @@ export class LocationSharing {
   private removeListener?: () => void;
   private ready = false;
   private disposed = false;
+  private abandoned = false;
   private revision = 0;
   private nativeChain = Promise.resolve();
   private nativeStarted = false;
@@ -81,6 +82,7 @@ export class LocationSharing {
       typeof message.location_expires_at === 'string' && Date.parse(message.location_expires_at) > this.now();
   }
   async attach(native: NativeLocation): Promise<void> {
+    if (this.disposed) return;
     this.native = native;
     const revision = this.revision;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -113,18 +115,22 @@ export class LocationSharing {
     void this.pump();
   }
   receive(status: LocationRelayStatus) {
+    if (this.disposed) return;
     this.relayStatus = status;
     if (this.session?.enabled && status.locationSharing === false) this.session.enabled = false;
     this.changed();
   }
   private persist() {
+    if (this.abandoned) return;
     const raw = JSON.stringify(this.preferences);
     let local = false;
     try { this.storage().setItem(KEY, raw); local = true; } catch {}
     const native = this.native;
     this.writes = this.writes.then(async () => {
+      if (this.abandoned) return;
       let saved = false;
       try { saved = !!native && await native.setLocalStorage(KEY, raw); } catch {}
+      if (this.abandoned) return;
       this.saved = saved || local; this.changed();
     });
   }
@@ -139,16 +145,18 @@ export class LocationSharing {
   private syncNative() {
     this.nativeChain = this.nativeChain.then(async () => {
       const native = this.native;
-      if (!native || !this.ready) return;
+      if (!native || !this.ready || this.abandoned) return;
       const enabled = this.preferences.enabled && !this.disposed && !!this.target() && this.preferences.origin === this.target();
       if (enabled && !this.nativeStarted && !this.nativeFailed) {
         this.state = 'starting'; this.changed();
         try {
           const ok = await native.startAppLocationUpdates({ accuracy: AppLocationAccuracy.High, intervalMs: 15_000, distanceFilter: 25 });
+          if (this.abandoned) return;
           if (!ok) throw new Error('Location unavailable');
           this.nativeStarted = true;
         } catch { this.nativeFailed = true; this.state = 'unavailable'; }
       }
+      if (this.abandoned) return;
       // An off click may have arrived while native permission/start was awaiting.
       if (this.nativeStarted && (!this.preferences.enabled || this.disposed || this.preferences.origin !== this.target())) {
         try { if (await native.stopAppLocationUpdates()) this.nativeStarted = false; } catch {}
@@ -157,13 +165,16 @@ export class LocationSharing {
     });
   }
   private async flushStops(): Promise<void> {
+    if (this.abandoned) return;
     if (this.stopping) return this.stopping;
     const operation = (async () => {
       const target = this.target();
       for (const stop of [...this.preferences.stops]) {
+        if (this.abandoned) return;
         if (!target || stop.origin !== target) continue;
         try {
           await this.api('/api/location/control', { sharing_id: stop.sharing_id, enabled: false });
+          if (this.abandoned) return;
           this.preferences.stops = this.preferences.stops.filter(s => s.sharing_id !== stop.sharing_id); this.persist();
         } catch { if (!this.preferences.enabled) this.state = 'stopping'; return; }
       }
@@ -174,7 +185,7 @@ export class LocationSharing {
     try { await operation; } finally { if (this.stopping === operation) this.stopping = undefined; }
   }
   async pump(): Promise<void> {
-    if (this.working || !this.ready) return;
+    if (this.working || !this.ready || this.abandoned) return;
     this.working = true;
     try {
       const target = this.target();
@@ -185,6 +196,7 @@ export class LocationSharing {
       this.syncNative();
       // Revocations do not wait behind a native permission prompt.
       await this.flushStops();
+      if (this.abandoned) return;
       if (this.preferences.stops.some(s => s.origin === target)) { this.state = this.preferences.enabled ? 'offline' : 'stopping'; return; }
       if (!this.preferences.enabled || this.disposed) { this.state = this.preferences.stops.some(s => s.origin === target) ? 'stopping' : 'off'; return; }
       if (!target) { this.state = 'offline'; return; }
@@ -219,10 +231,18 @@ export class LocationSharing {
       this.relayStatus = status as LocationRelayStatus;
       this.state = fix ? 'sharing' : this.latest ? 'stale' : 'waiting';
     } catch { if (this.preferences.enabled) { this.state = 'offline'; if (this.session) this.session.enabled = false; } }
-    finally { this.working = false; this.changed(); }
+    finally { this.working = false; if (!this.abandoned) this.changed(); }
+  }
+  /** Ownership handoff cancels only local work, never shared consent/native state. */
+  abandon(): void {
+    this.abandoned = true; this.disposed = true; this.revision++;
+    if (this.timer) clearInterval(this.timer);
+    this.removeListener?.(); this.removeListener = undefined;
+    this.session = undefined; this.latest = undefined;
   }
   /** Explicit glasses-app exit ends the live session; the saved preference resumes on next launch. */
   async stop(): Promise<void> {
+    if (this.abandoned) return;
     this.disposed = true; this.revision++;
     if (this.timer) clearInterval(this.timer);
     this.removeListener?.(); this.stopCurrent(); this.persist(); this.syncNative();
@@ -230,7 +250,9 @@ export class LocationSharing {
     const target = this.target();
     for (const stop of [...this.preferences.stops]) {
       if (stop.origin !== target) continue;
+      if (this.abandoned) return;
       try { await this.api('/api/location/control', {sharing_id: stop.sharing_id, enabled: false});
+        if (this.abandoned) return;
         this.preferences.stops = this.preferences.stops.filter(s => s.sharing_id !== stop.sharing_id); this.persist(); } catch {}
     }
   }
