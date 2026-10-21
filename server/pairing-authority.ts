@@ -1,8 +1,9 @@
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { chmodSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { appOrigin, relayOrigin, type PairingInvite } from '../src/relay-origin.ts';
 import { pairingGeneration, currentPairingGeneration } from './pairing-generation.ts';
+import { runtimeGeneration, runtimeId, runtimeRecoveryRequest, type RuntimeRecoveryRequest } from '../src/runtime-recovery.ts';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const valid = (value: string) => /^[A-Za-z0-9_-]{43}$/.test(value);
@@ -12,6 +13,15 @@ const packagedSource = (origin: string): boolean => {
   try { return appOrigin(origin).startsWith('http://127.0.0.1:'); } catch { return false; }
 };
 const SESSION_LIFETIME = 90 * 24 * 60 * 60 * 1000;
+
+interface RuntimeOwner { id: string; generation: number; origin: string; nonce: string; }
+interface RecoveryRecord { currentSession: string; expiresAt: number; generation?: string; runtimeOwner?: RuntimeOwner; }
+interface RecoveryCredentials { token: string; expiresAt: number; resumeToken: string; }
+export type RuntimeRecoveryResult =
+  | { kind: 'inspected'; generation: number }
+  | { kind: 'resumed'; generation: number; credentials: RecoveryCredentials }
+  | { kind: 'superseded' }
+  | { kind: 'invalid' };
 
 /** Credentials never reach the Dot MCP. Only hashes are retained on disk.
  * Each invitation/session has a separate file; CLI revocation cannot overwrite
@@ -27,6 +37,72 @@ export class PairingAuthority {
     }
   }
   private path(kind: 'invitations' | 'sessions' | 'recoveries', secret: string): string { return join(this.directory, kind, `${digest(secret)}.json`); }
+  private recovery(secret: string): RecoveryRecord | undefined {
+    if (!valid(secret)) return;
+    try {
+      const record: RecoveryRecord = JSON.parse(readFileSync(this.path('recoveries', secret), 'utf8'));
+      if (!currentPairingGeneration(record, pairingGeneration(this.directory)) ||
+        !Number.isFinite(record.expiresAt) || record.expiresAt <= this.clock() || !fileName.test(`${record.currentSession}.json`)) return;
+      const owner = record.runtimeOwner;
+      if (owner !== undefined && (!owner || !runtimeId(owner.id) || !runtimeGeneration(owner.generation) ||
+        owner.generation === 0 || !packagedSource(owner.origin) || !/^[a-f0-9]{64}$/.test(owner.nonce))) return;
+      return record;
+    } catch { return; }
+  }
+
+  /** Once adopted, old recovery callers must not take ownership back. */
+  managedRuntime(secret: string): boolean { return !!this.recovery(secret)?.runtimeOwner; }
+
+  /** Startup acquisition uses compare-and-swap; recovery can only renew its owner.
+   * A lost response is retried with the original claim, never a newer generation.
+   * The nonce is not a credential: deriving a session also requires the secret.
+   */
+  recoverRuntime(secret: string, origin: string, input: RuntimeRecoveryRequest): RuntimeRecoveryResult {
+    const request = runtimeRecoveryRequest(input);
+    const record = this.recovery(secret);
+    if (!request || !record || !packagedSource(origin)) return { kind: 'invalid' };
+    const owner = record.runtimeOwner;
+    const current = owner?.generation ?? 0;
+    if (request.action === 'inspect') return { kind: 'inspected', generation: current };
+    if (request.action === 'renew') {
+      if (!owner || owner.id !== request.id || owner.origin !== origin || owner.generation !== request.generation) return { kind: 'superseded' };
+      return this.runtimeCredentials(secret, record, owner);
+    }
+    if (owner?.id === request.id && owner.origin === origin && request.expectedGeneration === current - 1) {
+      return this.runtimeCredentials(secret, record, owner);
+    }
+    if (request.expectedGeneration !== current || owner?.id === request.id || !runtimeGeneration(current + 1)) return { kind: 'superseded' };
+    const next: RuntimeOwner = { id: request.id, origin, generation: current + 1, nonce: randomBytes(32).toString('hex') };
+    const token = this.runtimeToken(secret, record, next);
+    const sessionPath = this.path('sessions', token);
+    writeFileSync(sessionPath, JSON.stringify(this.runtimeSession(secret, record, next)), { mode: 0o600, flag: 'wx' });
+    const recoveryPath = this.path('recoveries', secret), temporary = `${recoveryPath}.next`;
+    try {
+      writeFileSync(temporary, JSON.stringify({ ...record, currentSession: digest(token), runtimeOwner: next }), { mode: 0o600 });
+      renameSync(temporary, recoveryPath);
+    } catch (error) { try { unlinkSync(sessionPath); } catch {} throw error; }
+    try { unlinkSync(join(this.directory, 'sessions', `${record.currentSession}.json`)); } catch {}
+    return { kind: 'resumed', generation: next.generation, credentials: { token, expiresAt: record.expiresAt, resumeToken: secret } };
+  }
+  private runtimeToken(secret: string, record: RecoveryRecord, owner: RuntimeOwner): string {
+    return createHmac('sha256', secret).update(JSON.stringify([
+      'dot-link-runtime-v1', owner.id, owner.generation, owner.origin, owner.nonce, record.expiresAt, record.generation ?? 'initial',
+    ])).digest('base64url');
+  }
+  private runtimeSession(secret: string, record: RecoveryRecord, owner: RuntimeOwner) {
+    return { origin: owner.origin, expiresAt: record.expiresAt, recoveryHash: digest(secret), generation: record.generation ?? 'initial' };
+  }
+  private runtimeCredentials(secret: string, record: RecoveryRecord, owner: RuntimeOwner): RuntimeRecoveryResult {
+    const token = this.runtimeToken(secret, record, owner);
+    if (digest(token) !== record.currentSession) return { kind: 'invalid' };
+    const path = this.path('sessions', token), expected = JSON.stringify(this.runtimeSession(secret, record, owner));
+    // Recover a lost session file without rotating ownership or its credential.
+    try { if (readFileSync(path, 'utf8') === expected) return { kind: 'resumed', generation: owner.generation, credentials: { token, expiresAt: record.expiresAt, resumeToken: secret } }; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
+    const temporary = `${path}.next`;
+    writeFileSync(temporary, expected, { mode: 0o600 }); renameSync(temporary, path);
+    return { kind: 'resumed', generation: owner.generation, credentials: { token, expiresAt: record.expiresAt, resumeToken: secret } };
+  }
   private prune(kind: 'invitations' | 'sessions' | 'recoveries'): number {
     let active = 0;
     const generation = pairingGeneration(this.directory);
@@ -132,9 +208,8 @@ export class PairingAuthority {
    */
   resume(secret: string, origin: string): { token: string; expiresAt: number; resumeToken: string } | undefined {
     if (!valid(secret) || !packagedSource(origin)) return;
-    let record: { currentSession: string; expiresAt: number; generation?: string };
-    try { record = JSON.parse(readFileSync(this.path('recoveries', secret), 'utf8')); } catch { return; }
-    if (!currentPairingGeneration(record, pairingGeneration(this.directory))) return;
+    const record = this.recovery(secret);
+    if (!record || record.runtimeOwner) return;
     const generation = record.generation ?? 'initial';
     if (!Number.isFinite(record.expiresAt) || record.expiresAt <= this.clock() || !/^[a-f0-9]{64}$/.test(record.currentSession)) return;
     const token = randomBytes(32).toString('base64url');
