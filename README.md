@@ -68,6 +68,7 @@ The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyw
 ### 4. Start a conversation
 
 - **Hold to talk:** hold to speak on G2 and release to stop recording.
+- **Disable hold-to-record:** in **Operation settings**, enable this to ignore accidental long presses on the glasses (for example, with wet or sweaty controls). The choice is saved; the default keeps hold-to-record enabled. When enabled, use Hey XX or text input; the phone button cannot start manual recording either. Wake listening is not enabled automatically. Enabling this setting discards an ongoing manual recording.
 - **Hey dot:** with Even app **0.3.1 or later**, open **Operation settings** in the phone companion and enable **Talk with Hey XX** (off by default). Say “Hey dot” in English or Japanese pronunciation, wait for **Go ahead** on G2, then speak. A short silence ends recording. Say the cue again for each new turn. In 0.3.4 or later, you can also enable **Change the name**, enter 1–24 ASCII letters, and save. Custom names use English pronunciation; Even, Siri and Meta are reserved.
 - **Type:** write and send a message in the Even companion.
 

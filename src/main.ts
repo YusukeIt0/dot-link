@@ -399,6 +399,8 @@ transcript.oninput = () => { sendButton.disabled = busy || !transcript.value.tri
 let bridge: EvenAppBridge | undefined;
 let clip: Uint8Array | undefined;
 let discarding = false;
+let holdRecording = false;
+let operationPreferencesReady = false;
 let transcriptionController: AbortController | undefined;
 let lastDisplayText = t('長押しで話してください');
 let renderDisplayText: () => string = () => t('長押しで話してください');
@@ -414,7 +416,9 @@ function keepWakeConversation(): boolean {
   return recorder.source === 'wake' && !!conversation.visible;
 }
 function idleVoicePrompt(): string {
-  return operationPreferences.wakeWord && wakeState === 'listening' ? wakeText('{wake} または長押しで話してください') : t('長押しで話してください');
+  const wake = operationPreferences.wakeWord && wakeState === 'listening';
+  if (operationPreferences.disableHoldRecording) return wake ? wakeText('{wake}で話せます') : t('スマートフォンでテキストを入力してください');
+  return wake ? wakeText('{wake} または長押しで話してください') : t('長押しで話してください');
 }
 function wakeText(key: Parameters<typeof t>[0]): string { return t(key).replace('{wake}', `Hey ${wakeNamePreferences.wakeName}`); }
 function renderWakeState(): void {
@@ -433,7 +437,7 @@ const g2Display = new G2Display({
   ready: () => !!bridge && glassesReady,
   hidden: () => standby?.hidden ?? false,
   frame: () => ({status: hudCaption(), conversation: wrapHudText(lastDisplayText),
-    help: t('長押しで録音 · 指を離すと停止'), speech: speechDisplayCaption(), receipt: currentReceipt(), newReplies: currentNewReplies()}),
+    help: recordingHint(), speech: speechDisplayCaption(), receipt: currentReceipt(), newReplies: currentNewReplies()}),
   writer: () => {
     const activeBridge = bridge!;
     return (containerID, containerName, content) => activeBridge.textContainerUpgrade(new TextContainerUpgrade({
@@ -492,12 +496,12 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status']) {
+  for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status', 'hold-save-status']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
   recordButton.textContent = recorder.state === 'idle' ? t('録音を開始') : recorder.state === 'stop-error' ? t('マイク停止を再試行') : t('録音を停止');
-  renderWakeState();
+  renderWakeState(); renderOperationSettings();
   el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
   if (!namedHost) hostName = t('接続先');
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
@@ -517,7 +521,7 @@ const recorder = new VoiceInput({
   loadWake: loadWakeDetector,
   onWakeState: state => { wakeState = state; renderWakeState(); },
   onClip: (wav, _seconds, source, capturedWakeName) => {
-    if (exited || discarding) { wav.fill(0); return; }
+    if (exited || discarding || (source === 'manual' && operationPreferences.disableHoldRecording)) { wav.fill(0); return; }
     transcriptionController?.abort();
     const controller = new AbortController(); transcriptionController = controller;
     const version = session.version;
@@ -554,8 +558,9 @@ const recorder = new VoiceInput({
   },
   onState: state => {
     try {
+      if (state === 'idle') holdRecording = false;
       recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
-      recordButton.disabled = !glassesReady || state === 'stopping';
+      recordButton.disabled = !glassesReady || state === 'stopping' || (state === 'idle' && operationPreferences.disableHoldRecording);
       // Session loss stops capture too. Its completion must not overwrite the
       // reconnection explanation or re-enter recognition without a pairing.
       if (!session.token && (state === 'stopping' || state === 'idle')) {
@@ -570,11 +575,11 @@ const recorder = new VoiceInput({
       if (state === 'idle' && !clip && !busy) {
         progress.setPhase('idle');
         if (keepWakeConversation()) updateRuntime();
-        else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。'));
+        else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : (operationPreferences.disableHoldRecording ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。')));
       }
       if (state === 'idle' && conversation.hasPendingDisplay) flushPendingDisplay();
       if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
-      if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => t('指を離すと停止します')); }
+      if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => holdRecording ? t('指を離すと停止します') : t('録音ボタンで停止します')); }
       if (state === 'recording') {
         standby?.activity();
         discardButton.disabled = false;
@@ -583,7 +588,7 @@ const recorder = new VoiceInput({
           audioTraceId = undefined; clearClip(); discardButton.disabled = false;
           if (keepWakeConversation()) updateRuntime();
           else display(() => t('話してください'), () => el<HTMLInputElement>('auto-send').checked ? t('話し終わると送信します') : t('話し終わると認識します'));
-        } else display(() => t('録音中'), () => `${t('指を離すと停止します')}\n${t('最長30秒')}`);
+        } else display(() => t('録音中'), () => `${holdRecording ? t('指を離すと停止します') : t('録音ボタンで停止します')}\n${t('最長30秒')}`);
       }
     } finally { syncRuntimeEffects(); }
   },
@@ -664,23 +669,52 @@ el<HTMLFormElement>('wake-name-form').onsubmit = event => {
 renderWakeNameControls();
 void recorder.setWakeName(wakeNamePreferences.wakeName);
 
+function recordingHint(): string {
+  return operationPreferences.disableHoldRecording ? t('長押し録音は無効です') : t('長押しで録音 · 指を離すと停止');
+}
+function renderOperationSettings(): void {
+  el<HTMLInputElement>('disable-hold-recording').checked = operationPreferences.disableHoldRecording;
+  recordButton.disabled = !glassesReady || recorder.state === 'stopping' || (recorder.state === 'idle' && (!operationPreferencesReady || operationPreferences.disableHoldRecording));
+  el('recording-hint').textContent = recordingHint();
+}
+function refreshIdleVoicePrompt(): void {
+  renderOperationSettings();
+  if (recorder.state === 'idle' && progress.phase === 'idle' && !conversation.selected && !busy) {
+    display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? idleVoicePrompt() : t('スマートフォンで接続設定を開いてください'));
+  } else queueDisplayFrame();
+}
+renderOperationSettings();
+el<HTMLInputElement>('disable-hold-recording').onchange = () => {
+  const disabled = el<HTMLInputElement>('disable-hold-recording').checked;
+  const saved = operationPreferences.saveDisableHoldRecording(disabled);
+  if (disabled && recorder.source === 'manual' && recorder.state !== 'idle') {
+    discarding = true;
+    void recorder.stop(true);
+  }
+  refreshIdleVoicePrompt();
+  void saved.then(saved => {
+    if (!exited) el('hold-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
+  });
+};
+
 el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
 el<HTMLInputElement>('wake-word').onchange = () => {
   const enabled = el<HTMLInputElement>('wake-word').checked;
   const saved = operationPreferences.save(enabled);
-  void recorder.setEnabled(enabled);
+  void recorder.setEnabled(enabled).then(() => { if (!exited) refreshIdleVoicePrompt(); });
   void saved.then(saved => {
     if (!exited) el('operation-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
   });
 };
 
-function startRecording(): void {
-  if (exited) return;
+function startRecording(fromHold = false): void {
+  if (exited || !operationPreferencesReady || operationPreferences.disableHoldRecording) return;
   if (!glassesReady) { notice.textContent = t('G2との接続と起動状態を確認し、Dot Linkを開き直してください。'); return; }
   if (busy) { notice.textContent = t('処理が終わるまでお待ちください。'); return; }
   if (!session.token || !subscribed || progress.connection !== 'online') { notice.textContent = getLanguage() === 'ja' ? `${hostName}とDotへの接続を確認してください。` : `Check the connection to ${hostName} and Dot.`; return; }
   standby?.activity();
   if (playback.active) playback.cancel();
+  holdRecording = fromHold;
   void recorder.start();
 }
 recordButton.onclick = () => recorder.state === 'idle' ? startRecording() : void recorder.stop();
@@ -690,7 +724,7 @@ function showDiscarded(): void {
   progress.setPhase('idle');
   if (keepWakeConversation()) updateRuntime();
   else if (recorder.source === 'manual' && conversation.selected) showMessage();
-  else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : t('長押しで話してください'));
+  else display(() => t('G2接続済み'), idleVoicePrompt);
   flushPendingDisplay();
 }
 discardButton.onclick = () => {
@@ -728,9 +762,9 @@ async function connect(): Promise<void> {
       new TextContainerProperty({ containerID: 1, containerName: 'status', xPosition: 8, yPosition: 8,
         width: 215, height: 36, content: 'Dot Link' }),
       new TextContainerProperty({ containerID: 2, containerName: 'conversation', xPosition: 8, yPosition: 50,
-        width: 560, height: 130, isEventCapture: 1, content: t('長押しで話してください') }),
+        width: 560, height: 130, isEventCapture: 1, content: t('接続を確認中') }),
       new TextContainerProperty({ containerID: 3, containerName: 'help', xPosition: 8, yPosition: 244,
-        width: 560, height: 36, content: t('長押しで録音 · 指を離すと停止') }),
+        width: 560, height: 36, content: recordingHint() }),
       new TextContainerProperty({ containerID: 4, containerName: 'speech', xPosition: 8, yPosition: 188,
         width: 560, height: 52, content: speechDisplayCaption() }),
       new TextContainerProperty({ containerID: 5, containerName: 'receipt', xPosition: 422, yPosition: 8,
@@ -753,6 +787,11 @@ async function connect(): Promise<void> {
   exitDiagnostics.record('ready');
   void Promise.all([operationPreferences.attach(appBridge), wakeNamePreferences.attach(appBridge)]).then(async () => {
     if (exited) return;
+    operationPreferencesReady = true;
+    if (operationPreferences.disableHoldRecording && recorder.source === 'manual' && recorder.state !== 'idle') {
+      discarding = true; void recorder.stop(true);
+    }
+    refreshIdleVoicePrompt();
     // Preserve an explicitly marked unsaved draft; the wake label below uses
     // the restored active name until the user saves the draft.
     if (!wakeNameEdited) renderWakeNameControls();
@@ -760,7 +799,8 @@ async function connect(): Promise<void> {
     if (exited) return;
     renderWakeState(); updateRuntime();
     el<HTMLInputElement>('wake-word').checked = operationPreferences.wakeWord;
-    void recorder.setEnabled(operationPreferences.wakeWord);
+    await recorder.setEnabled(operationPreferences.wakeWord);
+    if (!exited) refreshIdleVoicePrompt();
   });
   standby?.start();
   void syncHeadRaise();
@@ -773,13 +813,13 @@ async function connect(): Promise<void> {
   g2Display.invalidate();
   connection.textContent = t('Even Hub接続済み');
   notice.textContent = '';
-  recordButton.disabled = false;
+  renderOperationSettings();
   // History may finish loading before the Even bridge is ready. Repaint it
   // now: later polls with unchanged history otherwise never update the G2.
   if (conversation.selected) {
     showMessage();
   } else {
-    display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? t('長押しで話してください') : t('スマートフォンで接続設定を開いてください'));
+    display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? idleVoicePrompt() : t('スマートフォンで接続設定を開いてください'));
   }
   appBridge.onEvenHubEvent(event => {
     exitDiagnostics.observe(event, exited);
@@ -803,11 +843,14 @@ async function connect(): Promise<void> {
     const isGesture = isSingle || [OsEventTypeList.DOUBLE_CLICK_EVENT, OsEventTypeList.SCROLL_TOP_EVENT,
       OsEventTypeList.SCROLL_BOTTOM_EVENT, OsEventTypeList.LONG_PRESS_EVENT, OsEventTypeList.LONG_PRESS_RELEASE_EVENT].includes(eventType!);
     if (!isGesture) return;
+    // Ignore both edges before waking the display or touching any recording.
+    if ((eventType === OsEventTypeList.LONG_PRESS_EVENT || eventType === OsEventTypeList.LONG_PRESS_RELEASE_EVENT)
+      && (!operationPreferencesReady || operationPreferences.disableHoldRecording)) return;
     if (isSingle || eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
       if (standby?.tap(isSingle ? 'single' : 'double')) return;
     } else if (standby?.hidden && eventType !== OsEventTypeList.LONG_PRESS_EVENT && eventType !== OsEventTypeList.LONG_PRESS_RELEASE_EVENT) return;
     if (hasInput) standby?.activity();
-    if (eventType === OsEventTypeList.LONG_PRESS_EVENT) startRecording();
+    if (eventType === OsEventTypeList.LONG_PRESS_EVENT) startRecording(true);
     if (eventType === OsEventTypeList.SCROLL_TOP_EVENT) el('previous').click();
     if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) el('next').click();
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {

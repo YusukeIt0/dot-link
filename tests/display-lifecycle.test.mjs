@@ -52,7 +52,7 @@ async function launch(options = {}) {
       physical.set(update.containerID, update.content); return true;
     },
     onEvenHubEvent(callback) { receiver = callback; },
-    async audioControl(open) { calls.push(['mic', open]); return true; },
+    async audioControl(open) { calls.push(['mic', open]); return options.microphone?.(open) ?? true; },
     async imuControl(open) { calls.push(['imu', open]); return true; },
     async shutDownPageContainer(mode) { calls.push(['exit', mode]); return true; },
     async getLocalStorage(k) { return options.nativeRead?.(k) ?? nativeSaved.get(k) ?? ''; },
@@ -66,6 +66,7 @@ async function launch(options = {}) {
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
     LocationSharing: class extends dependencies.LocationSharing { constructor(options) { super({...options, now: () => epoch + now, automatic: false}); } },
+    loadWakeDetector: options.loadWake ?? dependencies.loadWakeDetector,
     exitDiagnosticsFlag: options.exitDiagnostics ? '1' : '0',
     // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
     installKeyboardViewport: () => () => {},
@@ -769,4 +770,132 @@ test('a reply deferred during recording is spoken once recording ends without pr
  assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
  await app.advance(2000);
  assert.equal(app.calls.filter(c=>c[0]==='speech').length,1);
+});
+
+async function setHoldDisabled(app, disabled) {
+  app.element('disable-hold-recording').checked = disabled;
+  app.element('disable-hold-recording').onchange();
+  await flush();
+}
+const holdEvent = {sysEvent:{eventType:sdk.OsEventTypeList.LONG_PRESS_EVENT}};
+const releaseEvent = {sysEvent:{eventType:sdk.OsEventTypeList.LONG_PRESS_RELEASE_EVENT}};
+test('disabled holds ignore every event envelope without waking the display; text still sends', async t => {
+  const app=await launch({typedInput:true});t.after(app.close);
+  await setHoldDisabled(app,true);
+  assert.equal(app.element('record').disabled,true);
+  assert.match(app.element('hud-content').textContent,/テキスト/);
+  assert.equal(app.nativeSaved.get('dot-disable-hold-recording-v1'),'true');
+  await app.advance(30000);assert.equal(app.hidden(),true);
+  const before=app.calls.filter(c=>c[0]==='mic').length;
+  for (const envelope of ['sysEvent','textEvent','listEvent']) {
+    for (let i=0;i<3;i++) {
+      await app.emit({[envelope]:{eventType:sdk.OsEventTypeList.LONG_PRESS_EVENT}});
+      await app.emit({[envelope]:{eventType:sdk.OsEventTypeList.LONG_PRESS_RELEASE_EVENT}});
+    }
+  }
+  assert.equal(app.hidden(),true);
+  assert.equal(app.calls.filter(c=>c[0]==='mic').length,before);
+  // Even an invoked handler cannot bypass the disabled phone button.
+  await app.element('record').onclick();await flush();
+  assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+  app.element('transcript').value='Synthetic text while holds disabled';app.element('transcript').oninput();
+  await app.element('send').onclick();await flush();
+  assert.ok(app.networkCalls.some(url=>url.endsWith('/api/utterances')));
+  await setHoldDisabled(app,false);
+  await app.emit(holdEvent);
+  assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+  await app.emit(releaseEvent);
+  assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+});
+
+test('enabling the option discards an active manual recording without transcribing or sending', async t => {
+  for (const fromPhone of [false,true]) {
+    const app=await launch();t.after(app.close);
+    if(fromPhone) await app.element('record').onclick();else await app.emit(holdEvent);
+    await flush();assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+    await app.emit({audioEvent:{audioPcm:new Uint8Array(16000),source:sdk.AudioInputSource.Glasses}});
+    await setHoldDisabled(app,true);
+    assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+    assert.ok(app.calls.some(c=>c[0]==='mic'&&c[1]===false));
+    assert.equal(app.networkCalls.some(url=>/transcribe|utterances/.test(url)),false);
+    assert.equal(app.element('record').disabled,true);
+    await app.emit(releaseEvent);
+    assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+  }
+});
+
+test('wake input stays independent and disabled hold edges cannot take over or stop it', async t => {
+  let wake;
+  const detector={listen(){},cancel(){},hold(){assert.fail('disabled hold took over wake');},finish(){wake({type:'clip',seconds:1});},append(){},dispose(){}};
+  const app=await launch({loadWake:async emit=>{wake=emit;return detector;}});t.after(app.close);
+  await setHoldDisabled(app,true);
+  assert.equal(vm.runInContext('operationPreferences.wakeWord',app.context),false);
+  app.element('wake-word').checked=true;app.element('wake-word').onchange();await flush();
+  assert.match(app.element('hud-content').textContent,/Hey dotで話せます/);
+  wake({type:'wake'});await flush();
+  assert.equal(vm.runInContext('recorder.source',app.context),'wake');
+  assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+  await app.emit(holdEvent);await app.emit(releaseEvent);
+  await setHoldDisabled(app,true);
+  assert.equal(vm.runInContext('recorder.source',app.context),'wake');
+  assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+  // Explicit stop remains available even though manual start is disabled.
+  assert.equal(app.element('record').disabled,false);
+  await app.element('record').onclick();await flush();
+  assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+  assert.equal(app.element('record').disabled,true);
+});
+
+test('hold events are gated until native preferences restore and remain disabled after reopening', async t => {
+  let restore;
+  const app=await launch({nativeRead:key=>key==='dot-disable-hold-recording-v1'?new Promise(r=>{restore=r;}):''});t.after(app.close);
+  await app.emit(holdEvent);
+  assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+  restore('true');await flush();
+  assert.equal(app.element('disable-hold-recording').checked,true);
+  await app.emit(holdEvent);assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+  const reopened=await launch({language:'en',nativeRead:key=>app.nativeSaved.get(key)??app.saved.get(key)??''});t.after(reopened.close);
+  assert.equal(reopened.element('disable-hold-recording').checked,true);
+  assert.match(reopened.element('hud-content').textContent,/Type a message/);
+  await reopened.emit(holdEvent);assert.equal(vm.runInContext('recorder.state',reopened.context),'idle');
+});
+
+test('a failed setting save reports failure while immediately preventing new recording', async t => {
+  const app=await launch({nativeWrite:key=>key!=='dot-disable-hold-recording-v1'});t.after(app.close);
+  await setHoldDisabled(app,true);
+  assert.match(app.element('hold-save-status').textContent,/設定を保存できませんでした/);
+  app.element('wake-word').checked=false;app.element('wake-word').onchange();await flush();
+  assert.match(app.element('hold-save-status').textContent,/設定を保存できませんでした/);
+  await app.emit(holdEvent);assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+});
+
+
+test('disabling while microphone start or stop is pending never transcribes the manual clip', async t => {
+  for (const pendingOpen of [true,false]) {
+    let release;
+    const app=await launch({microphone:open=>open===pendingOpen?new Promise(resolve=>{release=resolve;}):true});t.after(app.close);
+    await app.emit(holdEvent);
+    if(!pendingOpen) {
+      await app.emit({audioEvent:{audioPcm:new Uint8Array(16000),source:sdk.AudioInputSource.Glasses}});
+      await app.emit(releaseEvent);
+    }
+    assert.equal(vm.runInContext('recorder.state',app.context),pendingOpen?'starting':'stopping');
+    await setHoldDisabled(app,true);
+    release(true);await flush();
+    assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+    assert.equal(app.networkCalls.some(url=>/transcribe|utterances/.test(url)),false);
+    assert.equal(app.element('record').disabled,true);
+  }
+});
+
+test('changing hold policy updates G2 help without replacing the displayed reply', async t => {
+  const app=await launch();t.after(app.close);
+  await app.deliver(app.snapshot([proactive('keep-reply')]));
+  const reply=app.physical.get(2);
+  await setHoldDisabled(app,true);
+  assert.equal(app.physical.get(2),reply);
+  assert.equal(app.physical.get(3),'長押し録音は無効です');
+  await setHoldDisabled(app,false);
+  assert.equal(app.physical.get(2),reply);
+  assert.match(app.physical.get(3),/長押しで録音/);
 });

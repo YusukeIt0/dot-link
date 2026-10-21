@@ -1,5 +1,9 @@
 export type Language = 'ja' | 'en';
 const translations = {
+  'スマートフォンでテキストを入力してください': 'Type a message on your phone',
+  '長押し録音は無効です': 'Hold-to-record is disabled',
+  '録音ボタンで停止します': 'Use the recording button to stop',
+
   '{wake}で話す': 'Talk with {wake}',
   '{wake}を準備中…': 'Preparing {wake}…',
   '{wake}で話せます': 'Ready for {wake}',
