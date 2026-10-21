@@ -1,10 +1,9 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.9</title><sparkle:version>77</sparkle:version><sparkle:shortVersionString>0.4.9</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Remove all saved Even connections from the Mac app, including while the relay is paused.
-- See connection status update automatically after pairing, with clear guidance for reconnecting.
-- Stop location sharing when an Even connection is removed, while keeping ChatGPT settings and saved conversations.
-- Update the Mac app while the relay is active, with clearer interruption guidance and automatic recovery if installation fails.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.9-77/Dot-Link-0.4.9-77-arm64.zip" sparkle:installationType="application" sparkle:edSignature="VcLiijz2YrPnRAEJjvIVnmYSoCxEM/0s81j1dcdqGrmCitQxj7JhgzMxa2t05sx4vhUXvFL1mXag8j6iOPoOBg==" length="59110064" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: Tm/UjF+grsFYxjwsHKJgqY3A763dP4aCDYkrHU6wvD5Tb0C2Oy/JzuzNTI81tOabHMA3UUgTTs4WaLK2p1cgDA==
-length: 1460
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.10</title><sparkle:version>79</sparkle:version><sparkle:shortVersionString>0.4.10</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Improved connection stability when reopening the Even app.
+Keeps existing pairing while the app reconnects.
+For the full improvement, update the Even app to 0.3.21 or later.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.10-79/Dot-Link-0.4.10-79-arm64.zip" sparkle:installationType="application" sparkle:edSignature="npuGonBrmYkXhIT/Qaf27s4/cCWiV3+8Stm4/DrMEbXGUc3WhjRRKvLlepEp/O112gFz9cQGQbhmCRVv5E8zBA==" length="59118009" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: BSVLfxXZk0rYmajGYI2FLIwtqr4P3ds/t6G52bVPz/eCrfMVCz5K4t1jiIdl7hdKNn4EHD5SGqRK5L36IutIBw==
+length: 1204
 -->
