@@ -863,7 +863,9 @@ test('hold events are gated until native preferences restore and remain disabled
 test('a failed setting save reports failure while immediately preventing new recording', async t => {
   const app=await launch({nativeWrite:key=>key!=='dot-disable-hold-recording-v1'});t.after(app.close);
   await setHoldDisabled(app,true);
-  assert.match(app.element('operation-save-status').textContent,/設定を保存できませんでした/);
+  assert.match(app.element('hold-save-status').textContent,/設定を保存できませんでした/);
+  app.element('wake-word').checked=false;app.element('wake-word').onchange();await flush();
+  assert.match(app.element('hold-save-status').textContent,/設定を保存できませんでした/);
   await app.emit(holdEvent);assert.equal(vm.runInContext('recorder.state',app.context),'idle');
 });
 

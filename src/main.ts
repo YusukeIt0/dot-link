@@ -496,7 +496,7 @@ function applyLanguage(): void {
     // Runtime status/controls may have replaced the initial label.
     if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
   }
-  for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status']) {
+  for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status', 'hold-save-status']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
@@ -693,7 +693,7 @@ el<HTMLInputElement>('disable-hold-recording').onchange = () => {
   }
   refreshIdleVoicePrompt();
   void saved.then(saved => {
-    if (!exited) el('operation-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
+    if (!exited) el('hold-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
   });
 };
 
