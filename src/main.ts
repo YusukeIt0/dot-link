@@ -993,7 +993,7 @@ if (session.token && !session.credentials?.resumeToken) updates.start(true);
 updateRuntime(false);
 window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token && relayRestored) updates.start(); });
 window.addEventListener('online', () => { if (session.token && relayRestored && !exited) updates.start(); });
-window.addEventListener('offline', () => { if (exited) return; updates.stop(); progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
+window.addEventListener('offline', () => { if (exited) return; progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden && session.token && relayRestored) updates.start(); });
 
 void connect().catch(() => {

@@ -106,7 +106,7 @@ async function launch(options = {}) {
       if (String(url).endsWith('/api/timings')) return Promise.resolve({status: 204, ok: true});
       assert.equal(url, options.nativePairing ? `${options.nativePairing.origin}/api/updates` : '/api/updates', 'fixture must never access another API');
       if (options.nativePairing) assert.equal(init.headers.Authorization, `Bearer ${'n'.repeat(43)}`, 'only resumed token reaches data API');
-      return new Promise(resolve => requests.push(resolve));
+      return new Promise((resolve, reject) => requests.push(Object.assign(resolve, {reject})));
     },
   });
   vm.runInContext(script, context); await flush();
@@ -129,6 +129,8 @@ async function launch(options = {}) {
     now = end; await flush();
   };
   return {now: () => epoch + now, calls, networkCalls, physical, element, saved, nativeSaved, timers, snapshot, deliver, advance, context,
+    browserEvent: async name => {listeners.get(name)?.({persisted: false}); await flush();},
+    failUpdate: async () => {assert.ok(requests.length); requests.shift().reject(new Error('Network unavailable')); await flush();},
     emit: async event => {receiver(event); await flush();},
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
@@ -923,4 +925,18 @@ test('full app retires a superseded runtime without changing shared pairing, con
   assert.equal(app.calls.slice(count).some(c => ['mic', 'imu', 'text', 'location-stop', 'location-api'].includes(c[0])), false);
   await app.emit(doubleTap); await app.advance(30000); await app.close();
   assert.equal(app.calls.slice(count).some(c => ['mic', 'imu', 'text', 'location-stop', 'location-api', 'exit'].includes(c[0])), false);
+});
+
+
+test('hidden app recovers after offline without relying on an online or foreground event', async t => {
+  const app = await launch(); t.after(app.close);
+  app.context.document.hidden = true; await app.browserEvent('visibilitychange');
+  await app.browserEvent('offline');
+  assert.equal(vm.runInContext('progress.connection', app.context), 'offline');
+  await app.failUpdate();
+  await new Promise(resolve => setTimeout(resolve, 1100)); await flush();
+  await app.deliver(app.snapshot([proactive('background-recovered')]));
+  assert.equal(vm.runInContext('progress.connection', app.context), 'online');
+  assert.match(app.physical.get(2), /background-recovered/);
+  assert.equal(app.context.document.hidden, true);
 });
