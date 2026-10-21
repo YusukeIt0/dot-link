@@ -131,6 +131,7 @@ export function deviceServer(options: { token: string; origin: string; directory
           const rawTrace = request.headers['x-g2-trace-id'];
           const id = rawTrace === undefined ? undefined : traceId.parse(rawTrace);
           const wav = await boundedBody(request, 960044);
+          if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
           if (id) options.latency?.mark(id, 'asr_received');
           const cancelled = new AbortController();
           const cancel = () => cancelled.abort();
@@ -151,6 +152,7 @@ export function deviceServer(options: { token: string; origin: string; directory
         if (!allowed) { json(404, { error: 'Not found' }); return; }
         if (request.method === 'POST' && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
         const body = request.method === 'POST' ? await boundedBody(request, 32768) : undefined;
+        if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
         const controller = new AbortController();
         const disconnected = () => controller.abort();
         response.once('close', disconnected);
@@ -178,6 +180,7 @@ export function deviceServer(options: { token: string; origin: string; directory
             target.sttProvider = provider;
             target.sttModel = provider ? STT_PROVIDERS[provider].model : null;
           }
+          if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
           json(result.status, data); return;
         } finally { response.off('close', disconnected); }
       }

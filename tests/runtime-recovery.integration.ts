@@ -16,14 +16,18 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   let held: ServerResponse | undefined;
   let shouldHold = false;
   let onHeld: (() => void) | undefined;
+  let bridgeCalls = 0, transcriptions = 0;
+  let select: () => Promise<'whisper'> = async () => 'whisper';
   const bridge = createServer((_request, response) => {
+    bridgeCalls++;
     if (shouldHold) { held = response; shouldHold = false; onHeld?.(); return; }
-    response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ revision: 'synthetic' }));
+    response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify({ revision: 'synthetic', status: {} }));
   });
   bridge.listen(0, '127.0.0.1'); await once(bridge, 'listening');
   const bridgeAddress = bridge.address(); assert(bridgeAddress && typeof bridgeAddress !== 'string');
   const server = deviceServer({ token: 'm'.repeat(43), origin: 'https://mac.tailtest.ts.net', directory: root,
-    pairing: authority, transcribe: async () => 'synthetic', bridgeURL: `http://127.0.0.1:${bridgeAddress.port}` });
+    pairing: authority, transcribe: async () => { transcriptions++; return 'synthetic'; },
+    sttProvider: () => select(), bridgeURL: `http://127.0.0.1:${bridgeAddress.port}` });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); assert(address && typeof address !== 'string');
   t.after(async () => {
@@ -45,8 +49,22 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
   const paired = await call('/api/pair', origin(1), 'POST', { code: authority.issue('https://mac.tailtest.ts.net').code });
   assert.equal(paired.status, 200);
   return { authority, call, paired: paired.body,
+    counts: () => ({ bridgeCalls, transcriptions }),
+    delaySelection: (selection: () => Promise<'whisper'>) => { select = selection; },
+    slowBody: (path: string, token: string, contentType: string) => {
+      let finish!: () => void;
+      let ready!: () => void;
+      const started = new Promise<void>(resolve => { ready = resolve; });
+      const result = new Promise<number>((resolve, reject) => {
+        const q = request({ host: '127.0.0.1', port: address.port, path, method: 'POST', agent: false,
+          headers: { Host: 'mac.tailtest.ts.net', Origin: origin(1), Authorization: `Bearer ${token}`,
+            'Content-Type': contentType, Expect: '100-continue' } }, res => { res.resume(); res.on('end', () => resolve(res.statusCode!)); });
+        q.on('error', reject); q.on('continue', ready); q.flushHeaders(); finish = () => q.end('{}');
+      });
+      return { started, finish, result };
+    },
     hold: () => { shouldHold = true; return new Promise<void>(r => { onHeld = r; }); },
-    release: () => { assert(held); held.writeHead(200, { 'Content-Type': 'application/json' }); held.end('{"revision":"synthetic"}'); held = undefined; } };
+    release: () => { assert(held); held.writeHead(200, { 'Content-Type': 'application/json' }); held.end('{"revision":"synthetic","status":{}}'); held = undefined; } };
 }
 
 test('HTTP handoff fences stale polls and old recovery without invalidating the new owner', async t => {
@@ -75,6 +93,26 @@ test('HTTP handoff fences stale polls and old recovery without invalidating the 
   assert.equal((await s.call('/api/utterances', origin(1), 'POST', {}, { Authorization: `Bearer ${first.body.token}` })).status, 403);
   assert.equal((await s.call('/api/pair/revoke', origin(2), 'POST', {}, { Authorization: `Bearer ${second.body.token}` })).status, 204);
   assert.equal((await recover(origin(2), { action: 'inspect' })).status, 401);
+});
+
+test('ownership is rechecked after request bodies and asynchronous response metadata', async t => {
+  const s = await fixture(t);
+  const first = s.authority.recoverRuntime(s.paired.resumeToken, origin(1), { action: 'claim', id: id(1), expectedGeneration: 0 });
+  assert.equal(first.kind, 'resumed'); if (first.kind !== 'resumed') return;
+  const utterance = s.slowBody('/api/utterances', first.credentials.token, 'application/json');
+  const transcription = s.slowBody('/api/transcribe', first.credentials.token, 'audio/wav');
+  await Promise.all([utterance.started, transcription.started]);
+  let selected!: () => void, release!: (value: 'whisper') => void;
+  const selecting = new Promise<void>(resolve => { selected = resolve; });
+  s.delaySelection(() => { selected(); return new Promise(resolve => { release = resolve; }); });
+  const status = s.call('/api/status', origin(1), 'GET', {}, { Authorization: `Bearer ${first.credentials.token}` });
+  await selecting;
+  const before = s.counts();
+  assert.equal(s.authority.recoverRuntime(s.paired.resumeToken, origin(2), { action: 'claim', id: id(2), expectedGeneration: 1 }).kind, 'resumed');
+  utterance.finish(); transcription.finish(); release('whisper');
+  assert.deepEqual(await Promise.all([utterance.result, transcription.result]), [401, 401]);
+  assert.equal((await status).status, 401);
+  assert.deepEqual(s.counts(), before, 'stale request bodies never reach the bridge or speech provider');
 });
 
 test('runtime negotiation preserves bootstrap CORS and rejects malformed or unauthorized ownership requests', async t => {
