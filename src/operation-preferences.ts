@@ -30,8 +30,8 @@ class BooleanPreference {
     const revision = this.revision;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      const raw = await Promise.race([native.getLocalStorage(this.key), new Promise<string>(resolve => {
-        timer = setTimeout(() => resolve(''), 3000);
+      const raw = await Promise.race([native.getLocalStorage(this.key), new Promise<string>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('Preference restore timed out')), 3000);
       })]);
       if (revision !== this.revision) return;
       const restored = parse(raw);
@@ -39,7 +39,12 @@ class BooleanPreference {
       // Conflicting copies choose the setting that prevents accidental recording.
       if (restored === this.saferValue || !this.hasLocal) this.value = restored ?? false;
       this.writeLocal();
-    } catch {} finally { clearTimeout(timer); }
+    } catch {
+      // An unavailable native store is not evidence of an unset preference.
+      // With no local copy, protect input for this session without persisting
+      // a guessed value. A later launch can retry; a fresh user choice wins.
+      if (revision === this.revision && !this.hasLocal) this.value = this.saferValue;
+    } finally { clearTimeout(timer); }
   }
   save(enabled: boolean): Promise<boolean> {
     this.value = enabled; this.revision++;

@@ -71,3 +71,34 @@ test('hold writes stay ordered and failed native persistence does not undo prote
   assert.deepEqual(await Promise.all([prefs.saveDisableHoldRecording(false),prefs.saveDisableHoldRecording(true)]),[false,false]);
   assert.deepEqual(writes,['false','true']);assert.equal(prefs.disableHoldRecording,true);
 });
+
+test('failed native restore on a fresh origin protects input without persisting a guess', async () => {
+  const local=store();const prefs=new OperationPreferences(()=>local);
+  await prefs.attach({getLocalStorage:async()=>{throw new Error('unavailable');},setLocalStorage:async()=>true});
+  assert.equal(prefs.disableHoldRecording,true);assert.equal(prefs.wakeWord,false);
+  assert.equal(local.getItem(holdKey),null);
+  // The user can explicitly opt back into manual recording for this session.
+  await prefs.saveDisableHoldRecording(false);assert.equal(prefs.disableHoldRecording,false);
+  assert.equal(local.getItem(holdKey),'false');
+});
+test('native restore timeout protects input, ignores a late result, and lets the next launch retry', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const local=store();const prefs=new OperationPreferences(()=>local);let resolve!:(value:string)=>void;
+  const restore=prefs.attach({getLocalStorage:key=>key===holdKey?new Promise(r=>{resolve=r;}):Promise.resolve(''),setLocalStorage:async()=>true});
+  t.mock.timers.tick(3000);await restore;
+  assert.equal(prefs.disableHoldRecording,true);assert.equal(local.getItem(holdKey),null);
+  resolve('false');await Promise.resolve();assert.equal(prefs.disableHoldRecording,true);
+  const next=new OperationPreferences(()=>local);
+  await next.attach({getLocalStorage:async()=>'',setLocalStorage:async()=>true});
+  assert.equal(next.disableHoldRecording,false,'a confirmed unset preference retains the original default');
+});
+test('failed restore cannot override either a local copy or a fresh choice', async () => {
+  const local=store();local.setItem(holdKey,'false');const known=new OperationPreferences(()=>local);
+  await known.attach({getLocalStorage:async()=>{throw new Error('unavailable');},setLocalStorage:async()=>true});
+  assert.equal(known.disableHoldRecording,false);
+  let reject!:(error:Error)=>void;
+  const fresh=new OperationPreferences(()=>{throw new Error('local storage unavailable');});
+  const pending=fresh.attach({getLocalStorage:key=>key===holdKey?new Promise((_r,j)=>{reject=j;}):Promise.resolve(''),setLocalStorage:async()=>false});
+  await fresh.saveDisableHoldRecording(false);reject(new Error('native unavailable'));await pending;
+  assert.equal(fresh.disableHoldRecording,false);
+});
