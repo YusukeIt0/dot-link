@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { OperationPreferences } from '../src/operation-preferences.ts';
-function store(value: string|null=null){return {getItem:()=>value,setItem:(_key:string,next:string)=>{value=next;}};}
+function store(value: string|null=null){const values=new Map<string,string>();if(value!==null)values.set('dot-operation-preferences-v1',value);return {getItem:(key:string)=>values.get(key)??null,setItem:(key:string,next:string)=>{values.set(key,next);}};}
 test('missing and corrupt preferences default to OFF; explicit OFF survives native restore',async()=>{
   for(const value of [null,'broken','false'])assert.equal(new OperationPreferences(()=>store(value)).wakeWord,false);
   const prefs=new OperationPreferences(()=>store('false'));
@@ -9,7 +9,7 @@ test('missing and corrupt preferences default to OFF; explicit OFF survives nati
 });
 test('an in-flight native restore cannot undo the latest user choice',async()=>{
   let resolve!:(value:string)=>void;const prefs=new OperationPreferences(()=>store());
-  const restore=prefs.attach({getLocalStorage:()=>new Promise(r=>{resolve=r;}),setLocalStorage:async()=>true});
+  const restore=prefs.attach({getLocalStorage:key=>key==='dot-operation-preferences-v1'?new Promise(r=>{resolve=r;}):Promise.resolve(''),setLocalStorage:async()=>true});
   await prefs.save(false);resolve('true');await restore;assert.equal(prefs.wakeWord,false);
 });
 test('native writes stay in order and both stores failing is reported',async()=>{
@@ -31,4 +31,43 @@ test('failed native persistence is reported even if a current-origin copy was sa
   const prefs=new OperationPreferences(()=>store('true'));
   await prefs.attach({getLocalStorage:async()=> 'true',setLocalStorage:async()=>false});
   assert.equal(await prefs.save(false),false);assert.equal(prefs.wakeWord,false);
+});
+
+const holdKey = 'dot-disable-hold-recording-v1';
+test('hold disable defaults off, persists independently, and survives reopening', async () => {
+  const local = store('false');
+  const native = new Map<string,string>();
+  const prefs = new OperationPreferences(() => local);
+  assert.equal(prefs.disableHoldRecording, false);
+  await prefs.attach({getLocalStorage:async key=>native.get(key)??'',setLocalStorage:async(key,value)=>{native.set(key,value);return true;}});
+  assert.equal(await prefs.saveDisableHoldRecording(true), true);
+  assert.equal(prefs.wakeWord, false);
+  await prefs.save(true);
+  assert.equal(prefs.disableHoldRecording, true);
+  assert.equal(native.get(holdKey), 'true');
+  const reopened = new OperationPreferences(() => local);
+  assert.equal(reopened.disableHoldRecording, true);
+  const newOrigin = new OperationPreferences(() => store());
+  await newOrigin.attach({getLocalStorage:async key=>native.get(key)??'',setLocalStorage:async()=>true});
+  assert.equal(newOrigin.disableHoldRecording, true);
+});
+test('conflicting hold copies preserve disabled input and a fresh choice outranks restore', async () => {
+  for (const [localValue,nativeValue] of [['true','false'],['false','true']]) {
+    const local=store();local.setItem(holdKey,localValue);
+    const prefs=new OperationPreferences(()=>local);
+    await prefs.attach({getLocalStorage:async key=>key===holdKey?nativeValue:'',setLocalStorage:async()=>true});
+    assert.equal(prefs.disableHoldRecording,true);
+  }
+  let restore!:(value:string)=>void;
+  const local=store();local.setItem(holdKey,'true');
+  const prefs=new OperationPreferences(()=>local);
+  const pending=prefs.attach({getLocalStorage:key=>key===holdKey?new Promise(r=>{restore=r;}):Promise.resolve(''),setLocalStorage:async()=>true});
+  await prefs.saveDisableHoldRecording(false);restore('true');await pending;
+  assert.equal(prefs.disableHoldRecording,false);
+});
+test('hold writes stay ordered and failed native persistence does not undo protection', async () => {
+  const writes:string[]=[];const prefs=new OperationPreferences(()=>store());
+  await prefs.attach({getLocalStorage:async()=>'',setLocalStorage:async(key,value)=>{if(key===holdKey)writes.push(value);return false;}});
+  assert.deepEqual(await Promise.all([prefs.saveDisableHoldRecording(false),prefs.saveDisableHoldRecording(true)]),[false,false]);
+  assert.deepEqual(writes,['false','true']);assert.equal(prefs.disableHoldRecording,true);
 });

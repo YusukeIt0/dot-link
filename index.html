@@ -3,7 +3,7 @@
   <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png"><title>Dot Link</title></head>
   <body><main>
     <header><p>EVEN G2</p><h1>Dot Link</h1><small id="app-version"></small><p id="connection" role="status" data-en="Waiting for the Even app">Evenアプリとの接続を待っています</p></header>
-    <section class="glass" aria-label="G2 display"><p id="hud-state" data-en="Waiting for connection">接続待ち</p><pre id="hud-content" data-en="Hold to speak">長押しで話してください</pre><p id="speech-status" class="speech-status" aria-label="STT / TTS">STT:— / TTS:OFF</p><small data-en="Hold to record · release to stop">長押しで録音 · 指を離すと停止</small></section>
+    <section class="glass" aria-label="G2 display"><p id="hud-state" data-en="Waiting for connection">接続待ち</p><pre id="hud-content" data-en="Hold to speak">長押しで話してください</pre><p id="speech-status" class="speech-status" aria-label="STT / TTS">STT:— / TTS:OFF</p><small id="recording-hint" data-en="Hold to record · release to stop">長押しで録音 · 指を離すと停止</small></section>
     <p id="notice" role="status" data-en="Open in Even Hub to use the G2 microphone and display.">Even Hubから開くとG2のマイクと表示を使用できます。</p>
     <p id="dot-status" role="status" data-en="Checking your relay">接続先を確認中</p>
     <section id="conversation-controls">
@@ -24,9 +24,11 @@
     </details>
     <details id="operation-settings" class="display-settings">
       <summary data-en="Operation settings">操作設定</summary>
+      <label class="display-checkbox"><input id="disable-hold-recording" type="checkbox"> <span data-en="Disable hold-to-record">長押しで録音を無効</span></label>
+      <p class="note" data-en="Turn this on if water or sweat causes accidental input. When enabled, only Hey XX (voice input) and text input are available.">水や汗で誤作動してしまう場合、こちらをオンにしてください。オンにした場合、Hey XX（音声入力）とテキストでのみ操作可能です。</p>
       <label class="display-checkbox"><input id="wake-word" type="checkbox"> <span id="wake-word-label" data-en="Talk with Hey XX">Hey XXで話す</span></label>
       <p class="note" data-en="The default is Hey dot.">初期値はHey dotです。</p>
-      <p class="note" data-en="Keeps the G2 microphone on while waiting. Wake detection stays on your phone. Hold-to-talk still works.">待受中はG2のマイクを使います。呼びかけの検出はスマートフォン内で行います。長押しも使えます。</p>
+      <p class="note" data-en="Keeps the G2 microphone on while waiting. Wake detection stays on your phone.">待受中はG2のマイクを使います。呼びかけの検出はスマートフォン内で行います。</p>
       <form id="wake-name-form" novalidate>
         <label class="display-checkbox"><input id="custom-wake-name" type="checkbox"> <span data-en="Change the name">呼び名を変える</span></label>
         <div id="wake-name-fields" hidden>
