@@ -118,11 +118,12 @@ export class RelaySession {
       signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(path === '/api/transcribe' ? 100000 : 25000), ...(requestSignal ? [requestSignal] : [])]),
     });
     this.check(version);
-    if (response.status === 401 && this.saved?.resumeToken && !recovered) {
-      await this.ensureOrigin(true);
-      return this.request(path, method, body, trace, requestSignal, true);
-    }
-    if (response.status === 401) this.options.rejected('invalid');
+    if (response.status === 401 && this.saved?.resumeToken) {
+      // Even the retried request can cross another startup claim. Only the
+      // recovery authority can distinguish supersession from revocation.
+      await this.ensureOrigin(true); this.check(version);
+      if (!recovered) return this.request(path, method, body, trace, requestSignal, true);
+    } else if (response.status === 401) this.options.rejected('invalid');
     return response;
   }
   async updates<T>(revision: string | undefined, signal: AbortSignal, recovered = false): Promise<T> {
@@ -135,11 +136,10 @@ export class RelaySession {
     });
     this.check(version);
     if (!signal.aborted && response.status === 401) {
-      if (this.saved?.resumeToken && !recovered) {
+      if (this.saved?.resumeToken) {
         await this.ensureOrigin(true); this.check(version);
-        return this.updates<T>(revision, signal, true);
-      }
-      this.options.rejected('invalid');
+        if (!recovered) return this.updates<T>(revision, signal, true);
+      } else this.options.rejected('invalid');
     }
     if (!response.ok) throw new Error('Update connection failed');
     const result = await response.json(); this.check(version); return result;

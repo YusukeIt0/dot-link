@@ -177,3 +177,45 @@ test('lost renew reply does not rotate ownership and a stale claim completion ca
   assert.equal(next.session.token, current);
   assert.equal(next.requests.filter(r => r.runtime?.action === 'inspect').length, 1);
 });
+
+test('a claim during the retried poll/request retires safely instead of forgetting shared pairing', async t => {
+  for (const route of ['updates', 'request', 'location']) {
+    const f = fixture(t), c = f.client(1); await c.attach(); await c.session.ensureOrigin(); await c.settings.nativeSaved();
+    const native = [...f.native], local = [...c.local]; let attempts = 0;
+    c.intercept(async url => {
+      if (url.endsWith('/api/pair/resume')) return;
+      if (++attempts === 2) {
+        assert.equal(f.authority().recoverRuntime(f.original.resumeToken!, origin(2), {action: 'claim', id: 'competing-runtime-2', expectedGeneration: 1}).kind, 'resumed');
+      }
+      return Response.json({}, {status: 401});
+    });
+    const operation = route === 'updates' ? c.session.updates(undefined, new AbortController().signal)
+      : route === 'request' ? c.session.request('/api/messages') : c.session.location('/api/location/update', {sequence: 1});
+    await assert.rejects(operation, /superseded/); await flush();
+    assert.equal(attempts, 2); assert.equal(c.retired(), 1); assert.deepEqual(c.rejected, []);
+    assert.deepEqual([...f.native], native); assert.deepEqual([...c.local], local);
+    assert.deepEqual(c.requests.filter(r => r.runtime?.action === 'renew').map(r => r.runtime.generation), [1, 1]);
+  }
+});
+
+test('legacy collisions during a retry remain recoverable and never erase pairing', async t => {
+  for (const route of ['updates', 'request', 'location']) {
+    const f = fixture(t), c = f.client(1); let attempts = 0;
+    c.intercept(async (url, init) => {
+      if (url.endsWith('/api/pair/resume')) {
+        const body = JSON.parse(String(init.body));
+        return body.runtime ? Response.json({error: 'Invalid pairing request'}, {status: 400})
+          : Response.json(f.authority().resume(body.resumeToken, origin(1)));
+      }
+      attempts++;
+      if (attempts === 2) assert.ok(f.authority().resume(f.original.resumeToken!, origin(2)));
+      if (attempts <= 2) return Response.json({}, {status: 401});
+    });
+    if (route === 'updates') await assert.rejects(c.session.updates(undefined, new AbortController().signal), /Update connection failed/);
+    else if (route === 'location') await assert.rejects(c.session.location('/api/location/update', {sequence: 1}), /Location sharing unavailable/);
+    else assert.equal((await c.session.request('/api/messages')).status, 401);
+    assert.deepEqual(c.rejected, []); assert.equal(c.retired(), 0);
+    assert.equal(c.settings.read()!.resumeToken, f.original.resumeToken);
+    assert.deepEqual(await c.session.updates(undefined, new AbortController().signal), {revision: 'current'});
+  }
+});

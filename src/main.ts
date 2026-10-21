@@ -243,7 +243,7 @@ async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, 
     const failure = await response.json().catch(() => ({})); current();
     throw new Error(sttErrorMessage(failure.code) ?? t('処理できませんでした。接続または録音を確認してください。'));
   }
-  if (!response.ok) throw new Error(response.status === 401 ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
+  if (!response.ok) throw new Error(response.status === 401 && !session.credentials?.resumeToken ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
   const result = response.status === 204 ? undefined : await response.json();
   current();
   return result as T;
