@@ -75,7 +75,7 @@ async function launch(options = {}) {
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
-      querySelector: element, querySelectorAll: () => [staticLabel], createComment: element, addEventListener: listen},
+      querySelector: element, querySelectorAll: selector => selector === '[data-en]' ? [staticLabel] : selector === 'textarea' ? [element('transcript'), element('pair-code')] : [...elements.values()], createComment: element, addEventListener: listen},
     window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text]); }}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     navigator: {language: options.language ?? 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
@@ -96,6 +96,7 @@ async function launch(options = {}) {
         return Promise.resolve({status: 200, ok: true, json: async () => ({...value, status: 'accepted', createdAt:new Date(epoch + now).toISOString()})});
       }
       if (String(url).endsWith('/api/pair/resume')) {
+        if (JSON.parse(init.body).runtime?.action === 'inspect') return Promise.resolve({status: 400, ok: false, json: async () => ({error: 'Invalid pairing request'})});
         resumeAttempts++;
         assert.equal(JSON.parse(init.body).resumeToken, options.nativePairing.resumeToken);
         calls.push(['resume']);
@@ -105,7 +106,7 @@ async function launch(options = {}) {
       if (String(url).endsWith('/api/timings')) return Promise.resolve({status: 204, ok: true});
       assert.equal(url, options.nativePairing ? `${options.nativePairing.origin}/api/updates` : '/api/updates', 'fixture must never access another API');
       if (options.nativePairing) assert.equal(init.headers.Authorization, `Bearer ${'n'.repeat(43)}`, 'only resumed token reaches data API');
-      return new Promise(resolve => requests.push(resolve));
+      return new Promise((resolve, reject) => requests.push(Object.assign(resolve, {reject})));
     },
   });
   vm.runInContext(script, context); await flush();
@@ -128,6 +129,8 @@ async function launch(options = {}) {
     now = end; await flush();
   };
   return {now: () => epoch + now, calls, networkCalls, physical, element, saved, nativeSaved, timers, snapshot, deliver, advance, context,
+    browserEvent: async name => {listeners.get(name)?.({persisted: false}); await flush();},
+    failUpdate: async () => {assert.ok(requests.length); requests.shift().reject(new Error('Network unavailable')); await flush();},
     emit: async event => {receiver(event); await flush();},
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
@@ -898,4 +901,42 @@ test('changing hold policy updates G2 help without replacing the displayed reply
   await setHoldDisabled(app,false);
   assert.equal(app.physical.get(2),reply);
   assert.match(app.physical.get(3),/長押しで録音/);
+});
+
+
+test('full app retires a superseded runtime without changing shared pairing, consent or replacement resources', async t => {
+  const credentials = {origin:'https://mac.tailtest.ts.net',token:'o'.repeat(43),resumeToken:'r'.repeat(43),appOrigin:'http://127.0.0.1:55895',expiresAt:Date.now()+100000};
+  const app = await launch({nativePairing: credentials, request: (url, init) => {
+    if (!url.endsWith('/api/pair/resume')) return;
+    const runtime = JSON.parse(init.body).runtime;
+    if (runtime.action === 'inspect') return Promise.resolve({status: 200, ok: true, json: async () => ({protocol: 1, generation: 0})});
+    if (runtime.action === 'renew') return Promise.resolve({status: 409, ok: false, json: async () => ({code: 'runtime_superseded'})});
+    return Promise.resolve({status: 200, ok: true, json: async () => ({...credentials, token: 'n'.repeat(43), protocol: 1, generation: 1})});
+  }}); t.after(app.close);
+  app.element('location-share').checked = true; await app.element('location-share').onchange(); await flush();
+  app.element('transcript').value = 'Unsent draft';
+  await app.element('record').click(); await flush();
+  const native = [...app.nativeSaved], local = [...app.saved], count = app.calls.length;
+  await assert.rejects(vm.runInContext('session.ensureOrigin(true)', app.context), /superseded/); await flush();
+  assert.deepEqual([...app.nativeSaved], native); assert.deepEqual([...app.saved], local);
+  assert.equal(app.element('transcript').value, 'Unsent draft'); assert.equal(app.element('transcript').readOnly, true);
+  assert.equal(app.element('record').disabled, true);
+  assert.match(app.element('dot-status').textContent, /引き継ぎ/);
+  assert.equal(app.calls.slice(count).some(c => ['mic', 'imu', 'text', 'location-stop', 'location-api'].includes(c[0])), false);
+  await app.emit(doubleTap); await app.advance(30000); await app.close();
+  assert.equal(app.calls.slice(count).some(c => ['mic', 'imu', 'text', 'location-stop', 'location-api', 'exit'].includes(c[0])), false);
+});
+
+
+test('hidden app recovers after offline without relying on an online or foreground event', async t => {
+  const app = await launch(); t.after(app.close);
+  app.context.document.hidden = true; await app.browserEvent('visibilitychange');
+  await app.browserEvent('offline');
+  assert.equal(vm.runInContext('progress.connection', app.context), 'offline');
+  await app.failUpdate();
+  await new Promise(resolve => setTimeout(resolve, 1100)); await flush();
+  await app.deliver(app.snapshot([proactive('background-recovered')]));
+  assert.equal(vm.runInContext('progress.connection', app.context), 'online');
+  assert.match(app.physical.get(2), /background-recovered/);
+  assert.equal(app.context.document.hidden, true);
 });

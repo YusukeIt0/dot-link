@@ -1,3 +1,4 @@
+import { RuntimeNative } from './runtime-native.ts';
 import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
 import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from './speech-status.ts';
@@ -61,12 +62,14 @@ const transcript = el<HTMLTextAreaElement>('transcript');
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
 const relaySettings = new RelaySettings(() => localStorage);
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
+const runtimeNative = new RuntimeNative();
 const session = new RelaySession({
   settings: relaySettings, legacyToken: pairing.read(), appOrigin: location.origin,
   fetch: (input, init) => fetch(input, init),
   rejected: reason => forgetPairing(reason === 'expired'
     ? t('接続の有効期限が切れたか、Mac側で解除されました。新しい接続コードで接続してください。')
     : t('接続設定が無効になりました。Macで新しい接続コードを発行してください。')),
+  superseded: () => retireSupersededRuntime(),
   persistenceFailed: () => { notice.textContent = t('Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。'); },
 });
 const setupPanel = el<HTMLDetailsElement>('mac-setup');
@@ -103,6 +106,7 @@ function showSetup(unpaired: boolean): void {
 }
 let pendingDelivery = new PendingUtterance(() => localStorage, session.credentials?.origin ?? location.origin);
 let exited = false;
+let relayRestored = !session.credentials?.resumeToken;
 let glassesReady = false;
 let startupStage: 'bridge' | 'page' | 'ready' = 'bridge';
 let startupResult: number | undefined;
@@ -159,6 +163,7 @@ const locationSharing = new LocationSharing({
   changed: () => renderLocationStatus(),
 });
 function renderLocationStatus(): void {
+  if (exited) return;
   const s = locationSharing.status(), ja = getLanguage() === 'ja';
   el<HTMLInputElement>('location-share').checked = s.enabled;
   const labels = {
@@ -217,8 +222,9 @@ let audioTraceId: string | undefined;
 
 async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   const version = session.version;
-  const saved = await relaySettings.attach(appBridge);
+  const saved = await relaySettings.attach(runtimeNative.storage(appBridge));
   if (version !== session.version || exited) return;
+  relayRestored = true;
   // Legacy development credentials are separate from packaged pairing.
   if (!saved && !session.credentials) return;
   connectionTransitions.restore(saved);
@@ -228,6 +234,7 @@ async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
 }
 
 async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, requestSignal?: AbortSignal): Promise<T> {
+  if (!relayRestored) throw new Error(t('接続を確認中'));
   const version = session.version;
   const current = () => { if (exited || !session.isCurrent(version)) throw new Error('Connection changed'); };
   const response = await session.request(path, method, body, trace, requestSignal);
@@ -236,7 +243,7 @@ async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, 
     const failure = await response.json().catch(() => ({})); current();
     throw new Error(sttErrorMessage(failure.code) ?? t('処理できませんでした。接続または録音を確認してください。'));
   }
-  if (!response.ok) throw new Error(response.status === 401 ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
+  if (!response.ok) throw new Error(response.status === 401 && !session.credentials?.resumeToken ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
   const result = response.status === 204 ? undefined : await response.json();
   current();
   return result as T;
@@ -267,7 +274,7 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   subscribed = snapshot.status.subscribed;
   selectedSTT = readSTTProvider(snapshot.status.sttProvider);
   selectedSTTModel = snapshot.status.sttModel;
-  progress.connection = 'online'; progress.dotConnected = subscribed;
+  progress.connection = 'online'; progress.dotConnected = subscribed; attachLocation();
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
   const update = conversation.receive(snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
   for (const message of update.announcements) {
@@ -321,7 +328,7 @@ el('pair').onclick = async () => {
   try {
     const credentials = await session.pair(invite);
     if (version !== session.version || exited) return;
-    const retained = connectionTransitions.paired(credentials);
+    const retained = connectionTransitions.paired(credentials); relayRestored = true;
     const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
@@ -336,7 +343,7 @@ el('pair').onclick = async () => {
     setupPanel.open = true;
     pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
-    if (session.token) updates.start(true);
+    if (session.token && relayRestored) updates.start(true);
   } finally { if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
 };
 el('forget-pairing').onclick = async () => {
@@ -517,9 +524,9 @@ function clearClip(): void {
 }
 
 const recorder = new VoiceInput({
-  microphone: open => bridge?.audioControl(open, AudioInputSource.Glasses) ?? Promise.resolve(false),
+  microphone: open => runtimeNative.control(() => bridge?.audioControl(open, AudioInputSource.Glasses) ?? Promise.resolve(false)),
   loadWake: loadWakeDetector,
-  onWakeState: state => { wakeState = state; renderWakeState(); },
+  onWakeState: state => { if (exited) return; wakeState = state; renderWakeState(); },
   onClip: (wav, _seconds, source, capturedWakeName) => {
     if (exited || discarding || (source === 'manual' && operationPreferences.disableHoldRecording)) { wav.fill(0); return; }
     transcriptionController?.abort();
@@ -557,6 +564,7 @@ const recorder = new VoiceInput({
       .finally(() => { if (transcriptionController === controller) transcriptionController = undefined; });
   },
   onState: state => {
+    if (exited) return;
     try {
       if (state === 'idle') holdRecording = false;
       recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
@@ -592,7 +600,7 @@ const recorder = new VoiceInput({
       }
     } finally { syncRuntimeEffects(); }
   },
-  onError: message => { progress.setPhase('error'); syncRuntimeEffects(); notice.textContent = message; display(() => t('確認が必要'), message); },
+  onError: message => { if (exited) return; progress.setPhase('error'); syncRuntimeEffects(); notice.textContent = message; display(() => t('確認が必要'), message); },
 });
 
 const runtimeEffects = new RuntimeEffects({
@@ -748,11 +756,38 @@ function stopSession(): void {
   runtimeEffects.stop(); playback.stop(); g2Display.stop(); clearClip(); void recorder.dispose();
 }
 
+function retireSupersededRuntime(): void {
+  if (exited) return;
+  runtimeNative.retire();
+  exited = true; pageActive = false;
+  session.stop(); updates.stop();
+  if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
+  if (imuWatchdog) clearTimeout(imuWatchdog); imuWatchdog = undefined;
+  transcriptionController?.abort(); transcriptionController = undefined;
+  locationSharing.abandon(); standby?.stop(); runtimeEffects.stop();
+  g2Display.stop(); playback.stop(false); clearClip(); void recorder.dispose();
+  // Keep an unsent text draft selectable; stop controls in the retained page.
+  for (const control of document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')) control.disabled = true;
+  for (const field of document.querySelectorAll<HTMLTextAreaElement>('textarea')) field.readOnly = true;
+  el('dot-status').textContent = t('新しい画面へ接続を引き継ぎました');
+  notice.textContent = t('この画面は停止しました。続きは新しく開いたDot Linkで行ってください。未送信のテキストはこの画面からコピーできます。');
+}
+let locationAttached = false;
+function attachLocation(): void {
+  if (!bridge || exited || locationAttached) return;
+  // Do not start shared native location until this runtime has acquired access.
+  if (session.token && progress.connection !== 'online') return;
+  locationAttached = true;
+  void locationSharing.attach(bridge);
+}
+
 async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
-  void exitDiagnostics.attach(appBridge);
-  void restoreRelay(appBridge).then(() => { if (!exited) return locationSharing.attach(appBridge); });
-  void languagePreferences.attach(appBridge).then(() => { if (!exited) applyLanguage(); });
+  if (exited) return;
+  void exitDiagnostics.attach(runtimeNative.storage(appBridge));
+  void restoreRelay(appBridge).then(() => attachLocation());
+  const nativeStorage = runtimeNative.storage(appBridge);
+  void languagePreferences.attach(nativeStorage).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;
   startupStage = 'page';
   el('g2-diagnostic').textContent = 'G2_STARTUP_PENDING';
@@ -773,10 +808,11 @@ async function connect(): Promise<void> {
         width: 145, height: 36, content: ' ' }),
     ],
   }));
+  if (exited) return;
   startupResult = result;
   if (result !== 0) throw new Error('Glasses page initialization failed');
   startupStage = 'ready'; glassesReady = true; syncRuntimeEffects();
-  void readAloudPreferences.attach(appBridge).then(() => {
+  void readAloudPreferences.attach(nativeStorage).then(() => {
     if (exited) return;
     const wasEnabled = tts;
     tts = readAloudPreferences.value;
@@ -785,7 +821,7 @@ async function connect(): Promise<void> {
     updateRuntime();
   });
   exitDiagnostics.record('ready');
-  void Promise.all([operationPreferences.attach(appBridge), wakeNamePreferences.attach(appBridge)]).then(async () => {
+  void Promise.all([operationPreferences.attach(nativeStorage), wakeNamePreferences.attach(nativeStorage)]).then(async () => {
     if (exited) return;
     operationPreferencesReady = true;
     if (operationPreferences.disableHoldRecording && recorder.source === 'manual' && recorder.state !== 'idle') {
@@ -804,7 +840,7 @@ async function connect(): Promise<void> {
   });
   standby?.start();
   void syncHeadRaise();
-  void displayPreferences.attach(appBridge).then(restored => {
+  void displayPreferences.attach(nativeStorage).then(restored => {
     if (exited) return;
     if (restored) applyDisplayPreferences();
     else void syncHeadRaise();
@@ -878,12 +914,13 @@ function updateHeadRaiseStatus(): void {
 function syncHeadRaise(): Promise<void> {
   imuChain = imuChain.then(async () => {
     const enabled = displayPreferences.value.headRaise && glassesReady && !exited;
-    if (!bridge || enabled === imuActive) return;
+    if (!bridge || !runtimeNative.active || enabled === imuActive) return;
     if (imuWatchdog) clearTimeout(imuWatchdog);
     headRaise.reset(); headStatusAt = -Infinity;
     if (enabled) el('head-raise-status').textContent = t('頭の動きを確認しています…');
     try {
-      const ok = await bridge.imuControl(enabled, ImuReportPace.P200);
+      const ok = await runtimeNative.control(() => bridge!.imuControl(enabled, ImuReportPace.P200));
+      if (!runtimeNative.active) return;
       if (!ok) throw new Error('IMU control failed');
       imuActive = enabled;
       if (enabled && !exited && displayPreferences.value.headRaise) {
@@ -954,12 +991,13 @@ renderLocationStatus();
 showSetup(!session.token);
 if (session.token && !session.credentials?.resumeToken) updates.start(true);
 updateRuntime(false);
-window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token) updates.start(); });
-window.addEventListener('online', () => { if (session.token && !exited) updates.start(); });
-window.addEventListener('offline', () => { progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
-document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden && session.token) updates.start(); });
+window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token && relayRestored) updates.start(); });
+window.addEventListener('online', () => { if (session.token && relayRestored && !exited) updates.start(); });
+window.addEventListener('offline', () => { if (exited) return; progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
+document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden && session.token && relayRestored) updates.start(); });
 
 void connect().catch(() => {
+  if (exited) return;
   const nativeReady = startupStage !== 'bridge';
   connection.textContent = nativeReady ? t('G2の画面を起動できませんでした') : t('Evenアプリとの接続準備ができませんでした');
   notice.textContent = nativeReady ? t('G2との接続と起動状態を確認し、Dot Linkを開き直してください。') : t('Evenアプリとの接続準備ができていません。アプリを閉じて開き直してください。');

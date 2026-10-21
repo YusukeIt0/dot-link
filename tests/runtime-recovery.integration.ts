@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { createServer, request, type ServerResponse } from 'node:http';
 import { PairingAuthority } from '../server/pairing-authority.ts';
 import { deviceServer } from '../server/device.ts';
+import { RelaySession } from '../src/relay-session.ts';
+import { RelaySettings } from '../src/relay-connection.ts';
 
 const origin = (n: number) => `http://127.0.0.1:${56000 + n}`;
 const id = (n: number) => `runtime-${String(n).padStart(16, '0')}`;
@@ -130,4 +132,31 @@ test('runtime negotiation preserves bootstrap CORS and rejects malformed or unau
   assert.equal((await s.call('/api/pair/resume', origin(2), 'POST', { ...body, extra: true })).status, 400);
   assert.equal((await s.call('/api/pair/resume', origin(2), 'POST', { ...body, resumeToken: 'x'.repeat(43) })).status, 401);
   assert.equal((await s.call('/api/pair/resume', origin(1), 'POST', { resumeToken: s.paired.resumeToken })).status, 200, 'legacy recovery remains before adoption');
+});
+
+
+test('real HTTP client/server handoff retires the old client without clearing pairing', async t => {
+  const s = await fixture(t);
+  function client(n: number) {
+    const local = new Map<string, string>(); let retired = 0;
+    const settings = new RelaySettings(() => ({getItem: key => local.get(key) ?? null,
+      setItem: (key, value) => {local.set(key, value);}, removeItem: key => {local.delete(key);}}));
+    settings.save({...s.paired, origin: 'https://mac.tailtest.ts.net', appOrigin: origin(1)});
+    const session = new RelaySession({settings, legacyToken: '', appOrigin: origin(n), runtimeId: id(n),
+      rejected: () => assert.fail('handoff must not revoke shared pairing'), persistenceFailed() {}, superseded: () => retired++,
+      fetch: (async (url: string, init: RequestInit) => {
+        const response = await s.call(new URL(url).pathname, origin(n), init.method ?? 'GET',
+          init.body ? JSON.parse(String(init.body)) : {}, init.headers as Record<string, string>);
+        assert.equal(response.cors, origin(n));
+        return Response.json(response.body, {status: response.status});
+      }) as typeof fetch});
+    return {session, local, retired: () => retired};
+  }
+  const first = client(1), second = client(2), signal = new AbortController().signal;
+  assert.equal((await first.session.updates<{revision: string}>(undefined, signal)).revision, 'synthetic');
+  assert.equal((await second.session.updates<{revision: string}>(undefined, signal)).revision, 'synthetic');
+  const saved = [...first.local];
+  await assert.rejects(first.session.updates(undefined, signal), /superseded/);
+  assert.equal(first.retired(), 1); assert.deepEqual([...first.local], saved);
+  assert.equal((await second.session.updates<{revision: string}>(undefined, signal)).revision, 'synthetic');
 });
