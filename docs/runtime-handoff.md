@@ -1,6 +1,6 @@
 # Runtime handoff
 
-Status: implemented on the #124 integration branch; integrated review and physical acceptance are pending. Not a released capability.
+Status: implemented and physically accepted on the #124 integration branch; final integrated review and formal release are pending.
 
 ## Outcome
 
@@ -100,21 +100,28 @@ Automated checks must cover:
 - Successful recovery without offline flicker; sustained failure becomes visible
   within the bounded interval; cancellation removes timers and stale callbacks.
 
-Physical acceptance uses exact PR commits and Beta artifacts on the affected
-Even and Mac surfaces. Run one bounded session covering reopen, repeated reopen,
-background use, normal voice/text/reply delivery, temporary network interruption,
-recovery and explicit disconnect. Check in-flight work for loss or duplication;
-do not claim seamless handoff of native recording without physical evidence.
+Physical acceptance completed on 2026-10-21 using runtime commit
+`118529b31fc35e8cbfb7c4ffad7d04f46e6e2e8f`, Mac 0.4.9 Beta build 78 and
+Even 0.3.20 Beta. The maintainer reported passing repeated reopen, background
+voice/reply, normal voice/text/reply, recording and read-aloud across reopen,
+location-setting retention, and relay pause/resume recovery without foregrounding.
+Agent observations kept one session and registration across eight ownership
+generations, and confirmed healthy services and pairing after recovery.
+[Build and acceptance evidence](https://github.com/YusukeIt0/dot-link/pull/133#issuecomment-6314078248)
+records the exact artifacts and attribution.
+
+The maintainer declined an additional disconnect/re-pair cycle; revocation has
+automated coverage and is not claimed as physically tested. Wake word, head raise
+and active location transmission were not exercised. These are recorded limits,
+not additional release acceptance requirements. The parent only changes release
+version metadata and this record relative to the accepted runtime.
+
 The SDK cannot cancel a native operation already dispatched before supersession.
 The old runtime learns of ownership loss through its next failed request/poll;
 server authorization fences access immediately, but native retirement is not an
-instantaneous cross-WebView transaction. Physical checks must include a reopen
-while recording, processing speech, displaying a reply and sharing location.
-Unsent text remains selectable in a retired view. An in-progress recording is not
-transferred between runtimes, and no seamless recording handoff is claimed.
-
-The initial acceptance ends only when the integrated behavior is assessed and
-passed, failed and unverified checks are recorded together.
+instantaneous cross-WebView transaction. Unsent text remains selectable in a
+retired view. An in-progress recording is not transferred between runtimes, and
+no seamless recording handoff is claimed.
 
 ## Delivery order
 
