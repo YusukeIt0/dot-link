@@ -9,6 +9,7 @@ import { LatencyLog, traceId } from './latency.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 import type { UpdateActivity } from './update-activity.ts';
 import { appOrigin } from '../src/relay-origin.ts';
+import { RUNTIME_RECOVERY_PROTOCOL, RUNTIME_SUPERSEDED, runtimeRecoveryRequest } from '../src/runtime-recovery.ts';
 
 async function boundedBody(request: IncomingMessage, maximum: number): Promise<Buffer> {
   const chunks: Buffer[] = []; let size = 0;
@@ -79,10 +80,27 @@ export function deviceServer(options: { token: string; origin: string; directory
         if (['/api/pair', '/api/pair/resume'].includes(path) && request.method === 'POST' && options.pairing) {
           if (request.headers['content-type'] !== 'application/json' || requestOrigin === undefined) { json(415, { error: 'JSON and Origin required' }); return; }
           if (Date.now() - pairingWindow >= 60000) { pairingWindow = Date.now(); pairingAttempts = 0; }
-          if (++pairingAttempts > 30) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
+          const withinBudget = ++pairingAttempts <= 30;
           const value = JSON.parse((await boundedBody(request, 1024)).toString('utf8'));
           const key = path === '/api/pair/resume' ? 'resumeToken' : 'code';
-          if (!value || typeof value[key] !== 'string' || Object.keys(value).length !== 1) { json(400, { error: 'Invalid pairing request' }); return; }
+          const hasRuntime = key === 'resumeToken' && value && Object.hasOwn(value, 'runtime');
+          const runtime = hasRuntime ? runtimeRecoveryRequest(value.runtime) : undefined;
+          const validEnvelope = value && typeof value[key] === 'string' && Object.keys(value).length === (hasRuntime ? 2 : 1) && (!hasRuntime || runtime);
+          // Retained old code must not exhaust the acquisition budget for the
+          // new owner by repeatedly attempting unsupported legacy recovery.
+          if (validEnvelope && key === 'resumeToken' && !runtime && options.pairing.managedRuntime(value[key])) {
+            pairingAttempts--;
+            json(409, { code: RUNTIME_SUPERSEDED }); return;
+          }
+          if (!withinBudget) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
+          if (!validEnvelope) { json(400, { error: 'Invalid pairing request' }); return; }
+          if (runtime) {
+            const result = options.pairing.recoverRuntime(value[key], requestOrigin, runtime);
+            if (result.kind === 'invalid') { json(401, { error: 'Pairing invitation invalid or expired' }); return; }
+            if (result.kind === 'superseded') { json(409, { code: RUNTIME_SUPERSEDED }); return; }
+            json(200, { protocol: RUNTIME_RECOVERY_PROTOCOL, generation: result.generation,
+              ...(result.kind === 'resumed' ? result.credentials : {}) }); return;
+          }
           const result = key === 'resumeToken' ? options.pairing.resume(value.resumeToken, requestOrigin) : options.pairing.exchange(value.code, requestOrigin);
           if (!result) { json(401, { error: 'Pairing invitation invalid or expired' }); return; }
           json(200, result); return;
@@ -113,6 +131,7 @@ export function deviceServer(options: { token: string; origin: string; directory
           const rawTrace = request.headers['x-g2-trace-id'];
           const id = rawTrace === undefined ? undefined : traceId.parse(rawTrace);
           const wav = await boundedBody(request, 960044);
+          if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
           if (id) options.latency?.mark(id, 'asr_received');
           const cancelled = new AbortController();
           const cancel = () => cancelled.abort();
@@ -133,6 +152,7 @@ export function deviceServer(options: { token: string; origin: string; directory
         if (!allowed) { json(404, { error: 'Not found' }); return; }
         if (request.method === 'POST' && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
         const body = request.method === 'POST' ? await boundedBody(request, 32768) : undefined;
+        if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
         const controller = new AbortController();
         const disconnected = () => controller.abort();
         response.once('close', disconnected);
@@ -160,6 +180,7 @@ export function deviceServer(options: { token: string; origin: string; directory
             target.sttProvider = provider;
             target.sttModel = provider ? STT_PROVIDERS[provider].model : null;
           }
+          if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
           json(result.status, data); return;
         } finally { response.off('close', disconnected); }
       }

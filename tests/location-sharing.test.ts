@@ -200,3 +200,23 @@ test('real relay lease expires while an exited native source leaves the WebView 
   assert.equal(context.status().locationSharing, true);
   assert.equal(context.status().locationFresh, true);
 });
+
+test('handoff abandons location without changing consent, stopping native acquisition or sending revocation', async () => {
+  const f = fixture(); await f.controller.attach(f.native);
+  f.controller.setEnabled(true); await flush();
+  const local = [...f.local], native = [...f.nativeStore], requests = f.requests.length;
+  f.controller.abandon(); f.emit(); await f.controller.pump(); await f.controller.stop(); await flush();
+  assert.equal(f.stops(), 0); assert.equal(f.requests.length, requests);
+  assert.deepEqual([...f.local], local); assert.deepEqual([...f.nativeStore], native);
+});
+test('handoff during a native location start cannot send a late stop or preference write', async () => {
+  const f = fixture(); await f.controller.attach(f.native);
+  let release!: (ok: boolean) => void;
+  f.native.startAppLocationUpdates = () => new Promise(resolve => {release = resolve;});
+  f.controller.setEnabled(true); await flush();
+  const saved = [...f.nativeStore];
+  f.controller.abandon(); release(true); await flush();
+  assert.equal(f.stops(), 0); assert.equal(f.requests.length, 0);
+  assert.deepEqual([...f.nativeStore], saved);
+  assert.equal(f.controller.status().enabled, true);
+});

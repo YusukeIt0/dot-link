@@ -34,6 +34,7 @@ export class G2Display {
     this.chain = this.chain.then(async () => {
       if (this.stopped || this.options.hidden()) return;
       for (const [id, name] of this.headers(this.options.frame())) {
+        if (this.stopped) return;
         // Read each field when it reaches the queue, as application state may
         // change while a preceding BLE write is in flight.
         const value = this.headers(this.options.frame()).find(([key]) => key === id)![2];
@@ -41,7 +42,7 @@ export class G2Display {
         if (!await write(id, name, value || ' ')) throw new Error('Status update failed');
         this.sent.set(id, value);
       }
-    }).catch(() => this.options.failed('status')).finally(() => {
+    }).catch(() => { if (!this.stopped) this.options.failed('status'); }).finally(() => {
       this.statusQueued = false;
       if (this.statusDirty) { this.statusDirty = false; this.refreshStatus(); }
     });
@@ -67,6 +68,7 @@ export class G2Display {
         if (this.reported.size > 100) this.reported.delete(this.reported.values().next().value!);
       }
     }).catch(() => {
+      if (this.stopped) return;
       if (trace) { this.options.timing(trace, 'g2_update_failed'); this.options.report(trace); }
       this.options.failed('frame');
     });
