@@ -8,16 +8,16 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Connect to your own Mac relay for transcription and messages with your existing Dot. 自分のMac中継で音声認識し、既存のDotとメッセージをやり取りします。",
+      "desc": "Connect to your own Mac relay for transcription and messages with your existing Dot.",
       "whitelist": []
     },
     {
       "name": "g2-microphone",
-      "desc": "Hold to record up to 30 seconds. With voice activation on, Dot Link keeps the G2 microphone open while active and detects the cue on your phone. Only speech after the cue is sent for transcription. 長押しで最大30秒録音します。呼びかけをオンにすると、Dot Linkの起動中はG2マイクを使ってスマートフォン内で呼びかけを検出し、その後の発話だけを文字起こしに送信します。"
+      "desc": "When hold-to-record is enabled, hold to record up to 30 seconds. With voice activation on, Dot Link keeps the G2 microphone open while active and detects the cue on your phone. Only speech after the cue is sent for transcription."
     },
     {
       "name": "location",
-      "desc": "When you turn on location sharing, share your phone's current location with your own Dot through your Mac for relevant suggestions. 位置情報の共有をオンにしたとき、スマートフォンの現在地を自分のMac経由でいつものDotに共有し、場所に応じた案内に使います。"
+      "desc": "When you turn on location sharing, share your phone's current location with your own Dot through your Mac for relevant suggestions."
     }
   ],
   "supported_languages": [
