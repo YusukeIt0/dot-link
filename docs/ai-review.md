@@ -172,7 +172,7 @@ GraphQL last-editor identity as well as original authorship. Their exact body an
 update time must match the REST snapshot. Another repository writer editing a bot
 or maintainer comment cannot inherit that original author's authority. API access
 failure or inconsistent snapshots fail closed. See [development assurance](development-assurance.md)
-for evidence records and [automatic merging](automatic-merging.md) for the disabled coordinator.
+for evidence records and [automatic merging](automatic-merging.md) for the active coordinator and its eligibility gates.
 
 The pinned official Claude Code Action uses the read-only workflow `github_token`.
 A private GitHub App named `dotsweeper`, installed only on this public repository,

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { once } from 'node:events';
@@ -30,7 +30,14 @@ test('real HTTP listener separates device and MCP credentials and rejects browse
   const discovery = { method: 'POST', headers: { Authorization: `Bearer ${tokens.mcp}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover' }) };
   const response = await fetch(base + '/mcp', discovery);
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).result.supportedVersions, ['2026-07-28']);
+  const metadata = (await response.json()).result;
+  const version = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
+  assert.deepEqual(metadata.supportedVersions, ['2026-07-28']);
+  assert.deepEqual(metadata.serverInfo, { name: 'even-g2-dot', version });
+  const initialized = await fetch(base + '/mcp', { ...discovery, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'initialize' }) });
+  const initialization = (await initialized.json()).result;
+  assert.equal(initialization.protocolVersion, '2025-11-25');
+  assert.deepEqual(initialization.serverInfo, { name: 'even-g2-dot', version });
   assert.equal((await fetch(base + '/mcp', { ...discovery, headers: { ...discovery.headers, Authorization: `Bearer ${tokens.device}` } })).status, 401);
   assert.equal((await fetch(base + '/mcp', { ...discovery, headers: { ...discovery.headers, Origin: 'https://unexpected.example' } })).status, 403);
   const status = await fetch(base + '/api/status', { headers: { Authorization: `Bearer ${tokens.device}` } });

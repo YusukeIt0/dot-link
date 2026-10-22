@@ -1,10 +1,13 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { readFileSync } from 'node:fs';
 import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessageTool } from './bridge.ts';
 import { CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
+
+const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
 
@@ -16,8 +19,8 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
   try {
     let result: unknown;
     switch (method) {
-      case 'server/discover': result = { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {}, events: {} }, serverInfo: { name: 'even-g2-dot', version: '0.1.0' } }; break;
-      case 'initialize': result = { protocolVersion: '2025-11-25', serverInfo: { name: 'even-g2-dot', version: '0.1.0' }, capabilities: { tools: {}, experimental: { events: {} } } }; break;
+      case 'server/discover': result = { resultType: 'complete', supportedVersions: ['2026-07-28'], capabilities: { tools: {}, events: {} }, serverInfo: { name: 'even-g2-dot', version: packageVersion } }; break;
+      case 'initialize': result = { protocolVersion: '2025-11-25', serverInfo: { name: 'even-g2-dot', version: packageVersion }, capabilities: { tools: {}, experimental: { events: {} } } }; break;
       case 'ping': result = {}; break;
       case 'events/list': result = { events: [eventDefinition, ...(notifications ? [notificationEvent] : []), ...(locations ? [locationEvent] : [])] }; break;
       case 'events/subscribe': result = locations && (params as { name?: string })?.name === 'location.updated' ? await locations.subscribe(params) : notifications && (params as { name?: string })?.name === 'notification.created' ? await notifications.subscribe(params) : await bridge.subscribe(params); break;

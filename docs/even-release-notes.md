@@ -1,5 +1,35 @@
 # Even app release notes
 
+Version history describes app changes. Check Even Hub for the version currently available to you.
+
+## 0.3.21
+
+- Improved connection recovery when reopening the app, without pairing again.
+- Reduced brief reconnect indicators while keeping sustained connection failures visible.
+- Improved background reconnection after network interruptions.
+- Use with Mac 0.4.10 or later for the full connection-recovery improvements.
+
+## 0.3.19
+
+- Added **Disable hold-to-record** to prevent accidental recording from glasses controls or the phone button.
+- Kept Hey voice activation and text input available when manual recording is disabled.
+- Remembered the setting after reopening the app.
+
+## 0.3.17
+
+- Clarified how to remove connections on the Mac when this phone cannot confirm disconnection.
+
+## 0.3.15
+
+- Kept recording, sending and read-aloud notices beside conversation controls while Mac setup is open.
+- Showed connection-code errors beside the pairing input.
+- Restored the selected conversation after discarding a recording.
+
+## 0.3.12
+
+- Remembered the read-aloud setting when reopening the app.
+- Stopped treating old location measurements as fresh when phone updates stop.
+
 ## 0.3.4
 
 - Choose a custom name for Hey voice activation in Operation settings.

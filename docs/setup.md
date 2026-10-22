@@ -77,7 +77,7 @@ Sharing starts off. Turning it off stops new sharing and clears the relay's curr
 
 ## Updates
 
-Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. If the app says **Close Even to apply the update**, close Dot Link in the Even app and let the Mac app restart.
+Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. Starting a manual update interrupts the active conversation while the Mac app restarts. If the app says **Finish the current settings operation, then click Retry update**, finish that operation and choose **Retry update**.
 
 Updates preserve connection settings, pairing and history. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
 
