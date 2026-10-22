@@ -59,6 +59,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         var attributes: [String] = []
         var notificationID = UUID().uuidString.lowercased()
         var forwarding = "未送信"
+        var forwardingResult: NotificationProbeResult = .pending
     }
     var probes: [String: Probe] = [:]
     var structureSnapshots: [NotificationStructureProbe.Snapshot] = []
@@ -276,7 +277,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
         if !paused && !AXIsProcessTrusted() { reasons.append("通知を再開するにはアクセシビリティを許可してください。") }
         else if !paused && observer == nil { reasons.append("通知の監視に再接続しています。") }
-        if probes.values.contains(where: { $0.forwarding.hasPrefix("送信未確認") || $0.forwarding == "通知用接続設定なし" }) {
+        if probes.values.contains(where: { $0.forwardingResult.needsAttention }) {
             reasons.append("中継への転送を確認できないテスト通知があります。検知結果を確認してください。")
         }
         currentIcon = !healthChecked ? .checking : !healthReady || !reasons.isEmpty ? .attention : paused ? .paused : .ready
@@ -317,7 +318,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             let notificationSubscriptionReady: Bool?
             let notificationStatusAvailable: Bool
         }
-        let record = Diagnostic(version: 2, pid: ProcessInfo.processInfo.processIdentifier,
+        let record = Diagnostic(version: 3, pid: ProcessInfo.processInfo.processIdentifier,
             updatedAt: Date().timeIntervalSince1970, trusted: AXIsProcessTrusted(), paused: paused,
             observing: observer != nil, relaySuspended: relaySuspended, notificationPermission: notificationPermission,
             eventCount: eventCount, candidateCount: candidateCount, selectedApps: selected.sorted(),
@@ -463,7 +464,14 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         seen = seen.filter { Date().timeIntervalSince($0.value) < 120 }
         for (index, window) in windows.prefix(10).enumerated() {
             let read = readWindow(window, index: index)
-            if !read.truncated { lineDelivery.observe(NotificationReader.extract(read.root), selected: shareAllNotifications) }
+            // The migration marker uses one direct receipt even when sharing is enabled.
+            // Do not let the general ledger reserve or send the same notification.
+            if !read.truncated {
+                let extractions = NotificationReader.extract(read.root).filter {
+                    !(validating && migrationProbe != nil && $0.notification?.title == migrationProbe)
+                }
+                lineDelivery.observe(extractions, selected: shareAllNotifications)
+            }
             let strings = read.strings
             guard !strings.isEmpty else { continue }
             let fingerprint = strings.joined(separator: "\u{1f}")
@@ -481,12 +489,14 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                         probe.selectedAtDetection = shareAllNotifications || validating || selected.contains("Dot Notification Lab")
                         add("テスト通知をAXで検知: \(marker) / 本文一致: \(probe.bodyMatched)")
                     }
-                    if shareAllNotifications, let extraction = NotificationReader.extract(read.root).first(where: { $0.notification?.title == marker && $0.notification?.body == probe.body }),
+                    let directProbe = NotificationProbeResult.usesDirectProbe(shareAll: shareAllNotifications,
+                        validating: validating, marker: marker, migrationProbe: migrationProbe)
+                    if !directProbe, let extraction = NotificationReader.extract(read.root).first(where: { $0.notification?.title == marker && $0.notification?.body == probe.body }),
                        let identity = extraction.identity, let entry = lineDelivery.ledger.entry(identity) {
-                        probe.notificationID = entry.id; probe.forwarding = entry.stage
+                        probe.notificationID = entry.id; probe.forwarding = entry.stage; probe.forwardingResult = .ledgerManaged
                     }
                     probes[marker] = probe
-                    if !shareAllNotifications && probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwarding == "未送信" { forwardProbe(marker) }
+                    if directProbe && probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwardingResult == .pending { forwardProbe(marker) }
                 }
             } else {
                 add("通知候補: 要素 \(read.nodes) / 本文は診断に保存しません")
@@ -514,6 +524,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                 "observed_at": ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: detectedAt)),
                 "source_verification": "synthetic-test-marker"
             ])
+            probes[marker]?.forwardingResult = .sending
             probes[marker]?.forwarding = "送信中"
             updateState()
             let generation = activityGeneration
@@ -523,10 +534,12 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                     guard !self.relaySuspended, self.activityGeneration == generation else { return }
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                     if error == nil && (200..<300).contains(status) {
+                        self.probes[marker]?.forwardingResult = .relayAccepted
                         self.probes[marker]?.forwarding = "中継受領済み"
                         if self.validating && self.migrationProbe == marker { self.validating = false; self.detach(); self.saveDiagnostics(); self.requestMigration?() }
                         self.add("自動転送: \(marker) — 中継受領済み（Dotの案内・G2表示は別途確認）")
                     } else {
+                        self.probes[marker]?.forwardingResult = .sendUnconfirmed
                         self.probes[marker]?.forwarding = "送信未確認 HTTP \(status)"
                         self.add("自動転送: \(marker) — 送信未確認 HTTP \(status)")
                         if attempt < 2 {
@@ -542,6 +555,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             }
             forwardingTasks[marker] = task; task.resume()
         } catch {
+            probes[marker]?.forwardingResult = .missingCredentials
             probes[marker]?.forwarding = "通知用接続設定なし"
             add("自動転送: \(marker) — 通知用接続設定を確認してください")
             if legacyRunning { migrationFailed() }

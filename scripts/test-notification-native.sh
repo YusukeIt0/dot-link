@@ -7,3 +7,5 @@ xcrun swiftc -module-cache-path .runtime/swift-module-cache native/DotLinkSetup/
 .runtime/notification-structure-test/reader
 xcrun swiftc -module-cache-path .runtime/swift-module-cache native/DotLinkSetup/NotificationReader.swift native/DotLinkSetup/NotificationForwarder.swift tests/notification-forwarder.swift -o .runtime/notification-structure-test/forwarder
 .runtime/notification-structure-test/forwarder
+xcrun swiftc -module-cache-path .runtime/swift-module-cache native/NotificationMenu/NotificationProbeResult.swift tests/notification-probe-result.swift -o .runtime/notification-structure-test/probe
+.runtime/notification-structure-test/probe
