@@ -20,6 +20,11 @@ sh scripts/test-notification-native.sh
 
 Pushes and pull requests run these checks in GitHub Actions. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
 
+MCP `serverInfo.version` reports the root `package.json` version, shared with the
+Even app. It is not the Mac app release/build number. For Mac update or support
+identification, use the Mac app's version and build; a Mac-only release can retain
+the same MCP package version.
+
 For the standalone introduction page, see [page maintenance and deployment](introduction-page.md).
 
 For Even application state ownership and diagnosis, see [Even runtime ownership](even-runtime.md).
