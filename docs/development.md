@@ -2,7 +2,13 @@
 
 ## Tests
 
-Use Node.js 22.18.0 or later; the packaged runtime is pinned in `scripts/mac-runtime-manifest.json`.
+Use a supported Node.js release with current security fixes. The packaged runtime
+and CI use 22.23.4, pinned in `scripts/mac-runtime-manifest.json`. The
+`engines.node` value `>=22.18.0` is the native TypeScript execution compatibility
+floor, not a security guarantee. A higher lower bound alone would still admit
+vulnerable versions on other major lines. For the October 21, 2026 security
+release, the patched versions are 22.23.4, 24.22.1 and 26.12.1; use those or later
+patched releases on a supported line. See the [official advisory](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases).
 
 ```sh
 npm ci
@@ -49,11 +55,42 @@ For changes to this path, run `node --test tests/app-update.test.mjs tests/app-l
 
 Record the source commit, starting/target build identities, pairing/settings comparison, and outcomes for: connected idle, interrupted speech/transcription/reply, initially paused, preparation failure and retained-download retry, install failure and recovery, and quit while a verified installer is retained. Keep physical observations separate from injected failures and fixture results.
 
+## Required documentation check for every change and distribution
+
+Every implementation PR must check whether its changes affect user-facing release
+notes, `docs/privacy.md`, setup guidance, dependency/version descriptions, or
+permissions. Update affected documents in the same change. Record the documents
+checked and the result in the PR; if no update is needed, state the reason.
+
+Repeat this check against the exact source and artifact before **every** Mac or
+Even distribution, including validation builds and private uploads. Compare with
+the previous distributed version on that channel, not just the last commit:
+
+- Verify release notes cover the cumulative user-visible changes. Even changes
+  belong in `docs/even-release-notes.md`; Mac release notes must match the archive
+  and update feed. Keep issue numbers, commits, test results and internal status
+  out of user-facing notes.
+- Check the privacy baseline and actual behavior: microphone/wake input,
+  location, notifications, storage/retention, diagnostics, external services,
+  consent, stopping and deletion. A version bump alone is not a privacy audit.
+- Verify dependency versions, setup/update instructions and permission text
+  against the built artifact. Inspect the privacy document copied into the Mac
+  bundle. On Even Hub, check and save permissions and English change notes on
+  the actual selected build, then read them back.
+- Record source/build identity, comparison version, reviewed documents and
+  corrections (or why none were needed) in the existing PR/issue/release record.
+  Resolve discrepancies before distribution. Do not create a release-tracking
+  issue solely for this check.
+
+This is a required implementation and distribution gate, not optional cleanup.
+Mac release, Even upload, maintainer review submission and general publication
+remain separate stages. The maintainer presses the Even review-submission button.
+
 ## Maintainer release
 
 The maintainer needs authenticated `gh`, write access to this repository, and the existing Ed25519 signing key at `.runtime/update-signing/ed25519.key` with mode 600. This key is never included in a build, commit, or workflow. Contributors can build and test without the release key; only the maintainer signs official updates.
 
-1. Update `CFBundleShortVersionString` and increase `CFBundleVersion` in `native/DotLinkSetup/Info.plist`.
+1. Complete the [required documentation check](#required-documentation-check-for-every-change-and-distribution), then update `CFBundleShortVersionString` and increase `CFBundleVersion` in `native/DotLinkSetup/Info.plist`.
 2. Run tests, the native driver test, and the Mac build above. Inspect the app and changes. Push the matching source to `main`.
 3. Write release notes to a local text file and run:
 
@@ -74,7 +111,7 @@ npm run package:beta
 
 Work-branch validation builds show `Beta` beside the numeric app version. Use `npm run build` and `node scripts/package-beta.mjs` for those builds; the packager requires clean matching source and records its commit. Keep package ID and pairing identity stable, and increment the numeric version when a new upload requires it.
 
-Package code merged into main with `npm run package:release` (which runs `build:release` and the shared asset/secret/SDK checks), without the Beta marker and without opt-in diagnostics. The version update must also be merged before packaging the main release. Private storage in Even Hub before review does not make a main release a Beta. Upload authorization does not authorize review submission or publication.
+Complete the [required documentation check](#required-documentation-check-for-every-change-and-distribution) before distributing either build type. Package code merged into main with `npm run package:release` (which runs `build:release` and the shared asset/secret/SDK checks), without the Beta marker and without opt-in diagnostics. The version update must also be merged before packaging the main release. Private storage in Even Hub before review does not make a main release a Beta. Upload authorization does not authorize review submission or publication.
 
 Independent defects discovered during the refactor may use a child fix branch and PR targeting the parent branch. Verify the fix before integrating it and preserve the parent acceptance criteria. Keep one overall outcome until automated checks, review and affected physical verification are complete. Main merge requires explicit maintainer instruction.
 
@@ -90,7 +127,7 @@ The repository is `YusukeIt0/dot-link` (formerly `dot-link-app`). The signed fee
 
 Use the Mac app's pause, resume, quit and update controls for normal operation; see the [user guide](setup.md#pause-quit-and-uninstall). Dot Link owns its launchd jobs and must not change unrelated jobs or network settings. Data, credentials, models, history and pairing live outside the app bundle.
 
-Updates retain the data directory and paused state. Before installation, the app waits for recent Even activity and pending requests, records a recovery journal, and backs up the app and service configuration. Backups are retained; automatic rollback of an app that cannot launch is not implemented.
+Updates retain the data directory and paused state. Before installation, the app records a recovery journal and backs up the app and service configuration. Manual updates explicitly permit interruption; the currently disabled automatic path retains its idle checks. Backups are retained; automatic rollback of an app that cannot launch is not implemented.
 
 For source-based diagnostics, run `node scripts/setup.mjs status --voice-only` from the installation directory. Do not start another relay on the same ports. Runtime files may contain credentials: never attach the whole `.runtime` directory to an issue. For iPhone layout investigation, see [viewport diagnostics](viewport-diagnostics.md).
 

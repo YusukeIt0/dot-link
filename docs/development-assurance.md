@@ -212,12 +212,14 @@ webhook wakes Grok without continuous polling; execution stays in its own
 environment. Measure useful unique findings, overlap, rejected findings, limitations
 and duration to assess its value.
 
-**Rollout:** this section defines the agreed policy. Automatic label assignment
-and the merge-side hold are delivered in a separate implementation PR tracked by
-[#84](https://github.com/YusukeIt0/dot-link/issues/84). App installation and this
-policy document alone do not enable either mechanism. Before using it on a live
-PR, ensure the merge-side hold is deployed or the PR is otherwise excluded by the
-merge operator until review and adjudication finish.
+**Rollout:** label selection, exact-head independent-review holds and webhook
+wake-ups are implemented. The independent-review flow was validated in
+[#87](https://github.com/YusukeIt0/dot-link/issues/87), and automatic merging was
+activated on October 18, 2026. The live `DOTLINK_AUTO_MERGE_ENABLED` variable
+remains authoritative. Selected PRs still require authenticated current-head
+review and adjudication; a new head invalidates previous evidence. Protected
+control-plane changes remain subject to an explicit maintainer merge decision.
+See [automatic merging](automatic-merging.md) for the full gates.
 
 ## Validation boundaries
 
