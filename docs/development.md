@@ -103,7 +103,7 @@ The maintainer needs authenticated `gh`, write access to this repository, and th
 node scripts/release-mac-update.mjs '.runtime/mac-app/Dot Link.app' /path/to/release-notes.txt
 ```
 
-4. Commit and push the generated `updates/mac/appcast.xml`. This enables client discovery of the signed release.
+4. Commit the generated `updates/mac/appcast.xml` on a release branch, open a pull request, and complete the required CI/review checks before merging it. Do not bypass main branch protection. Merging the signed feed enables client discovery of the release.
 5. Fetch the public feed and ZIP without authentication, verify signatures, and check the update in the app. A failed network request must never be reported as “up to date.”
 
 The release helper packages the app, verifies its signature, signs the ZIP, uploads a release, and signs the feed. The release points to the current public `main` commit. Do not publish mismatched source and binaries. Keep release signing local; do not put personal credentials into GitHub Actions to make installation work.
