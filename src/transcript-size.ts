@@ -9,6 +9,7 @@ export function installTranscriptSize(field: HTMLTextAreaElement, scroller: HTML
   measure.readOnly = true;
   document.body.append(measure);
   let width = 0;
+  let frame = 0;
   const resize = () => {
     if (!field.getClientRects().length) return;
     const style = getComputedStyle(field);
@@ -42,8 +43,12 @@ export function installTranscriptSize(field: HTMLTextAreaElement, scroller: HTML
   };
   field.addEventListener('input', resize);
   // Covers orientation, layout width changes and becoming visible after pairing.
+  // Defer writes out of observer delivery so changing height cannot generate
+  // undelivered resize notifications in the same browser layout cycle.
   new ResizeObserver(() => {
-    if (field.getBoundingClientRect().width !== width) resize();
+    if (field.getBoundingClientRect().width !== width && !frame) {
+      frame = requestAnimationFrame(() => { frame = 0; resize(); });
+    }
   }).observe(field);
   resize();
   return resize;
