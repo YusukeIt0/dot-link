@@ -7,6 +7,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
 | `src/runtime-effects.ts` | Deferred speech, voice eligibility, standby protection and its waiting deadline | DOM/G2 presentation, transport or conversation selection |
+| `src/disconnect-journal.ts` | Durable revocation-only intent, native restore barrier and bounded retry | Active data sessions or recovery |
 | `src/connection-transitions.ts` | Reset/retention policy for pairing, restoration and forgetting | Transport implementation, rendering or user preference changes |
 | `src/relay-session.ts` | Active relay credentials, origin recovery, request cancellation, and connection generations | User-facing status, history selection, or whether to record |
 | `src/speech-playback.ts` | Queued read-aloud speech, cancellation, completion recovery, and the quiet interval before voice input resumes | Which replies to announce or whether TTS is enabled |
@@ -48,6 +49,8 @@ Each child PR targets `refactor/even-state-coordination`; later children incorpo
 | Subscription / host / provider status | Connection is marked connecting by caller | Clear until fresh snapshot | Clear until fresh snapshot | Clear |
 | Unsent text / language / TTS / operation preferences | Keep | Keep | Keep | Keep |
 | Location sharing | Existing owner continues enforcing origin-bound consent | Existing owner continues | Existing owner enforces saved origin; no consent expansion | Disable before credentials are removed |
+
+Explicit disconnect stores a separate native/local revocation journal before reporting durability. The session stops synchronously, and a separate retry path sends only `/api/pair/revoke`, preferring recovery proof. Journal restore precedes active credential restore and blocks matching registrations even if ordinary native pairing was overwritten by an older runtime. Native read failure prevents restoration; native write failure is visible and cannot guarantee disconnect across a new origin. Pending entries survive explicit new pairing and are removed after acknowledgment or expiry. Retries run while the app is active and after reopening; exit/supersession cancels them without discarding proof.
 
 Exit remains a terminal lifetime operation: it stops the session, receive loop, playback, display, capture and location owner without erasing saved pairing/preferences. It is not a reconnect reset. An ordinary offline poll does not discard an active recording.
 

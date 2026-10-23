@@ -48,7 +48,7 @@ export class RelaySession {
   save(saved: RelayCredentials): boolean {
     const retained = this.options.settings.save(saved); this.use(saved); return retained;
   }
-  forget(): void { this.use(undefined); this.options.settings.forget(); }
+  forget(persist = true): void { this.use(undefined); this.options.settings.forget(persist); }
   private check(version: number): void { if (!this.isCurrent(version)) throw new Error('Connection changed'); }
   private async recover(saved: RelayCredentials, version: number, runtime?: RuntimeRecoveryRequest): Promise<Response> {
     this.check(version);

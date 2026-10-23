@@ -1,3 +1,4 @@
+import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
 import { RuntimeNative } from './runtime-native.ts';
 import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
@@ -62,6 +63,13 @@ const sendButton = el<HTMLButtonElement>('send');
 const transcript = el<HTMLTextAreaElement>('transcript');
 const resizeTranscript = installTranscriptSize(transcript, document.querySelector<HTMLElement>('main')!);
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
+const disconnectJournal = new DisconnectJournal(() => localStorage);
+let disconnectRestoreReady = false;
+let explicitConnection = false;
+let disconnectRestoreFailures = 0;
+let relayRestoreFlight: Promise<void> | undefined;
+let disconnectRestoreTimer: ReturnType<typeof setTimeout> | undefined;
+let showDisconnectState = disconnectJournal.pending.length > 0;
 const relaySettings = new RelaySettings(() => localStorage);
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
 const runtimeNative = new RuntimeNative();
@@ -73,6 +81,18 @@ const session = new RelaySession({
     : t('接続設定が無効になりました。Macで新しい接続コードを発行してください。')),
   superseded: () => retireSupersededRuntime(),
   persistenceFailed: () => { notice.textContent = t('Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。'); },
+});
+if (session.credentials && disconnectJournal.blocks(session.credentials)) session.use(undefined);
+const disconnectRetry = new DisconnectRetry({
+  journal: disconnectJournal, fetch: (input, init) => fetch(input, init),
+  durable: () => { if (!session.token) relaySettings.forget(); },
+  changed: ({ pending, durable }) => {
+    if (exited || session.token || !showDisconnectState) return;
+    if (!pending) relaySettings.forget();
+    pairingNotice.textContent = !pending ? t('接続を解除しました。') : durable
+      ? t('この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。')
+      : t('この端末では停止しましたが、解除を保存できません。開き直すと接続が戻る場合があります。アプリを開いたままにしてください。');
+  },
 });
 const setupPanel = el<HTMLDetailsElement>('mac-setup');
 let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
@@ -204,8 +224,8 @@ const connectionTransitions = new ConnectionTransitions({
     hostName = t('接続先'); namedHost = false; selectedSTT = readSTTProvider(undefined); selectedSTTModel = undefined;
   },
 });
-function forgetPairing(message: string): void {
-  connectionTransitions.forget();
+function forgetPairing(message: string, persist = true): void {
+  connectionTransitions.forget(persist);
   pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
   progress.connection = 'unpaired'; syncRuntimeEffects();
@@ -223,13 +243,57 @@ const conversation = new ConversationState();
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
 
-async function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
+function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
+  if (relayRestoreFlight) return relayRestoreFlight;
+  const operation = restoreRelayAttempt(appBridge).then(() => { if (relayRestored && !exited) attachLocation(); }).finally(() => { if (relayRestoreFlight === operation) relayRestoreFlight = undefined; });
+  relayRestoreFlight = operation;
+  return operation;
+}
+async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
   const version = session.version;
-  const saved = await relaySettings.attach(runtimeNative.storage(appBridge));
+  clearTimeout(disconnectRestoreTimer);
+  const ready = await disconnectJournal.attach(runtimeNative.storage(appBridge));
+  if (exited) return;
+  if (version !== session.version) {
+    disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, 0);
+    return;
+  }
+  if (!ready) {
+    if (!explicitConnection) {
+      relayRestored = false;
+      connectionTransitions.beginPairing();
+      progress.connection = 'connecting'; syncRuntimeEffects();
+      pairingNotice.textContent = t('接続設定を確認できません。復元せずに再確認しています。');
+    }
+    const delay = Math.min(10000, 2000 * 2 ** Math.min(disconnectRestoreFailures++, 3));
+    disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, delay);
+    return;
+  }
+  const wasSuspended = disconnectRestoreFailures > 0;
+  disconnectRestoreFailures = 0;
+  disconnectRestoreReady = true;
+  // A freshly issued pairing cannot match an older disconnect entry. Never
+  // replace an explicit connection with credentials read later from storage.
+  if (explicitConnection) {
+    if (disconnectJournal.pending.length) void disconnectRetry.run();
+    return;
+  }
+  let saved = await relaySettings.attach(runtimeNative.storage(appBridge));
   if (version !== session.version || exited) return;
   relayRestored = true;
+  if (pairingNotice.textContent === t('接続設定を確認できません。復元せずに再確認しています。')) pairingNotice.textContent = '';
+  if (saved && disconnectJournal.blocks(saved)) saved = undefined;
+  if (disconnectJournal.pending.length) {
+    showDisconnectState = true;
+    if (!saved) forgetPairing(t('この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。'), false);
+    void disconnectRetry.run();
+  }
   // Legacy development credentials are separate from packaged pairing.
-  if (!saved && !session.credentials) return;
+  if (!saved && !session.credentials) {
+    if (wasSuspended && session.token) updates.start(true);
+    syncRuntimeEffects();
+    return;
+  }
   connectionTransitions.restore(saved);
   if (!saved) { showSetup(true); progress.connection = 'unpaired'; syncRuntimeEffects(); display(() => t('再接続が必要です'), () => t('接続先を確認して「接続」を押してください。')); return; }
   showSetup(false); progress.connection = 'connecting'; syncRuntimeEffects(); display(() => t('再接続中'), idleVoicePrompt);
@@ -324,14 +388,17 @@ el('pair').onclick = async () => {
   let invite: PairingInvite;
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
   catch { pairingNotice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
+  explicitConnection = true;
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
   connectionTransitions.beginPairing();
   const version = session.version;
   progress.connection = 'connecting'; updateRuntime();
+  let accepted = false;
   try {
     const credentials = await session.pair(invite);
     if (version !== session.version || exited) return;
-    const retained = connectionTransitions.paired(credentials); relayRestored = true;
+    if (bridge) relaySettings.connectNative(runtimeNative.storage(bridge));
+    const retained = connectionTransitions.paired(credentials); accepted = true; relayRestored = true;
     const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
@@ -342,6 +409,7 @@ el('pair').onclick = async () => {
     showSetup(false);
   } catch (error) {
     if (version !== session.version || exited) return;
+    if (!accepted) explicitConnection = false;
     progress.connection = session.token ? 'offline' : 'unpaired'; updateRuntime();
     setupPanel.open = true;
     pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
@@ -349,15 +417,15 @@ el('pair').onclick = async () => {
     if (session.token && relayRestored) updates.start(true);
   } finally { if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
 };
-el('forget-pairing').onclick = async () => {
-  if (busy || recorder.state !== 'idle') return;
-  busy = true; let revoked = false; const version = session.version;
-  try { if (session.credentials) { await api('/api/pair/revoke', 'POST'); revoked = true; } }
-  catch {} finally {
-    if (exited || !session.isCurrent(version)) return;
-    forgetPairing(revoked ? t('接続を解除しました。') : t('この端末の接続設定を削除しました。Mac側の解除は未確認です。Macの「Evenの接続設定」→「Evenの接続をすべて解除」で解除してください。ほかのEven接続も解除されます。'));
-    busy = false; display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
-  }
+el('forget-pairing').onclick = () => {
+  if (exited) return;
+  const credentials = session.credentials;
+  if (credentials) disconnectJournal.add(credentials);
+  showDisconnectState = true;
+  forgetPairing(credentials ? t('この端末では停止しました。Mac側の解除を確認しています。') : t('この端末の接続設定を削除しました。Mac側の解除は未確認です。Macの「Evenの接続設定」→「Evenの接続をすべて解除」で解除してください。ほかのEven接続も解除されます。'), !credentials);
+  busy = false;
+  display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
+  if (credentials) void disconnectRetry.run();
 };
 el('tts').onclick = () => {
   tts = !tts; renderReadAloudControl();
@@ -642,7 +710,7 @@ const recorder = new VoiceInput({
 });
 
 const runtimeEffects = new RuntimeEffects({
-  state: () => ({exited, tts, ready: glassesReady, paired: !!session.token, subscribed,
+  state: () => ({exited, tts, ready: glassesReady && relayRestored, paired: !!session.token, subscribed,
     online: progress.connection === 'online', busy, recording: recorder.state !== 'idle',
     draft: !!transcript.value.trim(), playbackBlocks: playback.blocksInput,
     phaseProtect: ['recognizing', 'sending'].includes(progress.phase), waitingMs: progress.waitingProtectionMs}),
@@ -789,6 +857,7 @@ function stopSession(): void {
   exitDiagnostics.record('stop-session');
   void locationSharing.stop();
   exited = true; pageActive = false; session.stop();
+  disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
   runtimeEffects.stop(); playback.stop(); g2Display.stop(); clearClip(); void recorder.dispose();
@@ -797,6 +866,7 @@ function stopSession(): void {
 function retireSupersededRuntime(): void {
   if (exited) return;
   runtimeNative.retire();
+  disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
   exited = true; pageActive = false;
   session.stop(); updates.stop();
   if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
@@ -823,7 +893,7 @@ async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
   if (exited) return;
   void exitDiagnostics.attach(runtimeNative.storage(appBridge));
-  void restoreRelay(appBridge).then(() => attachLocation());
+  void restoreRelay(appBridge);
   const nativeStorage = runtimeNative.storage(appBridge);
   void languagePreferences.attach(nativeStorage).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;
@@ -1030,9 +1100,9 @@ showSetup(!session.token);
 if (session.token && !session.credentials?.resumeToken) updates.start(true);
 updateRuntime(false);
 window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token && relayRestored) updates.start(); });
-window.addEventListener('online', () => { if (session.token && relayRestored && !exited) updates.start(); });
+window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); } if (session.token && relayRestored && !exited) updates.start(); });
 window.addEventListener('offline', () => { if (exited) return; progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
-document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden && session.token && relayRestored) updates.start(); });
+document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });
 
 void connect().catch(() => {
   if (exited) return;

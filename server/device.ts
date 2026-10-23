@@ -114,8 +114,6 @@ export function deviceServer(options: { token: string; origin: string; directory
         const credential = request.headers.authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1] ?? '';
         if (path === '/api/pair/revoke' && request.method === 'POST' && options.pairing && requestOrigin !== undefined) {
           if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
-          if (Date.now() - revokeWindow >= 60000) { revokeWindow = Date.now(); revokeAttempts = 0; }
-          if (++revokeAttempts > 30) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
           const raw = (await boundedBody(request, 1024)).toString('utf8');
           if (raw && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
           const value = raw ? JSON.parse(raw) : {};
@@ -124,14 +122,24 @@ export function deviceServer(options: { token: string; origin: string; directory
             (Object.hasOwn(value, 'resumeToken') && (typeof value.resumeToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.resumeToken)))) {
             json(400, { error: 'Invalid revocation request' }); return;
           }
+          if (value.resumeToken && !options.pairing.allowsResumeOrigin(requestOrigin)) { json(403, { error: 'Origin rejected' }); return; }
           if (!value.resumeToken && !credential) { json(401, { error: 'Revocation proof required' }); return; }
           // Reading a request body yields; maintenance may have started meanwhile.
           if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
           const finished = options.updateActivity?.begin();
           if (finished) response.once('close', finished);
           const subject = value.resumeToken ? options.pairing.revocationSubject(value.resumeToken, requestOrigin) : options.pairing.subject(credential, requestOrigin);
+          // Unknown/no-proof requests and inactive receipts cannot consume the
+          // shared mutation budget of a legitimate phone trying to disconnect.
+          if (subject) {
+            if (Date.now() - revokeWindow >= 60000) { revokeWindow = Date.now(); revokeAttempts = 0; }
+            if (++revokeAttempts > 30) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
+          }
           const removed = value.resumeToken ? options.pairing.revokeRecovery(value.resumeToken, requestOrigin) : options.pairing.revoke(credential, requestOrigin);
-          if (!removed) { json(500, { error: 'Pairing removal could not be confirmed' }); return; }
+          if (!removed) {
+            if (!value.resumeToken && options.pairing.revocationCredentialMissing(credential)) { json(401, { code: 'PAIRING_INACTIVE' }); return; }
+            json(500, { error: 'Pairing removal could not be confirmed' }); return;
+          }
           // Authority is already revoked; bridge cleanup cannot delay that boundary.
           if (subject) {
             try { await fetch(`${bridgeURL}/api/location/revoke`, { method: 'POST', redirect: 'error',
