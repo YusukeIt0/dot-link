@@ -7,6 +7,7 @@ import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
 import { LatencyLog } from './latency.ts';
 
 const SESSION = 'personal-g2';
+const OUTBOUND_LIMIT = 1000;
 const argsSchema = z.object({ session_id: z.literal(SESSION) }).strict();
 const deliverySchema = z.object({ mode: z.literal('webhook'), url: z.string().max(2048), secret: z.string().max(100) }).strict();
 const subscribeSchema = z.object({
@@ -24,7 +25,7 @@ const outboundInput = z.object({
   message_id: z.string().uuid(), text: z.string().trim().min(1).max(8000),
 }).strict();
 const outboundRecord = outboundInput.extend({ createdAt: z.string(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
-const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(1000).default([]) });
+const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(OUTBOUND_LIMIT).default([]) });
 type State = z.infer<typeof stateSchema>;
 type Subscription = z.infer<typeof subscriptionSchema>;
 
@@ -43,7 +44,7 @@ export const replyTool = {
 };
 export const sendMessageTool = {
   name: 'send_message_to_g2',
-  description: 'Send a NEW proactive message or follow-up to the owner’s G2 at any time, without an utterance ID or event subscription. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that same ID and identical text on retry. This sends now, not at a scheduled time. Receipt confirms storage for G2, not physical display. Do not overwrite an earlier reply_to_g2 response.',
+  description: 'Send a NEW proactive message or follow-up to the owner’s G2 at any time, without an utterance ID or event subscription. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that same ID and identical text on retry. Duplicate and conflicting-ID checks cover only the latest 1,000 accepted outbound messages; an evicted ID can be accepted again as new. This sends now, not at a scheduled time. Receipt confirms storage for G2, not physical display. Do not overwrite an earlier reply_to_g2 response.',
   inputSchema: { type: 'object', properties: { message_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['message_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -76,10 +77,11 @@ export class Bridge {
       this.state = { version: 1, messages: [], outbound: [] }; this.save();
     }
   }
-  private save(): void {
+  private save(next = this.state): void {
     const temporary = `${this.path}.tmp`;
-    writeFileSync(temporary, JSON.stringify(this.state), { mode: 0o600 });
+    writeFileSync(temporary, JSON.stringify(next), { mode: 0o600 });
     renameSync(temporary, this.path);
+    this.state = next;
     this.changes.emit();
   }
   private serial<T>(action: () => Promise<T>): Promise<T> {
@@ -121,10 +123,10 @@ export class Bridge {
       const existing = this.state.outbound.find(m => m.message_id === p.message_id);
       if (existing && existing.text !== p.text) throw new Error('Message ID conflicts');
       if (!existing) {
-        // Retain IDs so a retry cannot become a duplicate after history eviction.
-        if (this.state.outbound.length >= 1000) throw new Error('Outbound storage is full');
-        this.state.outbound.push({ ...p, createdAt: new Date().toISOString(), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) });
-        this.save();
+        // Rotate in acceptance order. Retried retained IDs never refresh that order.
+        // Publish the replacement only after persistence succeeds.
+        const outbound = [...this.state.outbound, { ...p, createdAt: new Date().toISOString(), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) }].slice(-OUTBOUND_LIMIT);
+        this.save({ ...this.state, outbound });
       }
       return { message_id: p.message_id, stored_for_g2: true, physical_display_confirmed: false };
     });
