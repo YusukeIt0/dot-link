@@ -80,7 +80,7 @@ main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 #conversation-controls #tts[aria-pressed=true]::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
 #tts[aria-pressed=true] .read-aloud-off, #tts[aria-pressed=false] .read-aloud-on { display: none; }
 #conversation-controls .conversation-composer { padding: 12px; margin: 0 -8px; border-radius: 27px; background: #222424; }
-#conversation-controls #transcript { display: block; height: 65px; min-height: 65px; max-height: 180px; margin: 0; padding: 8px 10px; border: 0; border-radius: 12px; resize: none; background: transparent; font-size: 16px; line-height: 1.5; }
+#conversation-controls #transcript { display: block; height: 40px; min-height: 40px; max-height: 136px; overflow-y: hidden; margin: 0; padding: 8px 10px; border: 0; border-radius: 12px; resize: none; background: transparent; font-size: 16px; line-height: 1.5; }
 #conversation-controls #transcript::placeholder { color: #999f9c; }
 #conversation-controls .conversation-actions { display: flex; align-items: center; gap: 0; margin-top: 4px; }
 #conversation-controls #send { margin-left: auto; background: #ebeee9; color: #141817; }

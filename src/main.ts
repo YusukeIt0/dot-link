@@ -24,6 +24,7 @@ import { parseInvite, type PairingInvite } from './relay-origin.ts';
 import { LanguagePreferences } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
 import { installKeyboardViewport } from './keyboard-viewport.ts';
+import { installTranscriptSize } from './transcript-size.ts';
 import { SpeechPlayback } from './speech-playback.ts';
 import { ReadAloudPreferences } from './read-aloud-preferences.ts';
 import { G2Display } from './g2-display.ts';
@@ -59,6 +60,7 @@ const recordButton = el<HTMLButtonElement>('record');
 const discardButton = el<HTMLButtonElement>('discard');
 const sendButton = el<HTMLButtonElement>('send');
 const transcript = el<HTMLTextAreaElement>('transcript');
+const resizeTranscript = installTranscriptSize(transcript, document.querySelector<HTMLElement>('main')!);
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
 const relaySettings = new RelaySettings(() => localStorage);
 const pairing = new Pairing(() => localStorage, () => sessionStorage);
@@ -391,7 +393,7 @@ sendButton.onclick = async () => {
     if (message.status === 'failed') throw new Error(t('配送を確認できませんでした。同じ発話は重複送信しません。'));
     progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();
-    transcript.value = ''; pendingId = undefined; pendingText = undefined;
+    transcript.value = ''; resizeTranscript(); pendingId = undefined; pendingText = undefined;
     if (conversation.acceptSent(message).reply) progress.complete(message.id);
     showMessage();
     notice.textContent = '';
@@ -590,7 +592,7 @@ const recorder = new VoiceInput({
         flushPendingDisplay();
         return;
       }
-      transcript.value = text; sendButton.disabled = false;
+      transcript.value = text; resizeTranscript(); sendButton.disabled = false;
       progress.review(); notice.textContent = '';
       display(() => t('認識完了'), text);
       busy = false; clearClip();

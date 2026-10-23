@@ -73,6 +73,7 @@ async function launch(options = {}) {
     exitDiagnosticsFlag: options.exitDiagnostics ? '1' : '0',
     // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
     installKeyboardViewport: () => () => {},
+    installTranscriptSize: () => () => {},
     InteractionStatus: class extends dependencies.InteractionStatus { constructor() { super(() => now); } },
     Date: class extends Date { static now() { return epoch + now; } },
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
