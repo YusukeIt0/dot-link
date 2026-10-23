@@ -114,8 +114,6 @@ export function deviceServer(options: { token: string; origin: string; directory
         const credential = request.headers.authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1] ?? '';
         if (path === '/api/pair/revoke' && request.method === 'POST' && options.pairing && requestOrigin !== undefined) {
           if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
-          if (Date.now() - revokeWindow >= 60000) { revokeWindow = Date.now(); revokeAttempts = 0; }
-          if (++revokeAttempts > 30) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
           const raw = (await boundedBody(request, 1024)).toString('utf8');
           if (raw && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
           const value = raw ? JSON.parse(raw) : {};
@@ -131,6 +129,12 @@ export function deviceServer(options: { token: string; origin: string; directory
           const finished = options.updateActivity?.begin();
           if (finished) response.once('close', finished);
           const subject = value.resumeToken ? options.pairing.revocationSubject(value.resumeToken, requestOrigin) : options.pairing.subject(credential, requestOrigin);
+          // Unknown/no-proof requests and inactive receipts cannot consume the
+          // shared mutation budget of a legitimate phone trying to disconnect.
+          if (subject) {
+            if (Date.now() - revokeWindow >= 60000) { revokeWindow = Date.now(); revokeAttempts = 0; }
+            if (++revokeAttempts > 30) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
+          }
           const removed = value.resumeToken ? options.pairing.revokeRecovery(value.resumeToken, requestOrigin) : options.pairing.revoke(credential, requestOrigin);
           if (!removed) {
             if (!value.resumeToken && options.pairing.revocationCredentialMissing(credential)) { json(401, { code: 'PAIRING_INACTIVE' }); return; }
