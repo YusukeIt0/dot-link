@@ -49,6 +49,7 @@ final class NotificationApp: NSObject, NSApplicationDelegate, UNUserNotification
         var attributes: [String] = []
         var notificationID = UUID().uuidString.lowercased()
         var forwarding = "未送信"
+        var forwardingResult: NotificationProbeResult = .pending
     }
     var probes: [String: Probe] = [:]
     var batchUntil: Date = .distantPast
@@ -266,7 +267,7 @@ final class NotificationApp: NSObject, NSApplicationDelegate, UNUserNotification
         var reasons = healthIssues
         if !paused && !AXIsProcessTrusted() { reasons.append("通知を再開するにはアクセシビリティを許可してください。") }
         else if !paused && observer == nil { reasons.append("通知の監視に再接続しています。") }
-        if probes.values.contains(where: { $0.forwarding.hasPrefix("送信未確認") || $0.forwarding == "通知用接続設定なし" }) {
+        if probes.values.contains(where: { $0.forwardingResult.needsAttention }) {
             reasons.append("中継への転送を確認できないテスト通知があります。検知結果を確認してください。")
         }
         currentIcon = !healthChecked ? .checking : !healthReady || !reasons.isEmpty ? .attention : paused ? .paused : .ready
@@ -291,7 +292,7 @@ final class NotificationApp: NSObject, NSApplicationDelegate, UNUserNotification
             let icon: String, connectionReady: Bool
             let probes: [Probe]
         }
-        let record = Diagnostic(version: 1, pid: ProcessInfo.processInfo.processIdentifier,
+        let record = Diagnostic(version: 3, pid: ProcessInfo.processInfo.processIdentifier,
             updatedAt: Date().timeIntervalSince1970, trusted: AXIsProcessTrusted(), paused: paused,
             observing: observer != nil, notificationPermission: notificationPermission,
             eventCount: eventCount, candidateCount: candidateCount, selectedApps: selected.sorted(),
@@ -388,7 +389,7 @@ final class NotificationApp: NSObject, NSApplicationDelegate, UNUserNotification
                         add("テスト通知をAXで検知: \(marker)\n本文一致: \(probe.bodyMatched ? "はい" : "いいえ") / 選択対象: \(probe.selectedAtDetection! ? "はい" : "対象外・除外") / 表示アプリ候補: \(matches.joined(separator: ", "))")
                     }
                     probes[marker] = probe
-                    if probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwarding == "未送信" { forwardProbe(marker) }
+                    if probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwardingResult == .pending { forwardProbe(marker) }
                 }
             } else {
                 add("通知候補: アプリ候補 \(matches.isEmpty ? "不明" : matches.joined(separator: ", ")) / 文字列 \(strings.count) / 要素 \(nodes) — 本文非表示・転送保留")
@@ -416,15 +417,18 @@ final class NotificationApp: NSObject, NSApplicationDelegate, UNUserNotification
                 "observed_at": ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: detectedAt)),
                 "source_verification": "synthetic-test-marker"
             ])
+            probes[marker]?.forwardingResult = .sending
             probes[marker]?.forwarding = "送信中"
             updateState()
             URLSession.shared.dataTask(with: request) { _, response, error in
                 DispatchQueue.main.async {
                     let status = (response as? HTTPURLResponse)?.statusCode ?? 0
                     if error == nil && (200..<300).contains(status) {
+                        self.probes[marker]?.forwardingResult = .relayAccepted
                         self.probes[marker]?.forwarding = "中継受領済み"
                         self.add("自動転送: \(marker) — 中継受領済み（Dotの案内・G2表示は別途確認）")
                     } else {
+                        self.probes[marker]?.forwardingResult = .sendUnconfirmed
                         self.probes[marker]?.forwarding = "送信未確認 HTTP \(status)"
                         self.add("自動転送: \(marker) — 送信未確認 HTTP \(status)")
                         if attempt < 2 {
@@ -437,6 +441,7 @@ final class NotificationApp: NSObject, NSApplicationDelegate, UNUserNotification
                 }
             }.resume()
         } catch {
+            probes[marker]?.forwardingResult = .missingCredentials
             probes[marker]?.forwarding = "通知用接続設定なし"
             add("自動転送: \(marker) — 通知用接続設定を確認してください")
             updateState()

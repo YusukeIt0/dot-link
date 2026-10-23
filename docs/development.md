@@ -152,3 +152,15 @@ node scripts/check-review-before-merge.mjs <PR> --base refactor/even-state-coord
 Both paths require completed intake/review/report jobs, current review inputs, clean mergeability and passing branch-required CI. The child CI lookup supports in-repository heads and PR runs whose API metadata identifies the PR; fork child PRs with missing run association remain NOT READY. A child target may have no branch-protection requirements; the child gate additionally requires the completed product CI workflow and its test job for the exact head, even in that case. Read the findings; READY is not merge authorization. Integrate children in dependency order, then verify the combined parent with automated checks, review and the affected physical flows. Give device testers the exact build, starting state, numbered actions, expected results and requested observations. Main merge, upload/distribution, review submission and publication retain separate authorization stages.
 
 When automation or repository settings conflict with this workflow, record the mismatch and agree on a meaningful workflow change before proceeding. A skipped review is not a completed review. For existing parent branches that predate a workflow update, dispatch the review from main (`gh workflow run claude-review.yml --ref main -f item_number=<PR>`) so the updated workflow runs.
+
+## Notification migration proof
+
+Both Mac notification diagnostic producers write schema version 3 with a stable
+`forwardingResult` for each synthetic probe. Only `relay_accepted` can authorize
+retiring the owned legacy notification helper; the human-readable `forwarding`
+field is informational. Trust, installed-process identity, proof/probe freshness,
+OS registration, body match and selection at detection remain required.
+Text-only diagnostics from older builds cannot authorize migration: rerun the
+notification test in the current installed app. A migration probe uses its direct
+receipt path even if notification sharing was already enabled, and is excluded
+from the general delivery ledger to prevent duplicate forwarding.

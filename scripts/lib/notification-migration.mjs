@@ -4,10 +4,11 @@ import { homedir } from 'node:os';
 import { run } from './setup.mjs';
 import { ownedService } from './service-management.mjs';
 const label='local.even-g2-dot.menu';
+// Legacy text-only diagnostics are deliberately rejected; rerun the notification test.
 export function validNotificationProof(proof,now=Date.now()) {
  return proof?.trusted===true && Number.isInteger(proof.pid) && proof.pid>0 &&
   Number.isFinite(proof.updatedAt) && now-proof.updatedAt*1000>=0 && now-proof.updatedAt*1000<120000 &&
-  proof.probes?.some(p=>p.registered===true && p.bodyMatched===true && p.selectedAtDetection===true && p.forwarding==='中継受領済み' && Number.isFinite(p.detectedAt) && now-p.detectedAt*1000>=0 && now-p.detectedAt*1000<120000)===true;
+  proof.probes?.some(p=>p.registered===true && p.bodyMatched===true && p.selectedAtDetection===true && p.forwardingResult==='relay_accepted' && Number.isFinite(p.detectedAt) && now-p.detectedAt*1000>=0 && now-p.detectedAt*1000<120000)===true;
 }
 export async function legacyNotificationState(directory,{home=homedir(),execute=run}={}) {
  const file=join(home,'Library/LaunchAgents',label+'.plist');
