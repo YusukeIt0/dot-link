@@ -2,11 +2,12 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.26
 
 - Fixed disconnect to stop this device immediately and remember the removal request when the Mac is offline.
 - Added automatic retries for pending Mac removal after reopening the app.
 - Clarified when Mac removal is pending or disconnect settings could not be saved.
+- Update Dot Link for Mac to 0.4.14 or later for reliable removal retries.
 
 ## 0.3.25
 
