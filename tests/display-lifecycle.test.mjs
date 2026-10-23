@@ -37,10 +37,13 @@ async function launch(options = {}) {
   const clock = {now: () => now, schedule, cancel: id => timers.delete(id)};
   const element = id => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', dataset: {}, checked: false, disabled: false,
-      before() {}, after() {}, setAttribute() {}, removeAttribute() {}, focus() {}, close() {}, pause() {}, showModal() {},
+      before() {}, after() {}, attributes: new Map(),
+      setAttribute(name, value) { this.attributes.set(name, String(value)); },
+      getAttribute(name) { return this.attributes.get(name) ?? null; },
+      removeAttribute(name) { this.attributes.delete(name); }, focus() {}, close() {}, pause() {}, showModal() {},
       listeners: new Map(), addEventListener(type, callback) { this.listeners.set(type, callback); },
       dispatchEvent(event) { this.listeners.get(event.type)?.(event); },
-      click() { return this.onclick?.(); }});
+      click() { if (!this.disabled) return this.onclick?.(); }});
     return elements.get(id);
   };
   const listen = (name, callback) => { listeners.set(name, callback); };
@@ -144,6 +147,84 @@ const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
 
+for (const language of ['en', 'ja']) {
+ for (const autoSend of [false, true]) {
+  test(`phone record icon stops in place and preserves transcription/auto-send (${language}, auto=${autoSend})`, {timeout: 5000}, async t => {
+   let finishTranscript, sent;
+   const sentRequest = new Promise(resolve => { sent = resolve; });
+   const app = await launch({language, typedInput: true, request: url => {
+    if (url.endsWith('/api/transcribe')) return new Promise(resolve => { finishTranscript = resolve; });
+    if (url.endsWith('/api/utterances')) sent();
+   }}); t.after(app.close);
+   const record = app.element('record'), discard = app.element('discard');
+   app.element('auto-send').checked = autoSend;
+   assert.equal(record.getAttribute('aria-label'), language === 'ja' ? '録音を開始' : 'Start recording');
+   assert.equal(record.dataset.recordState, 'idle');
+   assert.equal(app.element('transcript').placeholder, language === 'ja' ? 'Dotにメッセージ…' : 'Message Dot…');
+   await record.click(); await flush();
+   assert.equal(record.dataset.recordState, 'recording');
+   assert.equal(record.getAttribute('aria-label'), language === 'ja' ? '録音を停止' : 'Stop recording');
+   assert.equal(discard.disabled, false);
+   assert.equal(discard.getAttribute('aria-label'), language === 'ja' ? '録音を破棄' : 'Discard recording');
+   await app.emit({audioEvent: {audioPcm: new Uint8Array(3200)}});
+   await record.click(); await flush();
+   assert.equal(record.dataset.recordState, 'idle');
+   assert.equal(app.element('phone-control-status').textContent, language === 'ja' ? '認識中' : 'Transcribing');
+   assert.equal(discard.disabled, false, 'discard remains available during transcription');
+   finishTranscript({ok: true, status: 200, json: async () => ({text: 'Synthetic transcript'})}); await flush();
+   // Auto-send awaits a real Web Crypto digest; microtasks alone cannot settle it.
+   if (autoSend) { await sentRequest; await flush(); }
+   assert.equal(discard.disabled, true);
+   assert.equal(app.networkCalls.filter(url => url.endsWith('/api/utterances')).length, autoSend ? 1 : 0);
+   assert.equal(app.element('transcript').value, autoSend ? '' : 'Synthetic transcript');
+   if (!autoSend) {
+    app.element('transcript').value = 'Edited synthetic transcript'; app.element('transcript').oninput();
+    await app.element('send').click(); await flush();
+    assert.match(app.physical.get(2), /Edited synthetic transcript/);
+   }
+  });
+ }
+}
+
+test('phone stop error keeps the retry action on the microphone and recovers its idle icon', async t => {
+ let failStop = true;
+ const app = await launch({language: 'en', microphone: open => open || !failStop}); t.after(app.close);
+ await app.element('record').click(); await flush();
+ await app.element('record').click(); await flush();
+ assert.equal(app.element('record').dataset.recordState, 'stop-error');
+ assert.equal(app.element('record').disabled, false);
+ assert.equal(app.element('record').getAttribute('aria-label'), 'Retry stopping the microphone');
+ assert.equal(app.element('phone-control-status').textContent, 'Retry stopping the microphone');
+ failStop = false;
+ await app.element('record').click(); await flush();
+ assert.equal(app.element('record').dataset.recordState, 'idle');
+ assert.equal(app.element('record').getAttribute('aria-label'), 'Start recording');
+});
+
+test('phone history count follows selection without changing G2 boundary navigation or blank history', async t => {
+ const empty = await launch(); t.after(empty.close);
+ assert.equal(empty.element('conversation-position').textContent, '0 / 0');
+ const app = await launch({initialMessages: [proactive('first'), proactive('last')]}); t.after(app.close);
+ assert.equal(app.element('conversation-position').textContent, '2 / 2');
+ const previous = {textEvent: {eventType: sdk.OsEventTypeList.SCROLL_TOP_EVENT}};
+ const next = {textEvent: {eventType: sdk.OsEventTypeList.SCROLL_BOTTOM_EVENT}};
+ await app.emit(previous);
+ const firstFrame = [...app.physical];
+ assert.equal(app.element('conversation-position').textContent, '1 / 2');
+ await app.advance(29_000);
+ await app.emit(previous);
+ assert.deepEqual([...app.physical], firstFrame);
+ await app.advance(2000);
+ assert.equal(app.hidden(), false, 'the boundary swipe still resets activity');
+ await app.emit(next);
+ const lastFrame = [...app.physical];
+ assert.equal(app.element('conversation-position').textContent, '2 / 2');
+ await app.emit(next);
+ assert.deepEqual([...app.physical], lastFrame);
+ assert.equal(app.element('previous').disabled, false);
+ assert.equal(app.element('next').disabled, false);
+});
+
 for (const browseHistory of [false, true]) {
  test(`manual discard restores the ${browseHistory ? 'browsed' : 'latest'} conversation without replay or submission`, async t => {
   const app = await launch({initialMessages: [proactive('first'), proactive('second')]}); t.after(app.close);
@@ -153,7 +234,11 @@ for (const browseHistory of [false, true]) {
   await app.evaluate('tts = true;');
   await app.element('record').click(); await flush();
   assert.equal(vm.runInContext('recorder.state', app.context), 'recording');
+  assert.equal(app.element('record').dataset.recordState, 'recording');
+  assert.equal(app.element('discard').disabled, false);
   await app.element('discard').click(); await flush();
+  assert.equal(app.element('record').dataset.recordState, 'idle');
+  assert.equal(app.element('discard').disabled, true);
   await app.advance(1000);
   assert.equal(app.element('hud-content').textContent, expected);
   assert.equal(app.physical.get(2), expected);
@@ -199,11 +284,11 @@ test('stale local ON cannot speak a fresh reply while native OFF is still restor
   const app = await launch({localReadAloud: true, nativeReadAloud: false,
     nativeRead: key => key === 'dot-read-aloud-preference-v1' ? new Promise(resolve => { restore = resolve; }) : undefined});
   t.after(app.close);
-  assert.match(app.element('tts').textContent, /OFF$/);
+  assert.match(app.element('tts').getAttribute('aria-label'), /OFF$/);
   await app.deliver(app.snapshot([proactive('before-restore')]));
   assert.equal(app.calls.filter(c => c[0] === 'speech').length, 0);
   restore('false'); await flush();
-  assert.match(app.element('tts').textContent, /OFF$/);
+  assert.match(app.element('tts').getAttribute('aria-label'), /OFF$/);
   await app.deliver(app.snapshot([proactive('before-restore'), proactive('after-restore')]));
   assert.equal(app.calls.filter(c => c[0] === 'speech').length, 0);
 });
@@ -215,7 +300,8 @@ test('read-aloud choice persists through reopen without enable speech or history
   await first.close();
   const history = [proactive('old')];
   const reopened = await launch({nativeReadAloud: true, initialMessages: history}); t.after(reopened.close);
-  assert.match(reopened.element('tts').textContent, /ON$/);
+  assert.match(reopened.element('tts').getAttribute('aria-label'), /ON$/);
+  assert.equal(reopened.element('tts').getAttribute('aria-pressed'), 'true');
   assert.match(reopened.element('speech-status').textContent, /TTS:iPhone/);
   assert.equal(reopened.calls.filter(c => c[0] === 'speech').length, 0);
   await reopened.deliver(reopened.snapshot([...history, proactive('new')]));
@@ -224,7 +310,8 @@ test('read-aloud choice persists through reopen without enable speech or history
   assert.equal(reopened.nativeSaved.get('dot-read-aloud-preference-v1'), 'false');
   await reopened.close();
   const off = await launch({nativeReadAloud: false, initialMessages: history}); t.after(off.close);
-  assert.match(off.element('tts').textContent, /OFF$/);
+  assert.match(off.element('tts').getAttribute('aria-label'), /OFF$/);
+  assert.equal(off.element('tts').getAttribute('aria-pressed'), 'false');
   await off.deliver(off.snapshot([...history, proactive('another')]));
   assert.equal(off.calls.filter(c => c[0] === 'speech').length, 0);
 });
@@ -412,7 +499,11 @@ test('language switches preserve the live session, draft, TTS, history position 
       ? 'The pairing code is invalid or expired. Create a new one on your Mac.'
       : '接続コードが無効か期限切れです。Macで新しく発行してください。');
     assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : '表示設定');
-    assert.match(app.element('tts').textContent, /ON$/);
+    assert.match(app.element('tts').getAttribute('aria-label'), /ON$/);
+    assert.equal(app.element('tts').getAttribute('aria-pressed'), 'true');
+    assert.equal(app.element('record').getAttribute('aria-label'), locale === 'en' ? 'Start recording' : '録音を開始');
+    assert.equal(app.element('discard').getAttribute('aria-label'), locale === 'en' ? 'Discard recording' : '録音を破棄');
+    assert.equal(app.element('transcript').placeholder, locale === 'en' ? 'Message Dot…' : 'Dotにメッセージ…');
     assert.equal(app.element('record').disabled, false);
     assert.equal(app.element('transcript').value, 'Unsent draft');
     assert.match(app.physical.get(2), /Display settings\n\nDot: 長押しで話してください$/);

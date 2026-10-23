@@ -66,3 +66,28 @@ main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 
 #copy-toast { position: fixed; z-index: 30; left: 50%; bottom: max(24px, env(safe-area-inset-bottom)); transform: translateX(-50%); max-width: calc(100% - 32px); width: max-content; padding: 12px 20px; border: 1px solid #60765f; border-radius: 12px; background: #d1edc8; color: #152013; font-size: 16px; line-height: 1.5; box-shadow: 0 4px 20px #0006; pointer-events: none; }
 #copy-toast:empty { display: none; }
+
+/* Phone conversation controls only; shared HUD and settings keep their styles. */
+#conversation-controls .conversation-navigation { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 -4px 20px; }
+#conversation-controls .conversation-history { display: flex; align-items: center; border: 1px solid #343737; border-radius: 26px; padding: 0 3px; }
+#conversation-position { min-width: 44px; text-align: center; color: #a1a7a3; font-size: 12px; font-variant-numeric: tabular-nums; }
+#conversation-controls .conversation-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 50%; background: transparent; color: #ebeee9; }
+#conversation-controls .conversation-icon:disabled { opacity: .3; }
+#conversation-controls .conversation-icon svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+#conversation-controls button:focus-visible, #conversation-controls textarea:focus-visible, #conversation-controls input:focus-visible { outline: 2px solid #b8d3bc; outline-offset: 3px; }
+#conversation-controls #tts { position: relative; }
+#conversation-controls #tts[aria-pressed=true] { background: #b8d3bc18; color: #b8d3bc; }
+#conversation-controls #tts[aria-pressed=true]::after { content: ''; position: absolute; bottom: 3px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+#tts[aria-pressed=true] .read-aloud-off, #tts[aria-pressed=false] .read-aloud-on { display: none; }
+#conversation-controls .conversation-composer { padding: 12px; margin: 0 -8px; border-radius: 27px; background: #222424; }
+#conversation-controls #transcript { display: block; height: 65px; min-height: 65px; max-height: 180px; margin: 0; padding: 8px 10px; border: 0; border-radius: 12px; resize: none; background: transparent; font-size: 16px; line-height: 1.5; }
+#conversation-controls #transcript::placeholder { color: #999f9c; }
+#conversation-controls .conversation-actions { display: flex; align-items: center; gap: 0; margin-top: 4px; }
+#conversation-controls #send { margin-left: auto; background: #ebeee9; color: #141817; }
+#record[data-record-state=idle] .record-stop, #record:not([data-record-state=idle]) .record-start { display: none; }
+#conversation-controls #record:not([data-record-state=idle]) { color: #f0a6a0; background: #f0a6a016; }
+#conversation-controls #discard { color: #d0d7d1; }
+#conversation-controls .conversation-auto-send { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 4px 0 0; color: #bec5bf; font-size: 13px; }
+#conversation-controls #auto-send { width: 16px; height: 16px; margin: 0; accent-color: #b8d3bc; }
+#phone-control-status { min-height: 21px; margin: 0 0 12px; color: #bec5bf; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+#phone-control-status[data-state=stop-error] { color: #f0a6a0; }
