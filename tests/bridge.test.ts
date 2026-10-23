@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -162,4 +162,86 @@ test('Dot body retrieval persists a receipt only for returned utterances, withou
   await s.bridge.reply({utterance_id: ids[0], text: 'A reply covering several follow-ups'});
   await s.bridge.submit({id: randomUUID(), text: 'Another follow-up'});
   assert.equal(s.bridge.history().length, 12, 'there is no unresolved-count send cap');
+});
+
+
+test('outbound capacity rotates in acceptance order across legacy load, retries and restart', async t => {
+  const s = setup(); t.after(s.close);
+  const records = Array.from({length: 1000}, (_, i) => ({message_id: randomUUID(), text: `Synthetic ${i}`, createdAt: new Date(2000 - i).toISOString()}));
+  const messages = [{id: randomUUID(), text: 'Existing utterance', status: 'replied', reply: 'Existing reply', createdAt: new Date(0).toISOString()}];
+  writeFileSync(s.path, JSON.stringify({version: 1, messages, outbound: records}));
+  let bridge = new Bridge(s.path, s.sender, s.hosts);
+  let changes = 0; const off = bridge.changes.subscribe(() => changes++); t.after(off);
+  const input = (record: typeof records[number]) => ({message_id: record.message_id, text: record.text});
+  const before = readFileSync(s.path, 'utf8');
+  await bridge.sendMessage(input(records[0]));
+  await assert.rejects(bridge.sendMessage({...input(records[0]), text: 'Conflict'}), /Message ID conflicts/);
+  assert.equal(readFileSync(s.path, 'utf8'), before);
+  assert.equal(changes, 0);
+  const additions = Array.from({length: 3}, (_, i) => ({message_id: randomUUID(), text: `New ${i}`}));
+  await Promise.all(additions.map(value => bridge.sendMessage(value)));
+  assert.equal(changes, 3);
+  const expected = [...records.slice(3).map(r => r.message_id), ...additions.map(r => r.message_id)];
+  assert.deepEqual(bridge.outboundHistory().map(r => r.id), expected.map(id => `dot:${id}`));
+  assert.deepEqual(bridge.history(), messages);
+  bridge = new Bridge(s.path, s.sender, s.hosts);
+  await bridge.sendMessage(input(records[3]));
+  await assert.rejects(bridge.sendMessage({...input(records[3]), text: 'Conflict after restart'}), /Message ID conflicts/);
+  assert.deepEqual(bridge.outboundHistory().map(r => r.id), expected.map(id => `dot:${id}`));
+  // Evicted IDs have no duplicate/conflict guarantee, with either identical or changed text.
+  await bridge.sendMessage(input(records[0]));
+  await bridge.sendMessage({...input(records[1]), text: 'New text for an evicted ID'});
+  const reloaded = new Bridge(s.path, s.sender, s.hosts);
+  assert.equal(reloaded.outboundHistory().length, 1000);
+  assert.deepEqual(reloaded.outboundHistory().slice(-2).map(r => [r.id, r.reply]), [[`dot:${records[0].message_id}`, records[0].text], [`dot:${records[1].message_id}`, 'New text for an evicted ID']]);
+  assert.deepEqual(reloaded.history(), messages);
+  assert.equal(JSON.parse(readFileSync(s.path, 'utf8')).version, 1);
+});
+
+test('failed outbound rotation preserves memory and disk and allows a real retry', async t => {
+  const s = setup(); t.after(s.close);
+  const outbound = Array.from({length: 1000}, (_, i) => ({message_id: randomUUID(), text: `Synthetic ${i}`, createdAt: new Date(0).toISOString()}));
+  writeFileSync(s.path, JSON.stringify({version: 1, messages: [], outbound}));
+  const bridge = new Bridge(s.path, s.sender, s.hosts);
+  const before = readFileSync(s.path, 'utf8');
+  let changes = 0; const off = bridge.changes.subscribe(() => changes++); t.after(off);
+  const input = {message_id: randomUUID(), text: 'Persist before acknowledging'};
+  mkdirSync(`${s.path}.tmp`);
+  await assert.rejects(bridge.sendMessage(input));
+  assert.equal(readFileSync(s.path, 'utf8'), before);
+  assert.equal(bridge.outboundHistory()[0].id, `dot:${outbound[0].message_id}`);
+  assert.equal(bridge.outboundHistory().some(r => r.id === `dot:${input.message_id}`), false);
+  assert.equal(changes, 0);
+  rmSync(`${s.path}.tmp`, {recursive: true});
+  const result = await bridge.sendMessage(input);
+  assert.equal(result.stored_for_g2, true);
+  assert.equal(result.physical_display_confirmed, false);
+  assert.equal(changes, 1);
+  const reloaded = new Bridge(s.path, s.sender, s.hosts);
+  assert.equal(reloaded.outboundHistory().length, 1000);
+  assert.equal(reloaded.outboundHistory()[0].id, `dot:${outbound[1].message_id}`);
+  assert.equal(reloaded.outboundHistory().at(-1)?.id, `dot:${input.message_id}`);
+});
+
+
+test('location guards still prevent rotation and location metadata survives accepted rotation', async t => {
+  const s = setup(); t.after(s.close);
+  const outbound = Array.from({length: 1000}, () => ({message_id: randomUUID(), text: 'Synthetic', createdAt: new Date(0).toISOString()}));
+  writeFileSync(s.path, JSON.stringify({version: 1, messages: [], outbound}));
+  const bridge = new Bridge(s.path, s.sender, s.hosts);
+  const input = {message_id: randomUUID(), text: 'Synthetic location announcement'};
+  const location = {sharing_id: randomUUID(), expires_at: new Date(Date.now() + 60000).toISOString()};
+  const before = readFileSync(s.path, 'utf8');
+  await assert.rejects(bridge.sendMessage(input, () => false, location), /context is no longer valid/);
+  assert.equal(readFileSync(s.path, 'utf8'), before);
+  await bridge.sendMessage(input, () => true, location);
+  const reloaded = new Bridge(s.path, s.sender, s.hosts);
+  assert.equal(reloaded.outboundHistory().length, 1000);
+  assert.equal(reloaded.outboundHistory().at(-1)?.location_sharing_id, location.sharing_id);
+  assert.equal(reloaded.outboundHistory().at(-1)?.location_expires_at, location.expires_at);
+  const value = await rpc(reloaded, {jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+    name: 'send_message_to_g2', arguments: {message_id: randomUUID(), text: 'New via RPC at capacity'}
+  }}) as {result: {structuredContent: {stored_for_g2: boolean}}};
+  assert.equal(value.result.structuredContent.stored_for_g2, true);
+  assert.equal(reloaded.outboundHistory().length, 1000);
 });
