@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## 0.3.24
+## 0.3.25
 
 - Improved the phone message field to grow from one to five lines as you type or dictate, then scroll for longer messages.
 
