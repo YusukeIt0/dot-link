@@ -7,12 +7,29 @@
     <p id="notice" role="status" data-en="Open in Even Hub to use the G2 microphone and display.">Even Hubから開くとG2のマイクと表示を使用できます。</p>
     <p id="dot-status" role="status" data-en="Checking your relay">接続先を確認中</p>
     <section id="conversation-controls">
-    <button id="record" disabled data-en="Start recording">録音を開始</button>
-    <button id="discard" disabled data-en="Discard recording">録音を破棄</button>
-    <label for="transcript" data-en="Message">発話内容</label><textarea id="transcript" rows="3" maxlength="4000" placeholder="音声認識の結果、または送信したい文章"></textarea>
-    <label><input id="auto-send" type="checkbox" checked> <span data-en="Send after transcription">認識後に自動送信</span></label><br>
-    <button id="send" disabled data-en="Send to Dot">Dotに送信</button><button id="tts" data-en="Read aloud OFF">読み上げ OFF</button><br>
-    <button id="previous" data-en="Previous conversation">前の会話</button><button id="next" data-en="Next conversation">次の会話</button>
+      <div class="conversation-navigation">
+        <div class="conversation-history">
+          <button id="previous" type="button" class="conversation-icon" aria-label="Previous conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg></button>
+          <span id="conversation-position">0 / 0</span>
+          <button id="next" type="button" class="conversation-icon" aria-label="Next conversation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 6 6 6-6 6"/></svg></button>
+        </div>
+        <button id="tts" type="button" class="conversation-icon" aria-label="Read aloud OFF" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m11 5-6 4H2v6h3l6 4Z"/><path class="read-aloud-on" d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/><path class="read-aloud-off" d="m16 9 6 6m0-6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="conversation-composer">
+        <textarea id="transcript" rows="3" maxlength="4000" aria-label="Message to Dot" placeholder="Message Dot…"></textarea>
+        <div class="conversation-actions">
+          <button id="record" type="button" class="conversation-icon" data-record-state="idle" disabled aria-label="Start recording">
+            <svg class="record-start" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-3 0h6"/></svg>
+            <svg class="record-stop" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5V4a3 3 0 0 1 6 0v6m-6 0v1a3 3 0 0 0 5 2m-9-3v2a7 7 0 0 0 12 5m2-7v2m-7 7v3m-3 0h6M3 3l18 18"/></svg>
+          </button>
+          <button id="discard" type="button" class="conversation-icon" disabled aria-label="Discard recording"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg></button>
+          <button id="send" type="button" class="conversation-icon" disabled aria-label="Send to Dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V4m-7 7 7-7 7 7"/></svg></button>
+        </div>
+      </div>
+      <label class="conversation-auto-send"><input id="auto-send" type="checkbox" checked> <span data-en="Send after transcription">認識後に自動送信</span></label>
+      <p id="phone-control-status" role="status" aria-live="polite"></p>
     </section>
     <details id="location-settings" class="display-settings">
       <summary data-en="Location sharing">位置情報の共有</summary>

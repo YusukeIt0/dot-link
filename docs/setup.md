@@ -43,7 +43,7 @@ The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; th
 
 ## Conversation and display
 
-Hold to record on G2 and release to stop, or use the recording and text controls in the Even companion. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to review the text before sending. Browse conversation history and use **Display settings** to change idle timeout, wake gestures and head-raise behavior.
+Hold to record on G2 and release to stop, or tap the microphone in the Even companion. Tap the same button again to stop and transcribe; the adjacent trash button discards recording or transcription without sending. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to edit the text before sending with the up arrow. Use the left/right arrows to browse conversation history and the speaker button to turn read aloud on or off. **Display settings** controls idle timeout, wake gestures and head-raise behavior.
 
 The companion's Mac connection section contains setup instructions, a copyable download URL, pairing-code entry and **Revoke this device**. If copying is unavailable, enter the displayed URL in your Mac browser. Older public companions may show these controls separately. To revoke access, keep the Mac reachable; a failed revocation needs to be retried before Mac-side access is considered removed.
 

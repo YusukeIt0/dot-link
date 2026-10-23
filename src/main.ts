@@ -128,7 +128,8 @@ const exitDiagnostics = new ExitDiagnostics({
 });
 exitDiagnostics.record('boot');
 const language = el<HTMLSelectElement>('language'); language.value = languagePreferences.value;
-if (getLanguage() === 'en') transcript.placeholder = 'Transcribed speech, or a message to send';
+renderPhoneLabels();
+renderRecordControl('idle');
 language.onchange = () => {
   if (busy || recorder.state !== 'idle') { language.value = languagePreferences.value; notice.textContent = t('処理が終わるまでお待ちください。'); return; }
   if (!['auto', 'ja', 'en'].includes(language.value)) return;
@@ -215,7 +216,7 @@ let busy = false;
 let subscribed = false;
 // Packaged origins can retain stale local ON values; wait for native restore.
 let tts = false;
-el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+renderReadAloudControl();
 const conversation = new ConversationState();
 const timing = new TimingTracker();
 let audioTraceId: string | undefined;
@@ -357,7 +358,7 @@ el('forget-pairing').onclick = async () => {
   }
 };
 el('tts').onclick = () => {
-  tts = !tts; el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+  tts = !tts; renderReadAloudControl();
   void readAloudPreferences.save(tts).then(saved => {
     if (!saved && !exited) notice.textContent = t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
   });
@@ -458,10 +459,47 @@ const g2Display = new G2Display({
   timing: (id, stage) => timing.mark(id, stage), report: reportTiming,
 });
 
+// These renderers only describe phone controls. Native actions, persistence and
+// the shared HUD continue to use their existing owners and event handlers.
+function phoneLabel(id: string, label: string): void {
+  el(id).setAttribute('aria-label', label);
+  el(id).title = label;
+}
+function renderPhoneLabels(): void {
+  transcript.placeholder = t('Dotにメッセージ…');
+  phoneLabel('transcript', t('Dotへのメッセージ'));
+  phoneLabel('previous', t('前の会話'));
+  phoneLabel('next', t('次の会話'));
+  phoneLabel('discard', t('録音を破棄'));
+  phoneLabel('send', t('Dotに送信'));
+}
+function renderRecordControl(state: VoiceInput['state']): void {
+  recordButton.dataset.recordState = state;
+  phoneLabel('record', state === 'idle' ? t('録音を開始') : state === 'stop-error' ? t('マイク停止を再試行') : t('録音を停止'));
+}
+function renderReadAloudControl(): void {
+  el('tts').setAttribute('aria-pressed', String(tts));
+  phoneLabel('tts', `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`);
+}
+function renderPhoneStatus(): void {
+  const selected = conversation.selected;
+  const position = `${selected ? conversation.position(selected.id) : 0} / ${conversation.count}`;
+  const counter = el('conversation-position');
+  if (counter.textContent !== position) counter.textContent = position;
+  const state = recorder.state;
+  const status = state === 'stop-error' ? t('マイク停止を再試行') : state === 'stopping' ? t('マイクを停止中…') :
+    state === 'starting' ? t('マイク準備中') : state === 'recording' ? `${t('録音中')} · ${t('録音ボタンで停止します')}` :
+    progress.phase === 'recognizing' ? t('認識中') : progress.phase === 'sending' ? t('送信中') : '';
+  const caption = el('phone-control-status');
+  caption.dataset.state = state;
+  if (caption.textContent !== status) caption.textContent = status;
+}
+
 // A timer updates only the short status line. Keep at most one queued update
 // and read its latest value when it runs, so slow BLE never queues old seconds.
 function refreshStatus(sendToG2 = true): void {
   if (exited) return;
+  renderPhoneStatus();
   baseStatus = renderBaseStatus();
   const nextText = renderDisplayText();
   if (nextText !== lastDisplayText) {
@@ -506,10 +544,9 @@ function applyLanguage(): void {
   for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status', 'hold-save-status']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
-  transcript.placeholder = next === 'ja' ? '音声認識の結果、または送信したい文章' : 'Transcribed speech, or a message to send';
-  recordButton.textContent = recorder.state === 'idle' ? t('録音を開始') : recorder.state === 'stop-error' ? t('マイク停止を再試行') : t('録音を停止');
+  renderPhoneLabels(); renderRecordControl(recorder.state);
   renderWakeState(); renderOperationSettings();
-  el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+  renderReadAloudControl();
   if (!namedHost) hostName = t('接続先');
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
@@ -567,7 +604,7 @@ const recorder = new VoiceInput({
     if (exited) return;
     try {
       if (state === 'idle') holdRecording = false;
-      recordButton.textContent = state === 'idle' ? t('録音を開始') : t('録音を停止');
+      renderRecordControl(state);
       recordButton.disabled = !glassesReady || state === 'stopping' || (state === 'idle' && operationPreferences.disableHoldRecording);
       // Session loss stops capture too. Its completion must not overwrite the
       // reconnection explanation or re-enter recognition without a pairing.
@@ -586,7 +623,6 @@ const recorder = new VoiceInput({
         else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : (operationPreferences.disableHoldRecording ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。')));
       }
       if (state === 'idle' && conversation.hasPendingDisplay) flushPendingDisplay();
-      if (state === 'stop-error') recordButton.textContent = t('マイク停止を再試行');
       if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => holdRecording ? t('指を離すと停止します') : t('録音ボタンで停止します')); }
       if (state === 'recording') {
         standby?.activity();
@@ -598,7 +634,7 @@ const recorder = new VoiceInput({
           else display(() => t('話してください'), () => el<HTMLInputElement>('auto-send').checked ? t('話し終わると送信します') : t('話し終わると認識します'));
         } else display(() => t('録音中'), () => `${holdRecording ? t('指を離すと停止します') : t('録音ボタンで停止します')}\n${t('最長30秒')}`);
       }
-    } finally { syncRuntimeEffects(); }
+    } finally { syncRuntimeEffects(); renderPhoneStatus(); }
   },
   onError: message => { if (exited) return; progress.setPhase('error'); syncRuntimeEffects(); notice.textContent = message; display(() => t('確認が必要'), message); },
 });
@@ -816,7 +852,7 @@ async function connect(): Promise<void> {
     if (exited) return;
     const wasEnabled = tts;
     tts = readAloudPreferences.value;
-    el('tts').textContent = `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`;
+    renderReadAloudControl();
     if (wasEnabled && !tts) playback.cancel();
     updateRuntime();
   });

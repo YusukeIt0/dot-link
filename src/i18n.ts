@@ -1,5 +1,12 @@
 export type Language = 'ja' | 'en';
 const translations = {
+  'Dotにメッセージ…': 'Message Dot…',
+  'Dotへのメッセージ': 'Message to Dot',
+  'Dotに送信': 'Send to Dot',
+  '録音を破棄': 'Discard recording',
+  '前の会話': 'Previous conversation',
+  '次の会話': 'Next conversation',
+  'マイクを停止中…': 'Stopping microphone…',
   '新しい画面へ接続を引き継ぎました': 'Connection moved to the new view',
   'この画面は停止しました。続きは新しく開いたDot Linkで行ってください。未送信のテキストはこの画面からコピーできます。': 'This view has stopped. Continue in the newly opened Dot Link. You can copy unsent text from this view.',
   'スマートフォンでテキストを入力してください': 'Type a message on your phone',
