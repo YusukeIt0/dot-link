@@ -2,6 +2,14 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.28
+
+- Moved Revoke this device to the bottom of the Mac connection section.
+- Fixed disconnect to stop this device immediately and remember the removal request when the Mac is offline.
+- Added automatic retries for pending Mac removal after reopening the app.
+- Clarified when Mac removal is pending or disconnect settings could not be saved.
+- Update Dot Link for Mac to 0.4.14 or later for reliable removal retries.
+
 ## 0.3.25
 
 - Improved the phone message field to grow from one to five lines as you type or dictate, then scroll for longer messages.

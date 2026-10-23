@@ -133,3 +133,13 @@ test('bulk removal stops existing location context, delayed updates and queued a
   assert.equal(f.authority.subject(renewed.token, 'http://127.0.0.1:55003'), newSubject);
   assert.doesNotThrow(() => location.control({ sharing_id: randomUUID(), enabled: true }, newSubject));
 });
+
+test('Mac saved-registration count excludes individual revocation receipts and keeps other registrations', async t => {
+  const f = fixture(t), first = f.pair(), second = f.pair('http://127.0.0.1:55002');
+  assert.equal((await pairingStatus(f.directory)).evenPairingCount, 2);
+  assert.equal(f.authority.revokeRecovery(first.resumeToken!, f.phone), true);
+  const status = await pairingStatus(f.directory);
+  assert.equal(status.evenPairingKnown, true);
+  assert.equal(status.evenPairingCount, 1);
+  assert.equal(f.authority.authorized(second.token, 'http://127.0.0.1:55002'), true);
+});
