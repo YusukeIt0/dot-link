@@ -1094,17 +1094,31 @@ test('disconnect during recording closes the microphone and discards speech with
  assert.equal(app.networkCalls.some(url=>/api\/(transcribe|utterances)$/.test(url)),false);
 });
 
-test('a failed journal restore blocks data access and retries restoration on connectivity recovery', async t => {
+test('a failed journal restore blocks data access and retries restoration after a short backoff', async t => {
  const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
  let failed=true;
  const app=await launch({nativePairing:credentials,skipInitialUpdate:true,nativeRead:key=>{
   if (key==='dot-disconnect-v1' && failed) throw new Error('storage unavailable');
  }});
  t.after(app.close);
- assert.equal(vm.runInContext('session.token',app.context),'');
+ assert.equal(vm.runInContext('progress.connection',app.context),'connecting');
  assert.equal(app.networkCalls.length,0);
  assert.match(app.element('pair-notice').textContent,/復元せずに再確認/);
- failed=false; await app.browserEvent('online');
+ failed=false; await app.advance(2000);
  await app.deliver(app.snapshot());
  assert.equal(vm.runInContext('session.credentials.resumeToken',app.context),credentials.resumeToken);
+});
+
+
+test('a transient journal read failure preserves legacy credentials and resumes the suspended receive loop', async t => {
+ let failed=true;
+ const app=await launch({skipInitialUpdate:true,nativeRead:key=>{ if(key==='dot-disconnect-v1' && failed) throw new Error('read failed'); }});
+ t.after(app.close);
+ assert.equal(vm.runInContext('session.token',app.context),'x'.repeat(43));
+ assert.equal(vm.runInContext('progress.connection',app.context),'connecting');
+ assert.equal(app.element('forget-pairing').hidden,false);
+ failed=false; await app.advance(2000);
+ // Discard the response for the pre-suspension request, then deliver the new loop.
+ await app.deliver(app.snapshot()); await app.deliver(app.snapshot());
+ assert.equal(vm.runInContext('progress.connection',app.context),'online');
 });

@@ -124,6 +124,7 @@ export function deviceServer(options: { token: string; origin: string; directory
             (Object.hasOwn(value, 'resumeToken') && (typeof value.resumeToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.resumeToken)))) {
             json(400, { error: 'Invalid revocation request' }); return;
           }
+          if (value.resumeToken && !options.pairing.allowsResumeOrigin(requestOrigin)) { json(403, { error: 'Origin rejected' }); return; }
           if (!value.resumeToken && !credential) { json(401, { error: 'Revocation proof required' }); return; }
           // Reading a request body yields; maintenance may have started meanwhile.
           if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
@@ -131,7 +132,10 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (finished) response.once('close', finished);
           const subject = value.resumeToken ? options.pairing.revocationSubject(value.resumeToken, requestOrigin) : options.pairing.subject(credential, requestOrigin);
           const removed = value.resumeToken ? options.pairing.revokeRecovery(value.resumeToken, requestOrigin) : options.pairing.revoke(credential, requestOrigin);
-          if (!removed) { json(500, { error: 'Pairing removal could not be confirmed' }); return; }
+          if (!removed) {
+            if (!value.resumeToken && options.pairing.revocationCredentialMissing(credential)) { json(401, { code: 'PAIRING_INACTIVE' }); return; }
+            json(500, { error: 'Pairing removal could not be confirmed' }); return;
+          }
           // Authority is already revoked; bridge cleanup cannot delay that boundary.
           if (subject) {
             try { await fetch(`${bridgeURL}/api/location/revoke`, { method: 'POST', redirect: 'error',

@@ -104,4 +104,12 @@ test('Mac removal reaches an already-running relay: readable denial, no recovery
   t.mock.method(pairing, 'revoke', () => false);
   assert.equal((await invoke('/api/pair/revoke', 'POST', { Authorization: `Bearer ${last.token}` })).status, 500);
   assert.equal(pairing.authorized(last.token, origin), true);
+  const legacyOrigin = 'https://legacy.example';
+  const legacy = pairing.exchange(pairing.issue(`https://${host}`, legacyOrigin).code, legacyOrigin)!;
+  pairing.revokeAll();
+  const legacyHeaders = { Origin: legacyOrigin, Authorization: `Bearer ${legacy.token}` };
+  assert.equal((await invoke('/api/pair/revoke', 'OPTIONS', { Origin: legacyOrigin, 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'authorization' })).status, 204);
+  assert.equal((await invoke('/api/pair/revoke', 'POST', legacyHeaders)).status, 401, 'missing token-only authority has a readable definitive receipt');
+  assert.equal((await invoke('/api/messages', 'GET', legacyHeaders)).status, 403, 'revocation receipt CORS never opens data');
+
 });

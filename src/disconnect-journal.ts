@@ -111,7 +111,7 @@ export class DisconnectRetry {
             body: JSON.stringify(credentials.resumeToken ? { resumeToken: credentials.resumeToken } : {}),
             signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(15000)]),
           });
-          complete = response.status === 204;
+          complete = response.status === 204 || (!credentials.resumeToken && response.status === 401);
         } catch { /* Retain proof and retry; never recover a data session. */ }
       }
       if (this.stopped) return;

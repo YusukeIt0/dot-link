@@ -65,6 +65,7 @@ const resizeTranscript = installTranscriptSize(transcript, document.querySelecto
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
 const disconnectJournal = new DisconnectJournal(() => localStorage);
 let disconnectRestoreReady = false;
+let disconnectRestoreFailures = 0;
 let relayRestoreFlight: Promise<void> | undefined;
 let disconnectRestoreTimer: ReturnType<typeof setTimeout> | undefined;
 let showDisconnectState = disconnectJournal.pending.length > 0;
@@ -243,7 +244,7 @@ let audioTraceId: string | undefined;
 
 function restoreRelay(appBridge: EvenAppBridge): Promise<void> {
   if (relayRestoreFlight) return relayRestoreFlight;
-  const operation = restoreRelayAttempt(appBridge).finally(() => { if (relayRestoreFlight === operation) relayRestoreFlight = undefined; });
+  const operation = restoreRelayAttempt(appBridge).then(() => { if (relayRestored && !exited) attachLocation(); }).finally(() => { if (relayRestoreFlight === operation) relayRestoreFlight = undefined; });
   relayRestoreFlight = operation;
   return operation;
 }
@@ -258,16 +259,20 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
   }
   if (!ready) {
     relayRestored = false;
-    connectionTransitions.restore(undefined);
-    showSetup(true); progress.connection = 'unpaired'; syncRuntimeEffects();
+    connectionTransitions.beginPairing();
+    progress.connection = 'connecting'; syncRuntimeEffects();
     pairingNotice.textContent = t('接続設定を確認できません。復元せずに再確認しています。');
-    disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, 30000);
+    const delay = Math.min(10000, 2000 * 2 ** Math.min(disconnectRestoreFailures++, 3));
+    disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, delay);
     return;
   }
+  const wasSuspended = disconnectRestoreFailures > 0;
+  disconnectRestoreFailures = 0;
   disconnectRestoreReady = true;
   let saved = await relaySettings.attach(runtimeNative.storage(appBridge));
   if (version !== session.version || exited) return;
   relayRestored = true;
+  if (pairingNotice.textContent === t('接続設定を確認できません。復元せずに再確認しています。')) pairingNotice.textContent = '';
   if (saved && disconnectJournal.blocks(saved)) saved = undefined;
   if (disconnectJournal.pending.length) {
     showDisconnectState = true;
@@ -275,7 +280,11 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
     void disconnectRetry.run();
   }
   // Legacy development credentials are separate from packaged pairing.
-  if (!saved && !session.credentials) return;
+  if (!saved && !session.credentials) {
+    if (wasSuspended && session.token) updates.start(true);
+    syncRuntimeEffects();
+    return;
+  }
   connectionTransitions.restore(saved);
   if (!saved) { showSetup(true); progress.connection = 'unpaired'; syncRuntimeEffects(); display(() => t('再接続が必要です'), () => t('接続先を確認して「接続」を押してください。')); return; }
   showSetup(false); progress.connection = 'connecting'; syncRuntimeEffects(); display(() => t('再接続中'), idleVoicePrompt);
@@ -689,7 +698,7 @@ const recorder = new VoiceInput({
 });
 
 const runtimeEffects = new RuntimeEffects({
-  state: () => ({exited, tts, ready: glassesReady, paired: !!session.token, subscribed,
+  state: () => ({exited, tts, ready: glassesReady && relayRestored, paired: !!session.token, subscribed,
     online: progress.connection === 'online', busy, recording: recorder.state !== 'idle',
     draft: !!transcript.value.trim(), playbackBlocks: playback.blocksInput,
     phaseProtect: ['recognizing', 'sending'].includes(progress.phase), waitingMs: progress.waitingProtectionMs}),
@@ -872,7 +881,7 @@ async function connect(): Promise<void> {
   const appBridge = await waitForEvenAppBridge();
   if (exited) return;
   void exitDiagnostics.attach(runtimeNative.storage(appBridge));
-  void restoreRelay(appBridge).then(() => attachLocation());
+  void restoreRelay(appBridge);
   const nativeStorage = runtimeNative.storage(appBridge);
   void languagePreferences.attach(nativeStorage).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;

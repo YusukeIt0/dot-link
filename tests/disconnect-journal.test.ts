@@ -77,3 +77,12 @@ test('exit during response wait preserves proof; another launch can retry a lost
   const flight = retry.run(); await sent; retry.stop(); reply(new Response(null, { status: 204 })); await flight;
   assert.equal(journal.pending.length, 1);
 });
+
+
+test('only token-only inactive responses complete legacy removal; storage/server/rate failures retain proof', async t => {
+  for (const [resumeToken, status, remaining] of [[undefined,401,0],[undefined,500,1],[undefined,429,1],['b'.repeat(43),401,1]] as const) {
+    const journal = new DisconnectJournal(() => memory()); await journal.attach(nativeStore()); journal.add({ ...credentials(), resumeToken });
+    const retry = new DisconnectRetry({ journal, durable: () => {}, changed: () => {}, fetch: async () => new Response(null, { status }) });
+    t.after(() => retry.stop()); await retry.run(); assert.equal(journal.pending.length, remaining);
+  }
+});

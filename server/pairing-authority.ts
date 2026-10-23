@@ -209,14 +209,17 @@ export class PairingAuthority {
   revocationSubject(secret: string, origin: string): string | undefined {
     return valid(secret) && packagedSource(origin) && this.recovery(secret) ? digest(secret) : undefined;
   }
+  revocationCredentialMissing(token: string): boolean {
+    if (!valid(token)) return false;
+    try { readFileSync(this.path('sessions', token), 'utf8'); return false; }
+    catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT'; }
+  }
   allowsRevocationOrigin(origin: string): boolean {
-    if (packagedSource(origin)) return true;
-    // Retain exact-origin access to the no-data receipt for legacy sessions.
-    for (const name of readdirSync(join(this.directory, 'sessions'))) {
-      if (!fileName.test(name)) continue;
-      try { if (JSON.parse(readFileSync(join(this.directory, 'sessions', name), 'utf8')).origin === origin) return true; } catch {}
-    }
-    return false;
+    // No data is returned. Legacy HTTPS clients need a readable inactive receipt
+    // even after bulk removal deletes their last exact-origin session record.
+    // Existing tokens still require their exact stored origin to revoke anything.
+    if (origin === 'null') return this.allowsOrigin(origin);
+    try { return appOrigin(origin) === origin; } catch { return false; }
   }
   /** Internal stable subject for consent across packaged-app token rotation. Never expose the hash to a client. */
   subject(token: string, origin: string): string | undefined {
