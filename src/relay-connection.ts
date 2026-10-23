@@ -4,7 +4,7 @@ export interface RelayCredentials { origin: string; token: string; expiresAt: nu
 const KEY = 'dot-relay-v1';
 const NATIVE_KEY = 'dot-relay-native-v1';
 interface NativeStore { getLocalStorage(key: string): Promise<string>; setLocalStorage(key: string, value: string): Promise<boolean>; }
-function parseCredentials(raw: string | null): RelayCredentials | undefined {
+export function parseCredentials(raw: string | null): RelayCredentials | undefined {
   try {
     const value = JSON.parse(raw ?? 'null');
     if (!value || !/^[A-Za-z0-9_-]{43}$/.test(value.token) || !Number.isFinite(value.expiresAt) || value.expiresAt <= Date.now()) return;
@@ -63,10 +63,10 @@ export class RelaySettings {
     try { return await Promise.race([this.writes, new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 5000); })]); }
     finally { if (timer) clearTimeout(timer); }
   }
-  forget(): void {
+  forget(persist = true): void {
     this.revision++;
     try { this.storage().removeItem(KEY); } catch {}
-    this.queueNative('null');
+    if (persist) this.queueNative('null');
   }
 }
 

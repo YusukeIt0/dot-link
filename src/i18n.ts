@@ -1,5 +1,10 @@
 export type Language = 'ja' | 'en';
 const translations = {
+  'この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。': 'Stopped on this device. Removal on your Mac will complete automatically when it is reachable.',
+  'この端末では停止しましたが、解除を保存できません。開き直すと接続が戻る場合があります。アプリを開いたままにしてください。': 'Stopped on this device, but the disconnect could not be saved. Reopening may restore the connection. Keep the app open.',
+  '接続設定を確認できません。復元せずに再確認しています。': 'Could not verify saved connection settings. Retrying before restoring the connection.',
+  'この端末では停止しました。Mac側の解除を確認しています。': 'Stopped on this device. Confirming removal on your Mac.',
+
   'Dotにメッセージ…': 'Message Dot…',
   'Dotへのメッセージ': 'Message to Dot',
   'Dotに送信': 'Send to Dot',

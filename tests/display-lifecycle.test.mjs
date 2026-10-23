@@ -25,6 +25,7 @@ async function launch(options = {}) {
   const calls = []; const networkCalls = []; const requests = []; const physical = new Map();
   const saved = new Map(options.nativePairing ? [] : [['g2-device-token', 'x'.repeat(43)]]);
   const nativeSaved = new Map(options.nativePairing ? [['dot-relay-native-v1', JSON.stringify(options.nativePairing)]] : []);
+  for (const [key, value] of options.nativeState ?? []) nativeSaved.set(key, value);
   if (options.savedLanguage) saved.set('dot-language', options.savedLanguage);
   if (options.nativeLanguage) nativeSaved.set('dot-language-preference-v1', options.nativeLanguage);
   if (options.nativeReadAloud !== undefined) nativeSaved.set('dot-read-aloud-preference-v1', String(options.nativeReadAloud));
@@ -120,7 +121,7 @@ async function launch(options = {}) {
     assert.ok(requests.length, 'receiver must still be waiting');
     requests.shift()({ok: true, status: 200, json: async () => structuredClone(value)}); await flush();
   };
-  if (!options.failResumeOnce) await deliver(snapshot(options.initialMessages ?? []));
+  if (!options.failResumeOnce && !options.skipInitialUpdate) await deliver(snapshot(options.initialMessages ?? []));
   const advance = async ms => {
     const end = now + ms;
     while (true) {
@@ -1031,4 +1032,79 @@ test('hidden app recovers after offline without relying on an online or foregrou
   assert.equal(vm.runInContext('progress.connection', app.context), 'online');
   assert.match(app.physical.get(2), /background-recovered/);
   assert.equal(app.context.document.hidden, true);
+});
+
+
+test('explicit disconnect stops a busy session before the revoke response and cannot erase a new pairing', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ let reply;
+ const app=await launch({nativePairing:credentials,request:url=>url.endsWith('/api/pair/revoke') ? new Promise(resolve=>{reply=resolve;}) : undefined});
+ t.after(app.close);
+ await app.evaluate('busy=true;');
+ const before=app.networkCalls.filter(url=>url.endsWith('/api/pair/resume')).length;
+ app.element('forget-pairing').click(); await flush();
+ assert.equal(vm.runInContext('session.token',app.context),'');
+ assert.equal(vm.runInContext('busy',app.context),false);
+ assert.equal(app.element('forget-pairing').hidden,true);
+ assert.equal(app.element('mac-setup').open,true);
+ assert.match(app.element('pair-notice').textContent,/自動で完了/);
+ assert.equal(app.networkCalls.filter(url=>url.endsWith('/api/pair/resume')).length,before,'disconnect never resumes');
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-disconnect-v1')).pending.length,1);
+ await app.evaluate(`connectionTransitions.paired(${JSON.stringify({...credentials,token:'c'.repeat(43),resumeToken:'d'.repeat(43)})}); showSetup(false);`);
+ reply({status:204,ok:true}); await flush();
+ assert.equal(vm.runInContext('session.credentials.resumeToken',app.context),'d'.repeat(43));
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-relay-native-v1')).resumeToken,'d'.repeat(43));
+});
+
+test('reopening with durable disconnect intent suppresses stale native pairing and retries only revocation', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ const app=await launch({nativePairing:credentials,skipInitialUpdate:true,
+  nativeState:[['dot-disconnect-v1',JSON.stringify({version:1,pending:[credentials]})]],
+  request:url=>url.endsWith('/api/pair/revoke') ? Promise.resolve({status:204,ok:true}) : undefined});
+ t.after(app.close);
+ await flush();
+ assert.equal(vm.runInContext('session.token',app.context),'');
+ assert.equal(app.networkCalls.some(url=>/pair\/resume|api\/updates/.test(url)),false);
+ assert.equal(app.element('forget-pairing').hidden,true);
+ assert.equal(app.element('mac-setup').open,true);
+ assert.equal(app.element('pair-notice').textContent,'接続を解除しました。');
+});
+
+test('offline disconnect with a native storage failure remains stopped and reports that durability failed', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ const app=await launch({nativePairing:credentials,nativeWrite:key=>key==='dot-disconnect-v1' ? false : true,
+  request:url=>url.endsWith('/api/pair/revoke') ? Promise.reject(new Error('offline')) : undefined});
+ t.after(app.close);
+ app.element('forget-pairing').click(); await flush();
+ assert.equal(vm.runInContext('session.token',app.context),'');
+ assert.match(app.element('pair-notice').textContent,/解除を保存できません/);
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-relay-native-v1')).resumeToken,credentials.resumeToken,'retry proof is not discarded before intent is durable');
+ assert.equal(vm.runInContext('disconnectJournal.pending.length',app.context),1);
+});
+
+test('disconnect during recording closes the microphone and discards speech without transcription', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ const app=await launch({nativePairing:credentials,request:url=>url.endsWith('/api/pair/revoke') ? Promise.reject(new Error('offline')) : undefined});
+ t.after(app.close);
+ await app.element('record').click(); await flush();
+ assert.equal(vm.runInContext('recorder.state',app.context),'recording');
+ app.element('forget-pairing').click(); await flush();
+ assert.equal(vm.runInContext('recorder.state',app.context),'idle');
+ assert.equal(app.calls.filter(call=>call[0]==='mic').at(-1)[1],false);
+ assert.equal(app.networkCalls.some(url=>/api\/(transcribe|utterances)$/.test(url)),false);
+});
+
+test('a failed journal restore blocks data access and retries restoration on connectivity recovery', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ let failed=true;
+ const app=await launch({nativePairing:credentials,skipInitialUpdate:true,nativeRead:key=>{
+  if (key==='dot-disconnect-v1' && failed) throw new Error('storage unavailable');
+ }});
+ t.after(app.close);
+ assert.equal(vm.runInContext('session.token',app.context),'');
+ assert.equal(app.networkCalls.length,0);
+ assert.match(app.element('pair-notice').textContent,/復元せずに再確認/);
+ failed=false; await app.browserEvent('online');
+ await app.deliver(app.snapshot());
+ assert.equal(vm.runInContext('session.credentials.resumeToken',app.context),credentials.resumeToken);
 });

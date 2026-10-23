@@ -34,11 +34,11 @@ export class ConnectionTransitions {
     return retained;
   }
 
-  forget(): void {
+  forget(persist = true): void {
     // Revoke using the old destination before removing its credentials.
     this.options.stopLocation();
     this.restart();
-    this.options.session.forget();
+    this.options.session.forget(persist);
     this.options.clearLegacyPairing();
     this.reset(false, true, undefined);
   }
