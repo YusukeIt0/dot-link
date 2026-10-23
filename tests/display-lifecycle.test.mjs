@@ -1122,3 +1122,41 @@ test('a transient journal read failure preserves legacy credentials and resumes 
  await app.deliver(app.snapshot()); await app.deliver(app.snapshot());
  assert.equal(vm.runInContext('progress.connection',app.context),'online');
 });
+
+test('persistent journal read failure permits explicit new pairing without restoring or erasing old intent', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'c'.repeat(43),resumeToken:'d'.repeat(43),expiresAt:Date.now()+100000};
+ let failed=true;
+ const app=await launch({nativePairing:{...credentials,token:'a'.repeat(43),resumeToken:'b'.repeat(43)},skipInitialUpdate:true,nativeRead:key=>{
+  if(key==='dot-disconnect-v1' && failed) throw new Error('unavailable');
+ },request:(url,init)=>url.endsWith('/api/pair/resume') ? (assert.equal(JSON.parse(init.body).resumeToken,credentials.resumeToken), Promise.resolve({ok:false,status:400,json:async()=>({error:'Invalid pairing request'})})) : url.endsWith('/api/pair') ? Promise.resolve({ok:true,json:async()=>credentials})
+  : url.endsWith('/api/updates') ? Promise.resolve({ok:true,status:200,json:async()=>({revision:'test',status:{subscribed:true},messages:[]})}) : undefined});
+ t.after(app.close);
+ app.element('pair-code').value=JSON.stringify({version:1,origin:credentials.origin,code:'e'.repeat(43),expiresAt:Date.now()+100000});
+ await app.element('pair').click(); await flush();
+ assert.equal(vm.runInContext('session.credentials.resumeToken',app.context),credentials.resumeToken);
+ assert.equal(vm.runInContext('relayRestored',app.context),true);
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-relay-native-v1')).resumeToken,credentials.resumeToken);
+ await app.advance(2000);
+ assert.equal(vm.runInContext('relayRestored',app.context),true,'retry must not suspend the explicit connection');
+ assert.equal(app.networkCalls.filter(url=>url.endsWith('/api/pair')).length,1);
+ assert.equal(app.nativeSaved.has('dot-disconnect-v1'),false,'unread journal must not be overwritten');
+ failed=false; await app.advance(4000);
+ assert.equal(vm.runInContext('session.credentials.resumeToken',app.context),credentials.resumeToken);
+});
+
+test('disconnect during journal attachment persists immediately after the read without a false warning', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ let finish;
+ const app=await launch({nativePairing:credentials,skipInitialUpdate:true,
+  nativeRead:key=>key==='dot-disconnect-v1' ? new Promise(resolve=>{finish=resolve;}) : undefined,
+  request:url=>url.endsWith('/api/pair/revoke') ? Promise.reject(new Error('offline')) : undefined});
+ t.after(app.close);
+ await app.evaluate(`session.use(${JSON.stringify(credentials)}); showSetup(false);`);
+ app.element('forget-pairing').click(); await flush();
+ assert.doesNotMatch(app.element('pair-notice').textContent,/解除を保存できません/);
+ finish(''); await flush();
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-disconnect-v1')).pending.length,1);
+ assert.match(app.element('pair-notice').textContent,/自動で完了/);
+ assert.equal(vm.runInContext('session.token',app.context),'');
+ assert.equal(app.networkCalls.some(url=>/pair\/resume|api\/updates/.test(url)),false);
+});

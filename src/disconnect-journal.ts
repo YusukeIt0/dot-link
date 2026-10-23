@@ -28,6 +28,7 @@ export class DisconnectJournal {
   private entries: RelayCredentials[] = [];
   private native?: NativeStore;
   private loaded = false;
+  private reading?: Promise<boolean>;
   private writes = Promise.resolve(false);
   private storage: () => Store;
   constructor(storage: () => Store) {
@@ -36,7 +37,13 @@ export class DisconnectJournal {
   }
   get pending(): readonly RelayCredentials[] { return this.entries; }
   blocks(credentials: RelayCredentials): boolean { return this.entries.some(entry => identity(entry) === identity(credentials)); }
-  async attach(native: NativeStore): Promise<boolean> {
+  attach(native: NativeStore): Promise<boolean> {
+    if (this.reading) return this.reading;
+    const operation = this.read(native).finally(() => { if (this.reading === operation) this.reading = undefined; });
+    this.reading = operation;
+    return operation;
+  }
+  private async read(native: NativeStore): Promise<boolean> {
     this.native = native;
     this.loaded = false;
     const raw = await bounded(Promise.resolve().then(() => native.getLocalStorage(KEY)), undefined);
@@ -59,6 +66,7 @@ export class DisconnectJournal {
   private serialized(): string { return JSON.stringify({ version: 1, pending: this.entries }); }
   private local(): void { try { this.storage().setItem(KEY, this.serialized()); } catch {} }
   async persist(): Promise<boolean> {
+    if (this.reading) await this.reading;
     this.local();
     if (!this.native || !this.loaded) return false;
     const native = this.native, value = this.serialized();

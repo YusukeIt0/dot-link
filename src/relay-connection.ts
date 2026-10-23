@@ -26,6 +26,7 @@ export class RelaySettings {
   read(): RelayCredentials | undefined {
     try { return parseCredentials(this.storage().getItem(KEY)); } catch { return; }
   }
+  connectNative(native: NativeStore): void { this.native = native; }
   async attach(native: NativeStore): Promise<RelayCredentials | undefined> {
     this.native = native;
     const revision = this.revision;

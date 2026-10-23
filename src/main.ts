@@ -65,6 +65,7 @@ const resizeTranscript = installTranscriptSize(transcript, document.querySelecto
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
 const disconnectJournal = new DisconnectJournal(() => localStorage);
 let disconnectRestoreReady = false;
+let explicitConnection = false;
 let disconnectRestoreFailures = 0;
 let relayRestoreFlight: Promise<void> | undefined;
 let disconnectRestoreTimer: ReturnType<typeof setTimeout> | undefined;
@@ -254,14 +255,16 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
   const ready = await disconnectJournal.attach(runtimeNative.storage(appBridge));
   if (exited) return;
   if (version !== session.version) {
-    disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, 30000);
+    disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, 0);
     return;
   }
   if (!ready) {
-    relayRestored = false;
-    connectionTransitions.beginPairing();
-    progress.connection = 'connecting'; syncRuntimeEffects();
-    pairingNotice.textContent = t('接続設定を確認できません。復元せずに再確認しています。');
+    if (!explicitConnection) {
+      relayRestored = false;
+      connectionTransitions.beginPairing();
+      progress.connection = 'connecting'; syncRuntimeEffects();
+      pairingNotice.textContent = t('接続設定を確認できません。復元せずに再確認しています。');
+    }
     const delay = Math.min(10000, 2000 * 2 ** Math.min(disconnectRestoreFailures++, 3));
     disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, delay);
     return;
@@ -269,6 +272,12 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
   const wasSuspended = disconnectRestoreFailures > 0;
   disconnectRestoreFailures = 0;
   disconnectRestoreReady = true;
+  // A freshly issued pairing cannot match an older disconnect entry. Never
+  // replace an explicit connection with credentials read later from storage.
+  if (explicitConnection) {
+    if (disconnectJournal.pending.length) void disconnectRetry.run();
+    return;
+  }
   let saved = await relaySettings.attach(runtimeNative.storage(appBridge));
   if (version !== session.version || exited) return;
   relayRestored = true;
@@ -376,18 +385,20 @@ pairingInput.oninput = () => {
 };
 el('pair').onclick = async () => {
   if (busy || recorder.state !== 'idle' || exited) return;
-  if (!disconnectRestoreReady) { pairingNotice.textContent = t('接続設定を確認できません。復元せずに再確認しています。'); return; }
   let invite: PairingInvite;
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
   catch { pairingNotice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
+  explicitConnection = true;
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
   connectionTransitions.beginPairing();
   const version = session.version;
   progress.connection = 'connecting'; updateRuntime();
+  let accepted = false;
   try {
     const credentials = await session.pair(invite);
     if (version !== session.version || exited) return;
-    const retained = connectionTransitions.paired(credentials); relayRestored = true;
+    if (bridge) relaySettings.connectNative(runtimeNative.storage(bridge));
+    const retained = connectionTransitions.paired(credentials); accepted = true; relayRestored = true;
     const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
@@ -398,6 +409,7 @@ el('pair').onclick = async () => {
     showSetup(false);
   } catch (error) {
     if (version !== session.version || exited) return;
+    if (!accepted) explicitConnection = false;
     progress.connection = session.token ? 'offline' : 'unpaired'; updateRuntime();
     setupPanel.open = true;
     pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
