@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.12</title><sparkle:version>81</sparkle:version><sparkle:shortVersionString>0.4.12</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Fixed moving notifications from the older app when “Share all Mac notifications with Dot” is enabled.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.12-81/Dot-Link-0.4.12-81-arm64.zip" sparkle:installationType="application" sparkle:edSignature="iNiD31LBMNHJeyjCiPfjvenVnJXbLDugVC2PGuWPb5AVwgBWz24O9Kw48IFSFt7V7t6SW7lSCFxvzEPJvqPnBQ==" length="59156397" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: lia4Q83M6gIoSqYRnBp6DOnDklNhY9Dc6xx9z+j8g48/bBzDiHLaipLmzRiBpDyA6yd9lZMkSwfPmwRISn2YBw==
-length: 1138
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.13</title><sparkle:version>82</sparkle:version><sparkle:shortVersionString>0.4.13</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Fixed proactive messages stopping after extended use.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.13-82/Dot-Link-0.4.13-82-arm64.zip" sparkle:installationType="application" sparkle:edSignature="o4hB0QhqUK+NJlT4iFbsXS8cOf0vVvMEDUfNRTGGB7fqRhGbQufXIMOYm2iCkdFJ8cNHhsosoxR09xaPyV96DQ==" length="59161463" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: Opx+9az2m003Z78iQCI1kuHzHWmOgYtNJ69hEX29XxE7JXRpkoeaIBJC6kulOtIeDtaRIIdsUGcl21Uw16kxBQ==
+length: 1086
 -->
