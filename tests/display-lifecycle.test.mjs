@@ -1160,3 +1160,20 @@ test('disconnect during journal attachment persists immediately after the read w
  assert.equal(vm.runInContext('session.token',app.context),'');
  assert.equal(app.networkCalls.some(url=>/pair\/resume|api\/updates/.test(url)),false);
 });
+
+test('disconnect does not interrupt a pairing exchange and becomes available when it finishes', async t => {
+ const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ let finish;
+ const app=await launch({nativePairing:credentials,request:url=>url.endsWith('/api/pair') ? new Promise(resolve=>{finish=resolve;}) : undefined});
+ t.after(app.close);
+ app.element('pair-code').value=JSON.stringify({version:1,origin:credentials.origin,code:'e'.repeat(43),expiresAt:Date.now()+100000});
+ const pairing=app.element('pair').click(); await flush();
+ const token=vm.runInContext('session.token',app.context);
+ app.element('forget-pairing').click(); await flush();
+ assert.equal(vm.runInContext('session.token',app.context),token);
+ assert.equal(vm.runInContext('disconnectJournal.pending.length',app.context),0);
+ finish({ok:false,status:500}); await pairing;
+ assert.equal(vm.runInContext('pairingExchange',app.context),false);
+ app.element('forget-pairing').click(); await flush();
+ assert.equal(vm.runInContext('session.token',app.context),'');
+});

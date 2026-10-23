@@ -7,7 +7,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
 | `src/runtime-effects.ts` | Deferred speech, voice eligibility, standby protection and its waiting deadline | DOM/G2 presentation, transport or conversation selection |
-| `src/disconnect-journal.ts` | Durable revocation-only intent, native restore barrier and bounded retry | Active data sessions or recovery |
+| `src/disconnect-journal.ts` | Durable revocation-only intent, native journal read barrier and bounded retry | Active data sessions or recovery |
 | `src/connection-transitions.ts` | Reset/retention policy for pairing, restoration and forgetting | Transport implementation, rendering or user preference changes |
 | `src/relay-session.ts` | Active relay credentials, origin recovery, request cancellation, and connection generations | User-facing status, history selection, or whether to record |
 | `src/speech-playback.ts` | Queued read-aloud speech, cancellation, completion recovery, and the quiet interval before voice input resumes | Which replies to announce or whether TTS is enabled |
@@ -85,3 +85,5 @@ In that build, **Connection details** shows the last 48 lifecycle and location-r
 Check dialog cancellation first, then sharing OFF/ON followed by confirmed exit. Observe relay status while the app remains closed; reopening may legitimately resume the saved sharing preference. After that observation, reopen and inspect the trace: whether a confirmed-exit event reached the app, whether stop and revoke were attempted, and whether the same launch continued renewals. A successful request is transport evidence, not physical-device proof. Native-event absence or a second running instance must not be inferred solely from stale location timestamps.
 
 Location sharing renews its relay lease only when it uploads a fresh measurement with a newer native timestamp. Empty heartbeats and repeated cached fixes cannot keep an exited native source sharing indefinitely even if its WebView timer survives. The existing relay lease expires 90 seconds after the last renewal. Saved consent and native acquisition remain active while the app runs, so a new measurement can resume sharing after temporary location loss. Explicit OFF/exit still attempts immediate revocation. This fallback does not identify a confirmed native exit while fresh native measurements continue; physical exit and cancellation checks remain required.
+
+`src/main.ts` sequences the journal barrier before saved-credential restoration and owns explicit-pairing isolation and restore retries.

@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## 0.3.26
+## 0.3.27
 
 - Fixed disconnect to stop this device immediately and remember the removal request when the Mac is offline.
 - Added automatic retries for pending Mac removal after reopening the app.

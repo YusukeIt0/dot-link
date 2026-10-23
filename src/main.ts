@@ -66,6 +66,7 @@ const pairingInput = el<HTMLTextAreaElement>('pair-code');
 const disconnectJournal = new DisconnectJournal(() => localStorage);
 let disconnectRestoreReady = false;
 let explicitConnection = false;
+let pairingExchange = false;
 let disconnectRestoreFailures = 0;
 let relayRestoreFlight: Promise<void> | undefined;
 let disconnectRestoreTimer: ReturnType<typeof setTimeout> | undefined;
@@ -388,7 +389,8 @@ el('pair').onclick = async () => {
   let invite: PairingInvite;
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
   catch { pairingNotice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
-  explicitConnection = true;
+  explicitConnection = true; pairingExchange = true;
+  el<HTMLButtonElement>('forget-pairing').disabled = true;
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
   connectionTransitions.beginPairing();
   const version = session.version;
@@ -415,10 +417,10 @@ el('pair').onclick = async () => {
     pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
     el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
     if (session.token && relayRestored) updates.start(true);
-  } finally { if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
+  } finally { pairingExchange = false; el<HTMLButtonElement>('forget-pairing').disabled = false; if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
 };
 el('forget-pairing').onclick = () => {
-  if (exited) return;
+  if (exited || pairingExchange) return;
   const credentials = session.credentials;
   if (credentials) disconnectJournal.add(credentials);
   showDisconnectState = true;
