@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { PairingAuthority } from '../server/pairing-authority.ts';
@@ -114,4 +115,55 @@ test('update recovery changes the exact port, invalidates old tokens, retries lo
   now = another.expiresAt;
   assert.equal(authority.resume(another.resumeToken!, newOrigin), undefined);
   authority.revokeAll(); assert.deepEqual(readdirSync(join(root, 'recoveries')), []);
+});
+
+const secretHash = (value: string) => createHash('sha256').update(value).digest('hex');
+test('individual revocation survives response loss and restart, invalidates every authority path and isolates another phone', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dot-revoke-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const authority = new PairingAuthority(root), origin = 'http://127.0.0.1:55101', changed = 'http://127.0.0.1:55102';
+  const first = authority.exchange(authority.issue('https://mac.tailtest.ts.net').code, origin)!;
+  const second = authority.exchange(authority.issue('https://mac.tailtest.ts.net').code, changed)!;
+  const subject = authority.subject(first.token, origin)!;
+  assert.equal(authority.revokeRecovery(first.resumeToken!, 'https://evil.example'), false);
+  assert.equal(authority.authorized(first.token, origin), true);
+  assert.equal(authority.revokeRecovery(first.resumeToken!, changed), true);
+  const restarted = new PairingAuthority(root);
+  assert.equal(restarted.revokeRecovery(first.resumeToken!, changed), true);
+  assert.equal(restarted.revoke(first.token, origin), true);
+  assert.equal(restarted.authorized(first.token, origin), false);
+  assert.equal(restarted.authorizedSubject(subject), false);
+  assert.equal(restarted.allowsOrigin(origin), false);
+  assert.equal(restarted.resume(first.resumeToken!, changed), undefined);
+  assert.deepEqual(restarted.recoverRuntime(first.resumeToken!, changed, { action: 'inspect' }), { kind: 'invalid' });
+  assert.equal(restarted.authorized(second.token, changed), true);
+  // Kept receipts must not consume the 16-live-registration limit.
+  for (let i = 0; i < 20; i++) {
+    const next = restarted.exchange(restarted.issue('https://mac.tailtest.ts.net').code, origin)!;
+    assert.equal(restarted.revokeRecovery(next.resumeToken!, origin), true);
+  }
+});
+
+test('failed atomic revocation reports failure, preserves authority, and can retry after the storage fault clears', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dot-revoke-fault-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const authority = new PairingAuthority(root), origin = 'http://127.0.0.1:55101';
+  const session = authority.exchange(authority.issue('https://mac.tailtest.ts.net').code, origin)!;
+  const obstruction = join(root, 'recoveries', `${secretHash(session.resumeToken!)}.json.revoke-next`);
+  mkdirSync(obstruction);
+  assert.equal(authority.revokeRecovery(session.resumeToken!, origin), false);
+  assert.equal(authority.revoke(session.token, origin), false);
+  assert.equal(authority.authorized(session.token, origin), true);
+  rmSync(obstruction, { recursive: true });
+  assert.equal(authority.revokeRecovery(session.resumeToken!, origin), true);
+  assert.equal(authority.authorized(session.token, origin), false);
+});
+
+test('a stale data token cannot falsely acknowledge revocation of a newer session', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dot-revoke-stale-')); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const authority = new PairingAuthority(root), origin = 'http://127.0.0.1:55101';
+  const old = authority.exchange(authority.issue('https://mac.tailtest.ts.net').code, origin)!;
+  const current = authority.resume(old.resumeToken!, origin)!;
+  assert.equal(authority.revoke(old.token, origin), false);
+  assert.equal(authority.authorized(current.token, origin), true);
+  assert.equal(authority.revokeRecovery(old.resumeToken!, origin), true);
+  assert.equal(authority.authorized(current.token, origin), false);
 });

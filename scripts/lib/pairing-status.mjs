@@ -17,7 +17,7 @@ export async function pairingStatus(directory, now = Date.now()) {
     if (!/^[a-f0-9]{64}\.json$/.test(name)) continue;
     try {
       const s = JSON.parse(await readFile(join(root, 'sessions', name), 'utf8'));
-      if (!currentPairingGeneration(s, generation)) continue;
+      if (s.revoked || !currentPairingGeneration(s, generation)) continue;
       if (!Number.isFinite(s.expiresAt) || s.expiresAt <= now) continue;
       if (appOrigin(s.origin) !== s.origin) continue;
       if (s.recoveryHash) {
@@ -25,7 +25,7 @@ export async function pairingStatus(directory, now = Date.now()) {
         let r;
         try { r = JSON.parse(await readFile(join(root, 'recoveries', `${s.recoveryHash}.json`), 'utf8')); }
         catch (error) { if (error.code === 'ENOENT') continue; throw error; }
-        if (!currentPairingGeneration(r, generation) || r.currentSession !== name.slice(0, -5) || r.expiresAt !== s.expiresAt) continue;
+        if (r.revoked || !currentPairingGeneration(r, generation) || r.currentSession !== name.slice(0, -5) || r.expiresAt !== s.expiresAt) continue;
       }
       count++;
     } catch { unreadable = true; }
