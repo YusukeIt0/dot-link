@@ -101,10 +101,11 @@
       <div id="pairing-form">
         <p id="pair-notice" role="status"></p>
         <label for="pair-code" data-en="Pairing code">接続コード</label><textarea id="pair-code" rows="3" autocapitalize="off" maxlength="1024" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
-        <p id="pair-destination"></p><button id="pair" hidden data-en="Connect">接続</button><button id="forget-pairing" hidden class="secondary" data-en="Revoke this device">この端末の接続を解除</button>
+        <p id="pair-destination"></p><button id="pair" hidden data-en="Connect">接続</button>
         <p class="note" data-en="The pairing code is valid for two minutes and one use.">接続コードは発行から2分・1回限りです。</p>
         <p class="note" data-en="Your relay Mac must be awake and online.">接続先のMacが起動・接続している間に使えます。</p>
       </div>
+      <button id="forget-pairing" hidden class="secondary" data-en="Revoke this device">この端末の接続を解除</button>
     </details>
     <footer>
       <label for="language">Language / 言語</label> <select id="language"><option value="auto" data-en="Automatic">自動</option><option value="ja">日本語</option><option value="en">English</option></select>

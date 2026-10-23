@@ -2,8 +2,9 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## 0.3.27
+## 0.3.28
 
+- Moved Revoke this device to the bottom of the Mac connection section.
 - Fixed disconnect to stop this device immediately and remember the removal request when the Mac is offline.
 - Added automatic retries for pending Mac removal after reopening the app.
 - Clarified when Mac removal is pending or disconnect settings could not be saved.
