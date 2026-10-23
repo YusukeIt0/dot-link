@@ -31,6 +31,7 @@ export function deviceServer(options: { token: string; origin: string; directory
   const bridgeURL = options.bridgeURL ?? 'http://127.0.0.1:3460';
   const appOrigins = new Set((options.appOrigins ?? []).map(appOrigin));
   let pairingWindow = Date.now(); let pairingAttempts = 0;
+  let revokeWindow = Date.now(); let revokeAttempts = 0;
   return createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
     response.setHeader('X-Content-Type-Options', 'nosniff');
@@ -48,12 +49,14 @@ export function deviceServer(options: { token: string; origin: string; directory
       ['OPTIONS', 'POST'].includes(request.method ?? '') && !!options.pairing?.allowsPairingOrigin(requestOrigin);
     const resumeBootstrap = requestOrigin !== undefined && path === '/api/pair/resume' &&
       ['OPTIONS', 'POST'].includes(request.method ?? '') && !!options.pairing?.allowsResumeOrigin(requestOrigin);
+    const revokeBootstrap = requestOrigin !== undefined && path === '/api/pair/revoke' &&
+      ['OPTIONS', 'POST'].includes(request.method ?? '') && !!options.pairing?.allowsRevocationOrigin(requestOrigin);
     // A removed phone must be able to read the 401 on its next status poll.
     // CORS is not authorization: the exact origin/token check below still
     // guards all data, and other origins/routes retain the existing policy.
     const statusProbe = requestOrigin !== undefined && ['/api/status', '/api/updates'].includes(path) &&
       ['OPTIONS', 'GET'].includes(request.method ?? '') && !!options.pairing?.allowsResumeOrigin(requestOrigin);
-    if (request.headers.host !== origin.host || (crossOrigin && !appOrigins.has(requestOrigin) && !options.pairing?.allowsOrigin(requestOrigin) && !pairingBootstrap && !resumeBootstrap && !statusProbe)) {
+    if (request.headers.host !== origin.host || (crossOrigin && !appOrigins.has(requestOrigin) && !options.pairing?.allowsOrigin(requestOrigin) && !pairingBootstrap && !resumeBootstrap && !revokeBootstrap && !statusProbe)) {
       json(403, { error: 'Origin rejected' }); return;
     }
     if (crossOrigin) {
@@ -68,6 +71,9 @@ export function deviceServer(options: { token: string; origin: string; directory
           const headers = String(request.headers['access-control-request-headers'] ?? '').toLowerCase().split(',').map(item => item.trim()).filter(Boolean);
           if ((pairingBootstrap || resumeBootstrap) && (method !== 'POST' || headers.some(item => item !== 'content-type'))) {
             json(403, { error: 'Pairing preflight rejected' }); return;
+          }
+          if (revokeBootstrap && (method !== 'POST' || headers.some(item => !['authorization', 'content-type'].includes(item)))) {
+            json(403, { error: 'Revocation preflight rejected' }); return;
           }
           if (!routes.includes(path) || !['GET', 'POST'].includes(String(method)) || headers.some(item => !['authorization', 'content-type', 'x-g2-trace-id', 'x-g2-revision'].includes(item))) {
             json(403, { error: 'Preflight rejected' }); return;
@@ -106,6 +112,30 @@ export function deviceServer(options: { token: string; origin: string; directory
           json(200, result); return;
         }
         const credential = request.headers.authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1] ?? '';
+        if (path === '/api/pair/revoke' && request.method === 'POST' && options.pairing && requestOrigin !== undefined) {
+          if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
+          if (Date.now() - revokeWindow >= 60000) { revokeWindow = Date.now(); revokeAttempts = 0; }
+          if (++revokeAttempts > 30) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
+          const raw = (await boundedBody(request, 1024)).toString('utf8');
+          if (raw && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
+          const value = raw ? JSON.parse(raw) : {};
+          if (!value || typeof value !== 'object' || Array.isArray(value) ||
+            Object.keys(value).some(key => key !== 'resumeToken') ||
+            (Object.hasOwn(value, 'resumeToken') && (typeof value.resumeToken !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(value.resumeToken)))) {
+            json(400, { error: 'Invalid revocation request' }); return;
+          }
+          if (!value.resumeToken && !credential) { json(401, { error: 'Revocation proof required' }); return; }
+          const subject = value.resumeToken ? options.pairing.revocationSubject(value.resumeToken, requestOrigin) : options.pairing.subject(credential, requestOrigin);
+          const removed = value.resumeToken ? options.pairing.revokeRecovery(value.resumeToken, requestOrigin) : options.pairing.revoke(credential, requestOrigin);
+          if (!removed) { json(500, { error: 'Pairing removal could not be confirmed' }); return; }
+          // Authority is already revoked; bridge cleanup cannot delay that boundary.
+          if (subject) {
+            try { await fetch(`${bridgeURL}/api/location/revoke`, { method: 'POST', redirect: 'error',
+              headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json', 'X-G2-Location-Owner': subject },
+              body: '{}', signal: AbortSignal.timeout(3000) }); } catch { /* The short location lease also fails closed. */ }
+          }
+          response.writeHead(204); response.end(); return;
+        }
         const paired = () => requestOrigin !== undefined && !!options.pairing?.authorized(credential, requestOrigin);
         // The legacy local-device key is accepted only on its existing origin.
         // A beta session never receives the internal bridge/device master key.
@@ -115,16 +145,6 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
           const finished = options.updateActivity?.begin();
           if (finished) response.once('close', finished);
-        }
-        if (path === '/api/pair/revoke' && request.method === 'POST' && options.pairing && !legacy) {
-          const subject = options.pairing.subject(credential, requestOrigin!);
-          if (subject) {
-            try { await fetch(`${bridgeURL}/api/location/revoke`, {method: 'POST', redirect: 'error',
-              headers: {Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json', 'X-G2-Location-Owner': subject},
-              body: '{}', signal: AbortSignal.timeout(3000)}); } catch { /* The short location lease also fails closed. */ }
-          }
-          if (!options.pairing.revoke(credential, requestOrigin!)) { json(500, { error: 'Pairing removal could not be confirmed' }); return; }
-          response.writeHead(204); response.end(); return;
         }
         if (path === '/api/transcribe' && request.method === 'POST') {
           if (request.headers['content-type'] !== 'audio/wav') { json(415, { error: 'WAV required' }); return; }

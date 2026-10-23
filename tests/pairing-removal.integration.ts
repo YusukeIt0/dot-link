@@ -63,7 +63,21 @@ test('Mac removal reaches an already-running relay: readable denial, no recovery
   const fresh = pairing.exchange(pairing.issue(`https://${host}`).code, origin)!;
   const freshAuth = { Authorization: `Bearer ${fresh.token}` };
   assert.equal((await invoke('/api/status', 'GET', freshAuth)).status, 200);
-  t.mock.method(pairing, 'revoke', () => false);
-  assert.equal((await invoke('/api/pair/revoke', 'POST', freshAuth)).status, 500);
+  const changedOrigin = 'http://127.0.0.1:55502';
+  const proof = { 'Content-Type': 'application/json', Origin: changedOrigin };
+  const envelope = JSON.stringify({ resumeToken: fresh.resumeToken });
+  const preflight = await invoke('/api/pair/revoke', 'OPTIONS', { Origin: changedOrigin,
+    'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' });
+  assert.equal(preflight.status, 204);
+  assert.equal((await invoke('/api/pair/revoke', 'POST', { ...proof, Origin: 'https://untrusted.example' }, envelope)).status, 403);
+  assert.equal((await invoke('/api/pair/revoke', 'POST', proof, JSON.stringify({ resumeToken: 'bad' }))).status, 400);
   assert.equal(pairing.authorized(fresh.token, origin), true);
+  assert.equal((await invoke('/api/pair/revoke', 'POST', proof, envelope)).status, 204);
+  assert.equal((await invoke('/api/pair/revoke', 'POST', proof, envelope)).status, 204, 'lost response retry');
+  assert.equal((await invoke('/api/status', 'GET', freshAuth)).status, 401);
+  assert.equal((await invoke('/api/pair/resume', 'POST', proof, envelope)).status, 401);
+  const last = pairing.exchange(pairing.issue(`https://${host}`).code, origin)!;
+  t.mock.method(pairing, 'revoke', () => false);
+  assert.equal((await invoke('/api/pair/revoke', 'POST', { Authorization: `Bearer ${last.token}` })).status, 500);
+  assert.equal(pairing.authorized(last.token, origin), true);
 });

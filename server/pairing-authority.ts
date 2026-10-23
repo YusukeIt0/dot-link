@@ -15,7 +15,7 @@ const packagedSource = (origin: string): boolean => {
 const SESSION_LIFETIME = 90 * 24 * 60 * 60 * 1000;
 
 interface RuntimeOwner { id: string; generation: number; origin: string; nonce: string; }
-interface RecoveryRecord { currentSession: string; expiresAt: number; generation?: string; runtimeOwner?: RuntimeOwner; }
+interface RecoveryRecord { revoked?: boolean; currentSession: string; expiresAt: number; generation?: string; runtimeOwner?: RuntimeOwner; }
 interface RecoveryCredentials { token: string; expiresAt: number; resumeToken: string; }
 export type RuntimeRecoveryResult =
   | { kind: 'inspected'; generation: number }
@@ -41,7 +41,7 @@ export class PairingAuthority {
     if (!valid(secret)) return;
     try {
       const record: RecoveryRecord = JSON.parse(readFileSync(this.path('recoveries', secret), 'utf8'));
-      if (!currentPairingGeneration(record, pairingGeneration(this.directory)) ||
+      if (record.revoked || !currentPairingGeneration(record, pairingGeneration(this.directory)) ||
         !Number.isFinite(record.expiresAt) || record.expiresAt <= this.clock() || !fileName.test(`${record.currentSession}.json`)) return;
       const owner = record.runtimeOwner;
       if (owner !== undefined && (!owner || !runtimeId(owner.id) || !runtimeGeneration(owner.generation) ||
@@ -112,7 +112,7 @@ export class PairingAuthority {
       try {
         const data = JSON.parse(readFileSync(path, 'utf8'));
         if (!currentPairingGeneration(data, generation) || !Number.isFinite(data.expiresAt) || data.expiresAt <= this.clock()) unlinkSync(path);
-        else active++;
+        else if (kind !== 'sessions' || this.sessionActive(data, name.slice(0, -5))) active++;
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     }
     return active;
@@ -149,28 +149,74 @@ export class PairingAuthority {
     if (resumeToken) writeFileSync(this.path('recoveries', resumeToken), JSON.stringify({ currentSession: digest(token), expiresAt, generation }), { mode: 0o600, flag: 'wx' });
     return { token, expiresAt, ...(resumeToken ? { resumeToken } : {}) };
   }
+  private sessionActive(session: { revoked?: boolean; expiresAt: number; recoveryHash?: string; generation?: string }, hash: string): boolean {
+    const generation = pairingGeneration(this.directory);
+    if (session.revoked || !currentPairingGeneration(session, generation) || !Number.isFinite(session.expiresAt) || session.expiresAt <= this.clock()) return false;
+    if (session.recoveryHash) {
+      if (!/^[a-f0-9]{64}$/.test(session.recoveryHash)) return false;
+      try {
+        const recovery = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${session.recoveryHash}.json`), 'utf8'));
+        return !recovery.revoked && currentPairingGeneration(recovery, generation) && recovery.currentSession === hash && recovery.expiresAt === session.expiresAt;
+      } catch { return false; }
+    }
+    return true;
+  }
   authorized(token: string, origin: string): boolean {
     if (!valid(token)) return false;
     try {
       const session = JSON.parse(readFileSync(this.path('sessions', token), 'utf8'));
-      const generation = pairingGeneration(this.directory);
-      if (!currentPairingGeneration(session, generation)) return false;
-      if (session.origin !== origin || !Number.isFinite(session.expiresAt) || session.expiresAt <= this.clock()) return false;
+      return session.origin === origin && this.sessionActive(session, digest(token));
+    } catch { return false; }
+  }
+  private markRevoked(path: string, record: object): void {
+    const temporary = `${path}.revoke-next`;
+    try {
+      writeFileSync(temporary, JSON.stringify({ ...record, revoked: true }), { mode: 0o600 });
+      renameSync(temporary, path);
+    } catch (error) { try { unlinkSync(temporary); } catch {} throw error; }
+  }
+  /** Keep the hashed receipt until expiry. A lost response can be retried without
+   * recovering a session, and no partial deletion can restore authority. */
+  revoke(token: string, origin: string): boolean {
+    if (!valid(token)) return false;
+    try {
+      const session = JSON.parse(readFileSync(this.path('sessions', token), 'utf8'));
+      if (session.origin !== origin) return false;
       if (session.recoveryHash) {
         if (!/^[a-f0-9]{64}$/.test(session.recoveryHash)) return false;
-        const recovery = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${session.recoveryHash}.json`), 'utf8'));
-        if (!currentPairingGeneration(recovery, generation) || recovery.currentSession !== digest(token) || recovery.expiresAt !== session.expiresAt) return false;
-      }
+        const path = join(this.directory, 'recoveries', `${session.recoveryHash}.json`);
+        let record;
+        try { record = JSON.parse(readFileSync(path, 'utf8')); }
+        catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT'; }
+        // A stale session is not a revocation capability for its newer owner.
+        if (record.currentSession !== digest(token)) return false;
+        if (!record.revoked) this.markRevoked(path, record);
+      } else if (!session.revoked) this.markRevoked(this.path('sessions', token), session);
       return true;
     } catch { return false; }
   }
-  revoke(token: string, origin: string): boolean {
-    if (!this.authorized(token, origin)) return false;
+  /** Recovery proof grants only irreversible revocation across packaged origins.
+   * Missing/expired/bulk-removed capabilities are already inactive. */
+  revokeRecovery(secret: string, origin: string): boolean {
+    if (!valid(secret) || !packagedSource(origin)) return false;
     try {
-      const session = JSON.parse(readFileSync(this.path('sessions', token), 'utf8'));
-      if (session.recoveryHash && /^[a-f0-9]{64}$/.test(session.recoveryHash)) unlinkSync(join(this.directory, 'recoveries', `${session.recoveryHash}.json`));
-      unlinkSync(this.path('sessions', token)); return true;
-    } catch { return false; }
+      const path = this.path('recoveries', secret);
+      const record = JSON.parse(readFileSync(path, 'utf8'));
+      if (!record.revoked) this.markRevoked(path, record);
+      return true;
+    } catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT'; }
+  }
+  revocationSubject(secret: string, origin: string): string | undefined {
+    return valid(secret) && packagedSource(origin) && this.recovery(secret) ? digest(secret) : undefined;
+  }
+  allowsRevocationOrigin(origin: string): boolean {
+    if (packagedSource(origin)) return true;
+    // Retain exact-origin access to the no-data receipt for legacy sessions.
+    for (const name of readdirSync(join(this.directory, 'sessions'))) {
+      if (!fileName.test(name)) continue;
+      try { if (JSON.parse(readFileSync(join(this.directory, 'sessions', name), 'utf8')).origin === origin) return true; } catch {}
+    }
+    return false;
   }
   /** Internal stable subject for consent across packaged-app token rotation. Never expose the hash to a client. */
   subject(token: string, origin: string): string | undefined {
@@ -188,16 +234,16 @@ export class PairingAuthority {
     try {
       const generation = pairingGeneration(this.directory);
       let sessionHash = subject;
-      let recovery: { currentSession: string; expiresAt: number; generation?: string } | undefined;
+      let recovery: { revoked?: boolean; currentSession: string; expiresAt: number; generation?: string } | undefined;
       try {
         recovery = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${subject}.json`), 'utf8'));
       } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false; }
       if (recovery) {
-        if (!currentPairingGeneration(recovery, generation) || !fileName.test(`${recovery.currentSession}.json`)) return false;
+        if (recovery.revoked || !currentPairingGeneration(recovery, generation) || !fileName.test(`${recovery.currentSession}.json`)) return false;
         sessionHash = recovery.currentSession;
       }
       const session = JSON.parse(readFileSync(join(this.directory, 'sessions', `${sessionHash}.json`), 'utf8'));
-      return currentPairingGeneration(session, generation) && Number.isFinite(session.expiresAt) && session.expiresAt > this.clock()
+      return !session.revoked && currentPairingGeneration(session, generation) && Number.isFinite(session.expiresAt) && session.expiresAt > this.clock()
         && (recovery ? session.recoveryHash === subject && session.expiresAt === recovery.expiresAt : !session.recoveryHash);
     } catch { return false; }
   }
@@ -250,7 +296,7 @@ export class PairingAuthority {
         if (!fileName.test(name)) continue;
         try {
           const data = JSON.parse(readFileSync(join(this.directory, kind, name), 'utf8'));
-          if (currentPairingGeneration(data, pairingGeneration(this.directory)) && data.origin === origin && Number.isFinite(data.expiresAt) && data.expiresAt > this.clock()) return true;
+          if (currentPairingGeneration(data, pairingGeneration(this.directory)) && data.origin === origin && Number.isFinite(data.expiresAt) && data.expiresAt > this.clock() && (kind !== 'sessions' || this.sessionActive(data, name.slice(0, -5)))) return true;
         } catch {}
       }
     }
