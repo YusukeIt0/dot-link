@@ -75,8 +75,12 @@ test('Mac removal reaches an already-running relay: readable denial, no recovery
   assert.equal((await invoke('/api/pair/revoke', 'POST', { ...proof, Origin: 'https://untrusted.example' }, envelope)).status, 403);
   assert.equal((await invoke('/api/pair/revoke', 'POST', proof, JSON.stringify({ resumeToken: 'bad' }))).status, 400);
   assert.equal(pairing.authorized(fresh.token, origin), true);
+  const replacement = pairing.exchange(pairing.issue(`https://${host}`).code, changedOrigin)!;
+  const replacementAuth = { Authorization: `Bearer ${replacement.token}`, Origin: changedOrigin };
+  assert.equal((await invoke('/api/status', 'GET', replacementAuth)).status, 200);
   assert.equal((await invoke('/api/pair/revoke', 'POST', proof, envelope)).status, 204);
   assert.equal((await invoke('/api/pair/revoke', 'POST', proof, envelope)).status, 204, 'lost response retry');
+  assert.equal((await invoke('/api/status', 'GET', replacementAuth)).status, 200, 'old removal and its retry preserve the newer registration');
   assert.equal((await invoke('/api/status', 'GET', freshAuth)).status, 401);
   assert.equal((await invoke('/api/pair/resume', 'POST', proof, envelope)).status, 401);
   const last = pairing.exchange(pairing.issue(`https://${host}`).code, origin)!;

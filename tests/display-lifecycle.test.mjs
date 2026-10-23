@@ -1037,8 +1037,23 @@ test('hidden app recovers after offline without relying on an online or foregrou
 
 test('explicit disconnect stops a busy session before the revoke response and cannot erase a new pairing', async t => {
  const credentials={origin:'https://mac.tailtest.ts.net',token:'a'.repeat(43),resumeToken:'b'.repeat(43),expiresAt:Date.now()+100000};
+ const fresh={...credentials,token:'c'.repeat(43),resumeToken:'d'.repeat(43)};
+ const code='e'.repeat(43);
+ let exchanged=false, freshSnapshot=false;
  let reply;
- const app=await launch({nativePairing:credentials,request:url=>url.endsWith('/api/pair/revoke') ? new Promise(resolve=>{reply=resolve;}) : undefined});
+ const app=await launch({nativePairing:credentials,request:(url,init)=>{
+  if(url.endsWith('/api/pair/revoke')) return new Promise(resolve=>{reply=resolve;});
+  if(url.endsWith('/api/pair')) {
+   assert.equal(JSON.parse(init.body).code,code);
+   exchanged=true;
+   return Promise.resolve({status:200,ok:true,json:async()=>fresh});
+  }
+  if(url.endsWith('/api/updates') && init.headers.Authorization===`Bearer ${fresh.token}`) {
+   if(freshSnapshot) return new Promise(()=>{});
+   freshSnapshot=true;
+   return Promise.resolve({status:200,ok:true,json:async()=>({revision:'fresh',status:{subscribed:true},messages:[]})});
+  }
+ }});
  t.after(app.close);
  await app.evaluate('busy=true;');
  const before=app.networkCalls.filter(url=>url.endsWith('/api/pair/resume')).length;
@@ -1050,10 +1065,16 @@ test('explicit disconnect stops a busy session before the revoke response and ca
  assert.match(app.element('pair-notice').textContent,/自動で完了/);
  assert.equal(app.networkCalls.filter(url=>url.endsWith('/api/pair/resume')).length,before,'disconnect never resumes');
  assert.equal(JSON.parse(app.nativeSaved.get('dot-disconnect-v1')).pending.length,1);
- await app.evaluate(`connectionTransitions.paired(${JSON.stringify({...credentials,token:'c'.repeat(43),resumeToken:'d'.repeat(43)})}); showSetup(false);`);
+ app.element('pair-code').value=JSON.stringify({version:1,origin:credentials.origin,code,expiresAt:Date.now()+60000});
+ await app.element('pair').click(); await flush();
+ assert.equal(exchanged,true,'new pairing uses the real button and code exchange');
+ assert.equal(freshSnapshot,true,'new credentials reach the data endpoint before old removal finishes');
+ assert.equal(app.element('diagnostic').textContent,'接続確認成功');
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-disconnect-v1')).pending.length,1);
  reply({status:204,ok:true}); await flush();
  assert.equal(vm.runInContext('session.credentials.resumeToken',app.context),'d'.repeat(43));
  assert.equal(JSON.parse(app.nativeSaved.get('dot-relay-native-v1')).resumeToken,'d'.repeat(43));
+ assert.equal(JSON.parse(app.nativeSaved.get('dot-disconnect-v1')).pending.length,0);
 });
 
 test('reopening with durable disconnect intent suppresses stale native pairing and retries only revocation', async t => {
