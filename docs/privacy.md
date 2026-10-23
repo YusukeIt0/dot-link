@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.12 and Even 0.3.21 source, reviewed October 23, 2026. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.12 and Even 0.3.24 source, reviewed October 23, 2026. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
