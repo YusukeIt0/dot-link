@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.22
 
 - Improved phone conversation controls with a rounded message field, history arrows and a read-aloud toggle.
 - Improved recording controls with a microphone icon that changes when recording and an adjacent trash icon to discard speech.
