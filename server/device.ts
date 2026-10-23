@@ -125,6 +125,10 @@ export function deviceServer(options: { token: string; origin: string; directory
             json(400, { error: 'Invalid revocation request' }); return;
           }
           if (!value.resumeToken && !credential) { json(401, { error: 'Revocation proof required' }); return; }
+          // Reading a request body yields; maintenance may have started meanwhile.
+          if (options.updateActivity?.maintenance()) { json(503, { error: 'Update in progress' }); return; }
+          const finished = options.updateActivity?.begin();
+          if (finished) response.once('close', finished);
           const subject = value.resumeToken ? options.pairing.revocationSubject(value.resumeToken, requestOrigin) : options.pairing.subject(credential, requestOrigin);
           const removed = value.resumeToken ? options.pairing.revokeRecovery(value.resumeToken, requestOrigin) : options.pairing.revoke(credential, requestOrigin);
           if (!removed) { json(500, { error: 'Pairing removal could not be confirmed' }); return; }
