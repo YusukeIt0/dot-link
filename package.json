@@ -16,10 +16,10 @@
     "package:release": "npm run build:release && node scripts/package-even.mjs --release",
     "package:beta": "npm run build && node scripts/package-beta.mjs",
     "beta:pair": "node scripts/beta-pair.mjs",
-    "prebuild": "node scripts/prepare-wake-assets.mjs",
-    "predev": "node scripts/prepare-wake-assets.mjs",
-    "pretest": "node scripts/prepare-wake-assets.mjs",
-    "build:release": "node scripts/prepare-wake-assets.mjs && tsc --noEmit && vite build --mode release"
+    "prebuild": "node scripts/localization.mjs && node scripts/prepare-wake-assets.mjs",
+    "predev": "node scripts/localization.mjs && node scripts/prepare-wake-assets.mjs",
+    "pretest": "node scripts/localization.mjs && node scripts/prepare-wake-assets.mjs",
+    "build:release": "node scripts/localization.mjs && node scripts/prepare-wake-assets.mjs && tsc --noEmit && vite build --mode release"
   },
   "engines": {
     "node": ">=22.18.0"

@@ -67,7 +67,7 @@ export class Recorder {
   private setState(state: RecordingState): void { this.state = state; this.onState(state); }
   private queue(action: () => Promise<void>): Promise<void> {
     this.operation = this.operation.then(action).catch(error => {
-      this.onError(error instanceof Error ? error.message : t('マイク操作に失敗しました'));
+      this.onError(error instanceof Error ? error.message : t('even.microphone_operation_failed'));
     });
     return this.operation;
   }
@@ -78,7 +78,7 @@ export class Recorder {
     this.setState('starting');
     return this.queue(async () => {
       try {
-        if (!await this.microphone(true)) throw new Error(t('G2のマイクを開始できませんでした'));
+        if (!await this.microphone(true)) throw new Error(t('even.could_not_start_the_g2_microphone'));
         this.setState('recording');
         this.timer = setTimeout(() => void this.stop(), MAX_RECORDING_SECONDS * 1000);
       } catch (error) {
@@ -98,7 +98,7 @@ export class Recorder {
       this.setState('stopping');
       let stopped = false;
       try {
-        if (!await this.microphone(false)) throw new Error(t('マイク停止を確認できません。Evenアプリで停止してください'));
+        if (!await this.microphone(false)) throw new Error(t('even.could_not_confirm_microphone_stop_stop_it_in_the_even'));
         stopped = true;
         if (!discard && this.buffer.byteLength) this.onClip(this.buffer.toWav(), this.buffer.duration);
       } finally {

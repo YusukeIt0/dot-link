@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Added Korean to the phone interface and glasses status messages, including automatic selection on Korean-language phones.
+
 ## 0.3.31
 
 - Updated app components to address security vulnerabilities.

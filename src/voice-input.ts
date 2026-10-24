@@ -215,7 +215,7 @@ export class VoiceInput {
     this.updateWakeState();
   }
   private reportCloseFailure(): void {
-    this.options.onError(t('マイク停止を確認できません。Evenアプリで停止してください'));
+    this.options.onError(t('even.could_not_confirm_microphone_stop_stop_it_in_the_even'));
   }
   private stopWatchdog(): void { clearInterval(this.watchdog); this.watchdog = undefined; }
   private updateWakeState(): void {

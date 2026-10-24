@@ -29,6 +29,9 @@ For the standalone introduction page, see [page maintenance and deployment](intr
 
 For Even application state ownership and diagnosis, see [Even runtime ownership](even-runtime.md).
 
+For translation resources, locale selection and adding a language, see
+[Application localization](localization.md).
+
 ## Build the Mac app
 
 Apple Silicon macOS, Xcode Command Line Tools, Python 3 and CMake are required.
