@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { checkLocalization, validateCatalogs } from '../scripts/localization.mjs';
+import { checkLocalization, validateCatalogs, validateNativeReferences } from '../scripts/localization.mjs';
 import metadata from '../localization/locales.json' with { type: 'json' };
 test('every registered language covers the catalog with matching named placeholders', async () => {
   const result = await checkLocalization();
@@ -20,5 +20,15 @@ test('catalog validation rejects missing, extra, empty and incompatible placehol
     data => { delete data.ko; },
   ]) {
     const data = fixture(); mutate(data); assert.throws(() => validateCatalogs(metadata, data));
+  }
+});
+
+test('native message validation includes conditional and dictionary-selected keys', () => {
+  const source = 'tr(flag ? "mac.allowed" : "mac.denied"); let keys = ["wire": "common.unknown"]';
+  const catalog = {'mac.allowed': 'Allowed', 'mac.denied': 'Denied', 'common.unknown': 'Unknown'};
+  assert.doesNotThrow(() => validateNativeReferences(source, catalog));
+  for (const key of Object.keys(catalog)) {
+    const missing = {...catalog}; delete missing[key];
+    assert.throws(() => validateNativeReferences(source, missing), /Unknown Swift message/);
   }
 });

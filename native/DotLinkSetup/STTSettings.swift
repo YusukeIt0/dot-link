@@ -6,28 +6,28 @@ extension SetupApp {
         showingSpeech = true; let active = state["sttProvider"] as? String ?? "whisper"
         speechChoice = STTProviderInfo.order.contains(active) ? active : "whisper"
         speechEndpointDraft = state["sttMicrosoftEndpoint"] as? String ?? ""
-        message = ""; speechMetadata = [:]; render(); showWindow(); refreshSpeechMetadata()
+        messageRecord = nil; speechMetadata = [:]; render(); showWindow(); refreshSpeechMetadata()
     }
     @objc func menuSpeechOutput() {
         showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false
-        showingSpeechOutput = true; speechKeyField?.stringValue = ""; message = ""
+        showingSpeechOutput = true; speechKeyField?.stringValue = ""; messageRecord = nil
         render(); showWindow()
     }
     func renderSpeechOutput() {
-        button(tr("接続に戻る", "Back to connection")) { [weak self] in self?.showingSpeechOutput = false; self?.render() }
+        button(tr("mac.back_to_connection")) { [weak self] in self?.showingSpeechOutput = false; self?.render() }
         let heading = NSStackView(); heading.orientation = .horizontal; heading.spacing = 10
-        heading.addArrangedSubview(label(tr("音声出力", "Speech output"), size: 23, bold: true))
-        heading.addArrangedSubview(HelpButton(tr("音声出力について", "About speech output"), tr("文字を音声に変換するサービスを選びます。iPhone内での読み上げは無料です。外部サービスを利用する場合は、ご自身のAPIキーを使い、読み上げる文字をサービスへ送信します。料金は各サービスの条件に従います。", "Choose a service to turn text into speech. Speech synthesis on your iPhone is free. If you use an external service, your own API key is used and the text to be read aloud is sent to that service. Charges follow each service's terms.")))
+        heading.addArrangedSubview(label(tr("mac.speech_output"), size: 23, bold: true))
+        heading.addArrangedSubview(HelpButton(tr("mac.about_speech_output"), tr("mac.choose_a_service_to_turn_text_into_speech_speech_synthesis_on_your_iphon")))
         stack.addArrangedSubview(heading)
-        stack.addArrangedSubview(label(tr("読み上げのON／OFFは、Evenアプリ内のDot Linkで切り替えます。", "Turn read aloud on or off in Dot Link inside the Even app."), size: 13))
+        stack.addArrangedSubview(label(tr("mac.turn_read_aloud_on_or_off_in_dot_link_inside_the_even_app"), size: 13))
         let body = NSStackView(); body.orientation = .vertical; body.alignment = .leading; body.spacing = 14
         body.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
         let service = NSStackView(); service.orientation = .horizontal; service.spacing = 12
         service.addArrangedSubview(symbol("speaker.wave.2", size: 24))
         let choice = NSPopUpButton(); choice.addItem(withTitle: "iPhone"); choice.selectItem(at: 0)
-        choice.controlSize = .large; choice.setAccessibilityLabel(tr("音声出力方式", "Speech output method"))
+        choice.controlSize = .large; choice.setAccessibilityLabel(tr("mac.speech_output_method"))
         service.addArrangedSubview(choice); body.addArrangedSubview(service)
-        let detail = label(tr("iPhoneの標準音声", "iPhone system voice"), size: 13); detail.textColor = .secondaryLabelColor; body.addArrangedSubview(detail)
+        let detail = label(tr("mac.iphone_system_voice"), size: 13); detail.textColor = .secondaryLabelColor; body.addArrangedSubview(detail)
         let card = NSBox(); card.boxType = .custom; card.borderColor = .separatorColor; card.borderWidth = 0.5; card.cornerRadius = 12
         card.fillColor = .controlBackgroundColor; card.contentViewMargins = .zero; card.contentView = body
         stack.addArrangedSubview(card); card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
@@ -36,7 +36,7 @@ extension SetupApp {
         guard STTProviderInfo.order.indices.contains(sender.indexOfSelectedItem) else { return }
         speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft
         speechChoice = STTProviderInfo.order[sender.indexOfSelectedItem]
-        speechKeyField?.stringValue = ""; message = ""; speechMetadata = [:]
+        speechKeyField?.stringValue = ""; messageRecord = nil; speechMetadata = [:]
         speechMetadataGeneration += 1
         if speechChoice == "whisper" {
             speechMetadata = ["status": "ok", "count": "0"]
@@ -52,10 +52,10 @@ extension SetupApp {
         return "https://" + host
     }
     func renderSpeech() {
-        button(tr("接続に戻る", "Back to connection")) { [weak self] in self?.showingSpeech = false; self?.speechKeyField?.stringValue = ""; self?.message = ""; self?.render() }
+        button(tr("mac.back_to_connection")) { [weak self] in self?.showingSpeech = false; self?.speechKeyField?.stringValue = ""; self?.messageRecord = nil; self?.render() }
         let heading = NSStackView(); heading.orientation = .horizontal; heading.spacing = 10
-        heading.addArrangedSubview(label(tr("音声入力", "Speech input"), size: 23, bold: true))
-        heading.addArrangedSubview(HelpButton(tr("音声入力について", "About speech input"), tr("音声を文字に変換するサービスを選びます。Mac内での認識は無料です。外部サービスでは、ご自身のAPIキーを使い、このMacから録音を直接送信します。料金は各サービスの条件に従い、キーはMacのキーチェーンに保存します。変更は次の音声入力から反映されます。失敗時に別のサービスへ自動で切り替わることはありません。", "Choose a service to turn speech into text. Recognition on this Mac is free. External services use your own API key and receive recordings directly from this Mac. Charges follow each service's terms, and keys are stored in the Mac Keychain. Changes apply to the next recording. If recognition fails, Dot Link does not automatically switch to another service.")))
+        heading.addArrangedSubview(label(tr("mac.speech_input"), size: 23, bold: true))
+        heading.addArrangedSubview(HelpButton(tr("mac.about_speech_input"), tr("mac.choose_a_service_to_turn_speech_into_text_recognition_on_this_mac_is_fre")))
         stack.addArrangedSubview(heading)
         let body = NSStackView(); body.orientation = .vertical; body.alignment = .leading; body.spacing = 14
         body.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
@@ -63,13 +63,13 @@ extension SetupApp {
         service.addArrangedSubview(symbol("waveform", size: 24))
         let choice = NSPopUpButton(); choice.addItems(withTitles: STTProviderInfo.order.map { provider in
             let title = STTProviderInfo.catalog[provider]?.label ?? provider
-            return provider == "whisper" ? title + tr("（無料）", " (Free)") : title
+            return provider == "whisper" ? title + tr("mac.free") : title
         })
         choice.selectItem(at: STTProviderInfo.order.firstIndex(of: speechChoice) ?? 0); choice.target = self; choice.action = #selector(changeSpeechProvider(_:))
         choice.controlSize = .large; choice.isEnabled = !busy && speechMetadata["status"] != nil
-        choice.setAccessibilityLabel(tr("音声認識サービス", "Speech recognition service")); service.addArrangedSubview(choice); body.addArrangedSubview(service)
+        choice.setAccessibilityLabel(tr("mac.speech_recognition_service")); service.addArrangedSubview(choice); body.addArrangedSubview(service)
         let active = state["sttProvider"] as? String ?? "whisper"
-        let status = label(tr("使用中：", "In use: ") + (STTProviderInfo.catalog[active]?.label ?? tr("未確認", "Unknown")), size: 13)
+        let status = label(tr("mac.in_use") + (STTProviderInfo.catalog[active]?.label ?? tr("mac.unknown")), size: 13)
         status.textColor = .secondaryLabelColor; body.addArrangedSubview(status)
         speechMetadataLabel = nil; speechKeyField = nil; speechEndpointField = nil
         func action(_ title: String, primary: Bool = false, _ handler: @escaping () -> Void) {
@@ -79,10 +79,10 @@ extension SetupApp {
         }
         if speechChoice != "whisper" {
             if speechChoice == "microsoft" {
-                body.addArrangedSubview(label(tr("接続先", "Endpoint"), size: 13))
+                body.addArrangedSubview(label(tr("mac.endpoint"), size: 13))
                 let endpoint = NSTextField(string: speechEndpointDraft)
                 endpoint.placeholderString = "https://your-resource.cognitiveservices.azure.com"
-                endpoint.setAccessibilityLabel(tr("Microsoftの接続先", "Microsoft endpoint"))
+                endpoint.setAccessibilityLabel(tr("mac.microsoft_endpoint"))
                 endpoint.isEnabled = !busy; endpoint.cell?.isScrollable = true
                 endpoint.target = self; endpoint.action = #selector(speechEndpointChanged(_:))
                 body.addArrangedSubview(endpoint); speechEndpointField = endpoint
@@ -92,22 +92,22 @@ extension SetupApp {
             speechMetadataLabel = saved
             if speechMetadata["count"] != "0" { body.addArrangedSubview(saved) }
             if speechMetadata["status"] == "ok", speechMetadata["count"] == "0" {
-                let key = NSSecureTextField(); key.placeholderString = tr("APIキー", "API key"); key.font = .systemFont(ofSize: 15); key.isEnabled = !busy
+                let key = NSSecureTextField(); key.placeholderString = tr("mac.api_key"); key.font = .systemFont(ofSize: 15); key.isEnabled = !busy
                 key.cell?.wraps = false; key.cell?.isScrollable = true; key.cell?.usesSingleLineMode = true; key.cell?.lineBreakMode = .byClipping
                 key.setAccessibilityLabel((STTProviderInfo.catalog[speechChoice]?.name ?? speechChoice) + " API key"); body.addArrangedSubview(key); speechKeyField = key
                 key.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -36).isActive = true; key.heightAnchor.constraint(equalToConstant: 28).isActive = true
             }
-            let fee = label(tr("ご自身のAPI料金がかかります。", "Your API usage charges apply."), size: 12); fee.textColor = .secondaryLabelColor; body.addArrangedSubview(fee)
-            let permission = label(tr("Dot Linkのキーチェーン確認画面が表示されたら「常に許可」を選択してください。", "If a Keychain access dialog appears for Dot Link, choose Always Allow."), size: 12); permission.textColor = .secondaryLabelColor; body.addArrangedSubview(permission)
+            let fee = label(tr("mac.your_api_usage_charges_apply"), size: 12); fee.textColor = .secondaryLabelColor; body.addArrangedSubview(fee)
+            let permission = label(tr("mac.if_a_keychain_access_dialog_appears_for_dot_link_choose_always_allow"), size: 12); permission.textColor = .secondaryLabelColor; body.addArrangedSubview(permission)
             if speechMetadata["count"] == "1" {
                 if speechChoice == "microsoft" || active != speechChoice {
-                    action(tr("保存", "Save"), primary: true) { [weak self] in self?.saveSpeech() }
+                    action(tr("mac.save"), primary: true) { [weak self] in self?.saveSpeech() }
                 }
-                action(tr("キーを削除", "Delete key")) { [weak self] in self?.deleteSpeechKey() }
+                action(tr("mac.delete_key")) { [weak self] in self?.deleteSpeechKey() }
             } else if speechMetadata["count"] == "0" {
-                action(busy ? tr("保存中…", "Saving…") : tr("保存", "Save"), primary: true) { [weak self] in self?.saveSpeech() }
+                action(busy ? tr("mac.saving") : tr("mac.save"), primary: true) { [weak self] in self?.saveSpeech() }
             } else if speechMetadata["status"] != nil {
-                action(tr("アクセスを確認", "Check access")) { [weak self] in self?.saveSpeech() }
+                action(tr("mac.check_access")) { [weak self] in self?.saveSpeech() }
             }
         }
         if !message.isEmpty { body.addArrangedSubview(label(message, size: 13)) }
@@ -117,9 +117,9 @@ extension SetupApp {
         if speechChoice != "whisper" {
             let links = NSStackView(); links.orientation = .horizontal; links.spacing = 16
             let info = STTProviderInfo.catalog[speechChoice]
-            var destinations = [(tr("料金", "Pricing"), info?.pricing ?? ""), (tr("データの扱い", "Data handling"), info?.privacy ?? "")]
+            var destinations = [(tr("mac.pricing"), info?.pricing ?? ""), (tr("mac.data_handling"), info?.privacy ?? "")]
             if speechChoice == "microsoft" {
-                destinations.append((tr("接続先について", "About the endpoint"), "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/llm-speech?pivots=programming-language-javascript#retrieve-resource-information"))
+                destinations.append((tr("mac.about_the_endpoint"), "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/llm-speech?pivots=programming-language-javascript#retrieve-resource-information"))
             }
             for (title, url) in destinations where !url.isEmpty {
                 let link = ActionButton(title) { [weak self] in self?.open(url) }; link.isBordered = false; link.font = .systemFont(ofSize: 12); links.addArrangedSubview(link)
@@ -130,24 +130,24 @@ extension SetupApp {
     func deleteSpeechKey() {
         guard !busy else { return }
         let name = STTProviderInfo.catalog[speechChoice]?.name ?? speechChoice
-        let alert = NSAlert(); alert.messageText = tr(name + "のキーを削除しますか？", "Delete the " + name + " key?")
+        let alert = NSAlert(); alert.messageText = tr("mac.delete_provider_key", ["name": name])
         alert.informativeText = state["sttProvider"] as? String == speechChoice
-            ? tr("削除後はWhisperへ切り替えます。", "Speech input will switch to Whisper after deletion.")
-            : tr("このMacに保存したキーを削除します。", "The key saved on this Mac will be deleted.")
-        alert.addButton(withTitle: tr("削除", "Delete")); alert.addButton(withTitle: tr("キャンセル", "Cancel"))
+            ? tr("mac.speech_input_will_switch_to_whisper_after_deletion")
+            : tr("mac.the_key_saved_on_this_mac_will_be_deleted")
+        alert.addButton(withTitle: tr("mac.delete")); alert.addButton(withTitle: tr("mac.cancel"))
         if alert.runModal() == .alertFirstButtonReturn { performSpeechCredential("delete") }
     }
     func speechMetadataText() -> String {
-        guard let status = speechMetadata["status"] else { return tr("保存済みキーを確認中…", "Checking saved key…") }
-        guard status == "ok" else { return tr("保存済みキー：確認できません", "Saved key: unavailable") }
+        guard let status = speechMetadata["status"] else { return tr("mac.checking_saved_key") }
+        guard status == "ok" else { return tr("mac.saved_key_unavailable") }
         guard speechMetadata["count"] == "1" else { return "" }
-        var when = tr("日時不明", "Date unknown")
+        var when = tr("mac.date_unknown")
         if let raw = speechMetadata["savedAt"], let date = ISO8601DateFormatter().date(from: raw) {
-            let formatter = DateFormatter(); formatter.locale = Locale(identifier: language == "ja" ? "ja_JP" : "en_US")
-            formatter.dateFormat = language == "ja" ? "yyyy年M月d日 H時mm分" : "MMM d, yyyy, HH:mm"
+            let formatter = DateFormatter(); formatter.locale = Locale(identifier: Localization.shared.metadata[language]?.dateLocale ?? "en_US")
+            formatter.dateFormat = Localization.shared.metadata[language]?.dateFormat ?? "MMM d, yyyy, HH:mm"
             when = formatter.string(from: date)
         }
-        return tr("最終保存：", "Last saved: ") + when
+        return tr("mac.last_saved") + when
     }
     func refreshSpeechMetadata(applySelection: Bool = false) {
         if speechChoice == "whisper" { speechMetadata = ["status": "ok", "count": "0"]; if showingSpeech { render() }; return }
@@ -188,13 +188,13 @@ extension SetupApp {
         if speechChoice == "microsoft" {
             speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft
             guard let endpoint = validSpeechEndpoint() else {
-                message = tr("Azureの接続先を入力してください。下の「接続先について」を参照できます。", "Enter your Azure endpoint. See About the endpoint below."); render(); return
+                messageRecord = LocalizedMessage("mac.enter_your_azure_endpoint_see_about_the_endpoint_below"); render(); return
             }
             speechEndpointDraft = endpoint; selection["endpoint"] = endpoint
         }
         let value = speechKeyField?.stringValue.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if speechMetadata["count"] == "0" && value.isEmpty {
-            message = tr("APIキーを入力してください。", "Enter your API key."); render(); return
+            messageRecord = LocalizedMessage("mac.enter_your_api_key"); render(); return
         }
         speechKeyField?.stringValue = ""
         // Save is one user action: store/reuse the key, then apply the provider.
@@ -208,7 +208,7 @@ extension SetupApp {
         let provider = speechChoice
         speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft
         let input = (try? JSONSerialization.data(withJSONObject: ["key": key])) ?? Data()
-        busy = true; message = ""; render()
+        busy = true; messageRecord = nil; render()
         let task = Process(); task.executableURL = executable; task.arguments = ["--stt-credential", operation, provider]
         let output = Pipe(), stdin = Pipe(); task.standardOutput = output; task.standardInput = stdin; task.standardError = FileHandle.nullDevice; helper = task
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -227,15 +227,15 @@ extension SetupApp {
                 if result == "ok" {
                     self.refreshSpeechMetadata()
                     if let completion { completion(); return }
-                    self.message = operation == "delete" ? self.tr("キーを削除しました。", "Key deleted.") : operation == "save" ? self.tr("キーを保存しました。APIとの接続は音声入力時に確認します。", "Key saved. API access will be checked when you use speech input.") : self.tr("保存済みキーにアクセスできました。", "Access to the saved key succeeded.")
+                    self.messageRecord = operation == "delete" ? LocalizedMessage("mac.key_deleted") : operation == "save" ? LocalizedMessage("mac.key_saved_api_access_will_be_checked_when_you_use_speech_input") : LocalizedMessage("mac.access_to_the_saved_key_succeeded")
                     if operation == "delete" && self.state["sttProvider"] as? String == provider { self.speechChoice = "whisper"; self.perform("stt-select", input: ["provider": "whisper"]); return }
                 } else if result == "missing" {
                     self.refreshSpeechMetadata()
-                    self.message = self.tr("APIキーを入力してください。", "Enter your API key.")
+                    self.messageRecord = LocalizedMessage("mac.enter_your_api_key")
                 } else if result == "cancelled" {
-                    self.message = self.tr("操作をキャンセルしました。再試行はしていません。", "Operation cancelled. No retry was made.")
+                    self.messageRecord = LocalizedMessage("mac.operation_cancelled_no_retry_was_made")
                 } else {
-                    self.message = self.tr("キーを利用できません。キーチェーンのロック・アクセス許可、入力したキーを確認してください。", "The key could not be used. Check the Keychain lock, access permission and the entered key.")
+                    self.messageRecord = LocalizedMessage("mac.the_key_could_not_be_used_check_the_keychain_lock_access_permission_and")
                 }
                 self.render()
             }

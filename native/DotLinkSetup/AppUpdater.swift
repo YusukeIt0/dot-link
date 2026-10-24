@@ -6,7 +6,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     let automaticUpdatesEnabled: Bool
     private let savedAutomaticPreferenceKey = "DotLinkAutomaticChecksBeforePolicyPause"
     var changed: (() -> Void)?
-    var tr: (String, String) -> String = { ja, _ in ja }
+    var localize: (String, [String: String]) -> String = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
+    func tr(_ key: String, _ parameters: [String: String] = [:]) -> String { localize(key, parameters) }
     var canCheck: () -> Bool = { false }
     var prepare: (Bool, @escaping (String) -> Void) -> Void = { _, reply in reply("failed") }
     var recover: (@escaping (Bool) -> Void) -> Void = { $0(false) }
@@ -14,7 +15,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     var prepared = false
     var working = false
     var message = ""
-    private var statusText: (String, String)?
+    private var statusText: LocalizedMessage?
     private var manuallyApproved = false
     private var manualCheck = false
     private var cancelDownload: (() -> Void)?
@@ -30,7 +31,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private(set) var preparing = false
     var blocksActions: Bool { preparing || recovering || prepared }
     var checkTitle: String {
-        recoveryRequired ? tr("復旧を再試行", "Retry recovery") : readyReply != nil ? tr("更新を再試行", "Retry update") : tr("アップデートを確認", "Check for updates")
+        recoveryRequired ? tr("mac.retry_recovery") : readyReply != nil ? tr("mac.retry_update") : tr("mac.check_for_updates")
     }
     private let repository = Bundle.main.object(forInfoDictionaryKey: "DotLinkUpdateRepository") as? String ?? ""
     var silentRelaunch: Bool { !manuallyApproved }
@@ -60,32 +61,30 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         updater.sendsSystemProfile = false
         do {
             try updater.start()
-            if !automaticUpdatesEnabled { status("手動でアップデートを確認できます", "Check for updates manually") }
-            else if automatic { status("アップデートを確認できます", "Ready to check for updates") }
-            else { status("自動更新はオフです", "Automatic updates are off") }
-        } catch { status("更新を開始できません", "Updates could not start") }
+            if !automaticUpdatesEnabled { status("mac.check_for_updates_manually") }
+            else if automatic { status("mac.ready_to_check_for_updates") }
+            else { status("mac.automatic_updates_are_off") }
+        } catch { status("mac.updates_could_not_start") }
     }
-    private func status(_ ja: String, _ en: String, working: Bool = false) {
-        statusText = (ja, en)
-        let next = tr(ja, en); if message == next && self.working == working { return }
+    private func status(_ key: String, _ parameters: [String: String] = [:], working: Bool = false) {
+        statusText = LocalizedMessage(key, parameters)
+        let next = tr(key, parameters); if message == next && self.working == working { return }
         self.working = working; message = next; statusLabel?.stringValue = message; refreshCheckButton(); changed?()
     }
     private func refreshCheckButton() {
         checkButton?.title = checkTitle
         checkButton?.isEnabled = !blocksActions && !extracting
     }
-    func refreshLanguage() { if let (ja, en) = statusText { message = tr(ja, en); statusLabel?.stringValue = message; refreshCheckButton(); changed?() } }
+    func refreshLanguage() { if let value = statusText { message = tr(value.key, value.parameters); statusLabel?.stringValue = message; refreshCheckButton(); changed?() } }
     func settingsView() -> NSView {
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") + ((Bundle.main.object(forInfoDictionaryKey: "DotLinkBeta") as? Bool == true) ? " Beta" : "")
-        let title = NSTextField(labelWithString: tr("バージョン：", "Version: ") + version); title.font = .systemFont(ofSize: 15, weight: .semibold); box.addArrangedSubview(title)
-        let toggle = NSButton(checkboxWithTitle: tr("自動更新", "Automatic updates"), target: self, action: #selector(toggleAutomatic(_:))); toggle.state = automatic ? .on : .off; toggle.isEnabled = automaticUpdatesEnabled; toggle.toolTip = automaticUpdatesEnabled ? nil : tr("自動更新は一時的に利用できません。手動で更新できます。", "Automatic updates are temporarily unavailable. You can update manually."); box.addArrangedSubview(toggle)
-        let check = ActionButton(tr("アップデートを確認", "Check for updates")) { [weak self] in self?.check() }
+        let title = NSTextField(labelWithString: tr("mac.version") + version); title.font = .systemFont(ofSize: 15, weight: .semibold); box.addArrangedSubview(title)
+        let toggle = NSButton(checkboxWithTitle: tr("mac.automatic_updates"), target: self, action: #selector(toggleAutomatic(_:))); toggle.state = automatic ? .on : .off; toggle.isEnabled = automaticUpdatesEnabled; toggle.toolTip = automaticUpdatesEnabled ? nil : tr("mac.automatic_updates_are_temporarily_unavailable_you_can_update_manually"); box.addArrangedSubview(toggle)
+        let check = ActionButton(tr("mac.check_for_updates")) { [weak self] in self?.check() }
         checkButton = check; refreshCheckButton(); box.addArrangedSubview(check)
-        let detail = NSTextField(wrappingLabelWithString: message.isEmpty ? tr("自動更新は、Evenを使っていない間に適用します。", "Automatic updates install while Even is not in use.") : message); detail.font = .systemFont(ofSize: 12); detail.textColor = .secondaryLabelColor; box.addArrangedSubview(detail); statusLabel = detail
-        let guidance = NSTextField(wrappingLabelWithString: tr(
-            "自動更新は一時停止中です。更新する場合は「アップデートを確認」を押してください。\n更新後、通知を共有できなくなった場合：\nシステム設定 → プライバシーとセキュリティ → アクセシビリティで、Dot Linkを一度削除し、インストール先のDot Link.appを追加し直してオンにしてください。",
-            "Automatic updates are temporarily disabled. To update, click Check for updates.\nIf notification sharing stops after an update:\nOpen System Settings → Privacy & Security → Accessibility. Remove Dot Link, add Dot Link.app again from its installation folder, then turn access on."))
+        let detail = NSTextField(wrappingLabelWithString: message.isEmpty ? tr("mac.automatic_updates_install_while_even_is_not_in_use") : message); detail.font = .systemFont(ofSize: 12); detail.textColor = .secondaryLabelColor; box.addArrangedSubview(detail); statusLabel = detail
+        let guidance = NSTextField(wrappingLabelWithString: tr("mac.automatic_updates_are_temporarily_disabled_to_update_click_check_for_upd"))
         guidance.font = .systemFont(ofSize: 12); guidance.textColor = .secondaryLabelColor
         guidance.isSelectable = true; guidance.maximumNumberOfLines = 0
         guidance.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -98,11 +97,11 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     @objc private func toggleAutomatic(_ sender: NSButton) {
         guard automaticUpdatesEnabled else { sender.state = .off; return }
         updater.automaticallyChecksForUpdates = sender.state == .on
-        if automatic && !working && !preparing { status("自動更新はオンです", "Automatic updates are on") }
+        if automatic && !working && !preparing { status("mac.automatic_updates_are_on") }
         if !automatic && !manuallyApproved && !preparing {
             retry?.invalidate(); retry = nil; cancelDownload?(); cancelDownload = nil
             let reply = readyReply; readyReply = nil; reply?(.skip)
-            status("自動更新はオフです", "Automatic updates are off")
+            status("mac.automatic_updates_are_off")
         }
     }
     func check() {
@@ -114,18 +113,18 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     @discardableResult func cancelForQuit(discardConfirmed: Bool = false) -> Bool {
         if extracting || preparing || recovering {
             let alert = NSAlert()
-            alert.messageText = recovering ? tr("接続の復旧が終わるまでお待ちください", "Wait for connection recovery to finish")
-                : extracting ? tr("更新の検証が終わるまでお待ちください", "Wait for update verification to finish")
-                : tr("更新の準備が終わるまでお待ちください", "Wait for update preparation to finish")
+            alert.messageText = recovering ? tr("mac.wait_for_connection_recovery_to_finish")
+                : extracting ? tr("mac.wait_for_update_verification_to_finish")
+                : tr("mac.wait_for_update_preparation_to_finish")
             _ = runAlert(alert)
             return false
         }
         if readyReply != nil && manuallyApproved && !discardConfirmed {
             let alert = NSAlert()
-            alert.messageText = tr("更新せずに終了しますか？", "Quit without updating?")
-            alert.informativeText = tr("ダウンロード済みの更新は破棄されます。再ダウンロードせずに再試行するには、Dot Linkを開いたままにしてください。", "Quitting discards the downloaded update. Keep Dot Link open to retry without downloading again.")
-            alert.addButton(withTitle: tr("開いたままにする", "Keep open"))
-            alert.addButton(withTitle: tr("更新せず終了", "Quit without updating"))
+            alert.messageText = tr("mac.quit_without_updating")
+            alert.informativeText = tr("mac.quitting_discards_the_downloaded_update_keep_dot_link_open_to_retry_with")
+            alert.addButton(withTitle: tr("mac.keep_open"))
+            alert.addButton(withTitle: tr("mac.quit_without_updating_19"))
             guard runAlert(alert) == .alertSecondButtonReturn else { return false }
         }
         retry?.invalidate(); retry = nil
@@ -134,9 +133,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
         guard automaticUpdatesEnabled || updateCheck == .updates else {
-            throw NSError(domain: "DotLinkUpdate", code: 4, userInfo: [NSLocalizedDescriptionKey: tr("自動更新は一時停止中です。手動で確認してください。", "Automatic updates are temporarily disabled. Check manually.")])
+            throw NSError(domain: "DotLinkUpdate", code: 4, userInfo: [NSLocalizedDescriptionKey: tr("mac.automatic_updates_are_temporarily_disabled_check_manually")])
         }
-        guard canCheck() else { throw NSError(domain: "DotLinkUpdate", code: 1, userInfo: [NSLocalizedDescriptionKey: tr("Macの準備が終わってから確認してください。", "Finish Mac setup before checking for updates.")]) }
+        guard canCheck() else { throw NSError(domain: "DotLinkUpdate", code: 1, userInfo: [NSLocalizedDescriptionKey: tr("mac.finish_mac_setup_before_checking_for_updates")]) }
     }
     static func validDownloadURL(_ url: URL, repository: String) -> Bool {
         url.scheme == "https" && url.host == "github.com" && url.user == nil && url.password == nil &&
@@ -154,10 +153,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         request.setValue("application/octet-stream", forHTTPHeaderField: "Accept")
     }
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) { reply(SUUpdatePermissionResponse(automaticUpdateChecks: automaticUpdatesEnabled, sendSystemProfile: false)) }
-    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) { cancelDownload = cancellation; status("更新を確認中…", "Checking for updates…") }
+    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) { cancelDownload = cancellation; status("mac.checking_for_updates") }
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
         cancelDownload = nil; manuallyApproved = false
-        status("新しいバージョンがあります · " + appcastItem.displayVersionString, "Update available · " + appcastItem.displayVersionString)
+        status("mac.update_available_version", ["version": appcastItem.displayVersionString])
         guard !appcastItem.isInformationOnlyUpdate else { reply(.dismiss); return }
         if !state.userInitiated && automatic {
             if state.stage == .installing { showReady(toInstallAndRelaunch: reply) } else { reply(.install) }
@@ -170,17 +169,17 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         } else { reply(manuallyApproved ? .install : .dismiss) }
     }
     func confirmManualUpdate(version: String, notes: String?) {
-        let alert = NSAlert(); alert.messageText = tr("新しいバージョンがあります", "An update is available") + " · " + version
-        alert.informativeText = String((notes ?? tr("Dot Linkを更新します。設定と履歴は引き継ぎます。", "Update Dot Link. Your settings and history are preserved.")).prefix(4000))
-        alert.informativeText += "\n\n" + tr("更新時に接続と進行中の会話を中断し、アプリを再起動します。更新後は元の接続状態に戻ります。送信できなかった発言は、もう一度話しかけてください。", "Updating interrupts the connection and any conversation in progress, then restarts the app. Your previous connection state is restored afterward. Please repeat anything that was not sent.")
-        alert.addButton(withTitle: tr("あとで", "Later")); alert.addButton(withTitle: tr("更新する", "Update"))
+        let alert = NSAlert(); alert.messageText = tr("mac.an_update_is_available") + " · " + version
+        alert.informativeText = String((notes ?? tr("mac.update_dot_link_your_settings_and_history_are_preserved")).prefix(4000))
+        alert.informativeText += "\n\n" + tr("mac.updating_interrupts_the_connection_and_any_conversation_in_progress_then")
+        alert.addButton(withTitle: tr("mac.later")); alert.addButton(withTitle: tr("mac.update"))
         manuallyApproved = runAlert(alert) == .alertSecondButtonReturn
-        if !manuallyApproved { status("更新はあとで適用できます", "You can install this update later") }
+        if !manuallyApproved { status("mac.you_can_install_this_update_later") }
     }
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
     func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) {
-        status("最新バージョンです", "You’re up to date")
+        status("mac.you_re_up_to_date")
         if manualCheck { let alert = NSAlert(); alert.messageText = message; alert.runModal() }
         acknowledgement()
     }
@@ -192,18 +191,18 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             UserDefaults.standard.removeObject(forKey: "updateBackgroundRelaunchAt"); prepared = false
             restoreService()
         } else if recoveryRequired {
-            if !recovering { status("接続を復旧できませんでした。「復旧を再試行」を押してください。", "The connection could not be restored. Click Retry recovery.") }
-        } else { status("更新できませんでした。「アップデートを確認」で再試行してください。", "Update failed. Click Check for updates to retry.") }
+            if !recovering { status("mac.the_connection_could_not_be_restored_click_retry_recovery") }
+        } else { status("mac.update_failed_click_check_for_updates_to_retry") }
         if showAlert {
-            let alert = NSAlert(); alert.messageText = tr("更新できませんでした", "Update failed")
+            let alert = NSAlert(); alert.messageText = tr("mac.update_failed")
             alert.informativeText = error.localizedDescription; _ = runAlert(alert)
         }
         acknowledgement()
     }
-    func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0; cancelDownload = cancellation; status("更新をダウンロード中…", "Downloading update…", working: true) }
+    func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0; cancelDownload = cancellation; status("mac.downloading_update", working: true) }
     func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) { expected = expectedContentLength }
-    func showDownloadDidReceiveData(ofLength length: UInt64) { received += length; if expected > 0 { let p = min(100, Int(Double(received) / Double(expected) * 100)); status("更新をダウンロード中… \(p)%", "Downloading update… \(p)%", working: true) } }
-    func showDownloadDidStartExtractingUpdate() { extracting = true; cancelDownload = nil; status("更新を検証中…", "Verifying update…", working: true) }
+    func showDownloadDidReceiveData(ofLength length: UInt64) { received += length; if expected > 0 { let p = min(100, Int(Double(received) / Double(expected) * 100)); status("mac.downloading_update_p", ["p": String(p)], working: true) } }
+    func showDownloadDidStartExtractingUpdate() { extracting = true; cancelDownload = nil; status("mac.verifying_update", working: true) }
     func showExtractionReceivedProgress(_ progress: Double) {}
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
         extracting = false; readyReply = reply
@@ -214,7 +213,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         guard readyReply != nil, !blocksActions, !recoveryRequired else { return }
         retry?.invalidate(); retry = nil
         preparing = true
-        status("更新の準備中…", "Preparing update…", working: true)
+        status("mac.preparing_update", working: true)
         prepare(manuallyApproved) { [weak self] result in
             guard let self else { return }; self.preparing = false
             // An installer error may arrive while the helper is still stopping services.
@@ -229,38 +228,38 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                 self.restoreService()
             } else if result == "prepared" {
                 self.prepared = true
-                self.status("更新を適用中…", "Installing update…", working: true)
+                self.status("mac.installing_update", working: true)
                 let reply = self.readyReply; self.readyReply = nil; reply?(.install)
             } else if result == "waiting" {
                 if self.manuallyApproved {
-                    self.status("設定の操作が終わったら「更新を再試行」を押してください。ダウンロードは保持しています。", "Finish the current settings operation, then click Retry update. The download is kept.")
+                    self.status("mac.finish_the_current_settings_operation_then_click_retry_update_the_downlo")
                 } else {
-                    self.status("Evenを閉じると更新を適用します", "Close Even to apply the update")
+                    self.status("mac.close_even_to_apply_the_update")
                     self.retry = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.attemptInstall() }
                 }
             } else if result == "recovery-required" {
                 self.recoveryRequired = true
-                self.status("接続を復旧できませんでした。「復旧を再試行」を押してください。", "The connection could not be restored. Click Retry recovery.")
+                self.status("mac.the_connection_could_not_be_restored_click_retry_recovery")
             } else {
                 // Keep the verified installer for an in-session retry. Dismiss is unsafe:
                 // Sparkle can install on exit before service preparation has succeeded.
-                self.status("更新を準備できませんでした。「更新を再試行」を押してください。ダウンロードは保持しています。", "Update preparation failed. Click Retry update. The download is kept.")
+                self.status("mac.update_preparation_failed_click_retry_update_the_download_is_kept")
             }
         }
     }
     private func restoreService() {
         guard !recovering else { return }
         recovering = true; recoveryRequired = true
-        status("接続を復旧中…", "Restoring connection…", working: true)
+        status("mac.restoring_connection", working: true)
         recover { [weak self] success in
             guard let self else { return }
             self.recovering = false; self.recoveryRequired = !success
-            if !success { self.status("接続を復旧できませんでした。「復旧を再試行」を押してください。", "The connection could not be restored. Click Retry recovery.") }
-            else if self.readyReply != nil { self.status("元の接続状態に戻しました。「更新を再試行」を押してください。", "Previous connection state restored. Click Retry update.") }
-            else { self.status("元の接続状態に戻しました。「アップデートを確認」で再試行してください。", "Previous connection state restored. Click Check for updates to retry.") }
+            if !success { self.status("mac.the_connection_could_not_be_restored_click_retry_recovery") }
+            else if self.readyReply != nil { self.status("mac.previous_connection_state_restored_click_retry_update") }
+            else { self.status("mac.previous_connection_state_restored_click_check_for_updates_to_retry") }
         }
     }
-    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) { status("更新を適用中…", "Installing update…", working: true) }
+    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) { status("mac.installing_update", working: true) }
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) { acknowledgement() }
     func dismissUpdateInstallation() { extracting = false; cancelDownload = nil; retry?.invalidate(); retry = nil; readyReply = nil; manualCheck = false; manuallyApproved = false; working = recovering; refreshCheckButton(); changed?() }
 }

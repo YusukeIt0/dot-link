@@ -1,14 +1,12 @@
 # Application localization
 
 Application language is separate from conversation contents, speech recognition
-and acoustic wake detection. English is the fallback. The Even application
-supports English, Japanese and Korean; the Mac migration is the next dependent
-step of the localization work.
+and acoustic wake detection. English is the fallback. The Mac and Even applications support English, Japanese and Korean.
 
 ## Resource contract
 
 - `localization/locales.json` registers each language's native name, selector
-  order, speech locale and Mac date locale. Existing Japanese/English selector
+  order, speech locale, Mac date locale and saved-key date format. Existing Japanese/English selector
   order is retained; new languages follow them.
 - `localization/en.json` defines stable message IDs and English source text.
   `ja.json`, `ko.json`, and future locale files use exactly the same IDs.
@@ -21,10 +19,13 @@ step of the localization work.
   in runtime code.
 - `src/localization-catalogs.ts` is generated import/type glue. Run
   `node scripts/localization.mjs --write` after registering a language, then
-  commit the generated result. Never hand-edit it.
+  commit the generated result. `scripts/lib/setup-errors.json` is also generated
+  from the `setup.codes.*` and `setup.stages.*` resources, preserving its stable
+  machine-readable allowlist structure. Never hand-edit generated files.
 - `npm test` and build commands check registered catalogs, exact key coverage,
   nonempty text, placeholder parity, HTML references and generated imports.
-  TypeScript checks app message IDs. Runtime rendering retains English fallback.
+  TypeScript checks app message IDs; the validator checks native Swift message
+  references. Runtime rendering retains English fallback.
 
 Even owns display-language resolution in `src/i18n.ts`, persistence in
 `src/language-preferences.ts`, and application state in the existing runtime
@@ -48,12 +49,31 @@ install voices or guarantee pronunciation of mixed-language replies. A speech
 error keeps the existing visible fallback. User messages and Dot replies are
 never translated or rewritten by the UI language setting.
 
+Mac uses `native/DotLinkSetup/Localization.swift` with the same bundled JSON
+resources. Its existing `setupLanguage` preference overrides the first macOS
+preferred language; unsupported preferences resolve from the device language,
+then fall back to English. The language selector keeps its existing explicit
+choices (there is no new Auto control). Menus, settings, setup failures and
+retained update/status messages refresh when the selection changes. Retained
+messages store IDs and parameters instead of inferring IDs from visible text.
+Notification diagnostic wire values remain stable; only their UI presentation
+and synthetic test-notification wording are localized. OS-provided error text
+and external provider/release content keep their source language.
+
+The Mac builder validates and copies the catalogs into `Resources/payload`.
+Run `sh scripts/test-setup-native.sh` for native resolution, placeholders,
+fallback and safe failure-copying checks, plus
+`node scripts/test-mac-update-driver.mjs` for the unchanged update/recovery flow
+and language switching. These require macOS; the update driver needs AppKit.
+
 ## Adding a language
 
 1. Copy the English catalog to the new language file and translate every entry.
    Preserve placeholders, the meaning of permissions/stopping, product names
    and literal wake names. Review short state labels as well as long help/error
-   text. Register native name and locale metadata and regenerate imports.
+   text. Register native name and locale metadata and regenerate imports. Add the
+   language to `app.json` using a language code supported by the Even package
+   schema; platform support is separate from catalog registration.
 2. Run `npm test`, `npm run test:http`, and `npm run build`. Test locale/region
    detection, explicit selection, unsupported/invalid preferences, restart and
    native restore. Check that message contents, drafts, pairing and other

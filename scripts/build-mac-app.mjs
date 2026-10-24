@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 const root=resolve('.'), output=resolve(process.argv[2] ?? '.runtime/mac-app/Dot Link.app'), contents=join(output,'Contents'), payload=join(contents,'Resources/payload');
 if (!output.startsWith(join(root,'.runtime')+'/') || !output.endsWith('/Dot Link.app')) throw new Error('Build output must be a Dot Link.app below .runtime');
 const run=(cmd,args)=>{const r=spawnSync(cmd,args,{stdio:'inherit'});if(r.status!==0)throw new Error('Build step failed: '+cmd);};
+run(process.execPath,['scripts/localization.mjs']);
 run(process.execPath,['scripts/prepare-sparkle.mjs']);
 try {
  const info=await readFile(join(contents,'Info.plist'),'utf8');
@@ -11,7 +12,7 @@ try {
  await rm(output,{recursive:true});
 }catch(e){if(e.code!=='ENOENT')throw e;}
 await mkdir(join(contents,'MacOS'),{recursive:true});await mkdir(payload,{recursive:true});
-for(const name of ['package.json','package-lock.json','server','src','dist'])await cp(join(root,name),join(payload,name),{recursive:true});
+for(const name of ['package.json','package-lock.json','server','src','dist','localization'])await cp(join(root,name),join(payload,name),{recursive:true});
 await mkdir(join(payload,'scripts/lib'),{recursive:true});
 for(const name of ['mac-setup.mjs','setup-status.mjs','manage.mjs','setup.mjs','prepare-tunnel.mjs','beta-pair.mjs','mac-runtime-manifest.json'])await cp(join(root,'scripts',name),join(payload,'scripts',name));
 for(const name of ['setup.mjs','setup-failure.mjs','setup-errors.json','service-management.mjs','mac-install.mjs','menu-install.mjs','notification-migration.mjs','pairing-status.mjs','pairing-removal.mjs','app-lifecycle.mjs','app-uninstall.mjs','app-update.mjs','update-exit-recovery.mjs'])await cp(join(root,'scripts/lib',name),join(payload,'scripts/lib',name));
@@ -52,7 +53,7 @@ for(const [key,type,value] of [
 ])run('/usr/libexec/PlistBuddy',['-c',`Add :${key} ${type} ${value}`,info]);
 await cp('assets/brand/orbit/DotLink.icns',join(contents,'Resources/DotLink.icns'));
 await mkdir('.runtime/swift-module-cache',{recursive:true});
-run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/NotificationMenu/NotificationProbeResult.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/SetupFailure.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
+run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/Localization.swift','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/NotificationMenu/NotificationProbeResult.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/SetupFailure.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
 for(const name of ['node','tunnel-client','whisper-cli'])run('/usr/bin/codesign',['--force','--sign','-',join(payload,'.runtime/bin',name)]);
 run('/usr/bin/codesign',['--force','--sign','-','--identifier','app.tripsurf.dotlink.mac',output]);
 run('/usr/bin/codesign',['--verify','--deep','--strict',output]);
