@@ -167,3 +167,11 @@ Text-only diagnostics from older builds cannot authorize migration: rerun the
 notification test in the current installed app. A migration probe uses its direct
 receipt path even if notification sharing was already enabled, and is excluded
 from the general delivery ledger to prevent duplicate forwarding.
+
+### Review input bounds
+
+Automated review accepts up to 500,000 bytes for a PR diff and separately for
+the main-to-parent context of a child PR. These bounds allow complete shared
+translation catalogs to be reviewed. Larger inputs stop without an assessment;
+no files are silently omitted. Discussion, file-count, verification-context,
+authorization and result-validation bounds remain separate.

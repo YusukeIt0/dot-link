@@ -113,7 +113,7 @@ function boundedInput(s) {
   let diff = '';
   if (s.pr) {
     diff = gh(['api', `${root}/pulls/${number}`, '-H', 'Accept: application/vnd.github.diff']);
-    if (!diff.trim() || Buffer.byteLength(diff) > 250_000 || s.pr.changed_files > 50) throw new RangeError('Change exceeds review input limit or is empty');
+    if (!diff.trim() || Buffer.byteLength(diff) > 500_000 || s.pr.changed_files > 50) throw new RangeError('Change exceeds review input limit or is empty');
   }
   return {input, diff};
 }
@@ -223,12 +223,12 @@ if (mode === 'intake') {
     execFileSync('git', ['-c', 'core.hooksPath=/dev/null', 'fetch', '--no-tags', 'origin', s.data.base.sha], {stdio: 'pipe', timeout: 60_000});
     try {
       baseDiff = execFileSync('git', ['diff', '--no-ext-diff', '--no-textconv', '--no-renames', s.data.main, s.data.base.sha, '--'],
-        {encoding: 'utf8', maxBuffer: 250_001, timeout: 30_000});
+        {encoding: 'utf8', maxBuffer: 500_001, timeout: 30_000});
     } catch (error) {
       if (error.code !== 'ENOBUFS') throw error;
       output('scope_limited', 'true'); process.exit(0);
     }
-    if (Buffer.byteLength(baseDiff) > 250_000) { output('scope_limited', 'true'); process.exit(0); }
+    if (Buffer.byteLength(baseDiff) > 500_000) { output('scope_limited', 'true'); process.exit(0); }
   }
   let context;
   if (process.env.REVIEW_CONTEXT === '1') {
