@@ -1,5 +1,24 @@
 {
-  "en": { "name": "English", "speechLocale": "en-US", "dateLocale": "en_US", "order": 1 },
-  "ja": { "name": "日本語", "speechLocale": "ja-JP", "dateLocale": "ja_JP", "order": 0, "legacyPrefix": true },
-  "ko": { "name": "한국어", "speechLocale": "ko-KR", "dateLocale": "ko_KR", "order": 2 }
+  "en": {
+    "name": "English",
+    "speechLocale": "en-US",
+    "dateLocale": "en_US",
+    "order": 1,
+    "dateFormat": "MMM d, yyyy, HH:mm"
+  },
+  "ja": {
+    "name": "日本語",
+    "speechLocale": "ja-JP",
+    "dateLocale": "ja_JP",
+    "order": 0,
+    "legacyPrefix": true,
+    "dateFormat": "yyyy年M月d日 H時mm分"
+  },
+  "ko": {
+    "name": "한국어",
+    "speechLocale": "ko-KR",
+    "dateLocale": "ko_KR",
+    "order": 2,
+    "dateFormat": "yyyy년 M월 d일 HH:mm"
+  }
 }

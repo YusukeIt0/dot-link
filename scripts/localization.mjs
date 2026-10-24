@@ -17,6 +17,25 @@ export async function checkLocalization({ write = false } = {}) {
   const target = new URL('src/localization-catalogs.ts', root);
   if (write) await writeFile(target, generated);
   else if (await readFile(target, 'utf8').catch(() => '') !== generated) throw Error('Localization imports are stale; run node scripts/localization.mjs --write');
+  // The setup helper retains its stable code/stage allowlist shape, generated
+  // from the same resources so adding a language cannot leave errors behind.
+  const setup = { codes: {}, stages: {} };
+  for (const key of keys.filter(key => key.startsWith('setup.'))) {
+    const [, group, code] = key.split('.');
+    if (!Object.hasOwn(setup, group) || !code) throw Error(`Invalid setup key: ${key}`);
+    setup[group][code] = Object.fromEntries(locales.map(locale => [locale, catalogs[locale][key]]));
+  }
+  const setupText = JSON.stringify(setup, null, 2) + '\n';
+  const setupTarget = new URL('scripts/lib/setup-errors.json', root);
+  if (write) await writeFile(setupTarget, setupText);
+  else if (await readFile(setupTarget, 'utf8') !== setupText) throw Error('Setup catalog is stale; run node scripts/localization.mjs --write');
+  for (const file of await readdir(new URL('native/DotLinkSetup/', root))) {
+    if (!file.endsWith('.swift')) continue;
+    const source = await readFile(new URL(`native/DotLinkSetup/${file}`, root), 'utf8');
+    for (const [, key] of source.matchAll(/(?:tr|status|LocalizedMessage|add)\("((?:mac|common)\.[^"\s]+)"/g)) {
+      if (!Object.hasOwn(catalogs.en, key)) throw Error(`Unknown Swift message: ${file}:${key}`);
+    }
+  }
   const html = await readFile(new URL('index.html', root), 'utf8');
   for (const [, key] of html.matchAll(/data-i18n(?:-aria-label)?="([^"]+)"/g)) if (!Object.hasOwn(catalogs.en, key)) throw Error(`Unknown HTML message: ${key}`);
   if (/data-en=/.test(html)) throw Error('Legacy HTML translation outside catalogs');

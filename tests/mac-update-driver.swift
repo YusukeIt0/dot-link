@@ -7,6 +7,7 @@ final class ActionButton: NSButton {
 }
 let app = NSApplication.shared
 let driver = AppUpdater(automaticUpdatesEnabled: true)
+driver.localize = { key, parameters in Localization.shared.text(key, language: "ja", parameters) }
 var blockedQuitAlerts = 0
 driver.runAlert = { alert in
     precondition(alert.messageText.contains("終わるまでお待ちください"))
@@ -63,6 +64,7 @@ precondition(driver.automatic && driver.message == "自動更新はオンです"
 print("PASS: switching automatic updates updates the visible on/off state")
 
 let locked = AppUpdater(automaticUpdatesEnabled: false)
+locked.localize = { key, parameters in Localization.shared.text(key, language: "ja", parameters) }
 locked.canCheck = { true }
 locked.updater.automaticallyChecksForUpdates = true
 locked.applyAutomaticUpdatePolicy()
@@ -85,8 +87,12 @@ func labels(_ view: NSView) -> [String] { (view as? NSTextField).map { [$0.strin
 locked.showUpdateNotFoundWithError(NSError(domain: "fixture", code: 0)) {}
 let messages = labels(locked.settingsView())
 precondition(messages.contains("最新バージョンです") && messages.contains(where: { $0.contains("アクセシビリティ") && $0.contains("追加し直して") }))
-locked.tr = { _, en in en }; locked.refreshLanguage()
+locked.localize = { key, parameters in Localization.shared.text(key, language: "en", parameters) }; locked.refreshLanguage()
 precondition(labels(locked.settingsView()).contains(where: { $0.contains("Accessibility") && $0.contains("add Dot Link.app again") }))
+locked.localize = { key, parameters in Localization.shared.text(key, language: "ko", parameters) }; locked.refreshLanguage()
+precondition(locked.message == "최신 버전입니다")
+precondition(buttons(locked.settingsView()).contains(where: { $0.title == "업데이트 확인" }))
+precondition(labels(locked.settingsView()).contains(where: { $0.contains("손쉬운 사용") }))
 driver.applyAutomaticUpdatePolicy()
 precondition(driver.updater.automaticallyChecksForUpdates, "Lifting the policy restores the saved preference")
 print("PASS: disabled control, background veto, stale-preference install veto, manual check, bilingual recovery guidance, reversible preference")
@@ -105,7 +111,7 @@ if CommandLine.arguments.contains("--preview") {
 }
 
 let manual = AppUpdater(automaticUpdatesEnabled: false)
-manual.tr = { _, en in en }
+manual.localize = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
 manual.canCheck = { true }
 manual.runAlert = { alert in
     precondition(alert.informativeText.contains("interrupts the connection and any conversation"))
@@ -179,7 +185,7 @@ precondition(abandoned.cancelForQuit() && abandonedChoice == .skip, "Explicit di
 print("PASS: explicit quit explains and discards the pending installer")
 
 let failedRecovery = AppUpdater(automaticUpdatesEnabled: false)
-failedRecovery.tr = { _, en in en }
+failedRecovery.localize = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
 failedRecovery.runAlert = { _ in .alertSecondButtonReturn }
 failedRecovery.confirmManualUpdate(version: "1.0", notes: nil)
 failedRecovery.prepare = { _, reply in reply("recovery-required") }

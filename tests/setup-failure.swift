@@ -6,6 +6,7 @@ import Foundation
         let details = SetupFailureDetails(value: raw, catalogURL: catalogURL)!
         precondition(details.message(language: "en").contains("HTTPS Certificates"))
         precondition(details.message(language: "ja").contains("再試行"))
+        precondition(details.message(language: "ko").contains("다시 시도"))
         precondition(details.message(language: "de") == details.message(language: "en"))
         let copy = details.copyText(appVersion: "0.4.7", build: "75")!
         precondition(!copy.contains("private"))
@@ -40,6 +41,7 @@ import Foundation
             var value = raw; value["code"] = code
             let detail = SetupFailureDetails(value: value, catalogURL: catalogURL)!
             precondition(!detail.message(language: "ja").isEmpty)
+            precondition(detail.message(language: "ko") != detail.message(language: "en"))
             precondition(detail.message(language: "en").contains(code))
         }
         print("Setup failure presentation, localization and safe copying passed")

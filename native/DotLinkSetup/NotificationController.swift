@@ -8,11 +8,11 @@ final class NotificationSourcesStack: NSStackView { override var isFlipped: Bool
 // opens chats or invokes AX actions. Sharing readable notifications is explicitly opt-in.
 final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     let stateLabel = NSTextField(wrappingLabelWithString: "")
-    let connectionLabel = NSTextField(wrappingLabelWithString: "接続を確認しています…")
+    let connectionLabel = NSTextField(wrappingLabelWithString: "")
     let connectionStatusIcon = NSImageView()
-    let summaryItem = NSMenuItem(title: "接続を確認しています…", action: nil, keyEquivalent: "")
+    let summaryItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     var tailscaleButton: NSButton!
-    let pauseItem = NSMenuItem(title: "通知を開始", action: #selector(togglePause), keyEquivalent: "")
+    let pauseItem = NSMenuItem(title: "", action: #selector(togglePause), keyEquivalent: "")
     let results = NSTextView()
     let apps = NotificationSourcesStack()
     var selected = Set<String>()
@@ -25,7 +25,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     var observedPID: pid_t = 0
     var observers: [NSObjectProtocol] = []
     var seen: [String: Date] = [:]
-    var entries: [String] = []
+    var entries: [(Date, LocalizedMessage)] = []
     var eventCount = 0
     var candidateCount = 0
     var testCount = 0
@@ -86,13 +86,14 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     var migrationProbe: String?
     var settingsView: NSView?
     var detailsVisible = false
-    var tr: (String, String) -> String = { ja, _ in ja }
+    var localize: (String, [String: String]) -> String = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
+    func tr(_ key: String, _ parameters: [String: String] = [:]) -> String { localize(key, parameters) }
     var notificationSummary: String {
-        if relaySuspended { return tr("Dot Linkは一時停止中", "Dot Link is paused") }
-        if legacyRunning { return tr("旧アプリから引き継ぎ待ち", "Waiting to move notifications") }
-        if paused { return tr("通知は一時停止中", "Notifications paused") }
-        if !AXIsProcessTrusted() { return tr("通知の許可が必要です", "Notification access needed") }
-        return observer == nil ? tr("通知を確認中", "Checking notifications") : tr("通知を監視中", "Watching notifications")
+        if relaySuspended { return tr("mac.dot_link_is_paused") }
+        if legacyRunning { return tr("mac.waiting_to_move_notifications") }
+        if paused { return tr("mac.notifications_paused") }
+        if !AXIsProcessTrusted() { return tr("mac.notification_access_needed") }
+        return observer == nil ? tr("mac.checking_notifications") : tr("mac.watching_notifications")
     }
     init(project: URL, legacyRunning: Bool, relaySuspended: Bool = false) {
         self.projectURL = project; self.legacyRunning = legacyRunning; self.relaySuspended = relaySuspended
@@ -150,7 +151,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         testScheduled = true; scheduleTests(count: 1)
         DispatchQueue.main.asyncAfter(deadline: .now() + 45) { [weak self] in
             guard let self, self.validating else { return }
-            self.add(self.tr("通知テストを確認できませんでした。旧アプリはそのまま動いています。", "The notification test did not complete. The old app is still running."))
+            self.add("mac.the_notification_test_did_not_complete_the_old_app_is_still_running")
             self.migrationFailed()
         }
     }
@@ -181,7 +182,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         let heading = NSStackView(); heading.spacing = 12; heading.addArrangedSubview(symbol(icon))
         let titleLabel = text(title, size: 15); titleLabel.font = .systemFont(ofSize: 15, weight: .semibold); heading.addArrangedSubview(titleLabel)
         let spacer = NSView(); spacer.setContentHuggingPriority(.defaultLow, for: .horizontal); heading.addArrangedSubview(spacer)
-        heading.addArrangedSubview(HelpButton(title + tr("について", " help"), help)); body.addArrangedSubview(heading)
+        heading.addArrangedSubview(HelpButton(title + tr("mac.help"), help)); body.addArrangedSubview(heading)
         heading.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -36).isActive = true
         let box = NSBox(); box.boxType = .custom; box.borderColor = .separatorColor; box.borderWidth = 0.5; box.cornerRadius = 12; box.fillColor = .controlBackgroundColor; box.contentViewMargins = .zero; box.contentView = body
         root.addArrangedSubview(box); box.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
@@ -191,8 +192,8 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     func makeView() -> NSView {
         let root = NSStackView(); root.orientation = .vertical; root.alignment = .leading; root.spacing = 14
         root.translatesAutoresizingMaskIntoConstraints = false
-        let heading = text(tr("通知設定", "Notifications"), size: 22); heading.font = .systemFont(ofSize: 22, weight: .semibold); root.addArrangedSubview(heading)
-        let status = card(root, title: tr("通知の状態", "Notification status"), icon: "bell", help: tr("Macに表示される新着通知をDotへ共有します。送信者名・見出し・本文は通知に表示された範囲だけを扱い、省略された内容は取得しません。通知元や送信者を特定できない場合は推測しません。読み取り可能な通知形式を検証中です。", "Share new notifications displayed on this Mac with Dot. Only visible sender names, headings and message text are used; omitted content is not retrieved. Unknown sources and senders are not inferred. Notification formats are under validation."))
+        let heading = text(tr("mac.notifications"), size: 22); heading.font = .systemFont(ofSize: 22, weight: .semibold); root.addArrangedSubview(heading)
+        let status = card(root, title: tr("mac.notification_status"), icon: "bell", help: tr("mac.share_new_notifications_displayed_on_this_mac_with_dot_only_visible_send"))
         connectionLabel.font = .systemFont(ofSize: 12, weight: .semibold); connectionLabel.maximumNumberOfLines = 0; connectionLabel.lineBreakMode = .byWordWrapping
         connectionStatusIcon.imageScaling = .scaleProportionallyDown
         connectionStatusIcon.widthAnchor.constraint(equalToConstant: 21).isActive = true
@@ -201,33 +202,33 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         notificationState.orientation = .horizontal; notificationState.alignment = .centerY; notificationState.spacing = 4
         status.addArrangedSubview(notificationState)
         notificationState.widthAnchor.constraint(equalTo: status.widthAnchor, constant: -36).isActive = true
-        let permissionHelp = text(tr("「権限設定」からアクセシビリティを開き、「＋」でインストール先のDot Link.appを追加してオンにしてください。\n更新後に通知を共有できない場合は、アクセシビリティ内にあるDot Linkを一度削除して追加し直してください。", "Open Accessibility with Permissions, click +, and add Dot Link.app from its installed location. Then turn it on.\nIf notifications stop being shared after an update, remove Dot Link from the Accessibility list and add it again."), size: 12, secondary: true)
+        let permissionHelp = text(tr("mac.open_accessibility_with_permissions_click_and_add_dot_link_app_from_its"), size: 12, secondary: true)
         permissionHelp.maximumNumberOfLines = 0; permissionHelp.lineBreakMode = .byWordWrapping; permissionHelp.isSelectable = true
         status.addArrangedSubview(permissionHelp)
         permissionHelp.widthAnchor.constraint(equalTo: status.widthAnchor, constant: -36).isActive = true
         let controls = NSStackView(); controls.spacing = 10
         if legacyRunning {
-            controls.addArrangedSubview(button(tr("通知を引き継ぐ", "Move notifications"), #selector(beginMigration)))
-            status.addArrangedSubview(text(tr("対象と一時停止の設定を引き継ぎ、確認後に旧アプリを終了します。", "Keep your sources and pause setting. The old app closes after verification."), size: 12, secondary: true))
+            controls.addArrangedSubview(button(tr("mac.move_notifications"), #selector(beginMigration)))
+            status.addArrangedSubview(text(tr("mac.keep_your_sources_and_pause_setting_the_old_app_closes_after_verificatio"), size: 12, secondary: true))
         } else {
-            controls.addArrangedSubview(button(paused ? tr("通知を開始", "Start notifications") : tr("一時停止", "Pause"), #selector(togglePause)))
+            controls.addArrangedSubview(button(paused ? tr("mac.start_notifications") : tr("mac.pause"), #selector(togglePause)))
         }
-        controls.addArrangedSubview(button(tr("権限設定", "Permissions"), #selector(openPermission)))
-        let refreshButton = button("", #selector(refresh)); refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil); refreshButton.isBordered = false; refreshButton.toolTip = tr("状態を確認", "Check status"); refreshButton.setAccessibilityLabel(refreshButton.toolTip!); controls.addArrangedSubview(refreshButton); status.addArrangedSubview(controls)
-        let sources = card(root, title: tr("通知の共有", "Notification sharing"), icon: "bell.badge", help: tr("有効にすると、このMacに表示される新着通知の内容を既存Dotへ渡します。何をいつ知らせるかはDotが判断します。通知の表示範囲を超えてチャットやメールを開くことはありません。", "When enabled, new notifications displayed on this Mac are shared with your existing Dot. Dot decides what to announce and when. Chats and emails are never opened to retrieve more content."))
-        let share = NSButton(checkboxWithTitle: tr("Macの全通知をDotに共有", "Share all Mac notifications with Dot"), target: self, action: #selector(toggleShareAll(_:)))
+        controls.addArrangedSubview(button(tr("mac.permissions"), #selector(openPermission)))
+        let refreshButton = button("", #selector(refresh)); refreshButton.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: nil); refreshButton.isBordered = false; refreshButton.toolTip = tr("mac.check_status"); refreshButton.setAccessibilityLabel(refreshButton.toolTip!); controls.addArrangedSubview(refreshButton); status.addArrangedSubview(controls)
+        let sources = card(root, title: tr("mac.notification_sharing"), icon: "bell.badge", help: tr("mac.when_enabled_new_notifications_displayed_on_this_mac_are_shared_with_you"))
+        let share = NSButton(checkboxWithTitle: tr("mac.share_all_mac_notifications_with_dot"), target: self, action: #selector(toggleShareAll(_:)))
         share.state = shareAllNotifications ? .on : .off; share.isEnabled = !legacyRunning
         sources.addArrangedSubview(share)
-        sources.addArrangedSubview(text(tr("通知に表示された送信者・見出し・本文を共有します。", "Shares sender names, headings and text shown in notifications."), size: 12, secondary: true))
-        sources.addArrangedSubview(text(tr("どんな通知を知らせてほしいかは、Dotに直接伝えてください。", "Tell Dot directly which notifications you’d like to hear about."), size: 12, secondary: true))
-        let test = card(root, title: tr("動作確認", "Try a notification"), icon: "paperplane", help: tr("テスト通知をこのMacに表示し、検知とDotへの転送を確認します。OSの通知表示許可も必要です。Dotからの案内やG2での表示は、実際に届いた内容を確認してください。", "Display a test notification on this Mac to check detection and forwarding to Dot. macOS notification permission is also required. Check the actual message to confirm Dot's response and its display on G2."))
-        test.addArrangedSubview(button(tr("テスト通知を送る", "Send test notification"), #selector(sendTest)))
-        let details = button(detailsVisible ? tr("詳細を閉じる", "Hide details") : tr("検知結果と詳細", "Detection details"), #selector(toggleDetails)); details.isBordered = false; details.image = NSImage(systemSymbolName: detailsVisible ? "chevron.down" : "chevron.right", accessibilityDescription: nil); details.imagePosition = .imageLeading; details.setAccessibilityLabel(details.title); root.addArrangedSubview(details)
+        sources.addArrangedSubview(text(tr("mac.shares_sender_names_headings_and_text_shown_in_notifications"), size: 12, secondary: true))
+        sources.addArrangedSubview(text(tr("mac.tell_dot_directly_which_notifications_you_d_like_to_hear_about"), size: 12, secondary: true))
+        let test = card(root, title: tr("mac.try_a_notification"), icon: "paperplane", help: tr("mac.display_a_test_notification_on_this_mac_to_check_detection_and_forwardin"))
+        test.addArrangedSubview(button(tr("mac.send_test_notification"), #selector(sendTest)))
+        let details = button(detailsVisible ? tr("mac.hide_details") : tr("mac.detection_details"), #selector(toggleDetails)); details.isBordered = false; details.image = NSImage(systemSymbolName: detailsVisible ? "chevron.down" : "chevron.right", accessibilityDescription: nil); details.imagePosition = .imageLeading; details.setAccessibilityLabel(details.title); root.addArrangedSubview(details)
         if detailsVisible {
             root.addArrangedSubview(stateLabel)
             let scroll = NSScrollView(); scroll.hasVerticalScroller = true; results.isEditable = false; results.font = .monospacedSystemFont(ofSize: 12, weight: .regular); results.autoresizingMask = [.width]; scroll.documentView = results
             scroll.heightAnchor.constraint(equalToConstant: 180).isActive = true; root.addArrangedSubview(scroll); scroll.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
-            root.addArrangedSubview(button(tr("連続テスト（5件）", "Test 5 notifications"), #selector(sendBatch)))
+            root.addArrangedSubview(button(tr("mac.test_5_notifications"), #selector(sendBatch)))
         }
         settingsView = root; reloadApps(); updateState(); return root
     }
@@ -269,19 +270,23 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
     }
     func updateState() {
-        stateLabel.stringValue = "アクセシビリティ: \(AXIsProcessTrusted() ? "許可済み" : "未許可")　検知: \(paused ? "一時停止" : observer == nil ? "接続待ち" : "監視中")\nイベント \(eventCount) 件 / 新規候補 \(candidateCount) 件 / テスト要求 \(testCount) 件\n監視登録: \(registrations.isEmpty ? "なし" : registrations.joined(separator: ", "))"
+        stateLabel.stringValue = tr("mac.notification_details", [
+            "access": tr(AXIsProcessTrusted() ? "mac.notification_allowed" : "mac.notification_denied"),
+            "detection": tr(paused ? "mac.notification_paused" : observer == nil ? "mac.notification_waiting" : "mac.notification_watching"),
+            "events": String(eventCount), "candidates": String(candidateCount), "tests": String(testCount),
+            "registrations": registrations.isEmpty ? tr("mac.notification_none") : registrations.joined(separator: ", ")])
         var reasons = healthIssues
         if shareAllNotifications {
-            if !lineDelivery.ledger.healthy { reasons.append(tr("通知の記録を確認してください。通知の共有を保留しています。", "Check the notification ledger. Notification sharing is on hold.")) }
-            if lineDelivery.statusAvailable && lineDelivery.subscriptionReady == false { reasons.append(tr("Dotへの通知接続が必要です。", "Connect Dot to notification events.")) }
+            if !lineDelivery.ledger.healthy { reasons.append(tr("mac.check_the_notification_ledger_notification_sharing_is_on_hold")) }
+            if lineDelivery.statusAvailable && lineDelivery.subscriptionReady == false { reasons.append(tr("mac.connect_dot_to_notification_events")) }
         }
-        if !paused && !AXIsProcessTrusted() { reasons.append("通知を再開するにはアクセシビリティを許可してください。") }
-        else if !paused && observer == nil { reasons.append("通知の監視に再接続しています。") }
+        if !paused && !AXIsProcessTrusted() { reasons.append(tr("mac.notification_resume_permission")) }
+        else if !paused && observer == nil { reasons.append(tr("mac.notification_reconnecting")) }
         if probes.values.contains(where: { $0.forwardingResult.needsAttention }) {
-            reasons.append("中継への転送を確認できないテスト通知があります。検知結果を確認してください。")
+            reasons.append(tr("mac.notification_forward_unconfirmed"))
         }
         currentIcon = !healthChecked ? .checking : !healthReady || !reasons.isEmpty ? .attention : paused ? .paused : .ready
-        connectionLabel.stringValue = notificationSummary + (migrationRequested && !AXIsProcessTrusted() ? tr("\nシステム設定でDot Linkを許可してください。戻ると引き継ぎを続けます。", "\nAllow Dot Link in System Settings. Migration continues when you return.") : "")
+        connectionLabel.stringValue = notificationSummary + (migrationRequested && !AXIsProcessTrusted() ? tr("mac.nallow_dot_link_in_system_settings_migration_continues_when_you_return") : "")
         let statusSymbol: String
         let statusColor: NSColor
         if relaySuspended || paused {
@@ -296,7 +301,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         connectionStatusIcon.image = NSImage(systemSymbolName: statusSymbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 13, weight: .regular))
         connectionStatusIcon.contentTintColor = statusColor
         changed?()
-        stateLabel.stringValue += "\nテスト通知の表示権限: \(notificationPermission)"
+        stateLabel.stringValue += tr("mac.notification_display_permission", ["permission": permissionText])
         saveDiagnostics()
     }
     func saveDiagnostics() {
@@ -349,7 +354,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             guard let ref else { return }
             Unmanaged<NotificationController>.fromOpaque(ref).takeUnretainedValue().onEvent()
         }, &created)
-        guard result == .success, let created else { add("監視作成失敗: \(result.rawValue)"); return }
+        guard result == .success, let created else { add("mac.notification_observer_failed", ["code": String(result.rawValue)]); return }
         let element = AXUIElementCreateApplication(target.processIdentifier)
         AXUIElementSetMessagingTimeout(element, 0.3)
         let ref = Unmanaged.passUnretained(self).toOpaque()
@@ -359,7 +364,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             if error == .success { registeredCount += 1 }
             return "\(name)=\(error.rawValue)"
         }
-        guard registeredCount > 0 else { add("監視イベントが未対応です。検知は開始できません。"); updateState(); return }
+        guard registeredCount > 0 else { add("mac.notification_events_unsupported"); updateState(); return }
         observer = created; observedPID = target.processIdentifier
         baselineCurrentNotifications()
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(created), .commonModes)
@@ -487,7 +492,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                     if probe.detectedAt == nil {
                         probe.detectedAt = Date().timeIntervalSince1970
                         probe.selectedAtDetection = shareAllNotifications || validating || selected.contains("Dot Notification Lab")
-                        add("テスト通知をAXで検知: \(marker) / 本文一致: \(probe.bodyMatched)")
+                        add("mac.notification_test_detected", ["marker": marker, "matched": String(probe.bodyMatched)])
                     }
                     let directProbe = NotificationProbeResult.usesDirectProbe(shareAll: shareAllNotifications,
                         validating: validating, marker: marker, migrationProbe: migrationProbe)
@@ -499,7 +504,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                     if directProbe && probe.registered && probe.bodyMatched && probe.selectedAtDetection == true && probe.forwardingResult == .pending { forwardProbe(marker) }
                 }
             } else {
-                add("通知候補: 要素 \(read.nodes) / 本文は診断に保存しません")
+                add("mac.notification_candidate", ["nodes": String(read.nodes)])
             }
         }
         updateState()
@@ -537,11 +542,11 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                         self.probes[marker]?.forwardingResult = .relayAccepted
                         self.probes[marker]?.forwarding = "中継受領済み"
                         if self.validating && self.migrationProbe == marker { self.validating = false; self.detach(); self.saveDiagnostics(); self.requestMigration?() }
-                        self.add("自動転送: \(marker) — 中継受領済み（Dotの案内・G2表示は別途確認）")
+                        self.add("mac.notification_relay_accepted", ["marker": marker])
                     } else {
                         self.probes[marker]?.forwardingResult = .sendUnconfirmed
                         self.probes[marker]?.forwarding = "送信未確認 HTTP \(status)"
-                        self.add("自動転送: \(marker) — 送信未確認 HTTP \(status)")
+                        self.add("mac.notification_relay_unconfirmed", ["marker": marker, "status": String(status)])
                         if attempt < 2 {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 5) {
                                 guard self.activityGeneration == generation else { return }
@@ -557,25 +562,36 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         } catch {
             probes[marker]?.forwardingResult = .missingCredentials
             probes[marker]?.forwarding = "通知用接続設定なし"
-            add("自動転送: \(marker) — 通知用接続設定を確認してください")
+            add("mac.notification_credentials", ["marker": marker])
             if legacyRunning { migrationFailed() }
             updateState()
         }
     }
-    func add(_ message: String) {
-        let time = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
-        entries.insert("\(time)  \(message)", at: 0)
-        entries = Array(entries.prefix(50)); results.string = entries.joined(separator: "\n\n")
+    // Keep diagnostic wire values stable; translate only their UI presentation.
+    var permissionText: String {
+        let keys = ["確認中": "mac.notification_checking", "許可済み": "mac.notification_allowed", "未許可（システム設定 → 通知で変更）": "mac.notification_permission_denied", "未設定": "mac.notification_unset", "不明": "mac.notification_unknown"]
+        return tr(keys[notificationPermission] ?? "mac.notification_unknown")
+    }
+    func refreshLanguage() { updateState(); renderEntries() }
+    func renderEntries() {
+        results.string = entries.map { date, value in
+            let time = DateFormatter.localizedString(from: date, dateStyle: .none, timeStyle: .medium)
+            return time + "  " + tr(value.key, value.parameters)
+        }.joined(separator: "\n\n")
+    }
+    func add(_ key: String, _ parameters: [String: String] = [:]) {
+        entries.insert((Date(), LocalizedMessage(key, parameters)), at: 0)
+        entries = Array(entries.prefix(50)); renderEntries()
     }
     @objc func sendTest() { if legacyRunning { beginMigration() } else { scheduleTests(count: 1) } }
     @objc func sendBatch() { guard !legacyRunning else { return }; scheduleTests(count: 5) }
     func scheduleTests(count: Int) {
         guard !relaySuspended else { return }
-        guard Date() >= batchUntil else { add("前の連続テストが完了するまでお待ちください。"); return }
+        guard Date() >= batchUntil else { add("mac.notification_batch_wait"); return }
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             DispatchQueue.main.async {
                 guard !self.relaySuspended else { return }
-                guard granted else { self.add("テスト通知の許可なし: \(error?.localizedDescription ?? "システム設定 → 通知で確認")"); self.testScheduled = false; self.migrationRequested = false; self.validating = false; self.detach(); self.refresh(); return }
+                guard granted else { self.add("mac.notification_test_denied", ["reason": error?.localizedDescription ?? self.tr("mac.notification_permission_help")]); self.testScheduled = false; self.migrationRequested = false; self.validating = false; self.detach(); self.refresh(); return }
                 self.notificationPermission = "許可済み"
                 self.batchUntil = Date().addingTimeInterval(Double(count * 4 + 5))
                 for index in 0..<count {
@@ -584,12 +600,12 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
                 if self.validating { self.migrationProbe = id }
                 let content = UNMutableNotificationContent()
                 content.title = id
-                content.body = "通知の読み取りテスト \(self.testCount)。選択・検知後にDotへ自動送信します。"
+                content.body = self.tr("mac.notification_test_body", ["count": String(self.testCount)])
                 let delay = Double(3 + index * 4)
                 self.probes[id] = Probe(id: id, body: content.body, dueAt: Date().timeIntervalSince1970 + delay)
                 let request = UNNotificationRequest(identifier: id, content: content, trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false))
                 UNUserNotificationCenter.current().add(request) { error in
-                    DispatchQueue.main.async { self.probes[id]?.registered = error == nil; self.add(error.map { "テスト通知登録エラー: \($0.localizedDescription)" } ?? "テスト通知をOSへ予約: \(id)（検知・表示の証明ではありません）"); self.updateState() }
+                    DispatchQueue.main.async { self.probes[id]?.registered = error == nil; if let error { self.add("mac.notification_schedule_error", ["reason": error.localizedDescription]) } else { self.add("mac.notification_scheduled", ["id": id]) }; self.updateState() }
                 }
                 }
                 // Bound synthetic diagnostics for long-running interactive use.
