@@ -81,7 +81,7 @@ async function launch(options = {}) {
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
       querySelector: element, querySelectorAll: selector => selector === '[data-i18n]' ? [staticLabel] : selector === 'textarea' ? [element('transcript'), element('pair-code')] : [...elements.values()], createComment: element, addEventListener: listen},
-    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text, speech.lang]); }}},
+    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text, speech.lang]); options.speak?.(speech); }}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     navigator: {language: options.language ?? 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
     localStorage: local, sessionStorage: local, location: {origin: options.nativePairing ? 'http://127.0.0.1:57157' : 'https://test.invalid', hash: '', pathname: '/', search: ''},
@@ -525,6 +525,33 @@ test('language switches preserve the live session, draft, TTS, history position 
   assert.equal(app.physical.get(2), 'Synthetic message second');
   await app.element('next').click(); await flush();
   assert.equal(app.physical.get(2), 'Synthetic message third');
+});
+
+test('both read-aloud paths use the locale and preserve reply text', async t => {
+  for (const [language, locale] of [['en', 'en-US'], ['ja', 'ja-JP'], ['ko', 'ko-KR']]) {
+    const app = await launch({language, speak: speech => speech.onend()});
+    t.after(app.close);
+    await app.element('tts').click(); await flush();
+    const reply = {...proactive('mixed'), reply: '日本語 English 한국어'};
+    await app.deliver(app.snapshot([reply]));
+    const speech = app.calls.filter(c => c[0] === 'speech');
+    assert.equal(speech.length, 2);
+    assert.equal(speech[0][2], locale);
+    assert.deepEqual(speech[1], ['speech', reply.reply, locale]);
+    await app.close();
+  }
+});
+
+test('unavailable Korean speech retains visible reply and reports the existing fallback', async t => {
+  const app = await launch({language: 'ko', speak: speech => speech.onerror({error: 'language-unavailable'})});
+  t.after(app.close);
+  await app.element('tts').click(); await flush();
+  assert.equal(app.element('notice').textContent, '읽어주기에 실패했습니다. 화면에서 답변을 확인하세요.');
+  const reply = {...proactive('visible'), reply: '한국어 답변'};
+  await app.deliver(app.snapshot([reply]));
+  assert.equal(app.physical.get(2), reply.reply);
+  assert.equal(app.element('notice').textContent, '읽어주기에 실패했습니다. 화면에서 답변을 확인하세요.');
+  assert.equal(app.element('record').disabled, false);
 });
 
 test('automatic locale follows supported host changes without restart', async t => {

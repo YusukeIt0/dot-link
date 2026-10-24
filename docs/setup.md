@@ -14,7 +14,9 @@ The installer checks the release checksum, app signature consistency and bundle 
 
 Dot Link is not Apple-notarized. If macOS says it cannot verify the developer and you trust the download, dismiss the warning, then open **System Settings → Privacy & Security → Open Anyway**. Authenticate in the Mac dialog and choose **Open**. A warning that the app is damaged or will harm your computer is different; see [Apple's guidance](https://support.apple.com/en-us/102445).
 
-The app and installer use Japanese on Japanese Macs and English otherwise. The Even companion also supports Japanese; this guide uses the English labels.
+The Mac app and Even companion support English, Japanese and Korean, initially
+following the device language with English as the fallback. This guide uses the
+English labels; each app lets you select another supported language.
 
 ## Tailscale HTTPS setup
 
