@@ -82,7 +82,11 @@ Hey dot pauses during processing and read-aloud. If you do not speak after the c
 - **Speech input:** use free local Whisper or your own speech-service API key. [Speech settings](docs/setup.md#speech).
 - **Context:** optionally share [Mac notifications](docs/setup.md#mac-notifications) or your [phone location](docs/setup.md#location-sharing). Both start off; Dot decides what to announce.
 
-## Help and updates
+## Security and updates
+
+Dot Link's dependencies receive security updates, with automated checks, code review and device testing for changes that affect app behavior. This includes Node.js, which runs the Mac connection service, and Zod, which checks data while the app runs, as well as development and build tools such as Vite.
+
+For example, [Mac 0.4.11](https://github.com/YusukeIt0/dot-link/releases/tag/mac-v0.4.11-80) shipped Node.js 22.23.4 to address security issues including a [Brotli decompression vulnerability](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases). [Mac 0.4.15](https://github.com/YusukeIt0/dot-link/releases/tag/mac-v0.4.15-85) also includes the Zod 4.6.7 security update. These updates are part of ongoing maintenance to improve safety and reliability.
 
 Use **Check for updates** in the Mac app; automatic updates are currently paused. Updates preserve settings and pairing. See the [user guide](docs/setup.md) for manual installation, updates and troubleshooting, and [data handling](docs/privacy.md) for what is sent, stored and deleted.
 
