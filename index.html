@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
   <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png"><title>Dot Link</title></head>
   <body><main>
-    <header><p>EVEN G2</p><h1>Dot Link</h1><small id="app-version"></small><p id="connection" role="status" data-en="Waiting for the Even app">Evenアプリとの接続を待っています</p></header>
-    <section class="glass" aria-label="G2 display"><p id="hud-state" data-en="Waiting for connection">接続待ち</p><pre id="hud-content" data-en="Hold to speak">長押しで話してください</pre><p id="speech-status" class="speech-status" aria-label="STT / TTS">STT:— / TTS:OFF</p><small id="recording-hint" data-en="Hold to record · release to stop">長押しで録音 · 指を離すと停止</small></section>
-    <p id="notice" role="status" data-en="Open in Even Hub to use the G2 microphone and display.">Even Hubから開くとG2のマイクと表示を使用できます。</p>
-    <p id="dot-status" role="status" data-en="Checking your relay">接続先を確認中</p>
+    <header><p>EVEN G2</p><h1>Dot Link</h1><small id="app-version"></small><p id="connection" role="status" data-i18n="even.waiting_for_the_even_app">Waiting for the Even app</p></header>
+    <section class="glass" aria-label="G2 display" data-i18n-aria-label="even.g2_display"><p id="hud-state" data-i18n="even.waiting_for_connection">Waiting for connection</p><pre id="hud-content" data-i18n="even.hold_to_speak">Hold to speak</pre><p id="speech-status" class="speech-status" aria-label="STT / TTS">STT:— / TTS:OFF</p><small id="recording-hint" data-i18n="even.hold_to_record_release_to_stop">Hold to record · release to stop</small></section>
+    <p id="notice" role="status" data-i18n="even.open_in_even_hub_to_use_the_g2_microphone_and">Open in Even Hub to use the G2 microphone and display.</p>
+    <p id="dot-status" role="status" data-i18n="even.checking_your_relay">Checking your relay</p>
     <section id="conversation-controls">
       <div class="conversation-navigation">
         <div class="conversation-history">
@@ -28,32 +28,32 @@
           <button id="send" type="button" class="conversation-icon" disabled aria-label="Send to Dot"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V4m-7 7 7-7 7 7"/></svg></button>
         </div>
       </div>
-      <label class="conversation-auto-send"><input id="auto-send" type="checkbox" checked> <span data-en="Send after transcription">認識後に自動送信</span></label>
+      <label class="conversation-auto-send"><input id="auto-send" type="checkbox" checked> <span data-i18n="even.send_after_transcription">Send after transcription</span></label>
       <p id="phone-control-status" role="status" aria-live="polite"></p>
     </section>
     <details id="location-settings" class="display-settings">
-      <summary data-en="Location sharing">位置情報の共有</summary>
-      <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-en="Share my location">位置情報を共有する</span></label>
-      <p class="note" data-en="Share your phone's current location with your existing Dot through your Mac. Dot can use your location and preferences to offer relevant suggestions on G2. You can stop sharing here at any time.">スマートフォンの現在地を、自分のMac経由でいつものDotに共有します。Dotが好みや場所を踏まえた案内に使います。共有はここからいつでも停止できます。</p>
+      <summary data-i18n="even.location_sharing">Location sharing</summary>
+      <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-i18n="even.share_my_location">Share my location</span></label>
+      <p class="note" data-i18n="even.share_your_phone_s_current_location_with_your_existing_dot">Share your phone's current location with your existing Dot through your Mac. Dot can use your location and preferences to offer relevant suggestions on G2. You can stop sharing here at any time.</p>
       <p id="location-status" role="status" class="note"></p>
       <p id="location-dot-status" class="note"></p>
-      <p class="note" data-en="Your Mac must be awake and connected. Location sharing pauses when you exit Dot Link on the glasses and resumes when you reopen it with this setting on.">Macが起動・接続している間に使えます。G2でDot Linkを終了すると共有は停止し、この設定がオンのまま開き直すと再開します。</p>
+      <p class="note" data-i18n="even.your_mac_must_be_awake_and_connected_location_sharing_pauses">Your Mac must be awake and connected. Location sharing pauses when you exit Dot Link on the glasses and resumes when you reopen it with this setting on.</p>
     </details>
     <details id="operation-settings" class="display-settings">
-      <summary data-en="Operation settings">操作設定</summary>
-      <label class="display-checkbox"><input id="disable-hold-recording" type="checkbox"> <span data-en="Disable hold-to-record">長押しで録音を無効</span></label>
-      <p class="note" data-en="Turn this on if water or sweat causes accidental input. When enabled, only Hey XX (voice input) and text input are available.">水や汗で誤作動してしまう場合、こちらをオンにしてください。オンにした場合、Hey XX（音声入力）とテキストでのみ操作可能です。</p>
+      <summary data-i18n="even.operation_settings">Operation settings</summary>
+      <label class="display-checkbox"><input id="disable-hold-recording" type="checkbox"> <span data-i18n="even.disable_hold_to_record">Disable hold-to-record</span></label>
+      <p class="note" data-i18n="even.turn_this_on_if_water_or_sweat_causes_accidental_input">Turn this on if water or sweat causes accidental input. When enabled, only Hey XX (voice input) and text input are available.</p>
       <p id="hold-save-status" role="status" class="note"></p>
-      <label class="display-checkbox"><input id="wake-word" type="checkbox"> <span id="wake-word-label" data-en="Talk with Hey XX">Hey XXで話す</span></label>
-      <p class="note" data-en="The default is Hey dot.">初期値はHey dotです。</p>
-      <p class="note" data-en="Keeps the G2 microphone on while waiting. Wake detection stays on your phone.">待受中はG2のマイクを使います。呼びかけの検出はスマートフォン内で行います。</p>
+      <label class="display-checkbox"><input id="wake-word" type="checkbox"> <span id="wake-word-label" data-i18n="even.talk_with_hey_xx">Talk with Hey XX</span></label>
+      <p class="note" data-i18n="even.the_default_is_hey_dot">The default is Hey dot.</p>
+      <p class="note" data-i18n="even.keeps_the_g2_microphone_on_while_waiting_wake_detection_stays">Keeps the G2 microphone on while waiting. Wake detection stays on your phone.</p>
       <form id="wake-name-form" novalidate>
-        <label class="display-checkbox"><input id="custom-wake-name" type="checkbox"> <span data-en="Change the name">呼び名を変える</span></label>
+        <label class="display-checkbox"><input id="custom-wake-name" type="checkbox"> <span data-i18n="even.change_the_name">Change the name</span></label>
         <div id="wake-name-fields" hidden>
-          <label for="wake-name" class="note" data-en="Name (1–24 English letters)">呼び名（英字1〜24文字）</label>
+          <label for="wake-name" class="note" data-i18n="even.name_1_24_english_letters">Name (1–24 English letters)</label>
           <div class="wake-name-input"><span aria-hidden="true">Hey</span><input id="wake-name" type="text" pattern="[A-Za-z]+" autocomplete="off" autocapitalize="none" spellcheck="false" aria-describedby="wake-name-help wake-name-status"></div>
-          <p id="wake-name-help" class="note" data-en="English letters only.">英字のみ入力できます。</p>
-          <button type="submit" data-en="Save name">呼び名を保存</button>
+          <p id="wake-name-help" class="note" data-i18n="even.english_letters_only">English letters only.</p>
+          <button type="submit" data-i18n="even.save_name">Save name</button>
         </div>
         <p id="wake-name-status" role="status" class="note"></p>
         <p id="wake-name-save-status" role="status" class="note"></p>
@@ -62,55 +62,55 @@
       <p id="operation-save-status" role="status" class="note"></p>
     </details>
     <details id="display-settings" class="display-settings">
-      <summary data-en="Display settings">表示設定</summary>
-      <p class="note" data-en="These settings apply only to Dot Link, separately from Even's display settings. Hiding the display keeps Dot connected. The app never closes automatically.">Even本体の表示設定とは別に、Dot Link内だけに適用します。表示を消してもDotとの接続は継続し、アプリは自動終了しません。</p>
+      <summary data-i18n="even.display_settings">Display settings</summary>
+      <p class="note" data-i18n="even.these_settings_apply_only_to_dot_link_separately_from_even">These settings apply only to Dot Link, separately from Even's display settings. Hiding the display keeps Dot connected. The app never closes automatically.</p>
       <form id="display-settings-form">
-        <label for="display-idle" data-en="Hide after inactivity (seconds; 0 = always visible)">無操作で表示を消すまで（秒・0は常時表示）</label>
+        <label for="display-idle" data-i18n="even.hide_after_inactivity_seconds_0_always_visible">Hide after inactivity (seconds; 0 = always visible)</label>
         <input id="display-idle" type="number" min="0" max="3600" step="1" required inputmode="numeric" value="30" aria-describedby="display-idle-help">
-        <p id="display-idle-help" class="note" data-en="Choose 5–3600 seconds, or 0. Recording, transcription and waiting for a reply keep the display visible.">5〜3600秒、または0を指定できます。録音・文字起こし・返信待ちの間は表示を消しません。</p>
-        <label for="display-wake-tap" data-en="Tap gesture to show the hidden display">表示が消えているときの復帰操作</label>
-        <select id="display-wake-tap"><option value="double" data-en="Double tap">ダブルタップ</option><option value="single" data-en="Single tap">シングルタップ</option></select>
-        <label class="display-checkbox"><input id="display-head-raise" type="checkbox" checked> <span data-en="Show when I raise my head">顔を上げると再表示</span></label>
-        <label for="display-head-angle" data-en="Head-up angle (5–60°)">顔上げの角度（5〜60°）</label>
+        <p id="display-idle-help" class="note" data-i18n="even.choose_5_3600_seconds_or_0_recording_transcription_and_waiting">Choose 5–3600 seconds, or 0. Recording, transcription and waiting for a reply keep the display visible.</p>
+        <label for="display-wake-tap" data-i18n="even.tap_gesture_to_show_the_hidden_display">Tap gesture to show the hidden display</label>
+        <select id="display-wake-tap"><option value="double" data-i18n="even.double_tap">Double tap</option><option value="single" data-i18n="even.single_tap">Single tap</option></select>
+        <label class="display-checkbox"><input id="display-head-raise" type="checkbox" checked> <span data-i18n="even.show_when_i_raise_my_head">Show when I raise my head</span></label>
+        <label for="display-head-angle" data-i18n="even.head_up_angle_5_60">Head-up angle (5–60°)</label>
         <input id="display-head-angle" type="number" min="5" max="60" step="1" required inputmode="numeric" value="20">
       </form>
-      <button id="display-calibrate" class="secondary" type="button" data-en="Set my forward gaze to 0°">正面を向いた状態を0°にする</button>
-      <p class="note" data-en="Face straight ahead while wearing G2, then press the button. After the display hides, lower your head before raising it again. New messages from Dot appear automatically.">G2を掛けて正面を向き、ボタンを押してください。表示が消えた後は一度顔を下げてから上げると再表示します。Dotから新着が届いたときは自動で表示します。</p>
+      <button id="display-calibrate" class="secondary" type="button" data-i18n="even.set_my_forward_gaze_to_0">Set my forward gaze to 0°</button>
+      <p class="note" data-i18n="even.face_straight_ahead_while_wearing_g2_then_press_the_button">Face straight ahead while wearing G2, then press the button. After the display hides, lower your head before raising it again. New messages from Dot appear automatically.</p>
       <p id="head-raise-status" class="note" role="status"></p>
       <div class="display-settings-actions">
-        <button id="display-save" type="submit" form="display-settings-form" data-en="Save display settings">表示設定を保存</button>
+        <button id="display-save" type="submit" form="display-settings-form" data-i18n="even.save_display_settings">Save display settings</button>
         <p id="display-settings-status" class="note" role="status"></p>
       </div>
     </details>
     <details id="mac-setup" class="display-settings">
-      <summary data-en="Connect / disconnect your Mac">Macと接続 / 解除</summary>
+      <summary data-i18n="even.connect_disconnect_your_mac">Connect / disconnect your Mac</summary>
       <div id="setup-intro">
-        <p data-en="Set up the relay on your Mac before pairing this iPhone. An iPhone alone cannot connect to Dot.">最初に、会話を中継するMacを準備します。iPhoneだけではDotに接続できません。</p>
-        <p id="mac-download-label" data-en="GitHub download URL for Mac">Mac版の入手先（GitHub）</p>
+        <p data-i18n="even.set_up_the_relay_on_your_mac_before_pairing_this">Set up the relay on your Mac before pairing this iPhone. An iPhone alone cannot connect to Dot.</p>
+        <p id="mac-download-label" data-i18n="even.github_download_url_for_mac">GitHub download URL for Mac</p>
         <div id="mac-download-url" aria-labelledby="mac-download-label" aria-describedby="mac-download-help">https://github.com/YusukeIt0/dot-link/releases/latest</div>
-        <button id="copy-mac-url" type="button" data-en="Copy URL">URLをコピー</button>
+        <button id="copy-mac-url" type="button" data-i18n="even.copy_url">Copy URL</button>
         <p id="mac-copy-status" class="note"></p>
-        <p id="mac-download-help" class="note" data-en="Open this URL in a browser on your Mac to download Dot Link. If copying is unavailable, enter the displayed URL in your Mac browser.">このURLをMacのブラウザーで開き、Dot Linkをダウンロードしてください。コピーできない場合は、表示されているURLをMacのブラウザーに入力してください。</p>
+        <p id="mac-download-help" class="note" data-i18n="even.open_this_url_in_a_browser_on_your_mac_to">Open this URL in a browser on your Mac to download Dot Link. If copying is unavailable, enter the displayed URL in your Mac browser.</p>
         <ol class="setup-steps">
-          <li><strong data-en="Install Dot Link on your Mac">MacにDot Linkをインストール</strong><p data-en="Open the URL above on your Mac. Install and open Dot Link, then follow its setup instructions.">上のURLをMacで開きます。Dot Linkをインストールして起動し、画面の案内に沿って準備します。</p></li>
-          <li><strong data-en="Set up Tailscale on your iPhone">iPhoneにもTailscaleを準備</strong><p data-en="Tailscale securely connects your iPhone to your Mac. Search for Tailscale in the App Store on this iPhone and install it. Open Tailscale, sign in with the same account used on your Mac, and follow the prompts to connect. Both devices must be connected to the same Tailscale network.">TailscaleはiPhoneとMacを安全につなぐために使います。このiPhoneのApp Storeで「Tailscale」を検索してインストールします。Tailscaleを開き、Macで使ったものと同じアカウントでログインして、画面の案内に沿って接続してください。両方の端末を同じTailscaleネットワークに接続する必要があります。</p></li>
-          <li><strong data-en="Create a pairing code">接続コードを発行</strong><p data-en="In Dot Link on your Mac, choose Connect Even and copy the code.">MacのDot Linkで「Evenを接続」を押し、接続コードをコピーします。</p></li>
-          <li><strong data-en="Paste the code below to connect">下の欄にコードを貼り付けて接続</strong><p data-en="Return to this app, paste the entire code below, and choose Connect. To disconnect this iPhone later, use Revoke this device in this section.">このアプリに戻り、下の欄にコード全体を貼り付けて「接続」を押します。接続後、このiPhoneの接続を解除するときも、この欄の「この端末の接続を解除」を使います。</p></li>
+          <li><strong data-i18n="even.install_dot_link_on_your_mac">Install Dot Link on your Mac</strong><p data-i18n="even.open_the_url_above_on_your_mac_install_and_open">Open the URL above on your Mac. Install and open Dot Link, then follow its setup instructions.</p></li>
+          <li><strong data-i18n="even.set_up_tailscale_on_your_iphone">Set up Tailscale on your iPhone</strong><p data-i18n="even.tailscale_securely_connects_your_iphone_to_your_mac_search_for">Tailscale securely connects your iPhone to your Mac. Search for Tailscale in the App Store on this iPhone and install it. Open Tailscale, sign in with the same account used on your Mac, and follow the prompts to connect. Both devices must be connected to the same Tailscale network.</p></li>
+          <li><strong data-i18n="even.create_a_pairing_code">Create a pairing code</strong><p data-i18n="even.in_dot_link_on_your_mac_choose_connect_even_and">In Dot Link on your Mac, choose Connect Even and copy the code.</p></li>
+          <li><strong data-i18n="even.paste_the_code_below_to_connect">Paste the code below to connect</strong><p data-i18n="even.return_to_this_app_paste_the_entire_code_below_and">Return to this app, paste the entire code below, and choose Connect. To disconnect this iPhone later, use Revoke this device in this section.</p></li>
         </ol>
       </div>
       <div id="pairing-form">
         <p id="pair-notice" role="status"></p>
-        <label for="pair-code" data-en="Pairing code">接続コード</label><textarea id="pair-code" rows="3" autocapitalize="off" maxlength="1024" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
-        <p id="pair-destination"></p><button id="pair" hidden data-en="Connect">接続</button>
-        <p class="note" data-en="The pairing code is valid for two minutes and one use.">接続コードは発行から2分・1回限りです。</p>
-        <p class="note" data-en="Your relay Mac must be awake and online.">接続先のMacが起動・接続している間に使えます。</p>
+        <label for="pair-code" data-i18n="even.pairing_code">Pairing code</label><textarea id="pair-code" rows="3" autocapitalize="off" maxlength="1024" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+        <p id="pair-destination"></p><button id="pair" hidden data-i18n="even.connect">Connect</button>
+        <p class="note" data-i18n="even.the_pairing_code_is_valid_for_two_minutes_and_one">The pairing code is valid for two minutes and one use.</p>
+        <p class="note" data-i18n="even.your_relay_mac_must_be_awake_and_online">Your relay Mac must be awake and online.</p>
       </div>
-      <button id="forget-pairing" hidden class="secondary" data-en="Revoke this device">この端末の接続を解除</button>
+      <button id="forget-pairing" hidden class="secondary" data-i18n="even.revoke_this_device">Revoke this device</button>
     </details>
     <footer>
-      <label for="language">Language / 言語</label> <select id="language"><option value="auto" data-en="Automatic">自動</option><option value="ja">日本語</option><option value="en">English</option></select>
-      <button id="show-diagnostics" class="secondary" aria-expanded="false" aria-controls="connection-diagnostics" data-en="Connection details">接続情報を見る</button>
-      <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-en="App origin">この画面の接続元</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p><p id="location-diagnostic" role="status"></p><pre id="exit-diagnostic" hidden style="white-space:pre-wrap;font-size:11px"></pre></section>
+      <label for="language" data-i18n="common.language">Language / 言語</label> <select id="language"><option value="auto" data-i18n="even.automatic">Automatic</option><option value="ja">日本語</option><option value="en">English</option></select>
+      <button id="show-diagnostics" class="secondary" aria-expanded="false" aria-controls="connection-diagnostics" data-i18n="even.connection_details">Connection details</button>
+      <section id="connection-diagnostics" hidden class="pair-diagnostics"><p class="note" data-i18n="even.app_origin">App origin</p><code id="app-origin"></code><p id="g2-diagnostic" role="status"></p><p id="diagnostic" role="status"></p><p id="location-diagnostic" role="status"></p><pre id="exit-diagnostic" hidden style="white-space:pre-wrap;font-size:11px"></pre></section>
     </footer>
   </main>
   <div id="copy-toast" role="status" aria-live="polite" aria-atomic="true"></div>

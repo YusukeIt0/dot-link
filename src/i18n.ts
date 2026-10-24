@@ -1,142 +1,49 @@
-export type Language = 'ja' | 'en';
-const translations = {
-  'この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。': 'Stopped on this device. Removal on your Mac will complete automatically when it is reachable.',
-  'この端末では停止しましたが、解除を保存できません。開き直すと接続が戻る場合があります。アプリを開いたままにしてください。': 'Stopped on this device, but the disconnect could not be saved. Reopening may restore the connection. Keep the app open.',
-  '接続設定を確認できません。復元せずに再確認しています。': 'Could not verify saved connection settings. Retrying before restoring the connection.',
-  'この端末では停止しました。Mac側の解除を確認しています。': 'Stopped on this device. Confirming removal on your Mac.',
-
-  'Dotにメッセージ…': 'Message Dot…',
-  'Dotへのメッセージ': 'Message to Dot',
-  'Dotに送信': 'Send to Dot',
-  '録音を破棄': 'Discard recording',
-  '前の会話': 'Previous conversation',
-  '次の会話': 'Next conversation',
-  'マイクを停止中…': 'Stopping microphone…',
-  '新しい画面へ接続を引き継ぎました': 'Connection moved to the new view',
-  'この画面は停止しました。続きは新しく開いたDot Linkで行ってください。未送信のテキストはこの画面からコピーできます。': 'This view has stopped. Continue in the newly opened Dot Link. You can copy unsent text from this view.',
-  'スマートフォンでテキストを入力してください': 'Type a message on your phone',
-  '長押し録音は無効です': 'Hold-to-record is disabled',
-  '録音ボタンで停止します': 'Use the recording button to stop',
-
-  '{wake}で話す': 'Talk with {wake}',
-  '{wake}を準備中…': 'Preparing {wake}…',
-  '{wake}で話せます': 'Ready for {wake}',
-  '{wake}は一時停止中': '{wake} is paused',
-  '{wake}を使えません。オフにしてから再度オンにしてください。': '{wake} is unavailable. Turn it off and on to retry.',
-  '{wake} または長押しで話してください': 'Say {wake} or hold to speak',
-  '{name}の返信待ち': 'Waiting for {name}',
-  '呼び名を保存しました': 'Name saved',
-  '変更はまだ保存されていません': 'Changes not saved',
-  '呼び名は英字1〜24文字で入力してください': 'Use 1–24 English letters for the name',
-  'その名前は使えません': 'This name cannot be used',
-  'Hey dotを準備中…': 'Preparing Hey dot…',
-  'Hey dotで話せます': 'Ready for Hey dot',
-  'Hey dotは一時停止中': 'Hey dot is paused',
-  'Hey dotを使えません。オフにしてから再度オンにしてください。': 'Hey dot is unavailable. Turn it off and on to retry.',
-  'Hey dot または長押しで話してください': 'Say Hey dot or hold to speak',
-  '話してください': 'Go ahead',
-  '話し終わると送信します': 'Sends when you finish speaking',
-  '話し終わると認識します': 'Transcribes when you finish speaking',
-  '設定を保存できませんでした': 'Could not save settings',
-  'URLをコピーしました。Macのブラウザーで開いてください。': 'URL copied. Open it in a browser on your Mac.',
-  'コピーしました': 'Copied',
-  'コピーできませんでした': 'Could not copy',
-  'コピーできませんでした。表示されているURLをMacのブラウザーに入力してください。': 'Could not copy. Enter the displayed URL in your Mac browser.',
-  '接続の有効期限が切れたか、Mac側で解除されました。新しい接続コードで接続してください。': 'Pairing expired or was revoked on your Mac. Connect using a new pairing code.',
-  'Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。': 'Could not confirm saving pairing in Even. You may need to pair again after an update.',
-  '接続しました。更新後の再接続情報も保存しました。': 'Connected. Update recovery details are saved too.',
-  '接続しました。更新後の自動復元は未確認です。': 'Connected. Automatic recovery after an update is not verified.',
-  '表示設定を保存しました': 'Display settings saved',
-  'この画面では設定を保存できません。閉じると設定が戻る場合があります。': 'Settings could not be saved here. They may reset when you close the app.',
-  '表示時間は0、または5〜3600秒で指定してください。': 'Choose 0, or 5–3600 seconds.',
-  '顔上げの角度は5〜60°で指定してください。': 'Choose a head-up angle from 5–60°.',
-  '顔上げでの再表示はオフです': 'Head-up wake is off',
-  '頭の動きを確認しています…': 'Waiting for head motion…',
-  '頭の動きを取得できません。タップで再表示できます。': 'Head motion is unavailable. You can still use your selected tap gesture.',
-  '正面の角度を保存しました': 'Forward-gaze angle saved',
-  'G2の接続と顔上げ設定を確認してから、もう一度お試しください。': 'Check the G2 connection and enable head-up wake, then try again.',
-  '接続先': 'Relay',
-  '長押しで話してください': 'Hold to speak',
-  '再接続が必要です': 'Reconnect your Mac',
-  '接続設定が無効になりました。Macで新しい接続コードを発行してください。': 'Pairing has expired or been revoked. Create a new pairing code on your Mac.',
-  'Macで新しい接続コードを発行し、貼り付けてください。': 'Create a new pairing code on your Mac and paste it here.',
-  '処理できませんでした。接続または録音を確認してください。': 'Could not complete the request. Check the connection or recording.',
-  '送信未確認': 'Delivery unconfirmed',
-  'Dotの返信待ち': 'Waiting for Dot',
-  '通知': 'Notification',
-  'あなた': 'You',
-  '配送を確認できませんでした': 'Could not confirm delivery',
-  '返信を待っています…': 'Waiting for a reply…',
-  '読み上げできませんでした。画面の返信をご確認ください。': 'Read aloud failed. Please read the reply on screen.',
-  'Dot接続済み': 'Dot connected',
-  'Dot未接続': 'Dot disconnected',
-  '再接続中': 'Reconnecting',
-  '接続しました。次回も自動で接続します。': 'Connected. This device will reconnect automatically.',
-  '接続しました。この画面では設定を保存できないため、閉じた後は新しい接続コードで接続してください。': 'Connected, but storage is unavailable. Pair again after closing the app.',
-  '接続を解除しました。': 'Pairing revoked and removed.',
-  'この端末の接続設定を削除しました。Mac側の解除は未確認です。Macの「Evenの接続設定」→「Evenの接続をすべて解除」で解除してください。ほかのEven接続も解除されます。': 'Connection settings were removed from this device. Mac-side removal is unconfirmed. On your Mac, open Even connection settings → Remove all Even connections. This also removes other Even connections.',
-  '読み上げ': 'Read aloud',
-  '読み上げをオンにしました': 'Read aloud is on',
-  '配送を確認できませんでした。同じ発話は重複送信しません。': 'Delivery was not confirmed. Retrying the same message will not duplicate it.',
-  '送信を確認できませんでした': 'Delivery not confirmed',
-  'G2の表示更新を確認できません': 'Could not confirm the G2 display update',
-  'G2表示を更新できませんでした。接続を確認してください。': 'Could not update the G2 display. Check the connection.',
-  '認識中': 'Transcribing',
-  '認識完了': 'Transcribed',
-  '音声を認識できませんでした': 'Could not transcribe audio',
-  'もう一度話してください': 'Please speak again',
-  '録音を開始': 'Start recording',
-  '録音を停止': 'Stop recording',
-  'G2接続済み': 'G2 connected',
-  '音声を取得できませんでした。もう一度長押ししてください。': 'No audio received. Hold to speak again.',
-  'マイク停止を再試行': 'Retry stopping the microphone',
-  'マイク準備中': 'Starting microphone',
-  '指を離すと停止します': 'Release to stop',
-  '録音中': 'Recording',
-  '最長30秒': 'Up to 30 seconds',
-  '確認が必要': 'Action needed',
-  '処理が終わるまでお待ちください。': 'Please wait for the current task to finish.',
-  '録音を破棄しました。': 'Recording discarded.',
-  '長押しで録音 · 指を離すと停止': 'Hold to record · release to stop',
-  'Even Hub接続済み': 'Even Hub connected',
-  '切断': 'Disconnected',
-  'Even Hubに接続できませんでした': 'Could not connect to Even Hub',
-  'Even Hubでインストールしたアプリから開いてください。': 'Open the installed app in Even Hub.',
-  '接続設定が必要': 'Pair with your Mac',
-  '切断 · 再接続中': 'Disconnected · reconnecting',
-  '接続を確認中': 'Connecting',
-  '送信中': 'Sending',
-  'マイク操作に失敗しました': 'Microphone operation failed',
-  'G2のマイクを開始できませんでした': 'Could not start the G2 microphone',
-  'マイク停止を確認できません。Evenアプリで停止してください': 'Could not confirm microphone stop. Stop it in the Even app.',
-  'スマートフォンで接続設定を開いてください': 'Open setup on your phone',
-  '接続コードが無効か期限切れです。Macで新しく発行してください。': 'The pairing code is invalid or expired. Create a new one on your Mac.',
-  '接続先を確認して「接続」を押してください。': 'Check the Mac address below, then tap Connect.',
-  'Macが停止・スリープ・オフラインの場合は接続できません。': 'Your Mac must be awake and online.',
-  'この画面の接続元': 'App origin',
-  '終了確認を開けませんでした': 'Could not open the system exit dialog',
-  'G2の画面を起動できませんでした': 'Could not initialize the G2 display',
-  'Evenアプリとの接続準備ができませんでした': 'Could not initialize the Even app connection',
-  'Evenアプリとの接続準備ができていません。アプリを閉じて開き直してください。': 'The Even app connection is not ready. Close and reopen Dot Link.',
-  'G2との接続と起動状態を確認し、Dot Linkを開き直してください。': 'Check that G2 is connected and available, then reopen Dot Link.',
-  '未読': 'Unread',
-  '既読': 'Read',
-  '通常より返信に時間がかかっています…': 'The reply is taking longer than usual…',
-} as const;
-export type TranslationKey = keyof typeof translations;
-let language: Language = 'ja';
-export function setLanguage(value: Language): void { language = value; }
+import { catalogs, localeMetadata, type Language, type MessageKey } from './localization-catalogs.ts';
+export type { Language };
+export type TranslationKey = MessageKey;
+export type MessageParameters = Readonly<Record<string, string | number>>;
+// A bounded cache of app-created dynamic labels lets visible status fields
+// change language without parsing arbitrary text or touching conversation data.
+const dynamicLabels = new Map<string, { key: TranslationKey; values: MessageParameters }>();
+export const supportedLanguages = (Object.keys(localeMetadata) as Language[])
+  .sort((a, b) => localeMetadata[a].order - localeMetadata[b].order);
+export const languageName = (value: Language): string => localeMetadata[value].name;
+export function isLanguage(value: unknown): value is Language {
+  return typeof value === 'string' && Object.hasOwn(catalogs, value);
+}
+let language: Language = 'ja'; // Application startup resolves the host locale before rendering.
+export function setLanguage(value: Language): void { language = isLanguage(value) ? value : 'en'; }
 export function getLanguage(): Language { return language; }
-export function t(key: TranslationKey): string { return language === 'ja' ? key : translations[key]; }
-export function seconds(value: string | number): string { return language === 'ja' ? `${value}秒` : `${value}s`; }
+export function speechLocale(): string { return localeMetadata[language].speechLocale; }
+export function message(key: TranslationKey, locale: Language, values: MessageParameters = {}): string {
+  const template = catalogs[locale]?.[key] || catalogs.en[key];
+  // Replace once: parameter contents (including braces or dollar signs) are data.
+  return template.replace(/\{([a-zA-Z][a-zA-Z0-9_]*)\}/g, (token, name: string) =>
+    Object.hasOwn(values, name) ? String(values[name]) : token);
+}
+export function t(key: TranslationKey, values?: MessageParameters): string {
+  const text = message(key, language, values);
+  if (values && Object.keys(values).length) {
+    dynamicLabels.set(text, { key, values: { ...values } });
+    if (dynamicLabels.size > 256) dynamicLabels.delete(dynamicLabels.keys().next().value!);
+  }
+  return text;
+}
+export function seconds(value: string | number): string { return t('even.seconds', { value }); }
 export function chooseLanguage(preferred: string, saved?: string | null): Language {
-  return saved === 'ja' || saved === 'en' ? saved : preferred.toLowerCase().startsWith('ja') ? 'ja' : 'en';
+  if (isLanguage(saved)) return saved;
+  const locale = preferred.toLowerCase();
+  // Retain existing Japanese-prefix behavior, including legacy host values.
+  return supportedLanguages.find(value => locale === value || locale.startsWith(`${value}-`) || locale.startsWith(`${value}_`)
+    || ((localeMetadata[value] as { legacyPrefix?: boolean }).legacyPrefix === true && locale.startsWith(value))) ?? 'en';
 }
 
-/** Re-render an exact UI label, without translating arbitrary conversation text. */
+/** Only for app-owned status labels; never call on conversation/user content. */
 export function translateLabel(value: string): string {
-  for (const [ja, en] of Object.entries(translations)) {
-    if (value === ja || value === en) return language === 'ja' ? ja : en;
+  const dynamic = dynamicLabels.get(value);
+  if (dynamic) return t(dynamic.key, dynamic.values);
+  for (const key of Object.keys(catalogs.en) as TranslationKey[]) {
+    if (supportedLanguages.some(locale => catalogs[locale][key] === value)) return t(key);
   }
   return value;
 }

@@ -37,7 +37,7 @@ struct SetupFailureDetails {
     }
 
     func message(language: String) -> String {
-        let locale = language == "ja" ? "ja" : "en"
+        let locale = language
         let title = stages[stage]?[locale] ?? stages[stage]!["en"]!
         let guidance = codes[code]?[locale] ?? codes[code]!["en"]!
         return "\(title): \(guidance) (\(code))"

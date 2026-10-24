@@ -62,7 +62,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var migratingNotifications = false
     var busy = false
     var helper: Process?
-    var message = ""
+    var messageRecord: LocalizedMessage?
+    var message: String { messageRecord.map { Localization.shared.text($0, language: language) } ?? "" }
     var setupFailure = SetupFailurePresentation()
     var progressLabel: NSTextField?
     var progress: NSProgressIndicator?
@@ -80,10 +81,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var pairingRefreshPending = false
     var pairingRefreshAt = Date.distantPast
     var pairingRefreshGeneration = 0
-    var language = UserDefaults.standard.string(forKey: "setupLanguage") ?? (Locale.preferredLanguages.first?.hasPrefix("ja") == true ? "ja" : "en")
+    var language = Localization.shared.choose(preferred: Locale.preferredLanguages.first ?? "en", saved: UserDefaults.standard.string(forKey: "setupLanguage"))
     let payload = Bundle.main.resourceURL!.appendingPathComponent("payload")
     var step: String { state["step"] as? String ?? "checking" }
-    func tr(_ ja: String, _ en: String) -> String { language == "ja" ? ja : en }
+    func tr(_ key: String, _ parameters: [String: String] = [:]) -> String { Localization.shared.text(key, language: language, parameters) }
     func yes(_ key: String) -> Bool { state[key] as? Bool == true }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -93,10 +94,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.accessory)
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         updateMenu()
-        let menu = NSMenu(); let appItem = NSMenuItem(); menu.addItem(appItem)
-        let appMenu = NSMenu(); appMenu.addItem(withTitle: tr("Dot Linkを終了", "Quit Dot Link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); appItem.submenu = appMenu
-        let editItem = NSMenuItem(title: tr("編集", "Edit"), action: nil, keyEquivalent: ""); menu.addItem(editItem)
-        let edit = NSMenu(); edit.addItem(withTitle: tr("コピー", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"); edit.addItem(withTitle: tr("ペースト", "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"); edit.addItem(withTitle: tr("すべてを選択", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"); editItem.submenu = edit; NSApp.mainMenu = menu
+        updateAppMenu()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.minSize = NSSize(width: 580, height: 620); window.title = "Dot Link"; window.delegate = self; window.isReleasedWhenClosed = false
         window.titlebarAppearsTransparent = true; window.backgroundColor = .windowBackgroundColor
@@ -109,9 +107,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self?.refreshVisiblePairing()
         }
     }
+    func updateAppMenu() {
+        let menu = NSMenu(); let appItem = NSMenuItem(); menu.addItem(appItem)
+        let appMenu = NSMenu(); appMenu.addItem(withTitle: tr("mac.quit_dot_link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); appItem.submenu = appMenu
+        let editItem = NSMenuItem(title: tr("mac.edit"), action: nil, keyEquivalent: ""); menu.addItem(editItem)
+        let edit = NSMenu(); edit.addItem(withTitle: tr("mac.copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"); edit.addItem(withTitle: tr("mac.paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"); edit.addItem(withTitle: tr("mac.select_all"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"); editItem.submenu = edit; NSApp.mainMenu = menu
+    }
     func configureUpdater() {
         let updater = AppUpdater(); appUpdater = updater
-        updater.tr = { [weak self] ja, en in self?.tr(ja, en) ?? ja }
+        updater.localize = { [weak self] key, parameters in self?.tr(key, parameters) ?? Localization.shared.text(key, language: "en", parameters) }
         updater.canCheck = { [weak self] in guard let self else { return false }; return self.yes("installed") && !self.busy && self.appUpdater?.blocksActions != true && Bundle.main.bundleURL.path == NSHomeDirectory() + "/Applications/Dot Link.app" }
         updater.changed = { [weak self] in self?.refreshUpdateAnimation(); self?.updateMenu() }
         updater.prepare = { [weak self] interrupt, reply in
@@ -178,7 +182,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard notifications == nil, let directory = state["directory"] as? String, state["installed"] as? Bool == true else { return }
         let n = NotificationController(project: URL(fileURLWithPath: directory), legacyRunning: state["legacyNotificationRegistered"] as? Bool == true, relaySuspended: yes("lifecycleStopped") || !yes("bridge"))
         notifications = n
-        n.tr = { [weak self] ja, en in self?.tr(ja, en) ?? ja }
+        n.localize = { [weak self] key, parameters in self?.tr(key, parameters) ?? Localization.shared.text(key, language: "en", parameters) }
         n.changed = { [weak self] in self?.updateMenu() }
         n.rebuildView = { [weak self] in if self?.showingNotifications == true { self?.render() } }
         n.requestMigration = { [weak self] in self?.beginNotificationMigration() }
@@ -198,7 +202,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func updateMenu() {
         guard statusItem != nil else { return }
         let ready = step == "pair"
-        let status = yes("lifecycleStopped") ? tr("一時停止中", "Paused") : ready ? tr("Dotに接続済み", "Connected to Dot") : step == "start" ? tr("中継は停止中", "Relay stopped") : tr("準備・確認が必要", "Setup or attention needed")
+        let status = yes("lifecycleStopped") ? tr("mac.paused") : ready ? tr("mac.connected_to_dot") : step == "start" ? tr("mac.relay_stopped") : tr("mac.setup_or_attention_needed")
         let icon: DotStatus = yes("lifecycleStopped") ? .paused : ready ? .ready : step == "start" ? .paused : step == "checking" ? .checking : .attention
         statusItem.button?.image = appUpdater?.working == true ? DotStatus.ready.image(rotation: orbitAngle) : icon.image()
         statusItem.button?.setAccessibilityLabel("Dot Link: " + (appUpdater?.working == true ? appUpdater!.message : status))
@@ -206,22 +210,22 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let info = NSMenuItem(title: "Dot Link · " + status, action: nil, keyEquivalent: ""); info.isEnabled = false; menu.addItem(info)
         func item(_ title: String, _ action: Selector, enabled: Bool = true) { let i = NSMenuItem(title: title, action: action, keyEquivalent: ""); i.target = self; i.isEnabled = enabled && !busy && appUpdater?.blocksActions != true; menu.addItem(i) }
         menu.autoenablesItems = false
-        item(tr("Dot Linkを開く", "Open Dot Link"), #selector(showHome))
-        item(tr("Evenの接続設定…", "Even connection settings…"), #selector(menuPair), enabled: yes("installed"))
-        item(tr("音声入力…", "Speech input…"), #selector(menuSpeech), enabled: yes("installed"))
-        item(tr("音声出力…", "Speech output…"), #selector(menuSpeechOutput), enabled: yes("installed"))
-        item(tr("Macの通知…", "Mac notifications…"), #selector(menuNotifications), enabled: notifications != nil)
+        item(tr("mac.open_dot_link"), #selector(showHome))
+        item(tr("mac.even_connection_settings"), #selector(menuPair), enabled: yes("installed"))
+        item(tr("mac.speech_input_128"), #selector(menuSpeech), enabled: yes("installed"))
+        item(tr("mac.speech_output_129"), #selector(menuSpeechOutput), enabled: yes("installed"))
+        item(tr("mac.mac_notifications"), #selector(menuNotifications), enabled: notifications != nil)
         if let n = notifications {
             let detail = NSMenuItem(title: n.notificationSummary, action: nil, keyEquivalent: ""); detail.isEnabled = false; menu.addItem(detail)
         }
         menu.addItem(.separator())
-        item(tr("一時停止", "Pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
-        item(tr("再開", "Resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
+        item(tr("mac.pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
+        item(tr("mac.resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
         menu.addItem(.separator())
-        item(appUpdater?.checkTitle ?? tr("アップデートを確認", "Check for updates"), #selector(menuCheckUpdate))
+        item(appUpdater?.checkTitle ?? tr("mac.check_for_updates"), #selector(menuCheckUpdate))
         if let updater = appUpdater, !updater.message.isEmpty { let update = NSMenuItem(title: updater.message, action: nil, keyEquivalent: ""); update.isEnabled = false; menu.addItem(update) }
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: tr("Dot Linkを終了", "Quit Dot Link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
+        let quit = NSMenuItem(title: tr("mac.quit_dot_link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
         statusItem.menu = menu
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -233,8 +237,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if allowTermination { notifications?.shutdown(); return .terminateNow }
         if quitting { return .terminateLater }
         if busy {
-            let alert = NSAlert(); alert.messageText = tr("処理が終わってから終了してください", "Wait for the current operation to finish")
-            alert.informativeText = tr("設定の更新中です。完了後にもう一度終了できます。", "Settings are being updated. You can quit when the operation finishes.")
+            let alert = NSAlert(); alert.messageText = tr("mac.wait_for_the_current_operation_to_finish")
+            alert.informativeText = tr("mac.settings_are_being_updated_you_can_quit_when_the_operation_finishes")
             alert.runModal(); return .terminateCancel
         }
         if appUpdater?.cancelForQuit() == false {
@@ -248,16 +252,16 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func confirmUninstall(_ plan: [String: Any]) {
         guard let token = plan["token"] as? String else { return }
         let alert = NSAlert(); alert.alertStyle = .warning
-        alert.messageText = tr("このMacからDot Linkをアンインストールしますか？", "Uninstall Dot Link from this Mac?")
-        alert.informativeText = tr("会話の中継と通知を停止し、自動起動を解除します。Dot Link、音声認識モデル、接続設定、会話履歴をゴミ箱へ移動します。保存した音声認識APIキーはキーチェーンから削除します。再び使うには初期設定が必要です。", "This stops the relay and notifications, removes login items, and moves Dot Link, its speech model, connection settings, and conversation history to Trash. Saved speech API keys are deleted from Keychain. You will need to set up Dot Link again to use it.")
-        if plan["retainsSource"] as? Bool == true { alert.informativeText += tr(" 開発用のソースフォルダは残します。", " The development source folder is preserved.") }
+        alert.messageText = tr("mac.uninstall_dot_link_from_this_mac")
+        alert.informativeText = tr("mac.this_stops_the_relay_and_notifications_removes_login_items_and_moves_dot")
+        if plan["retainsSource"] as? Bool == true { alert.informativeText += tr("mac.the_development_source_folder_is_preserved") }
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
         let paths = (plan["removes"] as? [String] ?? []).joined(separator: "\n")
         let list = NSTextView(frame: NSRect(x: 0, y: 0, width: 480, height: 100)); list.string = paths; list.isEditable = false; list.font = .systemFont(ofSize: 11)
         let scroll = NSScrollView(frame: list.frame); scroll.hasVerticalScroller = true; scroll.documentView = list; box.addArrangedSubview(scroll)
         scroll.widthAnchor.constraint(equalToConstant: 480).isActive = true; scroll.heightAnchor.constraint(equalToConstant: 100).isActive = true
         box.widthAnchor.constraint(equalToConstant: 480).isActive = true; box.setFrameSize(box.fittingSize)
-        alert.accessoryView = box; alert.addButton(withTitle: tr("キャンセル", "Cancel")); alert.addButton(withTitle: tr("アンインストール", "Uninstall"))
+        alert.accessoryView = box; alert.addButton(withTitle: tr("mac.cancel")); alert.addButton(withTitle: tr("mac.uninstall"))
         guard alert.runModal() == .alertSecondButtonReturn else { return }
         if appUpdater?.cancelForQuit(discardConfirmed: true) == false {
             return
@@ -293,16 +297,16 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let flexible = NSView(); flexible.setContentHuggingPriority(.defaultLow, for: .horizontal); content.addArrangedSubview(flexible)
         let state = NSStackView(views: [symbol(statusIcon, size: 13, color: color), label(status, size: 12, bold: true)]); state.spacing = 4
         state.setContentCompressionResistancePriority(.required, for: .horizontal); content.addArrangedSubview(state)
-        content.addArrangedSubview(HelpButton(name + tr("について", " help"), help))
+        content.addArrangedSubview(HelpButton(name + tr("mac.help"), help))
         let card = NSBox(); card.boxType = .custom; card.borderColor = .separatorColor; card.borderWidth = 0.5; card.cornerRadius = 12; card.fillColor = .controlBackgroundColor; card.contentViewMargins = .zero
         card.contentView = content; stack.addArrangedSubview(card)
         card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         card.heightAnchor.constraint(greaterThanOrEqualToConstant: 84).isActive = true
     }
     func connectionCards(paused: Bool = false) {
-        statusCard("Dot", symbol: "bubble.left.and.bubble.right", detail: tr("いつものChatGPT Dot", "Your existing ChatGPT Dot"), status: paused ? tr("停止中", "Stopped") : tr("接続済み", "Connected"), statusIcon: paused ? "pause.circle" : "checkmark.circle.fill", color: paused ? .secondaryLabelColor : .systemGreen, help: tr("このMacの中継と、Dotの会話用購読の状態です。返信の到着やEvenでの表示を保証するものではありません。", "This reflects this Mac's relay and Dot's conversation subscription. It does not confirm delivery of a reply or its display on Even."))
-        statusCard(tr("このMac", "This Mac"), symbol: "desktopcomputer", detail: tr("音声認識・会話の中継", "Speech recognition and relay"), status: paused ? tr("一時停止", "Paused") : tr("稼働中", "Running"), statusIcon: paused ? "pause.circle" : "checkmark.circle.fill", color: paused ? .secondaryLabelColor : .systemGreen, help: tr("このMacが音声認識と通信を中継します。スリープ中は使えません。一時停止・終了では、会話の中継と通知を停止します。", "This Mac handles speech recognition and communication. It must be awake. Pause and Quit stop both the relay and notifications."))
-        statusCard("Even G2", symbol: "eyeglasses", detail: tr("接続設定", "Pairing"), status: yes("evenPaired") ? tr("設定済み", "Saved") : yes("evenPairingKnown") ? tr("未設定", "Not paired") : tr("確認できません", "Unknown"), statusIcon: yes("evenPaired") ? "checkmark.circle.fill" : "questionmark.circle", color: yes("evenPaired") ? .systemGreen : .systemOrange, help: tr("接続設定の保存状況です。Evenが今オンラインかどうかは、この画面では確認できません。接続先を変更・追加するときだけ、新しいコードを作成してください。", "This shows whether pairing is saved. This screen cannot check whether Even is currently online. Create a new code only to change or add a connection."))
+        statusCard("Dot", symbol: "bubble.left.and.bubble.right", detail: tr("mac.your_existing_chatgpt_dot"), status: paused ? tr("mac.stopped") : tr("mac.connected"), statusIcon: paused ? "pause.circle" : "checkmark.circle.fill", color: paused ? .secondaryLabelColor : .systemGreen, help: tr("mac.this_reflects_this_mac_s_relay_and_dot_s_conversation_subscription_it_do"))
+        statusCard(tr("mac.this_mac"), symbol: "desktopcomputer", detail: tr("mac.speech_recognition_and_relay"), status: paused ? tr("mac.paused_144") : tr("mac.running"), statusIcon: paused ? "pause.circle" : "checkmark.circle.fill", color: paused ? .secondaryLabelColor : .systemGreen, help: tr("mac.this_mac_handles_speech_recognition_and_communication_it_must_be_awake_p"))
+        statusCard("Even G2", symbol: "eyeglasses", detail: tr("mac.pairing"), status: yes("evenPaired") ? tr("mac.saved") : yes("evenPairingKnown") ? tr("mac.not_paired") : tr("mac.unknown_150"), statusIcon: yes("evenPaired") ? "checkmark.circle.fill" : "questionmark.circle", color: yes("evenPaired") ? .systemGreen : .systemOrange, help: tr("mac.this_shows_whether_pairing_is_saved_this_screen_cannot_check_whether_eve"))
     }
     func open(_ url: String) { if let value = URL(string: url) { NSWorkspace.shared.open(value) } }
     func render() {
@@ -317,28 +321,28 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         mark.widthAnchor.constraint(equalToConstant: 28).isActive = true; mark.heightAnchor.constraint(equalToConstant: 28).isActive = true
         top.addArrangedSubview(mark); top.addArrangedSubview(label("Dot Link", size: 26, bold: true))
         let topSpace = NSView(); topSpace.setContentHuggingPriority(.defaultLow, for: .horizontal); top.addArrangedSubview(topSpace)
-        let languages = NSPopUpButton(); languages.addItems(withTitles: ["日本語", "English"]); languages.selectItem(at: language == "ja" ? 0 : 1); languages.target = self; languages.action = #selector(changeLanguage(_:)); languages.isEnabled = !busy; languages.setAccessibilityLabel(tr("表示言語", "Language")); top.addArrangedSubview(languages); stack.addArrangedSubview(top)
+        let languages = NSPopUpButton(); languages.addItems(withTitles: Localization.shared.languages.map { Localization.shared.metadata[$0]!.name }); languages.selectItem(at: Localization.shared.languages.firstIndex(of: language) ?? 0); languages.target = self; languages.action = #selector(changeLanguage(_:)); languages.isEnabled = !busy; languages.setAccessibilityLabel(tr("mac.language")); top.addArrangedSubview(languages); stack.addArrangedSubview(top)
         top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         if showingSpeech { renderSpeech(); return }
         if showingSpeechOutput { renderSpeechOutput(); return }
         if showingDetails && !busy {
-            add(tr("詳細設定", "Advanced settings"), size: 23, bold: true)
-            button(tr("戻る", "Back")) { [weak self] in self?.showHome() }
+            add(tr("mac.advanced_settings"), size: 23, bold: true)
+            button(tr("mac.back")) { [weak self] in self?.showHome() }
             if !message.isEmpty { add(message) }
             if let updater = appUpdater { let updates = updater.settingsView(); stack.addArrangedSubview(updates); updates.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true }
             space()
-            add(tr("このMacでDot Linkを使わなくなった場合は、ここから取り除けます。", "If you no longer use Dot Link on this Mac, you can remove it here."))
-            button(tr("Dot Linkをアンインストール…", "Uninstall Dot Link…")) { [weak self] in self?.perform("uninstall-plan") }
+            add(tr("mac.if_you_no_longer_use_dot_link_on_this_mac_you_can_remove_it_here"))
+            button(tr("mac.uninstall_dot_link")) { [weak self] in self?.perform("uninstall-plan") }
             return
         }
         if showingNotifications && !busy {
-            button(tr("接続に戻る", "Back to connection")) { [weak self] in self?.showingNotifications = false; self?.render() }
+            button(tr("mac.back_to_connection")) { [weak self] in self?.showingNotifications = false; self?.render() }
             if !message.isEmpty { add(message) }
             if let n = notifications { let view = n.makeView(); stack.addArrangedSubview(view); view.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true }
-            else { add(tr("Macの準備が終わると通知を設定できます。", "Finish Mac setup to configure notifications.")) }
+            else { add(tr("mac.finish_mac_setup_to_configure_notifications")) }
             return
         }
-        if !showingPairing && step != "pair" && !yes("lifecycleStopped") { add(tr("1  Macの準備   →   2  Dotとの連携   →   3  iPhoneの接続", "1  Prepare Mac   →   2  Connect Dot   →   3  Pair iPhone"), size: 13, bold: true) }
+        if !showingPairing && step != "pair" && !yes("lifecycleStopped") { add(tr("mac.1_prepare_mac_2_connect_dot_3_pair_iphone"), size: 13, bold: true) }
         space()
         if !message.isEmpty {
             let l = label(message); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
@@ -348,14 +352,14 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let l = label(failure.message(language: language)); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
             l.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
             if setupFailure.details?.code == "TAILSCALE_SERVE_APPROVAL_REQUIRED" {
-                button(tr("TailscaleのDNS設定を開く", "Open Tailscale DNS settings")) { [weak self] in self?.open("https://login.tailscale.com/admin/dns") }
+                button(tr("mac.open_tailscale_dns_settings")) { [weak self] in self?.open("https://login.tailscale.com/admin/dns") }
             }
-            let copy = button(setupFailure.copied ? tr("診断情報をコピーしました", "Diagnostics copied") : tr("診断情報をコピー", "Copy diagnostics")) { [weak self] in self?.copySetupDiagnostics() }
-            copy.toolTip = tr("失敗した処理・エラーコード・アプリの版番号のみ。キーや会話は含みません。", "Only the failed step, error codes and app version. No keys or conversations.")
+            let copy = button(setupFailure.copied ? tr("mac.diagnostics_copied") : tr("mac.copy_diagnostics")) { [weak self] in self?.copySetupDiagnostics() }
+            copy.toolTip = tr("mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation")
         }
         progressLabel = nil; progress = nil; tunnelField = nil; secretField = nil; originField = nil; codeField = nil; expiryLabel = nil; copyButton = nil
         if busy {
-            let progressText = currentAction == "revoke-pairings" ? tr("Evenの接続を解除しています…", "Removing Even connections…") : ["pause", "shutdown"].contains(currentAction) ? tr("Dot Linkを停止しています…", "Stopping Dot Link…") : currentAction == "uninstall" ? tr("Dot Linkを取り除いています…", "Removing Dot Link…") : currentAction == "resume" ? tr("Dot Linkを再開しています…", "Resuming Dot Link…") : tr("状態を確認しています…", "Checking…")
+            let progressText = currentAction == "revoke-pairings" ? tr("mac.removing_even_connections") : ["pause", "shutdown"].contains(currentAction) ? tr("mac.stopping_dot_link") : currentAction == "uninstall" ? tr("mac.removing_dot_link") : currentAction == "resume" ? tr("mac.resuming_dot_link") : tr("mac.checking")
             let l = label(progressText, size: 18, bold: true); progressLabel = l; stack.addArrangedSubview(l)
             let p = NSProgressIndicator(); p.style = .bar; p.isIndeterminate = true; p.startAnimation(nil); p.widthAnchor.constraint(equalToConstant: 470).isActive = true; stack.addArrangedSubview(p); progress = p
             return
@@ -366,105 +370,105 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         switch step {
         case "install":
-            add(tr("このMacを準備", "Prepare this Mac"), size: 23, bold: true)
-            add(tr("必要なものを確認し、足りないものをDot Link専用の場所へ入れます。開発ツールの操作は不要です。", "Dot Link checks what is present and installs missing components in its own folder. No developer tools are needed."))
-            add(tr("音声認識データを約490 MBダウンロードします。Macの既存アプリ・接続設定・スリープ設定は変更しません。", "This downloads about 490 MB of speech recognition data. Existing apps, connection settings and sleep settings are preserved."))
-            if yes("legacyTerminalPresent") { add(tr("以前のEven Terminalが見つかりました。別のアプリとして、そのまま残します。", "An older Even Terminal folder was found. It is a separate app and will be preserved.")) }
-            button(tr("このMacを準備する", "Prepare this Mac"), primary: true) { [weak self] in self?.perform("prepare") }
+            add(tr("mac.prepare_this_mac"), size: 23, bold: true)
+            add(tr("mac.dot_link_checks_what_is_present_and_installs_missing_components_in_its_o"))
+            add(tr("mac.this_downloads_about_490_mb_of_speech_recognition_data_existing_apps_con"))
+            if yes("legacyTerminalPresent") { add(tr("mac.an_older_even_terminal_folder_was_found_it_is_a_separate_app_and_will_be")) }
+            button(tr("mac.prepare_this_mac_172"), primary: true) { [weak self] in self?.perform("prepare") }
         case "network":
-            add(tr("MacとiPhoneをつなぐ", "Connect your Mac and iPhone"), size: 23, bold: true)
-            add(tr("Tailscaleを使って、自分のMacとiPhoneを接続します。両方で同じアカウントにログインしてください。", "Use Tailscale to connect your own Mac and iPhone. Sign in with the same account on both devices."))
+            add(tr("mac.connect_your_mac_and_iphone"), size: 23, bold: true)
+            add(tr("mac.use_tailscale_to_connect_your_own_mac_and_iphone_sign_in_with_the_same_a"))
             if yes("tailscaleInstalled") {
-                button(tr("Tailscaleを開く", "Open Tailscale"), primary: true) { [weak self] in self?.openTailscale() }
+                button(tr("mac.open_tailscale"), primary: true) { [weak self] in self?.openTailscale() }
             } else {
-                button(tr("Tailscaleをインストール", "Install Tailscale"), primary: true) { [weak self] in self?.open("https://tailscale.com/download/mac") }
+                button(tr("mac.install_tailscale"), primary: true) { [weak self] in self?.open("https://tailscale.com/download/mac") }
             }
-            button(tr("接続できたので次へ", "Connected — continue")) { [weak self] in self?.inspect() }
+            button(tr("mac.connected_continue")) { [weak self] in self?.inspect() }
         case "networkConflict":
-            add(tr("既存の接続設定を確認", "Review existing network settings"), size: 23, bold: true)
-            add(tr("別の用途の設定が見つかりました。Dot Linkでは上書きしていません。既存サービスとの併用方法を確認してから続けます。", "Existing settings are in use for another purpose. Dot Link has not overwritten them. Resolve the conflict before continuing."))
-            button(tr("もう一度確認", "Check again"), primary: true) { [weak self] in self?.inspect() }
+            add(tr("mac.review_existing_network_settings"), size: 23, bold: true)
+            add(tr("mac.existing_settings_are_in_use_for_another_purpose_dot_link_has_not_overwr"))
+            button(tr("mac.check_again"), primary: true) { [weak self] in self?.inspect() }
         case "dot":
-            add(tr("いつものDotと連携", "Connect your existing Dot"), size: 23, bold: true)
-            add(tr("OpenAIの設定画面で、このMac用の接続を作ります。表示されたトンネルIDとAPIキーを、下の欄に一度だけ貼り付けます。", "Create a connection for this Mac in OpenAI settings. Paste its tunnel ID and API key below once."))
-            add(tr("別のMacで使っている接続はそのまま残し、このMacには別の接続を用意してください。", "Keep connections already used by another Mac. Create a separate one for this Mac."), size: 13)
-            button(tr("OpenAIの接続設定を開く", "Open OpenAI connection settings")) { [weak self] in self?.open("https://platform.openai.com/settings/organization/tunnels") }
-            add(tr("APIキーを作るときは Permissionsで「Restricted」を選び、Tunnelsの「Read」と「Use」だけを有効にします。", "When creating the API key, choose Restricted under Permissions and enable only Read and Use for Tunnels."), size: 14, bold: true)
-            add(tr("このアプリで使うAPIキーにManageは不要です。トンネル自体を新しく作る操作には、アカウント側のRead・Manage権限が必要です。", "The API key used by this app does not need Manage. Creating a new tunnel separately requires Read and Manage on your account."), size: 12)
-            add(tr("トンネルID（tunnel_ で始まるもの）", "Tunnel ID (starts with tunnel_)"), size: 13, bold: true)
+            add(tr("mac.connect_your_existing_dot"), size: 23, bold: true)
+            add(tr("mac.create_a_connection_for_this_mac_in_openai_settings_paste_its_tunnel_id"))
+            add(tr("mac.keep_connections_already_used_by_another_mac_create_a_separate_one_for_t"), size: 13)
+            button(tr("mac.open_openai_connection_settings")) { [weak self] in self?.open("https://platform.openai.com/settings/organization/tunnels") }
+            add(tr("mac.when_creating_the_api_key_choose_restricted_under_permissions_and_enable"), size: 14, bold: true)
+            add(tr("mac.the_api_key_used_by_this_app_does_not_need_manage_creating_a_new_tunnel"), size: 12)
+            add(tr("mac.tunnel_id_starts_with_tunnel"), size: 13, bold: true)
             let id = field("tunnel_…"); id.stringValue = tunnelID; tunnelField = id
-            add(tr("APIキー（このMac内だけに保存）", "API key (saved only on this Mac)"), size: 13, bold: true)
+            add(tr("mac.api_key_saved_only_on_this_mac"), size: 13, bold: true)
             let secret = field("sk-…", secure: true); secretField = secret
-            button(tr("保存して次へ", "Save and continue"), primary: true) { [weak self] in
+            button(tr("mac.save_and_continue"), primary: true) { [weak self] in
                 guard let self else { return }; self.tunnelID = self.tunnelField?.stringValue ?? ""; let key = self.secretField?.stringValue ?? ""; self.secretField?.stringValue = ""
                 self.perform("save-tunnel", input: ["id": self.tunnelID, "secret": key])
             }
         case "start":
-            add(yes("lifecycleStopped") ? tr("Dot Linkは一時停止中", "Dot Link is paused") : tr("中継を起動", "Start your relay"), size: 23, bold: true)
+            add(yes("lifecycleStopped") ? tr("mac.dot_link_is_paused") : tr("mac.start_your_relay"), size: 23, bold: true)
             if yes("lifecycleStopped") {
                 connectionCards(paused: true)
             } else {
-                add(tr("このMacでDot Linkを起動し、ログイン時にも自動で起動するようにします。Macが起きている間に利用できます。", "Start Dot Link on this Mac and enable it at login. The relay works while your Mac is awake."))
+                add(tr("mac.start_dot_link_on_this_mac_and_enable_it_at_login_the_relay_works_while"))
             }
-            button(yes("lifecycleStopped") ? tr("再開", "Resume") : tr("中継を起動する", "Start relay"), primary: true) { [weak self] in self?.menuResume() }
+            button(yes("lifecycleStopped") ? tr("mac.resume") : tr("mac.start_relay"), primary: true) { [weak self] in self?.menuResume() }
         case "subscribe":
-            add(tr("ChatGPTで接続を設定", "Set up the connection in ChatGPT"), size: 23, bold: true)
-            add(tr("1  プラグインを追加", "1  Add the plugin"), size: 16, bold: true)
-            add(tr("「プラグイン」→「追加」→「カスタム MCP サーバーを追加」", "Plugins → Add → Add custom MCP server"))
-            add(tr("名前：Dot Link（任意の名前でOK）\n接続タイプ：トンネル → このMac用のトンネルを選択\n認証：認証なし", "Name: Dot Link (or a name of your choice)\nConnection: Tunnel → select this Mac’s tunnel\nAuthentication: No authentication"))
-            add(tr("「理解したうえで続けます」を確認・チェックし、\n「プラグインとして作成」→「［名前］を接続する」。", "Review and check “I understand and want to continue”.\nClick “Create as a plugin”, then connect the plugin."))
-            button(tr("ChatGPTのプラグインを開く", "Open ChatGPT Plugins")) { [weak self] in self?.open("https://chatgpt.com/plugins") }
+            add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
+            add(tr("mac.1_add_the_plugin"), size: 16, bold: true)
+            add(tr("mac.plugins_add_add_custom_mcp_server"))
+            add(tr("mac.name_dot_link_or_a_name_of_your_choice_nconnection_tunnel_select_this_ma"))
+            add(tr("mac.review_and_check_i_understand_and_want_to_continue_nclick_create_as_a_pl"))
+            button(tr("mac.open_chatgpt_plugins")) { [weak self] in self?.open("https://chatgpt.com/plugins") }
             space()
-            add(tr("2  Dotに設定メッセージを送る", "2  Send the setup message to your dot"), size: 16, bold: true)
-            add(tr("「ホーム」→「あなたのdot」→ 入力欄の「＋」→ 追加した名前を選択。\n下のボタンでコピーし、Dotの入力欄に貼り付けて送信します。", "Home → Your dot → + in the message box → select your plugin.\nCopy the message below, paste it into your dot, and send it."))
-            button(tr("設定メッセージをコピー", "Copy setup message")) { [weak self] in self?.copySetupMessage() }
+            add(tr("mac.2_send_the_setup_message_to_your_dot"), size: 16, bold: true)
+            add(tr("mac.home_your_dot_in_the_message_box_select_your_plugin_ncopy_the_message_be"))
+            button(tr("mac.copy_setup_message")) { [weak self] in self?.copySetupMessage() }
             space()
-            add(tr("3  このアプリに戻って確認", "3  Return here to check the connection"), size: 16, bold: true)
-            add(tr("Dotから設定完了の返事が来たら、下のボタンを押します。", "When your dot confirms setup is complete, click below."))
-            button(tr("Dotとの接続を確認", "Check connection to Dot"), primary: true) { [weak self] in self?.inspect() }
+            add(tr("mac.3_return_here_to_check_the_connection"), size: 16, bold: true)
+            add(tr("mac.when_your_dot_confirms_setup_is_complete_click_below"))
+            button(tr("mac.check_connection_to_dot"), primary: true) { [weak self] in self?.inspect() }
         case "pair":
-            add(tr("接続状況", "Connections"), size: 22, bold: true)
+            add(tr("mac.connections"), size: 22, bold: true)
             connectionCards()
             let actions = NSStackView(); actions.orientation = .horizontal; actions.spacing = 12
-            let pairing = ActionButton(yes("evenPaired") ? tr("Evenの接続設定", "Even connection settings") : tr("Evenを接続", "Connect Even")) { [weak self] in self?.menuPair() }
+            let pairing = ActionButton(yes("evenPaired") ? tr("mac.even_connection_settings_206") : tr("mac.connect_even")) { [weak self] in self?.menuPair() }
             pairing.controlSize = .large; pairing.keyEquivalent = "\r"; actions.addArrangedSubview(pairing)
-            let notificationSettings = ActionButton(tr("通知設定", "Notifications")) { [weak self] in self?.menuNotifications() }
+            let notificationSettings = ActionButton(tr("mac.notifications")) { [weak self] in self?.menuNotifications() }
             notificationSettings.controlSize = .large; notificationSettings.image = NSImage(systemSymbolName: "bell", accessibilityDescription: nil); notificationSettings.imagePosition = .imageLeading
             notificationSettings.isEnabled = notifications != nil; actions.addArrangedSubview(notificationSettings)
-            let speechSettings = ActionButton(tr("音声入力", "Speech input")) { [weak self] in self?.menuSpeech() }
+            let speechSettings = ActionButton(tr("mac.speech_input")) { [weak self] in self?.menuSpeech() }
             speechSettings.controlSize = .large; speechSettings.image = NSImage(systemSymbolName: "waveform", accessibilityDescription: nil); speechSettings.imagePosition = .imageLeading
             actions.addArrangedSubview(speechSettings)
-            let outputSettings = ActionButton(tr("音声出力", "Speech output")) { [weak self] in self?.menuSpeechOutput() }
+            let outputSettings = ActionButton(tr("mac.speech_output")) { [weak self] in self?.menuSpeechOutput() }
             outputSettings.controlSize = .large; outputSettings.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil); outputSettings.imagePosition = .imageLeading
             actions.addArrangedSubview(outputSettings)
             stack.addArrangedSubview(actions)
         case "updateRecovery":
-            add(tr("更新後の中継を確認できません", "The relay has not recovered after the update"), size: 23, bold: true)
-            add(tr("設定と履歴は保持しています。ネットワーク接続を確認して、復旧を再試行してください。", "Your settings and history are preserved. Check the network connection and retry recovery."))
-            button(tr("復旧を再試行", "Retry recovery"), primary: true) { [weak self] in self?.perform("update-recover") }
+            add(tr("mac.the_relay_has_not_recovered_after_the_update"), size: 23, bold: true)
+            add(tr("mac.your_settings_and_history_are_preserved_check_the_network_connection_and"))
+            button(tr("mac.retry_recovery"), primary: true) { [weak self] in self?.perform("update-recover") }
         case "conflict":
-            add(tr("以前の設定を確認してください", "Review previous settings"), size: 23, bold: true)
-            add(tr("複数の導入先、または別の用途の起動設定が見つかりました。何も上書きしていません。", "Multiple installations or conflicting login services were found. Nothing has been overwritten."))
-            button(tr("もう一度確認", "Check again"), primary: true) { [weak self] in self?.inspect() }
+            add(tr("mac.review_previous_settings"), size: 23, bold: true)
+            add(tr("mac.multiple_installations_or_conflicting_login_services_were_found_nothing"))
+            button(tr("mac.check_again"), primary: true) { [weak self] in self?.inspect() }
         default:
-            add(tr("準備を確認", "Check setup"), size: 23, bold: true)
-            button(tr("確認する", "Check"), primary: true) { [weak self] in self?.inspect() }
+            add(tr("mac.check_setup"), size: 23, bold: true)
+            button(tr("mac.check"), primary: true) { [weak self] in self?.inspect() }
         }
         space()
-        if step != "pair" && step != "subscribe" && !yes("lifecycleStopped") { let footer = label(tr("接続や準備が終わるまで、iPhoneでコードを発行・撮影する必要はありません。", "Finish Mac and Dot setup before pairing your iPhone."), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
+        if step != "pair" && step != "subscribe" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
         let footer = NSStackView(); footer.orientation = .horizontal; footer.spacing = 10
         if let checked = lastChecked {
-            let f = DateFormatter(); f.locale = Locale(identifier: language == "ja" ? "ja_JP" : "en_US"); f.timeStyle = .medium
-            let checkedLabel = label(tr("最終確認：", "Last checked: ") + f.string(from: checked), size: 12); checkedLabel.textColor = .secondaryLabelColor; footer.addArrangedSubview(checkedLabel)
+            let f = DateFormatter(); f.locale = Locale(identifier: Localization.shared.metadata[language]?.dateLocale ?? "en_US"); f.timeStyle = .medium
+            let checkedLabel = label(tr("mac.last_checked") + f.string(from: checked), size: 12); checkedLabel.textColor = .secondaryLabelColor; footer.addArrangedSubview(checkedLabel)
         }
         if step != "checking" {
-            let refresh = ActionButton("") { [weak self] in self?.inspect() }; refresh.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: tr("状態を再確認", "Refresh status")); refresh.isBordered = false; refresh.toolTip = tr("状態を再確認", "Refresh status"); refresh.setAccessibilityLabel(refresh.toolTip!); footer.addArrangedSubview(refresh)
+            let refresh = ActionButton("") { [weak self] in self?.inspect() }; refresh.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: tr("mac.refresh_status")); refresh.isBordered = false; refresh.toolTip = tr("mac.refresh_status"); refresh.setAccessibilityLabel(refresh.toolTip!); footer.addArrangedSubview(refresh)
         }
         let footerSpace = NSView(); footerSpace.setContentHuggingPriority(.defaultLow, for: .horizontal); footer.addArrangedSubview(footerSpace)
-        let details = ActionButton("") { [weak self] in self?.showingDetails = true; self?.message = ""; self?.render() }; details.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: tr("詳細設定", "Advanced settings")); details.isBordered = false; details.toolTip = tr("詳細設定", "Advanced settings"); details.setAccessibilityLabel(details.toolTip!); footer.addArrangedSubview(details)
+        let details = ActionButton("") { [weak self] in self?.showingDetails = true; self?.messageRecord = nil; self?.render() }; details.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: tr("mac.advanced_settings")); details.isBordered = false; details.toolTip = tr("mac.advanced_settings"); details.setAccessibilityLabel(details.toolTip!); footer.addArrangedSubview(details)
         stack.addArrangedSubview(footer); footer.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
     }
-    @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = sender.indexOfSelectedItem == 0 ? "ja" : "en"; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); render() }
+    @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = Localization.shared.languages[sender.indexOfSelectedItem]; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); notifications?.refreshLanguage(); updateAppMenu(); render() }
     func inspect() { perform("inspect") }
     func refreshVisiblePairing() {
         guard showingPairing, window.isVisible, yes("installed"), !busy,
@@ -488,45 +492,45 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                (refreshed["evenPairingCount"] as? Int ?? 0) > previousCount,
                self.pairingCode != nil, (refreshed["evenInvitationCount"] as? Int ?? 0) == 0 {
                 self.pairingCode = nil; self.pairingExpiry = 0
-                self.message = self.tr("Evenが接続されました。", "Even connected.")
+                self.messageRecord = LocalizedMessage("mac.even_connected")
                 changed = true
             }
             if changed { self.render() }
         }
     }
     func renderPairingSettings() {
-        add(tr("Evenの接続設定", "Even connection settings"), size: 22, bold: true)
-        button(tr("接続状況に戻る", "Back to connection status")) { [weak self] in self?.showHome() }
+        add(tr("mac.even_connection_settings_206"), size: 22, bold: true)
+        button(tr("mac.back_to_connection_status")) { [weak self] in self?.showHome() }
         let count = state["evenPairingCount"] as? Int ?? 0
         let invitations = state["evenInvitationCount"] as? Int ?? 0
-        add(yes("evenPairingKnown") ? (count > 0 ? tr("保存済みの接続：\(count)件", "Saved connections: \(count)") : tr("保存済みの接続はありません", "No saved connections")) : tr("保存済みの接続を確認できません", "Saved connections could not be checked"), size: 16, bold: true)
-        if count > 1 { add(tr("同じ端末の古い登録を含む場合があります。端末の台数ではありません。", "This may include older registrations for the same device. It is not a device count.")) }
+        add(yes("evenPairingKnown") ? (count > 0 ? tr("mac.saved_connections_count", ["count": String(count)]) : tr("mac.no_saved_connections")) : tr("mac.saved_connections_could_not_be_checked"), size: 16, bold: true)
+        if count > 1 { add(tr("mac.this_may_include_older_registrations_for_the_same_device_it_is_not_a_dev")) }
         if step == "pair" {
-            button(count > 0 ? tr("接続を変更・追加", "Change or add a connection") : tr("接続コードを作成", "Create pairing code"), primary: true) { [weak self] in self?.perform("pair") }
+            button(count > 0 ? tr("mac.change_or_add_a_connection") : tr("mac.create_pairing_code"), primary: true) { [weak self] in self?.perform("pair") }
             if let code = pairingCode, pairingExpiry > Date().timeIntervalSince1970 * 1000 {
                 let f = field(""); f.stringValue = code; f.isEditable = false; f.font = .monospacedSystemFont(ofSize: 12, weight: .regular); codeField = f
-                copyButton = button(tr("接続コードをコピー", "Copy pairing code")) { [weak self] in self?.copyPairing() }
+                copyButton = button(tr("mac.copy_pairing_code")) { [weak self] in self?.copyPairing() }
                 let l = label(""); expiryLabel = l; stack.addArrangedSubview(l)
-                add(tr("コード全体をEvenアプリのDot Linkに貼り付けて「接続」を押してください。既存の接続設定は保持されます。", "Paste the full code into Dot Link in the Even app and tap Connect. Existing pairings are preserved."))
+                add(tr("mac.paste_the_full_code_into_dot_link_in_the_even_app_and_tap_connect_existi"))
                 updateExpiry()
             }
         } else {
-            add(tr("再接続するには、接続状況に戻ってMacとDotの準備を完了してください。接続の解除はこのまま行えます。", "To pair again, return to connection status and finish Mac and Dot setup. You can still remove connections here."))
+            add(tr("mac.to_pair_again_return_to_connection_status_and_finish_mac_and_dot_setup_y"))
         }
-        if invitations > 0 { add(tr("使用前の接続コード：\(invitations)件", "Unused pairing codes: \(invitations)"), size: 12) }
+        if invitations > 0 { add(tr("mac.unused_pairing_codes_invitations", ["invitations": String(invitations)]), size: 12) }
         space()
         if count > 0 || invitations > 0 || !yes("evenPairingKnown") {
-            button(tr("Evenの接続をすべて解除…", "Remove all Even connections…")) { [weak self] in self?.confirmPairingRemoval() }
+            button(tr("mac.remove_all_even_connections")) { [weak self] in self?.confirmPairingRemoval() }
         }
-        button(tr("状態を再確認", "Refresh status")) { [weak self] in self?.inspect() }
+        button(tr("mac.refresh_status")) { [weak self] in self?.inspect() }
     }
     func confirmPairingRemoval() {
         guard !busy, appUpdater?.blocksActions != true else { return }
         let alert = NSAlert(); alert.alertStyle = .warning
-        alert.messageText = tr("Evenの接続をすべて解除しますか？", "Remove all Even connections?")
-        alert.informativeText = tr("このMacの接続コードで登録したすべてのEven接続と、使用前のコードを無効にします。会話の送受信と位置共有が止まり、使う端末は接続し直す必要があります。\n\nChatGPT側の接続設定と保存済みの会話は残ります。", "This invalidates all Even connections registered with this Mac's pairing codes, including unused codes. Messaging and location sharing stop, and each device must pair again.\n\nYour ChatGPT connection settings and saved conversations are kept.")
-        alert.addButton(withTitle: tr("すべて解除", "Remove all"))
-        alert.addButton(withTitle: tr("キャンセル", "Cancel"))
+        alert.messageText = tr("mac.remove_all_even_connections_230")
+        alert.informativeText = tr("mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing")
+        alert.addButton(withTitle: tr("mac.remove_all"))
+        alert.addButton(withTitle: tr("mac.cancel"))
         alert.buttons[0].keyEquivalent = ""
         alert.buttons[1].keyEquivalent = "\r"
         if alert.runModal() == .alertFirstButtonReturn { perform("revoke-pairings") }
@@ -538,21 +542,21 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         open("https://tailscale.com/download/mac")
     }
     func copySetupMessage() {
-        let text = tr("このMac用のDot Link接続を使って、私のEven G2からの発話を受け取ってください。セッションはpersonal-g2です。utterance.createdを購読し、届いたらget_pending_utterancesで実際のIDと本文を取得して、reply_to_g2で返してください。新しい連絡はsend_message_to_g2を使ってください。まずget_statusで接続を確認してください。", "Use this Mac's Dot Link connection to receive messages from my Even G2. The session is personal-g2. Subscribe to utterance.created, use get_pending_utterances to read real IDs and messages, then reply with reply_to_g2. Use send_message_to_g2 for new messages. First check get_status.")
-        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); message = tr("設定メッセージをコピーしました。いつものDotへ貼り付けて送ってください。", "Setup message copied. Paste and send it to your existing Dot."); render()
+        let text = tr("mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t")
+        NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string); messageRecord = LocalizedMessage("mac.setup_message_copied_paste_and_send_it_to_your_existing_dot"); render()
     }
     func copyPairing() {
         guard let code = pairingCode, pairingExpiry > Date().timeIntervalSince1970 * 1000 else { updateExpiry(); return }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(code, forType: .string)
-        expiryLabel?.stringValue = tr("コピーしました。iPhoneへ貼り付けてください。", "Copied. Paste it on your iPhone.")
+        expiryLabel?.stringValue = tr("mac.copied_paste_it_on_your_iphone")
     }
     func updateExpiry() {
         guard pairingCode != nil else { return }
         let seconds = max(0, Int((pairingExpiry - Date().timeIntervalSince1970 * 1000) / 1000))
         if seconds == 0 {
             pairingCode = nil; codeField?.stringValue = ""; copyButton?.isEnabled = false
-            expiryLabel?.stringValue = tr("期限が切れました。新しい接続コードを作成してください。", "Expired. Create a new pairing code.")
-        } else { expiryLabel?.stringValue = tr("残り\(seconds)秒・1回限り", "\(seconds) seconds remaining · one use") }
+            expiryLabel?.stringValue = tr("mac.expired_create_a_new_pairing_code")
+        } else { expiryLabel?.stringValue = tr("mac.seconds_seconds_remaining_one_use", ["seconds": String(seconds)]) }
     }
     func copySetupDiagnostics() {
         guard let text = setupFailure.details?.copyText(appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) else { return }
@@ -560,7 +564,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupFailure.copied = true; render()
     }
     func perform(_ action: String, input: [String: String] = [:]) {
-        guard !busy, appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; message = ""
+        guard !busy, appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; messageRecord = nil
         pairingRefreshGeneration += 1
         setupFailure.begin(action)
         if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
@@ -593,7 +597,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         switch value["kind"] as? String {
         case "progress":
             let pct = value["percent"] as? Int ?? 0
-            progressLabel?.stringValue = value["task"] as? String == "model" ? tr("音声認識を準備しています… \(pct)%", "Preparing speech recognition… \(pct)%") : tr("Dot Linkを準備しています…", "Preparing Dot Link…")
+            progressLabel?.stringValue = value["task"] as? String == "model" ? tr("mac.preparing_speech_recognition_pct", ["pct": String(pct)]) : tr("mac.preparing_dot_link")
             progress?.isIndeterminate = false; progress?.doubleValue = Double(pct)
         case "result":
             busy = false; helper = nil
@@ -614,9 +618,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                         UserDefaults.standard.removePersistentDomain(forName: id)
                     } catch { preferencesRetained = true }
                 }
-                let alert = NSAlert(); alert.messageText = tr("アンインストールしました", "Dot Link was uninstalled")
-                alert.informativeText = tr("このMacのDot Linkは停止しました。取り除いたファイルはゴミ箱にあります。", "Dot Link has stopped on this Mac. Removed files are in Trash.")
-                if preferencesRetained { alert.informativeText += "\n" + tr("Macアプリの表示・通知設定は、バックアップできなかったため保持しています。", "Mac display and notification preferences were kept because their backup could not be created.") }
+                let alert = NSAlert(); alert.messageText = tr("mac.dot_link_was_uninstalled")
+                alert.informativeText = tr("mac.dot_link_has_stopped_on_this_mac_removed_files_are_in_trash")
+                if preferencesRetained { alert.informativeText += "\n" + tr("mac.mac_display_and_notification_preferences_were_kept_because_their_backup") }
                 alert.runModal(); allowTermination = true; NSApp.terminate(nil); return
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
@@ -625,25 +629,25 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 pairingCode = nil; pairingExpiry = 0
                 switch value["pairingRemoval"] as? String {
                 case "removed":
-                    message = tr("Evenの接続をすべて解除しました。再接続するには、新しい接続コードを使ってください。iPhoneには次にMacへ接続したときに反映されます。", "All Even connections were removed. Use a new pairing code to reconnect. Your iPhone will show the change when it next reaches this Mac.")
+                    messageRecord = LocalizedMessage("mac.all_even_connections_were_removed_use_a_new_pairing_code_to_reconnect_yo")
                 case "changed":
-                    message = tr("解除後に新しい接続またはコードが見つかりました。現在の保存状況を確認してください。", "A new connection or code was found after removal. Review the current saved connections.")
+                    messageRecord = LocalizedMessage("mac.a_new_connection_or_code_was_found_after_removal_review_the_current_save")
                 case "failed":
-                    message = tr("接続を解除できませんでした。解除済みとは確認できていません。もう一度お試しください。", "Connections could not be removed. Removal is not confirmed. Please try again.")
+                    messageRecord = LocalizedMessage("mac.connections_could_not_be_removed_removal_is_not_confirmed_please_try_aga")
                 default:
-                    message = tr("解除処理後の状態を確認できません。状態を再確認してから、必要なら解除を再試行してください。", "The state after removal could not be verified. Refresh the status, then retry removal if needed.")
+                    messageRecord = LocalizedMessage("mac.the_state_after_removal_could_not_be_verified_refresh_the_status_then_re")
                 }
             }
             if currentAction == "stt-select" {
-                message = "" // The active provider is already shown at the top of Speech input.
+                messageRecord = nil // The active provider is already shown at the top of Speech input.
             }
-            if currentAction == "inspect" { message = "" } // The timestamp and cards show the refreshed result.
+            if currentAction == "inspect" { messageRecord = nil } // The timestamp and cards show the refreshed result.
             connectNotifications()
             notifications?.setRelaySuspended(yes("lifecycleStopped") || !yes("bridge"))
             notifications?.healthChecked = true
             notifications?.healthReady = yes("bridge") && yes("subscribed")
             notifications?.updateState()
-            if migratingNotifications { migratingNotifications = false; notifications?.migrationFinished(); message = tr("通知の引き継ぎが完了しました。旧アプリの自動起動も解除しました。", "Notifications moved. The old app will no longer start at login.") }
+            if migratingNotifications { migratingNotifications = false; notifications?.migrationFinished(); messageRecord = LocalizedMessage("mac.notifications_moved_the_old_app_will_no_longer_start_at_login") }
             if let code = value["pairingCode"] as? String { pairingCode = code; pairingExpiry = value["expiresAt"] as? Double ?? 0 }
             render()
             if automaticResumePending {
@@ -657,22 +661,22 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let code = value["code"] as? String ?? "SETUP_FAILED"
             if code == "UPDATE_RECOVERY_REQUIRED" { state["step"] = "updateRecovery" }
             if ["MULTIPLE_INSTALLATIONS", "EXISTING_SERVICE_CONFLICT", "EXISTING_SERVICE_UNREADABLE", "INSTALL_FOLDER_OCCUPIED"].contains(code) { state["step"] = "conflict" }
-            message = tr("準備を完了できませんでした。既存の設定は保持しています。もう一度状態を確認してください。", "Setup could not complete. Existing settings have been preserved. Check the status again.") + " (\(code))"
+            messageRecord = LocalizedMessage("mac.setup_could_not_complete_existing_settings_have_been_preserved_check_the", suffix: " (\(code))")
             if currentAction == "activate" {
-                message = tr("中継の準備を完了できませんでした。状態を確認してから再試行してください。", "Relay setup could not complete. Check the current status before retrying.") + " (\(code))"
+                messageRecord = LocalizedMessage("mac.relay_setup_could_not_complete_check_the_current_status_before_retrying", suffix: " (\(code))")
                 if let failure = value["failure"] as? [String: Any] {
                     setupFailure.details = SetupFailureDetails(value: failure, catalogURL: payload.appendingPathComponent("scripts/lib/setup-errors.json"))
                 }
-                if setupFailure.details != nil { message = "" } // Render the retained failure separately from transient status messages.
+                if setupFailure.details != nil { messageRecord = nil } // Render the retained failure separately from transient status messages.
             }
-            if currentAction == "stt-select" { message = tr("切り替えに失敗しました。もう一度お試しください。", "Could not switch services. Please try again.") }
+            if currentAction == "stt-select" { messageRecord = LocalizedMessage("mac.could_not_switch_services_please_try_again") }
             if currentAction == "revoke-pairings" {
                 pairingCode = nil; pairingExpiry = 0
                 state["evenPairingKnown"] = false
-                message = tr("解除の結果を確認できません。状態を再確認してから、必要なら解除を再試行してください。", "The removal result could not be confirmed. Refresh the status, then retry removal if needed.")
+                messageRecord = LocalizedMessage("mac.the_removal_result_could_not_be_confirmed_refresh_the_status_then_retry")
             }
             if ["shutdown", "pause", "uninstall"].contains(currentAction) {
-                message = tr("処理を完了できませんでした。Dot Linkは開いたままです。停止・削除の状況を確認してから再試行してください。", "The operation could not complete. Dot Link remains open. Check the stop or removal status before retrying.") + " (\(code))"
+                messageRecord = LocalizedMessage("mac.the_operation_could_not_complete_dot_link_remains_open_check_the_stop_or", suffix: " (\(code))")
             }
             render()
         default: break

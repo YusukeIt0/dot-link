@@ -19,10 +19,10 @@ import { Pairing } from './pairing.ts';
 import { InteractionStatus } from './interaction-status.ts';
 import { DisplayStandby, HeadRaiseDetector, type DisplayPreferences } from './display-standby.ts';
 import { DisplayPreferenceStore } from './display-preferences.ts';
-import { t, getLanguage, setLanguage, chooseLanguage, translateLabel } from './i18n.ts';
+import { t, getLanguage, setLanguage, chooseLanguage, translateLabel, speechLocale, supportedLanguages, languageName, message, type TranslationKey } from './i18n.ts';
 import { RelaySettings, PendingUtterance } from './relay-connection.ts';
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
-import { LanguagePreferences } from './language-preferences.ts';
+import { LanguagePreferences, isLanguagePreference } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
 import { installKeyboardViewport } from './keyboard-viewport.ts';
 import { installTranscriptSize } from './transcript-size.ts';
@@ -38,12 +38,19 @@ import './style.css';
 installKeyboardViewport(document.querySelector<HTMLElement>('main')!);
 
 const languagePreferences = new LanguagePreferences(() => localStorage);
-const staticLabels = [...document.querySelectorAll<HTMLElement>('[data-en]')].map(element => ({
-  element, ja: element.textContent ?? '', en: element.dataset.en!,
+const staticLabels = [...document.querySelectorAll<HTMLElement>('[data-i18n]')].map(element => ({
+  element, key: element.dataset.i18n as TranslationKey,
 }));
 setLanguage(chooseLanguage(navigator.language, languagePreferences.value));
 document.documentElement.lang = getLanguage();
-for (const { element, ja, en } of staticLabels) element.textContent = getLanguage() === 'ja' ? ja : en;
+for (const { element, key } of staticLabels) element.textContent = t(key);
+function renderStaticAccessibility(): void {
+  for (const element of document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]')) {
+    const key = element.dataset.i18nAriaLabel as TranslationKey | undefined;
+    if (key) element.setAttribute('aria-label', t(key));
+  }
+}
+renderStaticAccessibility();
 
 const el = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const displayPreferences = new DisplayPreferenceStore(() => localStorage);
@@ -78,10 +85,10 @@ const session = new RelaySession({
   settings: relaySettings, legacyToken: pairing.read(), appOrigin: location.origin,
   fetch: (input, init) => fetch(input, init),
   rejected: reason => forgetPairing(reason === 'expired'
-    ? t('接続の有効期限が切れたか、Mac側で解除されました。新しい接続コードで接続してください。')
-    : t('接続設定が無効になりました。Macで新しい接続コードを発行してください。')),
+    ? t('even.pairing_expired_or_was_revoked_on_your_mac_connect_using')
+    : t('even.pairing_has_expired_or_been_revoked_create_a_new_pairing')),
   superseded: () => retireSupersededRuntime(),
-  persistenceFailed: () => { notice.textContent = t('Even側への接続情報の保存を確認できません。次回の更新時に再接続が必要な場合があります。'); },
+  persistenceFailed: () => { notice.textContent = t('even.could_not_confirm_saving_pairing_in_even_you_may_need'); },
 });
 if (session.credentials && disconnectJournal.blocks(session.credentials)) session.use(undefined);
 const disconnectRetry = new DisconnectRetry({
@@ -90,9 +97,9 @@ const disconnectRetry = new DisconnectRetry({
   changed: ({ pending, durable }) => {
     if (exited || session.token || !showDisconnectState) return;
     if (!pending) relaySettings.forget();
-    pairingNotice.textContent = !pending ? t('接続を解除しました。') : durable
-      ? t('この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。')
-      : t('この端末では停止しましたが、解除を保存できません。開き直すと接続が戻る場合があります。アプリを開いたままにしてください。');
+    pairingNotice.textContent = !pending ? t('even.pairing_revoked_and_removed') : durable
+      ? t('even.stopped_on_this_device_removal_on_your_mac_will_complete')
+      : t('even.stopped_on_this_device_but_the_disconnect_could_not_be');
   },
 });
 const setupPanel = el<HTMLDetailsElement>('mac-setup');
@@ -108,11 +115,11 @@ el('copy-mac-url').onclick = async () => {
   status.textContent = '';
   try {
     await navigator.clipboard.writeText(url);
-    status.textContent = t('URLをコピーしました。Macのブラウザーで開いてください。');
-    showCopyToast(t('コピーしました'));
+    status.textContent = t('even.url_copied_open_it_in_a_browser_on_your_mac');
+    showCopyToast(t('even.copied'));
   } catch {
-    status.textContent = t('コピーできませんでした。表示されているURLをMacのブラウザーに入力してください。');
-    showCopyToast(t('コピーできませんでした'));
+    status.textContent = t('even.could_not_copy_enter_the_displayed_url_in_your_mac');
+    showCopyToast(t('even.could_not_copy'));
   }
 };
 // Hide the fixed display-settings action bar while working in setup.
@@ -150,23 +157,29 @@ const exitDiagnostics = new ExitDiagnostics({
   log: text => console.info(text),
 });
 exitDiagnostics.record('boot');
-const language = el<HTMLSelectElement>('language'); language.value = languagePreferences.value;
+const language = el<HTMLSelectElement>('language');
+function renderLanguageOptions(): void {
+  const escape = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  language.innerHTML = `<option value="auto">${escape(t('even.automatic'))}</option>` + supportedLanguages.map(locale => `<option value="${locale}">${escape(languageName(locale))}</option>`).join('');
+  language.value = languagePreferences.value;
+}
+renderLanguageOptions();
 renderPhoneLabels();
 renderRecordControl('idle');
 language.onchange = () => {
-  if (busy || recorder.state !== 'idle') { language.value = languagePreferences.value; notice.textContent = t('処理が終わるまでお待ちください。'); return; }
-  if (!['auto', 'ja', 'en'].includes(language.value)) return;
-  void languagePreferences.save(language.value as 'auto' | 'ja' | 'en').then(saved => {
-    if (!saved && !exited) notice.textContent = t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  if (busy || recorder.state !== 'idle') { language.value = languagePreferences.value; notice.textContent = t('even.please_wait_for_the_current_task_to_finish'); return; }
+  if (!isLanguagePreference(language.value)) return;
+  void languagePreferences.save(language.value).then(saved => {
+    if (!saved && !exited) notice.textContent = t('even.settings_could_not_be_saved_here_they_may_reset_when');
   });
   applyLanguage();
 };
 const progress = new InteractionStatus();
 progress.connection = session.token ? 'connecting' : 'unpaired';
-let hostName = t('接続先');
+let hostName = t('even.relay');
 let namedHost = false;
-let baseStatus = t('長押しで話してください');
-let renderBaseStatus: () => string = () => t('長押しで話してください');
+let baseStatus = t('even.hold_to_speak');
+let renderBaseStatus: () => string = () => t('even.hold_to_speak');
 let statusTimer: ReturnType<typeof setInterval> | undefined;
 let selectedSTT: STTProvider | undefined;
 let selectedSTTModel: unknown;
@@ -188,21 +201,21 @@ const locationSharing = new LocationSharing({
 });
 function renderLocationStatus(): void {
   if (exited) return;
-  const s = locationSharing.status(), ja = getLanguage() === 'ja';
+  const s = locationSharing.status();
   el<HTMLInputElement>('location-share').checked = s.enabled;
   const labels = {
-    off: ['共有していません', 'Not sharing'], starting: ['位置情報を準備しています…', 'Starting location sharing…'],
-    waiting: ['現在地を取得しています…', 'Waiting for a current location…'], sharing: ['現在地を共有中', 'Sharing your current location'],
-    stale: ['現在地の更新を待っています', 'Waiting for a fresh location'],
-    unavailable: ['位置情報を取得できません。Evenアプリの位置情報の許可を確認し、共有をオフ・オンしてください。', 'Location is unavailable. Check location permission for the Even app, then turn sharing off and on.'],
-    offline: ['Macへの位置共有を再接続しています…', 'Reconnecting location sharing to your Mac…'],
-    stopping: ['この端末の共有は停止しました。Mac側の停止確認を待っています。', 'Sharing has stopped on this device. Waiting to confirm the stop on your Mac.'],
-  };
-  el('location-status').textContent = labels[s.state][ja ? 0 : 1] + (!s.saved ? (ja ? ' 設定の保存を確認できません。' : ' Settings could not be saved.') : '');
+    off: 'even.not_sharing', starting: 'even.starting_location_sharing',
+    waiting: 'even.waiting_for_a_current_location', sharing: 'even.sharing_your_current_location',
+    stale: 'even.waiting_for_a_fresh_location',
+    unavailable: 'even.location_is_unavailable_check_location_permission_for_the_even_app',
+    offline: 'even.reconnecting_location_sharing_to_your_mac',
+    stopping: 'even.sharing_has_stopped_on_this_device_waiting_to_confirm_the',
+  } as const;
+  el('location-status').textContent = t(labels[s.state]) + (!s.saved ? (t('even.settings_could_not_be_saved')) : '');
   el('location-dot-status').textContent = !s.enabled ? '' : s.dotSubscribed ?
-    (ja ? 'Dotが位置の変化を受け取れる状態です。知らせる内容とタイミングはDotが判断します。' : 'Dot is ready to receive location changes and decide whether and when to reach out.') :
-    (ja ? 'Dot側の位置共有の接続を待っています。' : 'Waiting for Dot to connect to location sharing.');
-  el('location-diagnostic').textContent = `${ja ? '位置共有' : 'Location'}: ${s.state} · ${ja ? '受信' : 'received'} ${s.receivedCount ?? 0} · ${ja ? '案内' : 'announcements'} ${s.announcementCount ?? 0}${s.accuracy === undefined ? '' : ` · ±${Math.round(s.accuracy)}m`}${s.receivedAt ? ` · ${new Date(s.receivedAt).toLocaleTimeString()}` : ''}`;
+    (t('even.dot_is_ready_to_receive_location_changes_and_decide_whether')) :
+    (t('even.waiting_for_dot_to_connect_to_location_sharing'));
+  el('location-diagnostic').textContent = `${t('even.location')}: ${s.state} · ${t('even.received')} ${s.receivedCount ?? 0} · ${t('even.announcements')} ${s.announcementCount ?? 0}${s.accuracy === undefined ? '' : ` · ±${Math.round(s.accuracy)}m`}${s.receivedAt ? ` · ${new Date(s.receivedAt).toLocaleTimeString()}` : ''}`;
 }
 el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabled(el<HTMLInputElement>('location-share').checked);
 const connectionTransitions = new ConnectionTransitions({
@@ -222,7 +235,7 @@ const connectionTransitions = new ConnectionTransitions({
   },
   resetConnectionInfo: () => {
     subscribed = false; progress.dotConnected = false;
-    hostName = t('接続先'); namedHost = false; selectedSTT = readSTTProvider(undefined); selectedSTTModel = undefined;
+    hostName = t('even.relay'); namedHost = false; selectedSTT = readSTTProvider(undefined); selectedSTTModel = undefined;
   },
 });
 function forgetPairing(message: string, persist = true): void {
@@ -230,8 +243,8 @@ function forgetPairing(message: string, persist = true): void {
   pairingInput.value = ''; offeredInvite = undefined;
   showSetup(true);
   progress.connection = 'unpaired'; syncRuntimeEffects();
-  display(() => t('再接続が必要です'), message);
-  el('dot-status').textContent = t('再接続が必要です');
+  display(() => t('even.reconnect_your_mac'), message);
+  el('dot-status').textContent = t('even.reconnect_your_mac');
   notice.textContent = ''; pairingNotice.textContent = message;
   setupPanel.open = true;
 }
@@ -264,7 +277,7 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
       relayRestored = false;
       connectionTransitions.beginPairing();
       progress.connection = 'connecting'; syncRuntimeEffects();
-      pairingNotice.textContent = t('接続設定を確認できません。復元せずに再確認しています。');
+      pairingNotice.textContent = t('even.could_not_verify_saved_connection_settings_retrying_before_restoring_the');
     }
     const delay = Math.min(10000, 2000 * 2 ** Math.min(disconnectRestoreFailures++, 3));
     disconnectRestoreTimer = setTimeout(() => { void restoreRelay(appBridge); }, delay);
@@ -282,11 +295,11 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
   let saved = await relaySettings.attach(runtimeNative.storage(appBridge));
   if (version !== session.version || exited) return;
   relayRestored = true;
-  if (pairingNotice.textContent === t('接続設定を確認できません。復元せずに再確認しています。')) pairingNotice.textContent = '';
+  if (pairingNotice.textContent === t('even.could_not_verify_saved_connection_settings_retrying_before_restoring_the')) pairingNotice.textContent = '';
   if (saved && disconnectJournal.blocks(saved)) saved = undefined;
   if (disconnectJournal.pending.length) {
     showDisconnectState = true;
-    if (!saved) forgetPairing(t('この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。'), false);
+    if (!saved) forgetPairing(t('even.stopped_on_this_device_removal_on_your_mac_will_complete'), false);
     void disconnectRetry.run();
   }
   // Legacy development credentials are separate from packaged pairing.
@@ -296,22 +309,22 @@ async function restoreRelayAttempt(appBridge: EvenAppBridge): Promise<void> {
     return;
   }
   connectionTransitions.restore(saved);
-  if (!saved) { showSetup(true); progress.connection = 'unpaired'; syncRuntimeEffects(); display(() => t('再接続が必要です'), () => t('接続先を確認して「接続」を押してください。')); return; }
-  showSetup(false); progress.connection = 'connecting'; syncRuntimeEffects(); display(() => t('再接続中'), idleVoicePrompt);
+  if (!saved) { showSetup(true); progress.connection = 'unpaired'; syncRuntimeEffects(); display(() => t('even.reconnect_your_mac'), () => t('even.check_the_mac_address_below_then_tap_connect')); return; }
+  showSetup(false); progress.connection = 'connecting'; syncRuntimeEffects(); display(() => t('even.reconnecting'), idleVoicePrompt);
   updates.start(true);
 }
 
 async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, trace?: string, requestSignal?: AbortSignal): Promise<T> {
-  if (!relayRestored) throw new Error(t('接続を確認中'));
+  if (!relayRestored) throw new Error(t('even.connecting'));
   const version = session.version;
   const current = () => { if (exited || !session.isCurrent(version)) throw new Error('Connection changed'); };
   const response = await session.request(path, method, body, trace, requestSignal);
   current();
   if (!response.ok && path === '/api/transcribe' && response.status === 422) {
     const failure = await response.json().catch(() => ({})); current();
-    throw new Error(sttErrorMessage(failure.code) ?? t('処理できませんでした。接続または録音を確認してください。'));
+    throw new Error(sttErrorMessage(failure.code) ?? t('even.could_not_complete_the_request_check_the_connection_or_recording'));
   }
-  if (!response.ok) throw new Error(response.status === 401 && !session.credentials?.resumeToken ? t('Macで新しい接続コードを発行し、貼り付けてください。') : t('処理できませんでした。接続または録音を確認してください。'));
+  if (!response.ok) throw new Error(response.status === 401 && !session.credentials?.resumeToken ? t('even.create_a_new_pairing_code_on_your_mac_and_paste') : t('even.could_not_complete_the_request_check_the_connection_or_recording'));
   const result = response.status === 204 ? undefined : await response.json();
   current();
   return result as T;
@@ -329,7 +342,7 @@ function showMessage(): void {
   display(() => {
     const item = current();
     return item.reply ? `${conversation.position(item.id)}/${conversation.count}` :
-      item.status === 'failed' ? t('送信未確認') : t('{name}の返信待ち').replace('{name}', wakeNamePreferences.assistantName);
+      item.status === 'failed' ? t('even.delivery_unconfirmed') : t('even.waiting_for_name', { name: wakeNamePreferences.assistantName });
   }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id);
 }
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
@@ -349,12 +362,12 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
     progress.complete(message.id);
     timing.mark(message.id, 'reply_received');
     if (tts && 'speechSynthesis' in window) {
-      const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US';
+      const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = speechLocale();
       playback.speak(speech);
     }
   }
   if (update.waiting) progress.restoreWaiting(update.waiting.id, update.waiting.createdAt, Date.now());
-  el('dot-status').textContent = `${hostName} · ${subscribed ? t('Dot接続済み') : t('Dot未接続')}`;
+  el('dot-status').textContent = `${hostName} · ${subscribed ? t('even.dot_connected') : t('even.dot_disconnected')}`;
   flushPendingDisplay();
   updateRuntime();
 }
@@ -371,24 +384,24 @@ function flushPendingDisplay(): void {
 
 const updates = new LiveUpdates<Snapshot>((revision, signal) => session.updates<Snapshot>(revision, signal), receiveUpdate, () => {
   progress.connection = 'offline'; updateRuntime();
-  el('dot-status').textContent = `${hostName} · ${t('再接続中')}`;
+  el('dot-status').textContent = `${hostName} · ${t('even.reconnecting')}`;
 });
 
 function offerInvite(raw: string): void {
   offeredInvite = parseInvite(raw);
   el('pair-destination').textContent = offeredInvite.origin;
   el('pair').hidden = false;
-  pairingNotice.textContent = t('接続先を確認して「接続」を押してください。');
+  pairingNotice.textContent = t('even.check_the_mac_address_below_then_tap_connect');
 }
 pairingInput.oninput = () => {
   offeredInvite = undefined; el('pair-destination').textContent = ''; el('pair').hidden = true;
-  try { offerInvite(pairingInput.value); } catch { pairingNotice.textContent = t('接続コードが無効か期限切れです。Macで新しく発行してください。'); }
+  try { offerInvite(pairingInput.value); } catch { pairingNotice.textContent = t('even.the_pairing_code_is_invalid_or_expired_create_a_new'); }
 };
 el('pair').onclick = async () => {
   if (busy || recorder.state !== 'idle' || exited) return;
   let invite: PairingInvite;
   try { invite = parseInvite(offeredInvite ? JSON.stringify(offeredInvite) : pairingInput.value); }
-  catch { pairingNotice.textContent = getLanguage() === 'ja' ? 'Macで接続コードをコピーして、全体を貼り付けてください。' : 'Copy the pairing code on your Mac and paste the entire code here.'; return; }
+  catch { pairingNotice.textContent = t('even.copy_the_pairing_code_on_your_mac_and_paste_the'); return; }
   explicitConnection = true; pairingExchange = true;
   el<HTMLButtonElement>('forget-pairing').disabled = true;
   busy = true; const button = el<HTMLButtonElement>('pair'); button.disabled = true;
@@ -406,16 +419,16 @@ el('pair').onclick = async () => {
     const nativeRetained = await relaySettings.nativeSaved();
     if (version !== session.version || exited) return;
     pairingNotice.textContent = '';
-    notice.textContent = nativeRetained && credentials.resumeToken ? t('接続しました。更新後の再接続情報も保存しました。') : retained ? t('接続しました。更新後の自動復元は未確認です。') : t('接続しました。この画面では設定を保存できないため、閉じた後は新しい接続コードで接続してください。');
-    el('diagnostic').textContent = getLanguage() === 'ja' ? '接続確認成功' : 'Connection verified';
+    notice.textContent = nativeRetained && credentials.resumeToken ? t('even.connected_update_recovery_details_are_saved_too') : retained ? t('even.connected_automatic_recovery_after_an_update_is_not_verified') : t('even.connected_but_storage_is_unavailable_pair_again_after_closing_the');
+    el('diagnostic').textContent = t('even.connection_verified');
     showSetup(false);
   } catch (error) {
     if (version !== session.version || exited) return;
     if (!accepted) explicitConnection = false;
     progress.connection = session.token ? 'offline' : 'unpaired'; updateRuntime();
     setupPanel.open = true;
-    pairingNotice.textContent = t('Macが停止・スリープ・オフラインの場合は接続できません。');
-    el('diagnostic').textContent = getLanguage() === 'ja' ? 'Tailscale接続、Macの状態、コードの期限を確認してください。' : 'Check Tailscale, your Mac, and code expiry.';
+    pairingNotice.textContent = t('even.your_mac_must_be_awake_and_online');
+    el('diagnostic').textContent = t('even.check_tailscale_your_mac_and_code_expiry');
     if (session.token && relayRestored) updates.start(true);
   } finally { pairingExchange = false; el<HTMLButtonElement>('forget-pairing').disabled = false; if (!exited && session.isCurrent(version)) { busy = false; button.disabled = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); } }
 };
@@ -424,17 +437,17 @@ el('forget-pairing').onclick = () => {
   const credentials = session.credentials;
   if (credentials) disconnectJournal.add(credentials);
   showDisconnectState = true;
-  forgetPairing(credentials ? t('この端末では停止しました。Mac側の解除を確認しています。') : t('この端末の接続設定を削除しました。Mac側の解除は未確認です。Macの「Evenの接続設定」→「Evenの接続をすべて解除」で解除してください。ほかのEven接続も解除されます。'), !credentials);
+  forgetPairing(credentials ? t('even.stopped_on_this_device_confirming_removal_on_your_mac') : t('even.connection_settings_were_removed_from_this_device_mac_side_removal'), !credentials);
   busy = false;
-  display(() => t('接続設定が必要'), () => t('スマートフォンで接続設定を開いてください'));
+  display(() => t('even.pair_with_your_mac'), () => t('even.open_setup_on_your_phone'));
   if (credentials) void disconnectRetry.run();
 };
 el('tts').onclick = () => {
   tts = !tts; renderReadAloudControl();
   void readAloudPreferences.save(tts).then(saved => {
-    if (!saved && !exited) notice.textContent = t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+    if (!saved && !exited) notice.textContent = t('even.settings_could_not_be_saved_here_they_may_reset_when');
   });
-  if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('読み上げをオンにしました')); speech.lang = getLanguage() === 'ja' ? 'ja-JP' : 'en-US'; playback.speak(speech); }
+  if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('even.read_aloud_is_on')); speech.lang = speechLocale(); playback.speak(speech); }
   else playback.cancel();
   updateRuntime();
 };
@@ -460,7 +473,7 @@ sendButton.onclick = async () => {
     const message = await api<Message>('/api/utterances', 'POST', JSON.stringify({id:pendingId,text}));
     timing.mark(pendingId!, 'utterance_accepted');
     reportTiming(pendingId!);
-    if (message.status === 'failed') throw new Error(t('配送を確認できませんでした。同じ発話は重複送信しません。'));
+    if (message.status === 'failed') throw new Error(t('even.delivery_was_not_confirmed_retrying_the_same_message_will_not'));
     progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();
     transcript.value = ''; resizeTranscript(); pendingId = undefined; pendingText = undefined;
@@ -470,7 +483,7 @@ sendButton.onclick = async () => {
   } catch (error) {
     if (version !== session.version || exited) return;
     progress.setPhase('error'); notice.textContent = (error as Error).message;
-    display(() => t('送信を確認できませんでした'), (error as Error).message);
+    display(() => t('even.delivery_not_confirmed'), (error as Error).message);
   }
   finally { if (!exited && session.isCurrent(version)) { busy = false; sendButton.disabled = !transcript.value.trim(); flushPendingDisplay(); syncRuntimeEffects(); } }
 };
@@ -482,35 +495,35 @@ let discarding = false;
 let holdRecording = false;
 let operationPreferencesReady = false;
 let transcriptionController: AbortController | undefined;
-let lastDisplayText = t('長押しで話してください');
-let renderDisplayText: () => string = () => t('長押しで話してください');
+let lastDisplayText = t('even.hold_to_speak');
+let renderDisplayText: () => string = () => t('even.hold_to_speak');
 
 function syncRuntimeEffects(): void { runtimeEffects.sync(); }
 function updateRuntime(sendToG2 = true): void {
   syncRuntimeEffects(); refreshStatus(sendToG2);
 }
 function hudCaption(): string {
-  return recorder.source === 'wake' && recorder.state === 'recording' ? t('話してください') : progress.caption(baseStatus, conversation.visibleId, wakeNamePreferences.assistantName);
+  return recorder.source === 'wake' && recorder.state === 'recording' ? t('even.go_ahead') : progress.caption(baseStatus, conversation.visibleId, wakeNamePreferences.assistantName);
 }
 function keepWakeConversation(): boolean {
   return recorder.source === 'wake' && !!conversation.visible;
 }
 function idleVoicePrompt(): string {
   const wake = operationPreferences.wakeWord && wakeState === 'listening';
-  if (operationPreferences.disableHoldRecording) return wake ? wakeText('{wake}で話せます') : t('スマートフォンでテキストを入力してください');
-  return wake ? wakeText('{wake} または長押しで話してください') : t('長押しで話してください');
+  if (operationPreferences.disableHoldRecording) return wake ? wakeText('even.ready_for_wake') : t('even.type_a_message_on_your_phone');
+  return wake ? wakeText('even.say_wake_or_hold_to_speak') : t('even.hold_to_speak');
 }
-function wakeText(key: Parameters<typeof t>[0]): string { return t(key).replace('{wake}', `Hey ${wakeNamePreferences.wakeName}`); }
+function wakeText(key: Parameters<typeof t>[0]): string { return t(key, { wake: `Hey ${wakeNamePreferences.wakeName}` }); }
 function renderWakeState(): void {
-  const labels = { off: '', loading: wakeText('{wake}を準備中…'), listening: '',
-    paused: wakeText('{wake}は一時停止中'), error: wakeText('{wake}を使えません。オフにしてから再度オンにしてください。') };
+  const labels = { off: '', loading: wakeText('even.preparing_wake'), listening: '',
+    paused: wakeText('even.wake_is_paused'), error: wakeText('even.wake_is_unavailable_turn_it_off_and_on_to_retry') };
   el('wake-status').textContent = labels[wakeState];
 }
 const playback = new SpeechPlayback({
   synthesis: () => window.speechSynthesis,
   canSpeak: () => recorder.state === 'idle' && !busy,
   changed: () => syncRuntimeEffects(),
-  failed: () => { notice.textContent = t('読み上げできませんでした。画面の返信をご確認ください。'); },
+  failed: () => { notice.textContent = t('even.read_aloud_failed_please_read_the_reply_on_screen'); },
   now: () => performance.now(), schedule: (callback, ms) => setTimeout(callback, ms), cancelTimer: timer => clearTimeout(timer),
 });
 const g2Display = new G2Display({
@@ -525,8 +538,8 @@ const g2Display = new G2Display({
     }));
   },
   failed: kind => {
-    if (kind === 'status') connection.textContent = t('G2の表示更新を確認できません');
-    else notice.textContent = t('G2表示を更新できませんでした。接続を確認してください。');
+    if (kind === 'status') connection.textContent = t('even.could_not_confirm_the_g2_display_update');
+    else notice.textContent = t('even.could_not_update_the_g2_display_check_the_connection');
   },
   timing: (id, stage) => timing.mark(id, stage), report: reportTiming,
 });
@@ -538,20 +551,20 @@ function phoneLabel(id: string, label: string): void {
   el(id).title = label;
 }
 function renderPhoneLabels(): void {
-  transcript.placeholder = t('Dotにメッセージ…');
-  phoneLabel('transcript', t('Dotへのメッセージ'));
-  phoneLabel('previous', t('前の会話'));
-  phoneLabel('next', t('次の会話'));
-  phoneLabel('discard', t('録音を破棄'));
-  phoneLabel('send', t('Dotに送信'));
+  transcript.placeholder = t('even.message_dot');
+  phoneLabel('transcript', t('even.message_to_dot'));
+  phoneLabel('previous', t('even.previous_conversation'));
+  phoneLabel('next', t('even.next_conversation'));
+  phoneLabel('discard', t('even.discard_recording'));
+  phoneLabel('send', t('even.send_to_dot'));
 }
 function renderRecordControl(state: VoiceInput['state']): void {
   recordButton.dataset.recordState = state;
-  phoneLabel('record', state === 'idle' ? t('録音を開始') : state === 'stop-error' ? t('マイク停止を再試行') : t('録音を停止'));
+  phoneLabel('record', state === 'idle' ? t('even.start_recording') : state === 'stop-error' ? t('even.retry_stopping_the_microphone') : t('even.stop_recording'));
 }
 function renderReadAloudControl(): void {
   el('tts').setAttribute('aria-pressed', String(tts));
-  phoneLabel('tts', `${t('読み上げ')} ${tts ? 'ON' : 'OFF'}`);
+  phoneLabel('tts', `${t('even.read_aloud')} ${tts ? 'ON' : 'OFF'}`);
 }
 function renderPhoneStatus(): void {
   const selected = conversation.selected;
@@ -559,9 +572,9 @@ function renderPhoneStatus(): void {
   const counter = el('conversation-position');
   if (counter.textContent !== position) counter.textContent = position;
   const state = recorder.state;
-  const status = state === 'stop-error' ? t('マイク停止を再試行') : state === 'stopping' ? t('マイクを停止中…') :
-    state === 'starting' ? t('マイク準備中') : state === 'recording' ? `${t('録音中')} · ${t('録音ボタンで停止します')}` :
-    progress.phase === 'recognizing' ? t('認識中') : progress.phase === 'sending' ? t('送信中') : '';
+  const status = state === 'stop-error' ? t('even.retry_stopping_the_microphone') : state === 'stopping' ? t('even.stopping_microphone') :
+    state === 'starting' ? t('even.starting_microphone') : state === 'recording' ? `${t('even.recording')} · ${t('even.use_the_recording_button_to_stop')}` :
+    progress.phase === 'recognizing' ? t('even.transcribing') : progress.phase === 'sending' ? t('even.sending') : '';
   const caption = el('phone-control-status');
   caption.dataset.state = state;
   if (caption.textContent !== status) caption.textContent = status;
@@ -608,19 +621,21 @@ function applyLanguage(): void {
   const next = chooseLanguage(navigator.language, languagePreferences.value);
   if (next === getLanguage()) return;
   setLanguage(next); document.documentElement.lang = next;
+  renderLanguageOptions();
+  renderStaticAccessibility();
   renderLocationStatus();
-  for (const { element, ja, en } of staticLabels) {
+  for (const { element, key } of staticLabels) {
     // Runtime status/controls may have replaced the initial label.
-    if (element.textContent === ja || element.textContent === en) element.textContent = next === 'ja' ? ja : en;
+    if (supportedLanguages.some(locale => element.textContent === message(key, locale))) element.textContent = t(key);
   }
-  for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status', 'hold-save-status']) {
+  for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status', 'hold-save-status', 'diagnostic']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
   renderPhoneLabels(); renderRecordControl(recorder.state);
   renderWakeState(); renderOperationSettings();
   renderReadAloudControl();
-  if (!namedHost) hostName = t('接続先');
-  el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('Dot接続済み') : t('Dot未接続')) : progress.connection === 'unpaired' ? t('接続設定が必要') : t('再接続中')}`;
+  if (!namedHost) hostName = t('even.relay');
+  el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('even.dot_connected') : t('even.dot_disconnected')) : progress.connection === 'unpaired' ? t('even.pair_with_your_mac') : t('even.reconnecting')}`;
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
   el('hud-content').textContent = lastDisplayText;
   g2Display.invalidate();
@@ -648,7 +663,7 @@ const recorder = new VoiceInput({
     progress.begin(audioTraceId, 'recognizing');
     busy = true; syncRuntimeEffects();
     if (keepWakeConversation()) updateRuntime();
-    else display(() => t('認識中'), () => getLanguage() === 'ja' ? `${hostName}で処理しています…` : `Processing on ${hostName}…`);
+    else display(() => t('even.transcribing'), () => t('even.host_processing', { host: hostName }));
     const trace = audioTraceId;
     timing.mark(trace, 'asr_sent');
     void api<{text:string}>('/api/transcribe', 'POST', wav, trace, controller.signal).then(result => {
@@ -658,18 +673,18 @@ const recorder = new VoiceInput({
       if (!text.trim()) {
         busy = false; clearClip(); progress.setPhase('idle');
         if (keepWakeConversation()) updateRuntime();
-        else display(() => t('G2接続済み'), idleVoicePrompt);
+        else display(() => t('even.g2_connected'), idleVoicePrompt);
         flushPendingDisplay();
         return;
       }
       transcript.value = text; resizeTranscript(); sendButton.disabled = false;
       progress.review(); notice.textContent = '';
-      display(() => t('認識完了'), text);
+      display(() => t('even.transcribed'), text);
       busy = false; clearClip();
       if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       updateRuntime();
-    }).catch(error => { if (exited || version !== session.version || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('音声を認識できませんでした'), error.message); flushPendingDisplay(); })
+    }).catch(error => { if (exited || version !== session.version || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('even.could_not_transcribe_audio'), error.message); flushPendingDisplay(); })
       .finally(() => { if (transcriptionController === controller) transcriptionController = undefined; });
   },
   onState: state => {
@@ -692,10 +707,10 @@ const recorder = new VoiceInput({
       if (state === 'idle' && !clip && !busy) {
         progress.setPhase('idle');
         if (keepWakeConversation()) updateRuntime();
-        else display(() => t('G2接続済み'), () => recorder.source === 'wake' ? idleVoicePrompt() : (operationPreferences.disableHoldRecording ? idleVoicePrompt() : t('音声を取得できませんでした。もう一度長押ししてください。')));
+        else display(() => t('even.g2_connected'), () => recorder.source === 'wake' ? idleVoicePrompt() : (operationPreferences.disableHoldRecording ? idleVoicePrompt() : t('even.no_audio_received_hold_to_speak_again')));
       }
       if (state === 'idle' && conversation.hasPendingDisplay) flushPendingDisplay();
-      if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('マイク準備中'), () => holdRecording ? t('指を離すと停止します') : t('録音ボタンで停止します')); }
+      if (state === 'starting') { progress.setPhase('microphone'); audioTraceId = undefined; clearClip(); display(() => t('even.starting_microphone'), () => holdRecording ? t('even.release_to_stop') : t('even.use_the_recording_button_to_stop')); }
       if (state === 'recording') {
         standby?.activity();
         discardButton.disabled = false;
@@ -703,12 +718,12 @@ const recorder = new VoiceInput({
         if (recorder.source === 'wake') {
           audioTraceId = undefined; clearClip(); discardButton.disabled = false;
           if (keepWakeConversation()) updateRuntime();
-          else display(() => t('話してください'), () => el<HTMLInputElement>('auto-send').checked ? t('話し終わると送信します') : t('話し終わると認識します'));
-        } else display(() => t('録音中'), () => `${holdRecording ? t('指を離すと停止します') : t('録音ボタンで停止します')}\n${t('最長30秒')}`);
+          else display(() => t('even.go_ahead'), () => el<HTMLInputElement>('auto-send').checked ? t('even.sends_when_you_finish_speaking') : t('even.transcribes_when_you_finish_speaking'));
+        } else display(() => t('even.recording'), () => `${holdRecording ? t('even.release_to_stop') : t('even.use_the_recording_button_to_stop')}\n${t('even.up_to_30_seconds')}`);
       }
     } finally { syncRuntimeEffects(); renderPhoneStatus(); }
   },
-  onError: message => { if (exited) return; progress.setPhase('error'); syncRuntimeEffects(); notice.textContent = message; display(() => t('確認が必要'), message); },
+  onError: message => { if (exited) return; progress.setPhase('error'); syncRuntimeEffects(); notice.textContent = message; display(() => t('even.action_needed'), message); },
 });
 
 const runtimeEffects = new RuntimeEffects({
@@ -733,14 +748,14 @@ function renderWakeNameControls(): void {
 }
 async function saveWakeName(custom: boolean): Promise<void> {
   if (busy || recorder.state !== 'idle') {
-    el('wake-name-status').textContent = t('処理が終わるまでお待ちください。');
+    el('wake-name-status').textContent = t('even.please_wait_for_the_current_task_to_finish');
     if (!custom) el<HTMLInputElement>('custom-wake-name').checked = wakeNamePreferences.value.custom;
     return;
   }
   const checked = validateWakeName(custom ? el<HTMLInputElement>('wake-name').value : wakeNamePreferences.value.name);
   if (checked.error) {
     el<HTMLInputElement>('wake-name').setAttribute('aria-invalid', 'true');
-    el('wake-name-status').textContent = t(checked.error === 'reserved' ? 'その名前は使えません' : '呼び名は英字1〜24文字で入力してください');
+    el('wake-name-status').textContent = t(checked.error === 'reserved' ? 'even.this_name_cannot_be_used' : 'even.use_1_24_english_letters_for_the_name');
     return;
   }
   wakeNameEdited = true;
@@ -755,12 +770,12 @@ async function saveWakeName(custom: boolean): Promise<void> {
   // Draft edits only invalidate their own success message. Persistence failure
   // stays visible independently; a newer save alone supersedes this result.
   if (!exited && persistenceVersion === wakeNamePersistenceVersion) {
-    el('wake-name-save-status').textContent = retained ? '' : t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+    el('wake-name-save-status').textContent = retained ? '' : t('even.settings_could_not_be_saved_here_they_may_reset_when');
   }
   await applying;
   if (exited || version !== wakeNameSaveVersion) return;
   renderWakeState(); updateRuntime();
-  el('wake-name-status').textContent = retained ? t('呼び名を保存しました') : '';
+  el('wake-name-status').textContent = retained ? t('even.name_saved') : '';
 }
 el<HTMLInputElement>('custom-wake-name').onchange = () => {
   wakeNameEdited = true; wakeNameSaveVersion++;
@@ -768,7 +783,7 @@ el<HTMLInputElement>('custom-wake-name').onchange = () => {
   el('wake-name-status').textContent = '';
   if (!custom) { void saveWakeName(false); return; }
   el('wake-name-fields').hidden = false;
-  el('wake-name-status').textContent = t('変更はまだ保存されていません');
+  el('wake-name-status').textContent = t('even.changes_not_saved');
   el<HTMLInputElement>('wake-name').focus();
 };
 el<HTMLInputElement>('wake-name').oninput = () => {
@@ -777,7 +792,7 @@ el<HTMLInputElement>('wake-name').oninput = () => {
   const reserved = validateWakeName(input.value).error === 'reserved';
   if (reserved) input.setAttribute('aria-invalid', 'true');
   else input.removeAttribute('aria-invalid');
-  el('wake-name-status').textContent = t(reserved ? 'その名前は使えません' : '変更はまだ保存されていません');
+  el('wake-name-status').textContent = t(reserved ? 'even.this_name_cannot_be_used' : 'even.changes_not_saved');
 };
 el<HTMLFormElement>('wake-name-form').onsubmit = event => {
   event.preventDefault(); void saveWakeName(el<HTMLInputElement>('custom-wake-name').checked);
@@ -786,7 +801,7 @@ renderWakeNameControls();
 void recorder.setWakeName(wakeNamePreferences.wakeName);
 
 function recordingHint(): string {
-  return operationPreferences.disableHoldRecording ? t('長押し録音は無効です') : t('長押しで録音 · 指を離すと停止');
+  return operationPreferences.disableHoldRecording ? t('even.hold_to_record_is_disabled') : t('even.hold_to_record_release_to_stop');
 }
 function renderOperationSettings(): void {
   el<HTMLInputElement>('disable-hold-recording').checked = operationPreferences.disableHoldRecording;
@@ -796,7 +811,7 @@ function renderOperationSettings(): void {
 function refreshIdleVoicePrompt(): void {
   renderOperationSettings();
   if (recorder.state === 'idle' && progress.phase === 'idle' && !conversation.selected && !busy) {
-    display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? idleVoicePrompt() : t('スマートフォンで接続設定を開いてください'));
+    display(() => session.token ? t('even.g2_connected') : t('even.pair_with_your_mac'), () => session.token ? idleVoicePrompt() : t('even.open_setup_on_your_phone'));
   } else queueDisplayFrame();
 }
 renderOperationSettings();
@@ -809,7 +824,7 @@ el<HTMLInputElement>('disable-hold-recording').onchange = () => {
   }
   refreshIdleVoicePrompt();
   void saved.then(saved => {
-    if (!exited) el('hold-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
+    if (!exited) el('hold-save-status').textContent = saved ? '' : t('even.could_not_save_settings');
   });
 };
 
@@ -819,15 +834,15 @@ el<HTMLInputElement>('wake-word').onchange = () => {
   const saved = operationPreferences.save(enabled);
   void recorder.setEnabled(enabled).then(() => { if (!exited) refreshIdleVoicePrompt(); });
   void saved.then(saved => {
-    if (!exited) el('operation-save-status').textContent = saved ? '' : t('設定を保存できませんでした');
+    if (!exited) el('operation-save-status').textContent = saved ? '' : t('even.could_not_save_settings');
   });
 };
 
 function startRecording(fromHold = false): void {
   if (exited || !operationPreferencesReady || operationPreferences.disableHoldRecording) return;
-  if (!glassesReady) { notice.textContent = t('G2との接続と起動状態を確認し、Dot Linkを開き直してください。'); return; }
-  if (busy) { notice.textContent = t('処理が終わるまでお待ちください。'); return; }
-  if (!session.token || !subscribed || progress.connection !== 'online') { notice.textContent = getLanguage() === 'ja' ? `${hostName}とDotへの接続を確認してください。` : `Check the connection to ${hostName} and Dot.`; return; }
+  if (!glassesReady) { notice.textContent = t('even.check_that_g2_is_connected_and_available_then_reopen_dot'); return; }
+  if (busy) { notice.textContent = t('even.please_wait_for_the_current_task_to_finish'); return; }
+  if (!session.token || !subscribed || progress.connection !== 'online') { notice.textContent = t('even.check_host_connection', { host: hostName }); return; }
   standby?.activity();
   if (playback.active) playback.cancel();
   holdRecording = fromHold;
@@ -836,18 +851,18 @@ function startRecording(fromHold = false): void {
 recordButton.onclick = () => recorder.state === 'idle' ? startRecording() : void recorder.stop();
 function showDiscarded(): void {
   discarding = false;
-  clearClip(); notice.textContent = t('録音を破棄しました。');
+  clearClip(); notice.textContent = t('even.recording_discarded');
   progress.setPhase('idle');
   if (keepWakeConversation()) updateRuntime();
   else if (recorder.source === 'manual' && conversation.selected) showMessage();
-  else display(() => t('G2接続済み'), idleVoicePrompt);
+  else display(() => t('even.g2_connected'), idleVoicePrompt);
   flushPendingDisplay();
 }
 discardButton.onclick = () => {
   if (transcriptionController) { transcriptionController.abort(); transcriptionController = undefined; busy = false; }
   clearClip();
   if (recorder.state !== 'idle') {
-    discarding = true; notice.textContent = t('録音を破棄しました。');
+    discarding = true; notice.textContent = t('even.recording_discarded');
     void recorder.stop(true);
   } else showDiscarded();
 };
@@ -879,8 +894,8 @@ function retireSupersededRuntime(): void {
   // Keep an unsent text draft selectable; stop controls in the retained page.
   for (const control of document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')) control.disabled = true;
   for (const field of document.querySelectorAll<HTMLTextAreaElement>('textarea')) field.readOnly = true;
-  el('dot-status').textContent = t('新しい画面へ接続を引き継ぎました');
-  notice.textContent = t('この画面は停止しました。続きは新しく開いたDot Linkで行ってください。未送信のテキストはこの画面からコピーできます。');
+  el('dot-status').textContent = t('even.connection_moved_to_the_new_view');
+  notice.textContent = t('even.this_view_has_stopped_continue_in_the_newly_opened_dot');
 }
 let locationAttached = false;
 function attachLocation(): void {
@@ -907,7 +922,7 @@ async function connect(): Promise<void> {
       new TextContainerProperty({ containerID: 1, containerName: 'status', xPosition: 8, yPosition: 8,
         width: 215, height: 36, content: 'Dot Link' }),
       new TextContainerProperty({ containerID: 2, containerName: 'conversation', xPosition: 8, yPosition: 50,
-        width: 560, height: 130, isEventCapture: 1, content: t('接続を確認中') }),
+        width: 560, height: 130, isEventCapture: 1, content: t('even.connecting') }),
       new TextContainerProperty({ containerID: 3, containerName: 'help', xPosition: 8, yPosition: 244,
         width: 560, height: 36, content: recordingHint() }),
       new TextContainerProperty({ containerID: 4, containerName: 'speech', xPosition: 8, yPosition: 188,
@@ -957,7 +972,7 @@ async function connect(): Promise<void> {
   });
   el('g2-diagnostic').textContent = 'G2_READY';
   g2Display.invalidate();
-  connection.textContent = t('Even Hub接続済み');
+  connection.textContent = t('even.even_hub_connected');
   notice.textContent = '';
   renderOperationSettings();
   // History may finish loading before the Even bridge is ready. Repaint it
@@ -965,7 +980,7 @@ async function connect(): Promise<void> {
   if (conversation.selected) {
     showMessage();
   } else {
-    display(() => session.token ? t('G2接続済み') : t('接続設定が必要'), () => session.token ? idleVoicePrompt() : t('スマートフォンで接続設定を開いてください'));
+    display(() => session.token ? t('even.g2_connected') : t('even.pair_with_your_mac'), () => session.token ? idleVoicePrompt() : t('even.open_setup_on_your_phone'));
   }
   appBridge.onEvenHubEvent(event => {
     exitDiagnostics.observe(event, exited);
@@ -1001,7 +1016,7 @@ async function connect(): Promise<void> {
     if (eventType === OsEventTypeList.SCROLL_BOTTOM_EVENT) el('next').click();
     if (eventType === OsEventTypeList.DOUBLE_CLICK_EVENT) {
       exitDiagnostics.record('dialog-request');
-      void appBridge.shutDownPageContainer(1).then(ok => { exitDiagnostics.record(ok ? 'dialog-opened' : 'dialog-failed'); if (!ok) notice.textContent = t('終了確認を開けませんでした'); }).catch(() => { exitDiagnostics.record('dialog-failed'); notice.textContent = t('終了確認を開けませんでした'); });
+      void appBridge.shutDownPageContainer(1).then(ok => { exitDiagnostics.record(ok ? 'dialog-opened' : 'dialog-failed'); if (!ok) notice.textContent = t('even.could_not_open_the_system_exit_dialog'); }).catch(() => { exitDiagnostics.record('dialog-failed'); notice.textContent = t('even.could_not_open_the_system_exit_dialog'); });
     }
     if (eventType === OsEventTypeList.LONG_PRESS_RELEASE_EVENT) void recorder.stop();
   });
@@ -1019,7 +1034,7 @@ function updateHeadRaiseStatus(): void {
   headStatusAt = now;
   if (imuWatchdog) clearTimeout(imuWatchdog);
   const angle = Math.round(headRaise.angle ?? 0);
-  el('head-raise-status').textContent = getLanguage() === 'ja' ? `現在の角度: ${angle}°` : `Current angle: ${angle}°`;
+  el('head-raise-status').textContent = t('even.current_angle', { angle });
 }
 function syncHeadRaise(): Promise<void> {
   imuChain = imuChain.then(async () => {
@@ -1027,7 +1042,7 @@ function syncHeadRaise(): Promise<void> {
     if (!bridge || !runtimeNative.active || enabled === imuActive) return;
     if (imuWatchdog) clearTimeout(imuWatchdog);
     headRaise.reset(); headStatusAt = -Infinity;
-    if (enabled) el('head-raise-status').textContent = t('頭の動きを確認しています…');
+    if (enabled) el('head-raise-status').textContent = t('even.waiting_for_head_motion');
     try {
       const ok = await runtimeNative.control(() => bridge!.imuControl(enabled, ImuReportPace.P200));
       if (!runtimeNative.active) return;
@@ -1035,11 +1050,11 @@ function syncHeadRaise(): Promise<void> {
       imuActive = enabled;
       if (enabled && !exited && displayPreferences.value.headRaise) {
         imuWatchdog = setTimeout(() => {
-          if (headRaise.calibration(performance.now()) === undefined) el('head-raise-status').textContent = t('頭の動きを取得できません。タップで再表示できます。');
+          if (headRaise.calibration(performance.now()) === undefined) el('head-raise-status').textContent = t('even.head_motion_is_unavailable_you_can_still_use_your_selected');
         }, 4000);
       }
     } catch {
-      el('head-raise-status').textContent = t('頭の動きを取得できません。タップで再表示できます。');
+      el('head-raise-status').textContent = t('even.head_motion_is_unavailable_you_can_still_use_your_selected');
     }
   });
   return imuChain;
@@ -1053,7 +1068,7 @@ function applyDisplayPreferences(): void {
   el<HTMLInputElement>('display-head-angle').disabled = !p.headRaise;
   el<HTMLButtonElement>('display-calibrate').disabled = !p.headRaise;
   headRaise.configure(p); standby?.configure(p);
-  el('head-raise-status').textContent = p.headRaise ? t('頭の動きを確認しています…') : t('顔上げでの再表示はオフです');
+  el('head-raise-status').textContent = p.headRaise ? t('even.waiting_for_head_motion') : t('even.head_up_wake_is_off');
   void syncHeadRaise();
 }
 async function saveDisplayPreferences(p: DisplayPreferences, calibrated = false): Promise<void> {
@@ -1062,7 +1077,7 @@ async function saveDisplayPreferences(p: DisplayPreferences, calibrated = false)
   applyDisplayPreferences();
   const retained = await saved;
   if (version !== displaySaveVersion || exited) return;
-  el('display-settings-status').textContent = retained ? (calibrated ? t('正面の角度を保存しました') : t('表示設定を保存しました')) : t('この画面では設定を保存できません。閉じると設定が戻る場合があります。');
+  el('display-settings-status').textContent = retained ? (calibrated ? t('even.forward_gaze_angle_saved') : t('even.display_settings_saved')) : t('even.settings_could_not_be_saved_here_they_may_reset_when');
 }
 function initializeDisplaySettings(): void {
   applyDisplayPreferences();
@@ -1071,10 +1086,10 @@ function initializeDisplaySettings(): void {
     const idleSeconds = Number(el<HTMLInputElement>('display-idle').value);
     const headAngle = Number(el<HTMLInputElement>('display-head-angle').value);
     if (!Number.isInteger(idleSeconds) || (idleSeconds !== 0 && (idleSeconds < 5 || idleSeconds > 3600))) {
-      el('display-settings-status').textContent = t('表示時間は0、または5〜3600秒で指定してください。'); return;
+      el('display-settings-status').textContent = t('even.choose_0_or_5_3600_seconds'); return;
     }
     if (!Number.isInteger(headAngle) || headAngle < 5 || headAngle > 60) {
-      el('display-settings-status').textContent = t('顔上げの角度は5〜60°で指定してください。'); return;
+      el('display-settings-status').textContent = t('even.choose_a_head_up_angle_from_5_60'); return;
     }
     const wakeTap = el<HTMLSelectElement>('display-wake-tap').value === 'single' ? 'single' : 'double';
     void saveDisplayPreferences({ ...displayPreferences.value, idleSeconds, wakeTap, headAngle, headRaise: el<HTMLInputElement>('display-head-raise').checked });
@@ -1085,7 +1100,7 @@ function initializeDisplaySettings(): void {
   el('display-calibrate').onclick = () => {
     const neutralPitch = headRaise.calibration(performance.now());
     if (!displayPreferences.value.headRaise || neutralPitch === undefined) {
-      el('display-settings-status').textContent = t('G2の接続と顔上げ設定を確認してから、もう一度お試しください。'); return;
+      el('display-settings-status').textContent = t('even.check_the_g2_connection_and_enable_head_up_wake_then'); return;
     }
     void saveDisplayPreferences({ ...displayPreferences.value, neutralPitch }, true);
   };
@@ -1103,13 +1118,13 @@ if (session.token && !session.credentials?.resumeToken) updates.start(true);
 updateRuntime(false);
 window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token && relayRestored) updates.start(); });
 window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); } if (session.token && relayRestored && !exited) updates.start(); });
-window.addEventListener('offline', () => { if (exited) return; progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('切断')}`; });
+window.addEventListener('offline', () => { if (exited) return; progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('even.disconnected')}`; });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });
 
 void connect().catch(() => {
   if (exited) return;
   const nativeReady = startupStage !== 'bridge';
-  connection.textContent = nativeReady ? t('G2の画面を起動できませんでした') : t('Evenアプリとの接続準備ができませんでした');
-  notice.textContent = nativeReady ? t('G2との接続と起動状態を確認し、Dot Linkを開き直してください。') : t('Evenアプリとの接続準備ができていません。アプリを閉じて開き直してください。');
+  connection.textContent = nativeReady ? t('even.could_not_initialize_the_g2_display') : t('even.could_not_initialize_the_even_app_connection');
+  notice.textContent = nativeReady ? t('even.check_that_g2_is_connected_and_available_then_reopen_dot') : t('even.the_even_app_connection_is_not_ready_close_and_reopen');
   el('g2-diagnostic').textContent = nativeReady ? `G2_STARTUP_${startupResult ?? 'REQUEST_FAILED'}` : 'EVEN_BRIDGE_UNAVAILABLE';
 });

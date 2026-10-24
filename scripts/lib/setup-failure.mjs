@@ -51,7 +51,7 @@ export async function setupStage(stage, operation, fallback = 'SETUP_FAILED') {
 }
 
 export function setupFailureMessage(failure, language = 'en') {
-  const locale = language === 'ja' ? 'ja' : 'en';
+  const locale = Object.hasOwn(catalog.codes[failure.code], language) ? language : 'en';
   return `${catalog.stages[failure.stage][locale]}: ${catalog.codes[failure.code][locale]}`;
 }
 

@@ -68,13 +68,13 @@ export class InteractionStatus {
     return this.connection === 'online' ? this.phase : this.connection;
   }
   caption(fallback: string, visibleId?: string, assistantName = 'Dot'): string {
-    if (this.phase === 'microphone') return t('マイク準備中');
-    if (this.phase === 'recording') return t('録音中');
-    if (this.connection === 'unpaired') return t('接続設定が必要');
-    if (this.connection === 'offline') return t('切断 · 再接続中');
-    if (this.connection === 'connecting') return t('接続を確認中');
-    if (!this.dotConnected && ['idle', 'waiting'].includes(this.phase)) return t('Dot未接続');
-    const label = { recognizing: t('認識中'), sending: t('送信中'), waiting: t('{name}の返信待ち').replace('{name}', assistantName) }[this.phase as 'recognizing' | 'sending' | 'waiting'];
+    if (this.phase === 'microphone') return t('even.starting_microphone');
+    if (this.phase === 'recording') return t('even.recording');
+    if (this.connection === 'unpaired') return t('even.pair_with_your_mac');
+    if (this.connection === 'offline') return t('even.disconnected_reconnecting');
+    if (this.connection === 'connecting') return t('even.connecting');
+    if (!this.dotConnected && ['idle', 'waiting'].includes(this.phase)) return t('even.dot_disconnected');
+    const label = { recognizing: t('even.transcribing'), sending: t('even.sending'), waiting: t('even.waiting_for_name', { name: assistantName }) }[this.phase as 'recognizing' | 'sending' | 'waiting'];
     const measurement = this.activeId ? this.measurements.get(this.activeId) : undefined;
     if (label && measurement && (this.phase !== 'waiting' || !visibleId || visibleId === this.activeId)) {
       const elapsed = seconds(Math.floor(Math.max(0, this.clock() - measurement.started - measurement.pausedMs) / 1000));

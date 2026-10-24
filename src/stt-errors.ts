@@ -1,16 +1,16 @@
-import { getLanguage } from './i18n.ts';
-const messages: Record<string, [string, string]> = {
-  STT_BUSY: ['音声認識中です。少し待ってから話してください。', 'Speech recognition is busy. Wait a moment before speaking again.'],
-  STT_KEY_REQUIRED: ['Macの音声入力設定でAPIキーを登録、またはアクセスを許可してください。', 'Open Speech input on your Mac to save an API key or allow access to it.'],
-  STT_CONFIG_REQUIRED: ['Macの音声入力設定で接続先を確認してください。', 'Check the endpoint in Speech input on your Mac.'],
-  STT_AUTH: ['APIキーを利用できません。Macの音声入力設定で確認してください。', 'The API key was rejected. Check Speech input on your Mac.'],
-  STT_QUOTA: ['音声認識サービスの残高・利用枠を確認するか、MacでWhisperへ切り替えてください。', 'Check your speech service balance or limits, or switch to Whisper on your Mac.'],
-  STT_UNAVAILABLE: ['音声認識サービスに接続できません。接続とMacの音声入力設定を確認してください。', 'Speech recognition is unavailable. Check your connection and Speech input on your Mac.'],
-  STT_TIMEOUT: ['音声認識が時間内に終わりませんでした。再度話すか、MacでWhisperへ切り替えてください。', 'Speech recognition timed out. Try again or switch to Whisper on your Mac.'],
-  STT_CANCELLED: ['音声認識を中止しました。', 'Speech recognition was cancelled.'],
-  STT_INVALID_RESPONSE: ['音声認識の結果を受け取れませんでした。再度話してください。', 'The speech result was incomplete. Please speak again.'],
-  STT_NO_TEXT: ['言葉を認識できませんでした。もう一度話してください。', 'No words were recognized. Please speak again.'],
+import { t, type TranslationKey } from './i18n.ts';
+const messages: Record<string, TranslationKey> = {
+  STT_BUSY: 'even.speech_recognition_is_busy_wait_a_moment_before_speaking_again',
+  STT_KEY_REQUIRED: 'even.open_speech_input_on_your_mac_to_save_an_api',
+  STT_CONFIG_REQUIRED: 'even.check_the_endpoint_in_speech_input_on_your_mac',
+  STT_AUTH: 'even.the_api_key_was_rejected_check_speech_input_on_your',
+  STT_QUOTA: 'even.check_your_speech_service_balance_or_limits_or_switch_to',
+  STT_UNAVAILABLE: 'even.speech_recognition_is_unavailable_check_your_connection_and_speech_input',
+  STT_TIMEOUT: 'even.speech_recognition_timed_out_try_again_or_switch_to_whisper',
+  STT_CANCELLED: 'even.speech_recognition_was_cancelled',
+  STT_INVALID_RESPONSE: 'even.the_speech_result_was_incomplete_please_speak_again',
+  STT_NO_TEXT: 'even.no_words_were_recognized_please_speak_again',
 };
 export function sttErrorMessage(code: unknown): string | undefined {
-  return typeof code === 'string' && Object.hasOwn(messages, code) ? messages[code][getLanguage() === 'ja' ? 0 : 1] : undefined;
+  return typeof code === 'string' && Object.hasOwn(messages, code) ? t(messages[code]) : undefined;
 }
