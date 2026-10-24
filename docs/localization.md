@@ -88,4 +88,6 @@ and language switching. These require macOS; the update driver needs AppKit.
 
 Acoustic wake model/keywords and STT provider configuration are outside UI
 translation. Post-transcription cue cleanup has its own rule/evidence boundary;
-adding a UI language alone must not add guessed phonetic wake aliases.
+adding a UI language alone must not add guessed phonetic wake aliases. See
+[post-transcription rules and Korean evidence](wake-transcript-localization.md)
+when adding a text-cleanup rule.
