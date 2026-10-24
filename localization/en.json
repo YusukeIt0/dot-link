@@ -542,5 +542,6 @@
   "mac.notification_test_body": "Notification reading test {count}. Automatically sent to Dot after selection and detection.",
   "mac.notification_schedule_error": "Test notification registration failed: {reason}",
   "mac.notification_scheduled": "Test notification scheduled with OS: {id} (not proof of detection or display)",
-  "mac.update_available_version": "Update available · {version}"
+  "mac.update_available_version": "Update available · {version}",
+  "mac.notification_test_denied_help": "Test notification not allowed: Check System Settings → Notifications"
 }

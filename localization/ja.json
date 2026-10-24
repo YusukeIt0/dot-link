@@ -542,5 +542,6 @@
   "mac.notification_test_body": "通知の読み取りテスト {count}。選択・検知後にDotへ自動送信します。",
   "mac.notification_schedule_error": "テスト通知登録エラー: {reason}",
   "mac.notification_scheduled": "テスト通知をOSへ予約: {id}（検知・表示の証明ではありません）",
-  "mac.update_available_version": "新しいバージョンがあります · {version}"
+  "mac.update_available_version": "新しいバージョンがあります · {version}",
+  "mac.notification_test_denied_help": "テスト通知の許可なし: システム設定 → 通知で確認"
 }

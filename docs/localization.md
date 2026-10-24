@@ -71,7 +71,9 @@ and language switching. These require macOS; the update driver needs AppKit.
 1. Copy the English catalog to the new language file and translate every entry.
    Preserve placeholders, the meaning of permissions/stopping, product names
    and literal wake names. Review short state labels as well as long help/error
-   text. Register native name and locale metadata and regenerate imports.
+   text. Register native name and locale metadata and regenerate imports. Add the
+   language to `app.json` using a language code supported by the Even package
+   schema; platform support is separate from catalog registration.
 2. Run `npm test`, `npm run test:http`, and `npm run build`. Test locale/region
    detection, explicit selection, unsupported/invalid preferences, restart and
    native restore. Check that message contents, drafts, pairing and other

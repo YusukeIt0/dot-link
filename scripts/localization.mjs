@@ -32,14 +32,19 @@ export async function checkLocalization({ write = false } = {}) {
   for (const file of await readdir(new URL('native/DotLinkSetup/', root))) {
     if (!file.endsWith('.swift')) continue;
     const source = await readFile(new URL(`native/DotLinkSetup/${file}`, root), 'utf8');
-    for (const [, key] of source.matchAll(/(?:tr|status|LocalizedMessage|add)\("((?:mac|common)\.[^"\s]+)"/g)) {
-      if (!Object.hasOwn(catalogs.en, key)) throw Error(`Unknown Swift message: ${file}:${key}`);
-    }
+    validateNativeReferences(source, catalogs.en, file);
   }
   const html = await readFile(new URL('index.html', root), 'utf8');
   for (const [, key] of html.matchAll(/data-i18n(?:-aria-label)?="([^"]+)"/g)) if (!Object.hasOwn(catalogs.en, key)) throw Error(`Unknown HTML message: ${key}`);
   if (/data-en=/.test(html)) throw Error('Legacy HTML translation outside catalogs');
   return { locales, messages: keys.length };
+}
+
+export function validateNativeReferences(source, catalog, file = 'Swift source') {
+  // Include keys chosen through ternaries and dictionaries, not just direct calls.
+  for (const [, key] of source.matchAll(/"((?:mac|common)\.[^"\s]+)"/g)) {
+    if (!Object.hasOwn(catalog, key)) throw Error(`Unknown Swift message: ${file}:${key}`);
+  }
 }
 
 export function validateCatalogs(metadata, catalogs) {

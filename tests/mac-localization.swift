@@ -12,6 +12,9 @@ import Foundation
         precondition(localization.text(status, language: "ja") == "更新をダウンロード中… 42%")
         precondition(localization.text(status, language: "ko") == "업데이트 다운로드 중… 42%")
         precondition(localization.text(status, language: "unknown") == localization.text(status, language: "en"))
+        let denied = LocalizedMessage("mac.notification_test_denied_help")
+        precondition(localization.text(denied, language: "ja").contains("システム設定"))
+        precondition(localization.text(denied, language: "ko").contains("시스템 설정"))
         let value = "{name} $& \\ 🐈"
         precondition(localization.text("mac.delete_provider_key", language: "ko", ["name": value]) == value + " 키를 삭제할까요?")
         // The fallback is loaded from English even if a registered language file

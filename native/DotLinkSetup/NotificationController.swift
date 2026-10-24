@@ -591,7 +591,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, error in
             DispatchQueue.main.async {
                 guard !self.relaySuspended else { return }
-                guard granted else { self.add("mac.notification_test_denied", ["reason": error?.localizedDescription ?? self.tr("mac.notification_permission_help")]); self.testScheduled = false; self.migrationRequested = false; self.validating = false; self.detach(); self.refresh(); return }
+                guard granted else { if let error { self.add("mac.notification_test_denied", ["reason": error.localizedDescription]) } else { self.add("mac.notification_test_denied_help") }; self.testScheduled = false; self.migrationRequested = false; self.validating = false; self.detach(); self.refresh(); return }
                 self.notificationPermission = "許可済み"
                 self.batchUntil = Date().addingTimeInterval(Double(count * 4 + 5))
                 for index in 0..<count {

@@ -542,5 +542,6 @@
   "mac.notification_test_body": "알림 읽기 테스트 {count}. 선택 및 감지 후 Dot에게 자동 전송됩니다.",
   "mac.notification_schedule_error": "테스트 알림 등록 실패: {reason}",
   "mac.notification_scheduled": "OS에 테스트 알림 예약: {id} (감지 또는 표시의 증거가 아님)",
-  "mac.update_available_version": "업데이트 있음 · {version}"
+  "mac.update_available_version": "업데이트 있음 · {version}",
+  "mac.notification_test_denied_help": "테스트 알림 허용 안 됨: 시스템 설정 → 알림에서 확인하세요"
 }
