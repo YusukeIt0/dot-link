@@ -1,0 +1,5 @@
+{
+  "en": { "name": "English", "speechLocale": "en-US", "dateLocale": "en_US", "order": 1 },
+  "ja": { "name": "日本語", "speechLocale": "ja-JP", "dateLocale": "ja_JP", "order": 0, "legacyPrefix": true },
+  "ko": { "name": "한국어", "speechLocale": "ko-KR", "dateLocale": "ko_KR", "order": 2 }
+}

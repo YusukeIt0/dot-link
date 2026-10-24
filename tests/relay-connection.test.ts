@@ -30,8 +30,8 @@ test('an uncertain delivery reuses its id after relaunch without persisting mess
 test('language selection covers English fallback and Japanese status', () => {
   assert.equal(chooseLanguage('ja-JP'),'ja'); assert.equal(chooseLanguage('en-US'),'en');
   assert.equal(chooseLanguage('fr-FR'),'en'); assert.equal(chooseLanguage('en-US','ja'),'ja');
-  setLanguage('en'); assert.equal(t('Dotの返信待ち'),'Waiting for Dot'); assert.equal(seconds(2),'2s');
-  setLanguage('ja'); assert.equal(t('Dotの返信待ち'),'Dotの返信待ち'); assert.equal(seconds(2),'2秒');
+  setLanguage('en'); assert.equal(t('even.waiting_for_dot'),'Waiting for Dot'); assert.equal(seconds(2),'2s');
+  setLanguage('ja'); assert.equal(t('even.waiting_for_dot'),'Dotの返信待ち'); assert.equal(seconds(2),'2秒');
 });
 
 test('native pairing survives a new WebView origin and explicit logout defeats stale local caches', async () => {

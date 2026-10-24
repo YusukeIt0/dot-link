@@ -66,7 +66,7 @@ async function launch(options = {}) {
     async stopAppLocationUpdates() { calls.push(['location-stop']); return true; },
     async getAppLocation() { return {latitude: 10, longitude: 20, accuracy: 5, timestamp: epoch + now}; },
   };
-  const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.en = 'Display settings';
+  const staticLabel = element('static-test-label'); staticLabel.textContent = '表示設定'; staticLabel.dataset.i18n = 'even.display_settings';
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
     LocationSharing: class extends dependencies.LocationSharing { constructor(options) { super({...options, now: () => epoch + now, automatic: false}); } },
@@ -80,8 +80,8 @@ async function launch(options = {}) {
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
-      querySelector: element, querySelectorAll: selector => selector === '[data-en]' ? [staticLabel] : selector === 'textarea' ? [element('transcript'), element('pair-code')] : [...elements.values()], createComment: element, addEventListener: listen},
-    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text]); }}},
+      querySelector: element, querySelectorAll: selector => selector === '[data-i18n]' ? [staticLabel] : selector === 'textarea' ? [element('transcript'), element('pair-code')] : [...elements.values()], createComment: element, addEventListener: listen},
+    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text, speech.lang]); }}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     navigator: {language: options.language ?? 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
     localStorage: local, sessionStorage: local, location: {origin: options.nativePairing ? 'http://127.0.0.1:57157' : 'https://test.invalid', hash: '', pathname: '/', search: ''},
@@ -494,22 +494,22 @@ test('language switches preserve the live session, draft, TTS, history position 
   const credentials = app.saved.get('g2-device-token');
   const beforeRequests = app.networkCalls.length;
   app.element('pair-code').value = 'invalid'; app.element('pair-code').oninput();
-  for (const locale of ['en', 'ja', 'en']) {
+  for (const locale of ['en', 'ko', 'ja', 'ko', 'en']) {
     app.element('language').value = locale; app.element('language').onchange(); await flush();
     assert.equal(app.context.document.documentElement.lang, locale);
     assert.equal(app.element('pair-notice').textContent, locale === 'en'
       ? 'The pairing code is invalid or expired. Create a new one on your Mac.'
-      : '接続コードが無効か期限切れです。Macで新しく発行してください。');
-    assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : '表示設定');
+      : locale === 'ko' ? '연결 코드가 잘못되었거나 만료되었습니다. Mac에서 새로 만드세요.' : '接続コードが無効か期限切れです。Macで新しく発行してください。');
+    assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : locale === 'ko' ? '표시 설정' : '表示設定');
     assert.match(app.element('tts').getAttribute('aria-label'), /ON$/);
     assert.equal(app.element('tts').getAttribute('aria-pressed'), 'true');
-    assert.equal(app.element('record').getAttribute('aria-label'), locale === 'en' ? 'Start recording' : '録音を開始');
-    assert.equal(app.element('discard').getAttribute('aria-label'), locale === 'en' ? 'Discard recording' : '録音を破棄');
-    assert.equal(app.element('transcript').placeholder, locale === 'en' ? 'Message Dot…' : 'Dotにメッセージ…');
+    assert.equal(app.element('record').getAttribute('aria-label'), locale === 'en' ? 'Start recording' : locale === 'ko' ? '녹음 시작' : '録音を開始');
+    assert.equal(app.element('discard').getAttribute('aria-label'), locale === 'en' ? 'Discard recording' : locale === 'ko' ? '녹음 삭제' : '録音を破棄');
+    assert.equal(app.element('transcript').placeholder, locale === 'en' ? 'Message Dot…' : locale === 'ko' ? 'Dot에게 메시지…' : 'Dotにメッセージ…');
     assert.equal(app.element('record').disabled, false);
     assert.equal(app.element('transcript').value, 'Unsent draft');
     assert.match(app.physical.get(2), /Display settings\n\nDot: 長押しで話してください$/);
-    assert.ok(app.physical.get(2).startsWith(locale === 'en' ? 'You: ' : 'あなた: '));
+    assert.ok(app.physical.get(2).startsWith(locale === 'en' ? 'You: ' : locale === 'ko' ? '나: ' : 'あなた: '));
     assert.match(app.physical.get(1), /1\/2/);
     assert.equal(app.element('g2-diagnostic').textContent, 'G2_READY');
   }
@@ -527,10 +527,11 @@ test('language switches preserve the live session, draft, TTS, history position 
   assert.equal(app.physical.get(2), 'Synthetic message third');
 });
 
-test('automatic locale uses Japanese only for Japanese and follows host changes without restart', async t => {
+test('automatic locale follows supported host changes without restart', async t => {
   const app = await launch({language: 'fr-FR'}); t.after(app.close);
   assert.equal(app.element('language').value, 'auto');
   assert.equal(app.context.document.documentElement.lang, 'en');
+  await app.locale('ko-KR'); assert.equal(app.context.document.documentElement.lang, 'ko');
   await app.locale('ja-JP'); assert.equal(app.context.document.documentElement.lang, 'ja');
   app.element('language').value = 'en'; app.element('language').onchange(); await flush();
   await app.locale('ja-JP'); assert.equal(app.context.document.documentElement.lang, 'en');
@@ -553,9 +554,9 @@ test('language change keeps a hidden display blank and recording guard preserves
 });
 
 test('native language is restored into a new WebView without replacing G2 startup', async t => {
-  const app = await launch({language: 'en-US', nativeLanguage: 'ja'}); t.after(app.close);
-  assert.equal(app.context.document.documentElement.lang, 'ja');
-  assert.equal(app.element('language').value, 'ja');
+  const app = await launch({language: 'en-US', nativeLanguage: 'ko'}); t.after(app.close);
+  assert.equal(app.context.document.documentElement.lang, 'ko');
+  assert.equal(app.element('language').value, 'ko');
   assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
 });
 

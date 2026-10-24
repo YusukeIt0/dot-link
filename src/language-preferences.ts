@@ -1,10 +1,12 @@
-export type LanguagePreference = 'auto' | 'ja' | 'en';
+import { isLanguage, type Language } from './i18n.ts';
+export type LanguagePreference = 'auto' | Language;
+export function isLanguagePreference(value: unknown): value is LanguagePreference { return value === 'auto' || isLanguage(value); }
 type LocalStore = Pick<Storage, 'getItem' | 'setItem'>;
 interface NativeStore { getLocalStorage(key: string): Promise<string>; setLocalStorage(key: string, value: string): Promise<boolean>; }
 const KEY = 'dot-language';
 const NATIVE_KEY = 'dot-language-preference-v1';
 function parse(raw: string | null): LanguagePreference | undefined {
-  return raw === 'auto' || raw === 'ja' || raw === 'en' ? raw : undefined;
+  return isLanguagePreference(raw) ? raw : undefined;
 }
 
 /** Keep explicit choices across WebView origins; first use follows the host locale. */
