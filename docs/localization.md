@@ -1,7 +1,8 @@
 # Application localization
 
 Application language is separate from conversation contents, speech recognition
-and acoustic wake detection. English is the fallback. The Mac and Even applications support English, Japanese and Korean.
+and acoustic wake detection. English is the fallback. See the README for
+[supported interface languages](../README.md#make-it-yours).
 
 ## Resource contract
 
@@ -84,6 +85,10 @@ and language switching. These require macOS; the update driver needs AppKit.
    tests and a browser preview do not establish physical display correctness.
 4. Review relevant setup/privacy/release documents and actual artifact
    permissions. Public Git documentation and Even Hub listings remain English.
+   Add the native language name to the README's **Interface languages** list;
+   keep this as the single user-facing list rather than repeating languages or
+   per-language versions in setup instructions. Acoustic evidence and release
+   history remain specific to the behavior and versions actually tested.
    Record exact source/build and device results in the implementation PR.
 
 Acoustic wake model/keywords and STT provider configuration are outside UI
