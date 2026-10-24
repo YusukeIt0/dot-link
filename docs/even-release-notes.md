@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.31
+
+- Updated app components to address security vulnerabilities.
+
 ## 0.3.29
 
 - Moved Revoke this device to the bottom of the Mac connection section.
