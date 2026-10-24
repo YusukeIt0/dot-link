@@ -78,6 +78,7 @@ Hey dot pauses during processing and read-aloud. If you do not speak after the c
 
 ## Make it yours
 
+- **Interface languages:** English, Japanese and Korean (Mac 0.4.16+; Even 0.3.33+).
 - **Conversation:** browse history, enable read-aloud, and adjust display timeout, wake gestures and the head-raise angle.
 - **Speech input:** use free local Whisper or your own speech-service API key. [Speech settings](docs/setup.md#speech).
 - **Context:** optionally share [Mac notifications](docs/setup.md#mac-notifications) or your [phone location](docs/setup.md#location-sharing). Both start off; Dot decides what to announce.
