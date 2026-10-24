@@ -351,7 +351,7 @@ test('base context fetch failure remains an infrastructure failure',t=>{
  success(f.run('intake'));assert.notEqual(f.run('prepare').status,0);
  assert.equal(existsSync(join(f.dir,'.review/input.json')),false);
 });
-for(const bytes of [250001,1100000]) test(`oversized base context (${bytes} bytes) reports scope without invoking the model`,t=>{
+for(const bytes of [500001,1100000]) test(`oversized base context (${bytes} bytes) reports scope without invoking the model`,t=>{
  const f=use(t,{issue:{...issue,pull_request:{}},pr:{...pr,base:{...pr.base,ref:'refactor/parent',sha:'c'.repeat(40)}},baseDiff:'x'.repeat(bytes)});
  success(f.run('intake'));const prep=f.run('prepare');success(prep);
  assert.equal(prep.outputs.ready,'false');assert.equal(prep.outputs.scope_limited,'true');
@@ -529,4 +529,22 @@ test('PR publication retains missing acceptance and physical evidence blockers',
   assert.equal(receipt.quality.assessment.gaps.length, 1);
   assert.equal(receipt.quality.assessment.device, 'missing');
   assert.notEqual(receipt.quality.acceptance.status, 'ready');
+});
+
+for (const bytes of [250001, 500000, 500001]) test(`PR diff byte boundary ${bytes} is enforced before review`, t => {
+  const f = use(t, {issue: {...issue, pull_request: {}}, diff: 'x'.repeat(bytes)});
+  const intake = f.run('intake'); success(intake);
+  assert.equal(intake.outputs.accepted, bytes <= 500000 ? 'true' : 'false');
+  if (bytes <= 500000) {
+    const prepared = f.run('prepare'); success(prepared);
+    assert.equal(prepared.outputs.ready, 'true');
+    assert.equal(readFileSync(join(f.dir, '.review/changes.diff')).length, bytes);
+  } else assert.equal(existsSync(join(f.dir, '.review/changes.diff')), false);
+});
+test('child base diff at 500000 bytes is kept in full', t => {
+  const f = use(t, {issue: {...issue, pull_request: {}},
+    pr: {...pr, base: {...pr.base, ref: 'refactor/parent', sha: 'c'.repeat(40)}}, baseDiff: 'x'.repeat(500000)});
+  success(f.run('intake')); const prepared = f.run('prepare'); success(prepared);
+  assert.equal(prepared.outputs.ready, 'true');
+  assert.equal(readFileSync(join(f.dir, '.review/base-changes.diff')).length, 500000);
 });
