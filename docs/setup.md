@@ -14,9 +14,8 @@ The installer checks the release checksum, app signature consistency and bundle 
 
 Dot Link is not Apple-notarized. If macOS says it cannot verify the developer and you trust the download, dismiss the warning, then open **System Settings → Privacy & Security → Open Anyway**. Authenticate in the Mac dialog and choose **Open**. A warning that the app is damaged or will harm your computer is different; see [Apple's guidance](https://support.apple.com/en-us/102445).
 
-The Mac app and Even companion support English, Japanese and Korean, initially
-following the device language with English as the fallback. This guide uses the
-English labels; each app lets you select another supported language.
+This guide uses English labels. See [application language](#application-language)
+to change the language in either app.
 
 ## Tailscale HTTPS setup
 
@@ -108,7 +107,8 @@ Closing the Mac window keeps Dot Link running. **Pause** stops the relay and not
 
 ### Application language
 
-Dot Link supports English, Japanese and Korean on Mac and in Even. Each app
-initially follows its device language and lets you select a language in the
-existing settings. The choice does not translate conversations or change
-pairing, notification sharing, or speech-service configuration.
+See the README for [supported interface languages](../README.md#make-it-yours).
+Each app initially follows its device language, with English as the fallback,
+and lets you select another supported language. The choice does not translate
+conversations or change pairing, notification sharing, speech-service
+configuration, or the wake phrase.
