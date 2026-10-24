@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.33
 
 - Added Korean to the phone interface and glasses status messages, including automatic selection on Korean-language phones.
 - Improved removal of a recognized Hey Dot cue from Korean transcriptions.
