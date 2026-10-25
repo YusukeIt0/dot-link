@@ -4,14 +4,10 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 ## 0.3.38
 
-- Prevented adding the same photo more than once to a message.
-- Improved photo messages to follow your automatic speech sending setting.
-
-## 0.3.37
-
 - Added camera and photo-library attachments, with previews and removal before sending.
 - Added up to four photos per message, with optional typed or dictated text.
-- Photos are sent only when you tap Send, even when automatic speech sending is enabled.
+- Photo messages follow your automatic speech sending setting; selecting a photo alone never sends it.
+- Prevented adding the same photo more than once to a message.
 
 ## 0.3.36
 
