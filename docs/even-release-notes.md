@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Added Traditional Chinese, Simplified Chinese, French and German to the phone interface and glasses status messages, with automatic language selection.
+
 ## 0.3.33
 
 - Added Korean to the phone interface and glasses status messages, including automatic selection on Korean-language phones.

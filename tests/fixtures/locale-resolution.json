@@ -1,0 +1,227 @@
+[
+  {
+    "preferred": "en",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "en-US",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "EN_gb",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "ar-SA",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "es-MX",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "kok-IN",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "korean",
+    "saved": null,
+    "expected": "en"
+  },
+  {
+    "preferred": "ja",
+    "saved": null,
+    "expected": "ja"
+  },
+  {
+    "preferred": "ja-JP",
+    "saved": null,
+    "expected": "ja"
+  },
+  {
+    "preferred": "JA_jp",
+    "saved": null,
+    "expected": "ja"
+  },
+  {
+    "preferred": "japanese",
+    "saved": null,
+    "expected": "ja"
+  },
+  {
+    "preferred": "ko",
+    "saved": null,
+    "expected": "ko"
+  },
+  {
+    "preferred": "ko-KR",
+    "saved": null,
+    "expected": "ko"
+  },
+  {
+    "preferred": "KO_kr",
+    "saved": null,
+    "expected": "ko"
+  },
+  {
+    "preferred": "zh-Hant",
+    "saved": null,
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "ZH_hant_TW",
+    "saved": null,
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "zh-Hant-CN",
+    "saved": null,
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "zh-TW",
+    "saved": null,
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "zh_HK",
+    "saved": null,
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "zh-MO",
+    "saved": null,
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "zh-Hans",
+    "saved": null,
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "zh-Hans-TW",
+    "saved": null,
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "ZH_hans_HK",
+    "saved": null,
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "zh",
+    "saved": null,
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "zh-CN",
+    "saved": null,
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "zh_SG",
+    "saved": null,
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "fr",
+    "saved": null,
+    "expected": "fr"
+  },
+  {
+    "preferred": "fr-FR",
+    "saved": null,
+    "expected": "fr"
+  },
+  {
+    "preferred": "FR_ca",
+    "saved": null,
+    "expected": "fr"
+  },
+  {
+    "preferred": "fr-CH",
+    "saved": null,
+    "expected": "fr"
+  },
+  {
+    "preferred": "de",
+    "saved": null,
+    "expected": "de"
+  },
+  {
+    "preferred": "DE_de",
+    "saved": null,
+    "expected": "de"
+  },
+  {
+    "preferred": "de-AT",
+    "saved": null,
+    "expected": "de"
+  },
+  {
+    "preferred": "de-CH",
+    "saved": null,
+    "expected": "de"
+  },
+  {
+    "preferred": "zh-TW",
+    "saved": "zh-Hans",
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "zh-CN",
+    "saved": "zh-Hant",
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "de-DE",
+    "saved": "fr",
+    "expected": "fr"
+  },
+  {
+    "preferred": "fr-CA",
+    "saved": "de",
+    "expected": "de"
+  },
+  {
+    "preferred": "ko-KR",
+    "saved": "ja",
+    "expected": "ja"
+  },
+  {
+    "preferred": "ja-JP",
+    "saved": "ko",
+    "expected": "ko"
+  },
+  {
+    "preferred": "ko-KR",
+    "saved": "invalid",
+    "expected": "ko"
+  },
+  {
+    "preferred": "zh-TW",
+    "saved": "auto",
+    "expected": "zh-Hant"
+  },
+  {
+    "preferred": "zh-Hans-HK",
+    "saved": "invalid",
+    "expected": "zh-Hans"
+  },
+  {
+    "preferred": "ar",
+    "saved": "auto",
+    "expected": "en"
+  }
+]

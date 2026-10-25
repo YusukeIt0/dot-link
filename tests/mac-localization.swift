@@ -3,9 +3,20 @@ import Foundation
 @main enum MacLocalizationTests {
     static func main() throws {
         let localization = Localization(directory: URL(fileURLWithPath: "localization"))
-        precondition(localization.languages == ["ja", "en", "ko"])
-        for (preferred, saved, expected) in [("ko-KR", nil, "ko"), ("KO_kr", nil, "ko"), ("kok-IN", nil, "en"), ("ja-JP", nil, "ja"), ("de-DE", nil, "en"), ("ja-JP", "ko", "ko"), ("ko-KR", "invalid", "ko")] {
-            precondition(localization.choose(preferred: preferred, saved: saved) == expected)
+        precondition(localization.languages == ["ja", "en", "ko", "zh-Hant", "zh-Hans", "fr", "de"])
+        struct LocaleCase: Decodable { let preferred: String; let saved: String?; let expected: String }
+        let cases = try JSONDecoder().decode([LocaleCase].self, from: Data(contentsOf: URL(fileURLWithPath: "tests/fixtures/locale-resolution.json")))
+        for item in cases {
+            precondition(localization.choose(preferred: item.preferred, saved: item.saved) == item.expected, item.preferred)
+        }
+        for language in localization.languages {
+            let value = "{name} $& \\ 🐈"
+            precondition(localization.text("mac.delete_provider_key", language: language, ["name": value]).contains(value))
+            precondition(localization.text("mac.downloading_update_p", language: language, ["p": "42"]).contains("42%"))
+            let date = DateFormatter()
+            date.locale = Locale(identifier: localization.metadata[language]!.dateLocale)
+            date.dateFormat = localization.metadata[language]!.dateFormat
+            precondition(!date.string(from: Date(timeIntervalSince1970: 0)).isEmpty)
         }
         let status = LocalizedMessage("mac.downloading_update_p", ["p": "42"])
         precondition(localization.text(status, language: "en") == "Downloading update… 42%")

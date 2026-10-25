@@ -3,284 +3,508 @@
     "SETUP_FAILED": {
       "en": "Could not complete this step. Copy diagnostics if retrying does not help.",
       "ja": "この処理を完了できませんでした。再試行しても続く場合は診断情報をコピーしてください。",
-      "ko": "이 단계를 완료하지 못했습니다. 재시도해도 해결되지 않으면 진단 정보를 복사하세요."
+      "ko": "이 단계를 완료하지 못했습니다. 재시도해도 해결되지 않으면 진단 정보를 복사하세요.",
+      "zh-Hant": "無法完成此步驟。若重試仍無效，請複製診斷資訊。",
+      "zh-Hans": "无法完成此步骤。如果重试仍无效，请复制诊断信息。",
+      "fr": "Impossible de terminer cette étape. Si une nouvelle tentative ne résout rien, copiez le diagnostic.",
+      "de": "Dieser Schritt konnte nicht abgeschlossen werden. Kopieren Sie die Diagnosedaten, falls ein erneuter Versuch nicht hilft."
     },
     "SETUP_TIMEOUT": {
       "en": "This step timed out. Check the connection, then try again.",
       "ja": "この処理が時間内に終わりませんでした。接続を確認して再試行してください。",
-      "ko": "시간 내에 완료되지 않았습니다. 연결을 확인한 후 다시 시도하세요."
+      "ko": "시간 내에 완료되지 않았습니다. 연결을 확인한 후 다시 시도하세요.",
+      "zh-Hant": "此步驟逾時。請檢查連線，再試一次。",
+      "zh-Hans": "此步骤超时。请检查连接，然后重试。",
+      "fr": "Cette étape a dépassé le délai prévu. Vérifiez la connexion, puis réessayez.",
+      "de": "Dieser Schritt hat zu lange gedauert. Prüfen Sie die Verbindung und versuchen Sie es erneut."
     },
     "SETUP_PERMISSION_DENIED": {
       "en": "macOS denied access to a required file or command. Copy diagnostics to identify the step.",
       "ja": "必要なファイルやコマンドへのアクセスが拒否されました。診断情報で処理箇所を確認できます。",
-      "ko": "macOS가 필요한 파일 또는 명령에 대한 접근을 거부했습니다. 진단 정보를 복사하여 해당 단계를 확인하세요."
+      "ko": "macOS가 필요한 파일 또는 명령에 대한 접근을 거부했습니다. 진단 정보를 복사하여 해당 단계를 확인하세요.",
+      "zh-Hant": "macOS 拒絕存取必要的檔案或指令。請複製診斷資訊以確認失敗步驟。",
+      "zh-Hans": "macOS 拒绝访问必要的文件或命令。请复制诊断信息以确认失败步骤。",
+      "fr": "macOS a refusé l’accès à un fichier ou à une commande nécessaire. Copiez le diagnostic pour identifier l’étape concernée.",
+      "de": "macOS hat den Zugriff auf eine benötigte Datei oder einen Befehl verweigert. Kopieren Sie die Diagnosedaten, um den betroffenen Schritt zu ermitteln."
     },
     "SETUP_DISK_FULL": {
       "en": "There is not enough disk space. Free up space on this Mac, then try again.",
       "ja": "ディスクの空き容量が不足しています。このMacの空き容量を増やして再試行してください。",
-      "ko": "디스크 공간이 부족합니다. 이 Mac의 공간을 확보한 후 다시 시도하세요."
+      "ko": "디스크 공간이 부족합니다. 이 Mac의 공간을 확보한 후 다시 시도하세요.",
+      "zh-Hant": "磁碟空間不足。請釋出此 Mac 的空間，再試一次。",
+      "zh-Hans": "磁盘空间不足。请释放此 Mac 的空间，然后重试。",
+      "fr": "L’espace disque est insuffisant. Libérez de l’espace sur ce Mac, puis réessayez.",
+      "de": "Nicht genügend Speicherplatz. Geben Sie auf diesem Mac Speicherplatz frei und versuchen Sie es erneut."
     },
     "SETUP_COMMAND_FAILED": {
       "en": "A setup command failed. Copy diagnostics if retrying does not help.",
       "ja": "設定コマンドが失敗しました。再試行しても続く場合は診断情報をコピーしてください。",
-      "ko": "설정 명령에 실패했습니다. 재시도해도 해결되지 않으면 진단 정보를 복사하세요."
+      "ko": "설정 명령에 실패했습니다. 재시도해도 해결되지 않으면 진단 정보를 복사하세요.",
+      "zh-Hant": "設定指令執行失敗。若重試仍無效，請複製診斷資訊。",
+      "zh-Hans": "设置命令执行失败。如果重试仍无效，请复制诊断信息。",
+      "fr": "Une commande de configuration a échoué. Si une nouvelle tentative ne résout rien, copiez le diagnostic.",
+      "de": "Ein Einrichtungsbefehl ist fehlgeschlagen. Kopieren Sie die Diagnosedaten, falls ein erneuter Versuch nicht hilft."
     },
     "SETUP_INVALID_RESPONSE": {
       "en": "The setup helper returned an unreadable result. Copy diagnostics and check for an app update.",
       "ja": "設定処理の結果を読み取れませんでした。診断情報をコピーし、アプリの更新を確認してください。",
-      "ko": "설정 도우미가 읽을 수 없는 결과를 반환했습니다. 진단 정보를 복사하고 앱 업데이트를 확인하세요."
+      "ko": "설정 도우미가 읽을 수 없는 결과를 반환했습니다. 진단 정보를 복사하고 앱 업데이트를 확인하세요.",
+      "zh-Hant": "設定輔助程式傳回無法讀取的結果。請複製診斷資訊，並檢查 App 更新。",
+      "zh-Hans": "设置辅助程序返回了无法读取的结果。请复制诊断信息，并检查应用更新。",
+      "fr": "L’assistant de configuration a renvoyé un résultat illisible. Copiez le diagnostic et recherchez une mise à jour de l’app.",
+      "de": "Das Einrichtungsprogramm hat ein unlesbares Ergebnis zurückgegeben. Kopieren Sie die Diagnosedaten und suchen Sie nach einem App-Update."
     },
     "TAILSCALE_NOT_INSTALLED": {
       "en": "Install Tailscale and sign in, then try again.",
       "ja": "Tailscaleをインストールしてログインし、再試行してください。",
-      "ko": "Tailscale을 설치하고 로그인한 후 다시 시도하세요."
+      "ko": "Tailscale을 설치하고 로그인한 후 다시 시도하세요.",
+      "zh-Hant": "請安裝並登入 Tailscale，再試一次。",
+      "zh-Hans": "请安装并登录 Tailscale，然后重试。",
+      "fr": "Installez Tailscale et connectez-vous, puis réessayez.",
+      "de": "Installieren Sie Tailscale und melden Sie sich an. Versuchen Sie es dann erneut."
     },
     "TAILSCALE_LOGIN_REQUIRED": {
       "en": "Open Tailscale and sign in to the same network as your iPhone.",
       "ja": "Tailscaleを開き、iPhoneと同じネットワークにログインしてください。",
-      "ko": "Tailscale을 열고 iPhone과 같은 네트워크에 로그인하세요."
+      "ko": "Tailscale을 열고 iPhone과 같은 네트워크에 로그인하세요.",
+      "zh-Hant": "請開啟 Tailscale，登入與 iPhone 相同的網路。",
+      "zh-Hans": "请打开 Tailscale，登录与 iPhone 相同的网络。",
+      "fr": "Ouvrez Tailscale et connectez-vous au même réseau que votre iPhone.",
+      "de": "Öffnen Sie Tailscale und melden Sie sich im selben Netzwerk wie Ihr iPhone an."
     },
     "TAILSCALE_APPROVAL_REQUIRED": {
       "en": "Approve this Mac in the Tailscale admin console, then try again.",
       "ja": "Tailscaleの管理画面でこのMacの参加を承認してから再試行してください。",
-      "ko": "Tailscale 관리 콘솔에서 이 Mac을 승인한 후 다시 시도하세요."
+      "ko": "Tailscale 관리 콘솔에서 이 Mac을 승인한 후 다시 시도하세요.",
+      "zh-Hant": "請在 Tailscale 管理控制台核准此 Mac，再試一次。",
+      "zh-Hans": "请在 Tailscale 管理控制台批准此 Mac，然后重试。",
+      "fr": "Approuvez ce Mac dans la console d’administration Tailscale, puis réessayez.",
+      "de": "Genehmigen Sie diesen Mac in der Tailscale-Administrationskonsole und versuchen Sie es erneut."
     },
     "TAILSCALE_STOPPED": {
       "en": "Open Tailscale and turn the connection on.",
       "ja": "Tailscaleが停止しています。Tailscaleを開いて接続をオンにしてください。",
-      "ko": "Tailscale을 열고 연결을 켜세요."
+      "ko": "Tailscale을 열고 연결을 켜세요.",
+      "zh-Hant": "請開啟 Tailscale 並啟用連線。",
+      "zh-Hans": "请打开 Tailscale 并开启连接。",
+      "fr": "Ouvrez Tailscale et activez la connexion.",
+      "de": "Öffnen Sie Tailscale und aktivieren Sie die Verbindung."
     },
     "TAILSCALE_NOT_READY": {
       "en": "Wait for Tailscale to connect, then try again.",
       "ja": "Tailscaleの接続が完了してから再試行してください。",
-      "ko": "Tailscale이 연결될 때까지 기다린 후 다시 시도하세요."
+      "ko": "Tailscale이 연결될 때까지 기다린 후 다시 시도하세요.",
+      "zh-Hant": "請等待 Tailscale 連線後再試一次。",
+      "zh-Hans": "请等待 Tailscale 连接后再试。",
+      "fr": "Attendez que Tailscale soit connecté, puis réessayez.",
+      "de": "Warten Sie, bis Tailscale verbunden ist, und versuchen Sie es erneut."
     },
     "TAILSCALE_DNS_UNAVAILABLE": {
       "en": "Check MagicDNS and HTTPS Certificates under DNS in the Tailscale admin console.",
       "ja": "Tailscale管理画面のDNSでMagicDNSとHTTPS Certificatesを確認してください。",
-      "ko": "Tailscale 관리 콘솔의 DNS에서 MagicDNS와 HTTPS Certificates를 확인하세요."
+      "ko": "Tailscale 관리 콘솔의 DNS에서 MagicDNS와 HTTPS Certificates를 확인하세요.",
+      "zh-Hant": "請在 Tailscale 管理控制台的 DNS 中檢查 MagicDNS 和 HTTPS Certificates。",
+      "zh-Hans": "请在 Tailscale 管理控制台的 DNS 中检查 MagicDNS 和 HTTPS Certificates。",
+      "fr": "Vérifiez MagicDNS et HTTPS Certificates dans la rubrique DNS de la console d’administration Tailscale.",
+      "de": "Prüfen Sie MagicDNS und HTTPS Certificates unter DNS in der Tailscale-Administrationskonsole."
     },
     "TAILSCALE_STATUS_FAILED": {
       "en": "Could not read Tailscale status. Open Tailscale and check its connection.",
       "ja": "Tailscaleの状態を読み取れません。Tailscaleを開いて接続を確認してください。",
-      "ko": "Tailscale 상태를 읽지 못했습니다. Tailscale을 열고 연결을 확인하세요."
+      "ko": "Tailscale 상태를 읽지 못했습니다. Tailscale을 열고 연결을 확인하세요.",
+      "zh-Hant": "無法讀取 Tailscale 狀態。請開啟 Tailscale 並檢查連線。",
+      "zh-Hans": "无法读取 Tailscale 状态。请打开 Tailscale 并检查连接。",
+      "fr": "Impossible de lire l’état de Tailscale. Ouvrez Tailscale et vérifiez sa connexion.",
+      "de": "Der Tailscale-Status konnte nicht gelesen werden. Öffnen Sie Tailscale und prüfen Sie die Verbindung."
     },
     "TAILSCALE_SERVE_STATUS_FAILED": {
       "en": "Could not read Tailscale Serve settings. Check Tailscale before retrying.",
       "ja": "Tailscale Serveの設定を読み取れません。Tailscaleの状態を確認して再試行してください。",
-      "ko": "Tailscale Serve 설정을 읽지 못했습니다. Tailscale을 확인한 후 다시 시도하세요."
+      "ko": "Tailscale Serve 설정을 읽지 못했습니다. Tailscale을 확인한 후 다시 시도하세요.",
+      "zh-Hant": "無法讀取 Tailscale Serve 設定。重試前請先檢查 Tailscale。",
+      "zh-Hans": "无法读取 Tailscale Serve 设置。重试前请先检查 Tailscale。",
+      "fr": "Impossible de lire les réglages Tailscale Serve. Vérifiez Tailscale avant de réessayer.",
+      "de": "Die Tailscale-Serve-Einstellungen konnten nicht gelesen werden. Prüfen Sie Tailscale vor einem erneuten Versuch."
     },
     "TAILSCALE_SERVE_CONFLICT": {
       "en": "Another Tailscale Serve configuration uses this address. Review it before retrying; Dot Link has not replaced it.",
       "ja": "別のTailscale Serve設定がこの接続先を使用しています。設定を確認してください。Dot Linkは上書きしていません。",
-      "ko": "다른 Tailscale Serve 설정이 이 주소를 사용 중입니다. 다시 시도하기 전에 확인하세요. Dot Link는 해당 설정을 덮어쓰지 않았습니다."
+      "ko": "다른 Tailscale Serve 설정이 이 주소를 사용 중입니다. 다시 시도하기 전에 확인하세요. Dot Link는 해당 설정을 덮어쓰지 않았습니다.",
+      "zh-Hant": "另一組 Tailscale Serve 設定正在使用此位址。重試前請先檢查，Dot Link 未取代該設定。",
+      "zh-Hans": "另一组 Tailscale Serve 配置正在使用此地址。重试前请先检查，Dot Link 未替换该配置。",
+      "fr": "Une autre configuration Tailscale Serve utilise cette adresse. Vérifiez-la avant de réessayer ; Dot Link ne l’a pas remplacée.",
+      "de": "Eine andere Tailscale-Serve-Konfiguration nutzt diese Adresse. Prüfen Sie sie vor einem erneuten Versuch. Dot Link hat sie nicht ersetzt."
     },
     "TAILSCALE_FUNNEL_ENABLED": {
       "en": "Tailscale Funnel is enabled. Review the public sharing settings before retrying; Dot Link requires a private connection.",
       "ja": "Tailscale Funnelが有効です。公開設定を確認してください。Dot Linkには専用ネットワーク内の接続が必要です。",
-      "ko": "Tailscale Funnel이 켜져 있습니다. 공개 공유 설정을 확인한 후 다시 시도하세요. Dot Link에는 비공개 연결이 필요합니다."
+      "ko": "Tailscale Funnel이 켜져 있습니다. 공개 공유 설정을 확인한 후 다시 시도하세요. Dot Link에는 비공개 연결이 필요합니다.",
+      "zh-Hant": "Tailscale Funnel 已開啟。重試前請檢查公開分享設定，Dot Link 需要私人連線。",
+      "zh-Hans": "Tailscale Funnel 已开启。重试前请检查公开共享设置，Dot Link 需要私有连接。",
+      "fr": "Tailscale Funnel est activé. Vérifiez les réglages de partage public avant de réessayer ; Dot Link nécessite une connexion privée.",
+      "de": "Tailscale Funnel ist aktiviert. Prüfen Sie die Einstellungen zur öffentlichen Freigabe, bevor Sie es erneut versuchen. Dot Link benötigt eine private Verbindung."
     },
     "TAILSCALE_SERVE_APPROVAL_REQUIRED": {
       "en": "Tailscale Serve needs approval. Use the button below to open Tailscale DNS settings, choose Enable HTTPS under HTTPS Certificates, then try Start relay again. Ask your network administrator if you cannot change this setting.",
       "ja": "Tailscale Serveの許可が必要です。下のボタンでTailscaleのDNS設定を開き、HTTPS CertificatesのEnable HTTPSを押してから、「中継を起動する」をもう一度押してください。変更できない場合はネットワーク管理者に依頼してください。",
-      "ko": "Tailscale Serve에 승인이 필요합니다. 아래 버튼으로 Tailscale DNS 설정을 열고 HTTPS Certificates에서 Enable HTTPS를 선택한 다음 중계 시작을 다시 누르세요. 설정을 변경할 수 없으면 네트워크 관리자에게 문의하세요."
+      "ko": "Tailscale Serve에 승인이 필요합니다. 아래 버튼으로 Tailscale DNS 설정을 열고 HTTPS Certificates에서 Enable HTTPS를 선택한 다음 중계 시작을 다시 누르세요. 설정을 변경할 수 없으면 네트워크 관리자에게 문의하세요.",
+      "zh-Hant": "Tailscale Serve 需要核准。請使用下方按鈕開啟 Tailscale DNS 設定，在 HTTPS Certificates 下選擇 Enable HTTPS，再重試「啟動轉送服務」。若無法變更此設定，請洽詢網路管理員。",
+      "zh-Hans": "Tailscale Serve 需要批准。请使用下方按钮打开 Tailscale DNS 设置，在 HTTPS Certificates 下选择 Enable HTTPS，再重试“启动中继服务”。如果无法更改此设置，请联系网络管理员。",
+      "fr": "Tailscale Serve doit être approuvé. Utilisez le bouton ci-dessous pour ouvrir les réglages DNS de Tailscale, choisissez Enable HTTPS sous HTTPS Certificates, puis réessayez Démarrer le relais. Si vous ne pouvez pas modifier ce réglage, contactez l’administrateur réseau.",
+      "de": "Tailscale Serve benötigt eine Genehmigung. Öffnen Sie über die Schaltfläche unten die DNS-Einstellungen von Tailscale, wählen Sie unter HTTPS Certificates die Option Enable HTTPS und versuchen Sie erneut, den Relay-Dienst zu starten. Falls Sie diese Einstellung nicht ändern können, wenden Sie sich an die Netzwerkadministration."
     },
     "TAILSCALE_HTTPS_FAILED": {
       "en": "Could not enable Tailscale HTTPS. Check HTTPS Certificates and Serve access in Tailscale, then try again.",
       "ja": "TailscaleのHTTPSを有効にできません。HTTPS CertificatesとServeの利用許可を確認して再試行してください。",
-      "ko": "Tailscale HTTPS를 켜지 못했습니다. Tailscale의 HTTPS Certificates와 Serve 접근 권한을 확인한 후 다시 시도하세요."
+      "ko": "Tailscale HTTPS를 켜지 못했습니다. Tailscale의 HTTPS Certificates와 Serve 접근 권한을 확인한 후 다시 시도하세요.",
+      "zh-Hant": "無法啟用 Tailscale HTTPS。請檢查 Tailscale 的 HTTPS Certificates 和 Serve 存取權限，再試一次。",
+      "zh-Hans": "无法启用 Tailscale HTTPS。请检查 Tailscale 的 HTTPS Certificates 和 Serve 访问权限，然后重试。",
+      "fr": "Impossible d’activer Tailscale HTTPS. Vérifiez HTTPS Certificates et l’accès à Serve dans Tailscale, puis réessayez.",
+      "de": "Tailscale HTTPS konnte nicht aktiviert werden. Prüfen Sie HTTPS Certificates und den Serve-Zugriff in Tailscale und versuchen Sie es erneut."
     },
     "TUNNEL_CONFIG_MISSING": {
       "en": "Save your Dot tunnel connection in setup before starting the relay.",
       "ja": "中継を起動する前に、セットアップでDotのTunnel接続設定を保存してください。",
-      "ko": "중계를 시작하기 전에 설정에서 Dot 터널 연결을 저장하세요."
+      "ko": "중계를 시작하기 전에 설정에서 Dot 터널 연결을 저장하세요.",
+      "zh-Hant": "啟動轉送服務前，請先在設定中儲存 Dot Tunnel 連線。",
+      "zh-Hans": "启动中继服务前，请先在设置中保存 Dot Tunnel 连接。",
+      "fr": "Enregistrez la connexion au tunnel Dot dans la configuration avant de démarrer le relais.",
+      "de": "Speichern Sie zuerst die Dot-Tunnel-Verbindung in der Einrichtung, bevor Sie den Relay-Dienst starten."
     },
     "SETUP_FILES_MISSING": {
       "en": "Required setup files are missing. Copy diagnostics for help; keep your saved settings.",
       "ja": "導入に必要なファイルがありません。設定を消さず、診断情報をコピーしてお問い合わせください。",
-      "ko": "필요한 설정 파일이 없습니다. 저장된 설정을 유지하고 진단 정보를 복사하여 도움을 요청하세요."
+      "ko": "필요한 설정 파일이 없습니다. 저장된 설정을 유지하고 진단 정보를 복사하여 도움을 요청하세요.",
+      "zh-Hant": "缺少必要的設定檔案。請複製診斷資訊以取得協助，並保留已儲存的設定。",
+      "zh-Hans": "缺少必要的设置文件。请复制诊断信息以寻求帮助，并保留已保存的设置。",
+      "fr": "Des fichiers de configuration nécessaires sont absents. Copiez le diagnostic pour obtenir de l’aide ; conservez vos réglages enregistrés.",
+      "de": "Benötigte Einrichtungsdateien fehlen. Kopieren Sie die Diagnosedaten, um Hilfe zu erhalten. Behalten Sie Ihre gespeicherten Einstellungen bei."
     },
     "TUNNEL_CLIENT_MISSING": {
       "en": "The Dot connection component is unavailable. Copy diagnostics for help; keep your saved settings.",
       "ja": "Dotへの接続部品を利用できません。設定を消さず、診断情報をコピーしてお問い合わせください。",
-      "ko": "Dot 연결 구성 요소를 사용할 수 없습니다. 저장된 설정을 유지하고 진단 정보를 복사하여 도움을 요청하세요."
+      "ko": "Dot 연결 구성 요소를 사용할 수 없습니다. 저장된 설정을 유지하고 진단 정보를 복사하여 도움을 요청하세요.",
+      "zh-Hant": "Dot 連線元件無法使用。請複製診斷資訊以取得協助，並保留已儲存的設定。",
+      "zh-Hans": "Dot 连接组件不可用。请复制诊断信息以寻求帮助，并保留已保存的设置。",
+      "fr": "Le composant de connexion à Dot est indisponible. Copiez le diagnostic pour obtenir de l’aide ; conservez vos réglages enregistrés.",
+      "de": "Die Dot-Verbindungskomponente ist nicht verfügbar. Kopieren Sie die Diagnosedaten, um Hilfe zu erhalten. Behalten Sie Ihre gespeicherten Einstellungen bei."
     },
     "EXISTING_SERVICE_UNREADABLE": {
       "en": "Could not verify existing login services. Copy diagnostics before changing them.",
       "ja": "既存の自動起動設定を確認できません。変更する前に診断情報をコピーしてください。",
-      "ko": "기존 로그인 서비스를 확인하지 못했습니다. 변경하기 전에 진단 정보를 복사하세요."
+      "ko": "기존 로그인 서비스를 확인하지 못했습니다. 변경하기 전에 진단 정보를 복사하세요.",
+      "zh-Hant": "無法驗證現有登入服務。變更前請先複製診斷資訊。",
+      "zh-Hans": "无法验证现有登录服务。更改前请先复制诊断信息。",
+      "fr": "Impossible de vérifier les services existants lancés à l’ouverture de session. Copiez le diagnostic avant de les modifier.",
+      "de": "Vorhandene Anmeldedienste konnten nicht geprüft werden. Kopieren Sie die Diagnosedaten, bevor Sie Änderungen vornehmen."
     },
     "EXISTING_SERVICE_CONFLICT": {
       "en": "Another installation owns these login services. Review the existing installation before retrying.",
       "ja": "別の配置先が自動起動設定を使用しています。既存のインストールを確認してください。",
-      "ko": "다른 설치가 이 로그인 서비스를 사용 중입니다. 기존 설치를 확인한 후 다시 시도하세요."
+      "ko": "다른 설치가 이 로그인 서비스를 사용 중입니다. 기존 설치를 확인한 후 다시 시도하세요.",
+      "zh-Hant": "這些登入服務屬於另一個安裝版本。重試前請先檢查現有安裝。",
+      "zh-Hans": "这些登录服务属于另一个安装版本。重试前请先检查现有安装。",
+      "fr": "Ces services de démarrage appartiennent à une autre installation. Vérifiez l’installation existante avant de réessayer.",
+      "de": "Diese Anmeldedienste gehören zu einer anderen Installation. Prüfen Sie die vorhandene Installation, bevor Sie es erneut versuchen."
     },
     "SERVICE_REGISTRATION_FAILED": {
       "en": "Could not register a login service. Check System Settings > General > Login Items, then try again while logged in to this Mac.",
       "ja": "自動起動を登録できません。「システム設定」→「一般」→「ログイン項目」を確認し、このMacにログインした状態で再試行してください。",
-      "ko": "로그인 서비스를 등록하지 못했습니다. 시스템 설정 > 일반 > 로그인 항목을 확인하고 이 Mac에 로그인한 상태에서 다시 시도하세요."
+      "ko": "로그인 서비스를 등록하지 못했습니다. 시스템 설정 > 일반 > 로그인 항목을 확인하고 이 Mac에 로그인한 상태에서 다시 시도하세요.",
+      "zh-Hant": "無法註冊登入服務。請檢查「系統設定」→「一般」→「登入項目」，並在登入此 Mac 的狀態下重試。",
+      "zh-Hans": "无法注册登录服务。请检查“系统设置”→“通用”→“登录项”，并在登录此 Mac 的状态下重试。",
+      "fr": "Impossible d’enregistrer un service de démarrage. Vérifiez Réglages Système → Général → Ouverture et extensions, puis réessayez en restant connecté à votre session sur ce Mac.",
+      "de": "Ein Anmeldedienst konnte nicht registriert werden. Prüfen Sie Systemeinstellungen → Allgemein → Anmeldeobjekte und versuchen Sie es erneut, während Sie an diesem Mac angemeldet sind."
     },
     "SERVICE_STOP_TIMEOUT": {
       "en": "The previous service is still stopping. Wait a moment, then try again.",
       "ja": "以前の起動処理が終了待ちです。少し待ってから再試行してください。",
-      "ko": "이전 서비스가 아직 중지 중입니다. 잠시 기다린 후 다시 시도하세요."
+      "ko": "이전 서비스가 아직 중지 중입니다. 잠시 기다린 후 다시 시도하세요.",
+      "zh-Hant": "先前的服務仍在停止中。請稍候再試。",
+      "zh-Hans": "先前的服务仍在停止中。请稍后重试。",
+      "fr": "Le service précédent est encore en cours d’arrêt. Patientez un instant, puis réessayez.",
+      "de": "Der vorherige Dienst wird noch gestoppt. Warten Sie kurz und versuchen Sie es erneut."
     },
     "INSTALL_FIRST": {
       "en": "Complete Prepare this Mac before starting the relay.",
       "ja": "中継を起動する前に「Macの準備」を完了してください。",
-      "ko": "중계를 시작하기 전에 Mac 준비를 완료하세요."
+      "ko": "중계를 시작하기 전에 Mac 준비를 완료하세요.",
+      "zh-Hant": "啟動轉送服務前，請先完成「準備此 Mac」。",
+      "zh-Hans": "启动中继服务前，请先完成“准备此 Mac”。",
+      "fr": "Terminez Préparer ce Mac avant de démarrer le relais.",
+      "de": "Schließen Sie Diesen Mac vorbereiten ab, bevor Sie den Relay-Dienst starten."
     },
     "MULTIPLE_INSTALLATIONS": {
       "en": "More than one installation was found. Review the existing installations before retrying.",
       "ja": "複数のインストールが見つかりました。既存の配置先を確認してください。",
-      "ko": "여러 설치가 발견되었습니다. 기존 설치를 확인한 후 다시 시도하세요."
+      "ko": "여러 설치가 발견되었습니다. 기존 설치를 확인한 후 다시 시도하세요.",
+      "zh-Hant": "發現多個安裝版本。重試前請先檢查現有安裝。",
+      "zh-Hans": "发现多个安装版本。重试前请先检查现有安装。",
+      "fr": "Plusieurs installations ont été trouvées. Vérifiez les installations existantes avant de réessayer.",
+      "de": "Mehrere Installationen wurden gefunden. Prüfen Sie die vorhandenen Installationen, bevor Sie es erneut versuchen."
     },
     "INSTALL_FOLDER_OCCUPIED": {
       "en": "The setup folder is already in use. Review the existing installation before retrying.",
       "ja": "導入先フォルダが使用されています。既存のインストールを確認してください。",
-      "ko": "설정 폴더가 이미 사용 중입니다. 기존 설치를 확인한 후 다시 시도하세요."
+      "ko": "설정 폴더가 이미 사용 중입니다. 기존 설치를 확인한 후 다시 시도하세요.",
+      "zh-Hant": "設定資料夾已被使用。重試前請先檢查現有安裝。",
+      "zh-Hans": "设置文件夹已被占用。重试前请先检查现有安装。",
+      "fr": "Le dossier de configuration est déjà utilisé. Vérifiez l’installation existante avant de réessayer.",
+      "de": "Der Einrichtungsordner wird bereits verwendet. Prüfen Sie die vorhandene Installation, bevor Sie es erneut versuchen."
     },
     "APP_BUNDLE_INVALID": {
       "en": "Could not verify the Mac app. Replace only the app with an official download; keep your Application Support data.",
       "ja": "Macアプリを確認できません。Application Supportのデータは残し、公式配布のアプリだけを入れ替えてください。",
-      "ko": "Mac 앱을 확인하지 못했습니다. Application Support 데이터는 유지하고 공식 다운로드로 앱만 교체하세요."
+      "ko": "Mac 앱을 확인하지 못했습니다. Application Support 데이터는 유지하고 공식 다운로드로 앱만 교체하세요.",
+      "zh-Hant": "無法驗證 Mac App。請使用官方下載檔僅替換 App，並保留 Application Support 資料。",
+      "zh-Hans": "无法验证 Mac 应用。请使用官方下载文件仅替换应用，并保留 Application Support 数据。",
+      "fr": "Impossible de vérifier l’app Mac. Remplacez uniquement l’app par une version téléchargée depuis la source officielle ; conservez les données Application Support.",
+      "de": "Die Mac-App konnte nicht geprüft werden. Ersetzen Sie nur die App durch einen offiziellen Download. Behalten Sie Ihre Application-Support-Daten bei."
     },
     "APP_BUNDLE_CONFLICT": {
       "en": "Another app occupies the destination. Review the app in your Applications folder before retrying.",
       "ja": "配置先が別のアプリに使用されています。ユーザーのApplicationsフォルダを確認してください。",
-      "ko": "대상 위치에 다른 앱이 있습니다. Applications 폴더의 앱을 확인한 후 다시 시도하세요."
+      "ko": "대상 위치에 다른 앱이 있습니다. Applications 폴더의 앱을 확인한 후 다시 시도하세요.",
+      "zh-Hant": "目標位置已有另一個 App。重試前請先檢查「應用程式」資料夾中的 App。",
+      "zh-Hans": "目标位置已有另一个应用。重试前请先检查“应用程序”文件夹中的应用。",
+      "fr": "Une autre app occupe l’emplacement prévu. Vérifiez l’app dans votre dossier Applications avant de réessayer.",
+      "de": "Am Ziel befindet sich bereits eine andere App. Prüfen Sie die App im Programme-Ordner, bevor Sie es erneut versuchen."
     },
     "MENU_SERVICE_CONFLICT": {
       "en": "Another login entry uses the app service. Review Login Items before retrying.",
       "ja": "別のログイン項目がアプリの起動設定を使用しています。ログイン項目を確認してください。",
-      "ko": "다른 로그인 항목이 앱 서비스를 사용 중입니다. 로그인 항목을 확인한 후 다시 시도하세요."
+      "ko": "다른 로그인 항목이 앱 서비스를 사용 중입니다. 로그인 항목을 확인한 후 다시 시도하세요.",
+      "zh-Hant": "另一個登入項目正在使用此 App 服務。重試前請先檢查登入項目。",
+      "zh-Hans": "另一个登录项正在使用此应用服务。重试前请先检查登录项。",
+      "fr": "Un autre élément d’ouverture de session utilise le service de l’app. Vérifiez les éléments d’ouverture de session avant de réessayer.",
+      "de": "Ein anderes Anmeldeobjekt nutzt den App-Dienst. Prüfen Sie die Anmeldeobjekte, bevor Sie es erneut versuchen."
     },
     "SERVICE_SETUP_REQUIRED": {
       "en": "Login services are incomplete. Check the status and retry Start relay.",
       "ja": "自動起動の設定が未完了です。状態を確認して中継の起動を再試行してください。",
-      "ko": "로그인 서비스 설정이 완료되지 않았습니다. 상태를 확인하고 중계 시작을 다시 시도하세요."
+      "ko": "로그인 서비스 설정이 완료되지 않았습니다. 상태를 확인하고 중계 시작을 다시 시도하세요.",
+      "zh-Hant": "登入服務設定不完整。請檢查狀態，再重試「啟動轉送服務」。",
+      "zh-Hans": "登录服务设置不完整。请检查状态，再重试“启动中继服务”。",
+      "fr": "Les services de démarrage sont incomplets. Vérifiez l’état, puis réessayez Démarrer le relais.",
+      "de": "Die Anmeldedienste sind unvollständig. Prüfen Sie den Status und versuchen Sie erneut, den Relay-Dienst zu starten."
     },
     "UNSAFE_INSTALL_PATH": {
       "en": "Could not verify the installation location. Copy diagnostics before changing it.",
       "ja": "インストール先の安全性を確認できません。変更する前に診断情報をコピーしてください。",
-      "ko": "설치 위치를 확인하지 못했습니다. 변경하기 전에 진단 정보를 복사하세요."
+      "ko": "설치 위치를 확인하지 못했습니다. 변경하기 전에 진단 정보를 복사하세요.",
+      "zh-Hant": "無法驗證安裝位置。變更前請先複製診斷資訊。",
+      "zh-Hans": "无法验证安装位置。更改前请先复制诊断信息。",
+      "fr": "Impossible de vérifier l’emplacement d’installation. Copiez le diagnostic avant de le modifier.",
+      "de": "Der Installationsort konnte nicht geprüft werden. Kopieren Sie die Diagnosedaten, bevor Sie ihn ändern."
     },
     "LIFECYCLE_STATE_UNREADABLE": {
       "en": "Could not read the saved relay state. Copy diagnostics before changing settings.",
       "ja": "中継の保存状態を読み取れません。設定を変更する前に診断情報をコピーしてください。",
-      "ko": "저장된 중계 상태를 읽지 못했습니다. 설정을 변경하기 전에 진단 정보를 복사하세요."
+      "ko": "저장된 중계 상태를 읽지 못했습니다. 설정을 변경하기 전에 진단 정보를 복사하세요.",
+      "zh-Hant": "無法讀取已儲存的轉送服務狀態。變更設定前請先複製診斷資訊。",
+      "zh-Hans": "无法读取已保存的中继服务状态。更改设置前请先复制诊断信息。",
+      "fr": "Impossible de lire l’état enregistré du relais. Copiez le diagnostic avant de modifier les réglages.",
+      "de": "Der gespeicherte Relay-Zustand konnte nicht gelesen werden. Kopieren Sie die Diagnosedaten, bevor Sie Einstellungen ändern."
     },
     "UPDATE_APP_INVALID": {
       "en": "Could not verify the installed Mac app. Replace only the app with an official download; keep your Application Support data.",
       "ja": "インストール済みアプリを確認できません。Application Supportのデータは残し、公式配布のアプリだけを入れ替えてください。",
-      "ko": "설치된 Mac 앱을 확인하지 못했습니다. Application Support 데이터는 유지하고 공식 다운로드로 앱만 교체하세요."
+      "ko": "설치된 Mac 앱을 확인하지 못했습니다. Application Support 데이터는 유지하고 공식 다운로드로 앱만 교체하세요.",
+      "zh-Hant": "無法驗證已安裝的 Mac App。請使用官方下載檔僅替換 App，並保留 Application Support 資料。",
+      "zh-Hans": "无法验证已安装的 Mac 应用。请使用官方下载文件仅替换应用，并保留 Application Support 数据。",
+      "fr": "Impossible de vérifier l’app Mac installée. Remplacez uniquement l’app par une version téléchargée depuis la source officielle ; conservez les données Application Support.",
+      "de": "Die installierte Mac-App konnte nicht geprüft werden. Ersetzen Sie nur die App durch einen offiziellen Download. Behalten Sie Ihre Application-Support-Daten bei."
     },
     "UPDATE_ALREADY_PREPARED": {
       "en": "A previous runtime change is unfinished. Check the app status for recovery.",
       "ja": "以前の実行環境の切り替えが未完了です。アプリの状態を確認して復旧してください。",
-      "ko": "이전 실행 환경 변경이 완료되지 않았습니다. 앱 상태에서 복구 방법을 확인하세요."
+      "ko": "이전 실행 환경 변경이 완료되지 않았습니다. 앱 상태에서 복구 방법을 확인하세요.",
+      "zh-Hant": "先前的執行環境變更尚未完成。請檢查 App 狀態以進行復原。",
+      "zh-Hans": "先前的运行环境更改尚未完成。请检查应用状态以进行恢复。",
+      "fr": "Un changement précédent de l’environnement d’exécution est inachevé. Vérifiez l’état de l’app pour le rétablir.",
+      "de": "Eine frühere Änderung der Laufzeitumgebung ist noch nicht abgeschlossen. Prüfen Sie den App-Status zur Wiederherstellung."
     },
     "UPDATE_SETUP_CHANGED": {
       "en": "Setup changed during activation. Check the status before retrying.",
       "ja": "起動中に設定状態が変わりました。状態を確認してから再試行してください。",
-      "ko": "활성화 중 설정이 변경되었습니다. 상태를 확인한 후 다시 시도하세요."
+      "ko": "활성화 중 설정이 변경되었습니다. 상태를 확인한 후 다시 시도하세요.",
+      "zh-Hant": "啟用過程中設定已變更。重試前請先檢查狀態。",
+      "zh-Hans": "激活过程中设置已更改。重试前请先检查状态。",
+      "fr": "La configuration a changé pendant l’activation. Vérifiez l’état avant de réessayer.",
+      "de": "Die Einrichtung hat sich während der Aktivierung geändert. Prüfen Sie den Status, bevor Sie es erneut versuchen."
     },
     "UPDATE_JOURNAL_INVALID": {
       "en": "Could not verify runtime recovery data. Copy diagnostics before changing settings.",
       "ja": "実行環境の復旧情報を確認できません。設定を変更する前に診断情報をコピーしてください。",
-      "ko": "실행 환경 복구 데이터를 확인하지 못했습니다. 설정을 변경하기 전에 진단 정보를 복사하세요."
+      "ko": "실행 환경 복구 데이터를 확인하지 못했습니다. 설정을 변경하기 전에 진단 정보를 복사하세요.",
+      "zh-Hant": "無法驗證執行環境復原資料。變更設定前請先複製診斷資訊。",
+      "zh-Hans": "无法验证运行环境恢复数据。更改设置前请先复制诊断信息。",
+      "fr": "Impossible de vérifier les données de récupération de l’environnement d’exécution. Copiez le diagnostic avant de modifier les réglages.",
+      "de": "Die Wiederherstellungsdaten der Laufzeitumgebung konnten nicht geprüft werden. Kopieren Sie die Diagnosedaten, bevor Sie Einstellungen ändern."
     },
     "UPDATE_RECOVERY_REQUIRED": {
       "en": "The relay did not become ready after switching its runtime. Use the recovery options shown below.",
       "ja": "実行環境の切り替え後、中継の準備が完了しませんでした。下の復旧操作を使ってください。",
-      "ko": "실행 환경 전환 후 중계가 준비되지 않았습니다. 아래 복구 옵션을 사용하세요."
+      "ko": "실행 환경 전환 후 중계가 준비되지 않았습니다. 아래 복구 옵션을 사용하세요.",
+      "zh-Hant": "切換執行環境後，轉送服務未能就緒。請使用下方顯示的復原選項。",
+      "zh-Hans": "切换运行环境后，中继服务未能就绪。请使用下方显示的恢复选项。",
+      "fr": "Le relais n’est pas devenu opérationnel après le changement d’environnement d’exécution. Utilisez les options de récupération ci-dessous.",
+      "de": "Der Relay-Dienst wurde nach dem Wechsel der Laufzeitumgebung nicht bereit. Nutzen Sie die unten angezeigten Wiederherstellungsoptionen."
     },
     "SERVICE_STILL_STOPPING": {
       "en": "A relay process is still stopping. Wait a moment, then try again.",
       "ja": "中継プロセスが終了待ちです。少し待ってから再試行してください。",
-      "ko": "중계 프로세스가 아직 중지 중입니다. 잠시 기다린 후 다시 시도하세요."
+      "ko": "중계 프로세스가 아직 중지 중입니다. 잠시 기다린 후 다시 시도하세요.",
+      "zh-Hant": "轉送服務的程序仍在停止中。請稍候再試。",
+      "zh-Hans": "中继服务的进程仍在停止中。请稍后重试。",
+      "fr": "Un processus du relais est encore en cours d’arrêt. Patientez un instant, puis réessayez.",
+      "de": "Ein Relay-Prozess wird noch gestoppt. Warten Sie kurz und versuchen Sie es erneut."
     },
     "SPEECH_MODEL_MISSING": {
       "en": "The speech model is missing. Return to Prepare this Mac to download it.",
       "ja": "音声認識モデルがありません。「Macの準備」に戻ってダウンロードしてください。",
-      "ko": "음성 모델이 없습니다. Mac 준비로 돌아가 다운로드하세요."
+      "ko": "음성 모델이 없습니다. Mac 준비로 돌아가 다운로드하세요.",
+      "zh-Hant": "缺少語音模型。請返回「準備此 Mac」下載。",
+      "zh-Hans": "缺少语音模型。请返回“准备此 Mac”下载。",
+      "fr": "Le modèle vocal est absent. Revenez à Préparer ce Mac pour le télécharger.",
+      "de": "Das Sprachmodell fehlt. Kehren Sie zu Diesen Mac vorbereiten zurück, um es herunterzuladen."
     }
   },
   "stages": {
     "discover": {
       "en": "Find installation",
       "ja": "インストール先の確認",
-      "ko": "설치 찾기"
+      "ko": "설치 찾기",
+      "zh-Hant": "尋找安裝位置",
+      "zh-Hans": "查找安装位置",
+      "fr": "Trouver l’installation",
+      "de": "Installation suchen"
     },
     "install": {
       "en": "Install relay services",
       "ja": "中継サービスの設定",
-      "ko": "중계 서비스 설치"
+      "ko": "중계 서비스 설치",
+      "zh-Hant": "安裝轉送服務",
+      "zh-Hans": "安装中继服务",
+      "fr": "Installer les services du relais",
+      "de": "Relay-Dienste installieren"
     },
     "ownership": {
       "en": "Check existing login services",
       "ja": "既存の自動起動設定の確認",
-      "ko": "기존 로그인 서비스 확인"
+      "ko": "기존 로그인 서비스 확인",
+      "zh-Hant": "檢查現有登入服務",
+      "zh-Hans": "检查现有登录服务",
+      "fr": "Vérifier les services de démarrage existants",
+      "de": "Vorhandene Anmeldedienste prüfen"
     },
     "tailscale": {
       "en": "Check Tailscale",
       "ja": "Tailscaleの確認",
-      "ko": "Tailscale 확인"
+      "ko": "Tailscale 확인",
+      "zh-Hant": "檢查 Tailscale",
+      "zh-Hans": "检查 Tailscale",
+      "fr": "Vérifier Tailscale",
+      "de": "Tailscale prüfen"
     },
     "prerequisites": {
       "en": "Check setup files",
       "ja": "導入ファイルの確認",
-      "ko": "설정 파일 확인"
+      "ko": "설정 파일 확인",
+      "zh-Hant": "檢查設定檔案",
+      "zh-Hans": "检查设置文件",
+      "fr": "Vérifier les fichiers de configuration",
+      "de": "Einrichtungsdateien prüfen"
     },
     "initialize": {
       "en": "Initialize relay data",
       "ja": "中継データの準備",
-      "ko": "중계 데이터 초기화"
+      "ko": "중계 데이터 초기화",
+      "zh-Hant": "初始化轉送服務資料",
+      "zh-Hans": "初始化中继服务数据",
+      "fr": "Initialiser les données du relais",
+      "de": "Relay-Daten initialisieren"
     },
     "https": {
       "en": "Enable Tailscale HTTPS",
       "ja": "Tailscale HTTPSの有効化",
-      "ko": "Tailscale HTTPS 활성화"
+      "ko": "Tailscale HTTPS 활성화",
+      "zh-Hant": "啟用 Tailscale HTTPS",
+      "zh-Hans": "启用 Tailscale HTTPS",
+      "fr": "Activer Tailscale HTTPS",
+      "de": "Tailscale HTTPS aktivieren"
     },
     "config": {
       "en": "Save connection settings",
       "ja": "接続設定の保存",
-      "ko": "연결 설정 저장"
+      "ko": "연결 설정 저장",
+      "zh-Hant": "儲存連線設定",
+      "zh-Hans": "保存连接设置",
+      "fr": "Enregistrer les réglages de connexion",
+      "de": "Verbindungseinstellungen speichern"
     },
     "services": {
       "en": "Register relay login services",
       "ja": "中継の自動起動登録",
-      "ko": "중계 로그인 서비스 등록"
+      "ko": "중계 로그인 서비스 등록",
+      "zh-Hant": "註冊轉送服務的登入項目",
+      "zh-Hans": "注册中继服务登录项",
+      "fr": "Enregistrer le démarrage du relais à l’ouverture de session",
+      "de": "Relay-Dienste für die Anmeldung registrieren"
     },
     "app-install": {
       "en": "Install Mac app",
       "ja": "Macアプリの配置",
-      "ko": "Mac 앱 설치"
+      "ko": "Mac 앱 설치",
+      "zh-Hant": "安裝 Mac App",
+      "zh-Hans": "安装 Mac 应用",
+      "fr": "Installer l’app Mac",
+      "de": "Mac-App installieren"
     },
     "app-register": {
       "en": "Register Mac app at login",
       "ja": "Macアプリの自動起動登録",
-      "ko": "로그인 시 Mac 앱 실행 등록"
+      "ko": "로그인 시 Mac 앱 실행 등록",
+      "zh-Hant": "設定 Mac App 登入時啟動",
+      "zh-Hans": "设置 Mac 应用登录时启动",
+      "fr": "Enregistrer l’ouverture de l’app Mac à la connexion",
+      "de": "Mac-App für den Start bei der Anmeldung registrieren"
     },
     "runtime-prepare": {
       "en": "Prepare relay runtime",
       "ja": "中継実行環境の準備",
-      "ko": "중계 실행 환경 준비"
+      "ko": "중계 실행 환경 준비",
+      "zh-Hant": "準備轉送服務執行環境",
+      "zh-Hans": "准备中继服务运行环境",
+      "fr": "Préparer l’environnement d’exécution du relais",
+      "de": "Relay-Laufzeitumgebung vorbereiten"
     },
     "runtime-finish": {
       "en": "Switch relay runtime",
       "ja": "中継実行環境の切り替え",
-      "ko": "중계 실행 환경 전환"
+      "ko": "중계 실행 환경 전환",
+      "zh-Hant": "切換轉送服務執行環境",
+      "zh-Hans": "切换中继服务运行环境",
+      "fr": "Changer l’environnement d’exécution du relais",
+      "de": "Relay-Laufzeitumgebung wechseln"
     },
     "health": {
       "en": "Check relay connection",
       "ja": "中継接続の確認",
-      "ko": "중계 연결 확인"
+      "ko": "중계 연결 확인",
+      "zh-Hant": "檢查轉送服務連線",
+      "zh-Hans": "检查中继服务连接",
+      "fr": "Vérifier la connexion au relais",
+      "de": "Relay-Verbindung prüfen"
     },
     "pairing": {
       "en": "Create pairing code",
       "ja": "接続コードの作成",
-      "ko": "페어링 코드 생성"
+      "ko": "페어링 코드 생성",
+      "zh-Hant": "建立配對碼",
+      "zh-Hans": "创建配对码",
+      "fr": "Créer un code de jumelage",
+      "de": "Kopplungscode erstellen"
     }
   }
 }

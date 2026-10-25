@@ -7,7 +7,7 @@ const memory = () => {
   return {getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => {data.set(k, v);}};
 };
 test('initial locale and unsupported locales use the supported-language fallback', () => {
-  for (const [input, expected] of [['ja-JP','ja'], ['JA-jp','ja'], ['en-GB','en'], ['zh-CN','en'], ['fr','en'], ['','en']]) {
+  for (const [input, expected] of [['ja-JP','ja'], ['JA-jp','ja'], ['en-GB','en'], ['zh-CN','zh-Hans'], ['fr','fr'], ['ar','en'], ['','en']]) {
     const prefs = new LanguagePreferences(memory);
     assert.equal(prefs.value, 'auto'); assert.equal(chooseLanguage(input, prefs.value), expected);
   }

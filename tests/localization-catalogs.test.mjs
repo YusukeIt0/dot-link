@@ -8,7 +8,7 @@ test('every registered language covers the catalog with matching named placehold
   assert.ok(result.messages > 200);
 });
 test('catalog validation rejects missing, extra, empty and incompatible placeholders', () => {
-  const fixture = () => ({en: {'even.test': 'Hello {name}'}, ja: {'even.test': '{name}さん'}, ko: {'even.test': '{name}님'}});
+  const fixture = () => Object.fromEntries(Object.keys(metadata).map(locale => [locale, {'even.test': 'Hello {name}'}]));
   assert.doesNotThrow(() => validateCatalogs(metadata, fixture()));
   for (const mutate of [
     data => { delete data.ko['even.test']; },
@@ -20,6 +20,21 @@ test('catalog validation rejects missing, extra, empty and incompatible placehol
     data => { delete data.ko; },
   ]) {
     const data = fixture(); mutate(data); assert.throws(() => validateCatalogs(metadata, data));
+  }
+});
+
+test('locale metadata rejects ambiguous matches and invalid script tags', () => {
+  const catalogs = Object.fromEntries(Object.keys(metadata).map(locale => [locale, {'even.test': 'Text'}]));
+  for (const mutate of [
+    data => { data['zh-Hans'].matchLocales.push('ZH-TW'); },
+    data => { data['zh-Hans'].matchLocales.push('zh-tw'); },
+    data => { data.fr.matchLocales = ['de']; },
+    data => { data.fr.matchLocales = []; },
+    data => { data.fr.matchLocales = ['fr/FR']; },
+    data => { data.fr.speechLocale = 'de-DE'; },
+  ]) {
+    const data = structuredClone(metadata); mutate(data);
+    assert.throws(() => validateCatalogs(data, catalogs));
   }
 });
 

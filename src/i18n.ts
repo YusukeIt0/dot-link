@@ -32,10 +32,13 @@ export function t(key: TranslationKey, values?: MessageParameters): string {
 export function seconds(value: string | number): string { return t('even.seconds', { value }); }
 export function chooseLanguage(preferred: string, saved?: string | null): Language {
   if (isLanguage(saved)) return saved;
-  const locale = preferred.toLowerCase();
-  // Retain existing Japanese-prefix behavior, including legacy host values.
-  return supportedLanguages.find(value => locale === value || locale.startsWith(`${value}-`) || locale.startsWith(`${value}_`)
-    || ((localeMetadata[value] as { legacyPrefix?: boolean }).legacyPrefix === true && locale.startsWith(value))) ?? 'en';
+  const locale = preferred.toLowerCase().replaceAll('_', '-');
+  // More specific script/region matches win over base-language defaults.
+  const matches = supportedLanguages.flatMap(value => {
+    const metadata = localeMetadata[value] as { matchLocales?: readonly string[]; legacyPrefix?: boolean };
+    return [value, ...(metadata.matchLocales ?? [])].map(tag => ({value, tag: tag.toLowerCase(), legacy: metadata.legacyPrefix}));
+  }).sort((a, b) => b.tag.length - a.tag.length);
+  return matches.find(({tag, legacy}) => locale === tag || locale.startsWith(`${tag}-`) || (legacy && locale.startsWith(tag)))?.value ?? 'en';
 }
 
 /** Only for app-owned status labels; never call on conversation/user content. */
