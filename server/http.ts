@@ -6,6 +6,7 @@ import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessag
 import { CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
+import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -56,7 +57,8 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         // Ignore envelope extensions; validate the actual tool arguments strictly.
         const statusCall = z.object({ name: z.enum(['get_status', 'get_pending_utterances']), arguments: z.object({}).strict().optional() }).safeParse(params);
         if (statusCall.success) {
-          const status = statusCall.data.name === 'get_status' ? { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) } : bridge.pending();
+          if (statusCall.data.name === 'get_pending_utterances') { result = bridge.pendingResult(); break; }
+          const status = { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
           result = { content: [{ type: 'text', text: JSON.stringify(status) }], structuredContent: status }; break;
         }
         const input = z.object({ name: z.literal('reply_to_g2'), arguments: z.unknown() }).parse(params);
@@ -80,11 +82,11 @@ export function authorized(value: string | undefined, token: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-async function body(request: IncomingMessage): Promise<unknown> {
+async function body(request: IncomingMessage, limit = 32768): Promise<unknown> {
   const chunks: Buffer[] = []; let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 32_768) throw new Error('Request too large');
+    if (size > limit) throw new Error('Request too large');
     chunks.push(chunk);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
@@ -103,7 +105,8 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
   const cursor = () => `${instance}:${revision}`;
   const history = () => [...bridge.history(), ...bridge.outboundHistory(), ...(notifications?.history() ?? [])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-100);
-  const snapshot = () => ({ revision: cursor(), status: { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) }, messages: history() });
+  const deviceStatus = () => ({ ...bridge.status(), photoAttachments: 1, ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) });
+  const snapshot = () => ({ revision: cursor(), status: deviceStatus(), messages: history() });
   const server = createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
@@ -119,7 +122,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     const token = request.url === '/mcp' ? tokens.mcp : ['/api/notifications', '/api/notifications/status'].includes(request.url ?? '') ? tokens.notification! : tokens.device;
     if (!authorized(request.headers.authorization, token)) { send(401, { error: 'Unauthorized' }); return; }
     try {
-      if (request.url === '/api/status' && request.method === 'GET') { send(200, { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) }); return; }
+      if (request.url === '/api/status' && request.method === 'GET') { send(200, deviceStatus()); return; }
       if (locations && request.method === 'POST' && ['/api/location/control', '/api/location/update', '/api/location/revoke'].includes(request.url ?? '')) {
         const owner = request.headers['x-g2-location-owner'];
         if (typeof owner !== 'string' || !/^[a-f0-9]{64}$/.test(owner)) { send(400, { error: 'Device subject required' }); return; }
@@ -155,7 +158,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
         return;
       }
       if (request.url === '/api/timings' && request.method === 'POST') { bridge.latency.client(await body(request)); send(204); return; }
-      if (request.url === '/api/utterances' && request.method === 'POST') { send(200, await bridge.submit(await body(request))); return; }
+      if (request.url === '/api/utterances' && request.method === 'POST') { send(200, await bridge.submit(await body(request, PHOTO_REQUEST_BYTES))); return; }
       if (notifications && request.url === '/api/notifications' && request.method === 'POST') { send(200, await notifications.submit(await body(request))); return; }
       if (request.url === '/mcp' && request.method === 'POST') {
         const result = await rpc(bridge, await body(request), notifications, locations); send(result === undefined ? 202 : 200, result); return;

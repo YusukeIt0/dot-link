@@ -48,6 +48,12 @@ Hold to record on G2 and release to stop, or tap the microphone in the Even comp
 
 The companion's Mac connection section contains setup instructions, a copyable download URL, pairing-code entry and **Revoke this device**. If copying is unavailable, enter the displayed URL in your Mac browser. Older public companions may show these controls separately. Revoke stops this device immediately. If the Mac is unreachable, Dot Link saves the removal request and retries while running or when reopened. The existing connection section shows whether Mac removal is still pending. If saving fails, keep the app open; reopening may restore the connection. You can also remove connections from the Mac. Update both the Mac and Even companion to use persistent disconnect and cross-origin retry.
 
+## Photos
+
+In the phone composer, tap the camera icon to take a photo or the photo icon to choose one from your library. Allow the corresponding Even app permission when prompted. Add up to four photos, one selection at a time, and use the × on a preview to remove one. Add text by typing or dictating, or send photos on their own.
+
+Tap **Send** when ready. Photos always require this explicit action, even with automatic speech sending enabled. A failed send keeps the draft so you can retry. Closing the app discards unsent photos. Conversation history shows the photo count; it does not retain a photo gallery. Photos require a Mac relay with photo-attachment support; the app asks you to update the Mac if it is too old. Camera and library availability depend on the installed Even host app.
+
 ## Speech
 
 Speech input requires Even 0.2.14 or later. Provider labels and detailed errors require 0.2.19; all six provider/model labels require 0.2.21. If these are missing, update the companion through Even Hub.

@@ -5,6 +5,8 @@ import { z } from 'zod';
 import { ChangeSignal } from './changes.ts';
 import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
 import { LatencyLog } from './latency.ts';
+import { photosSchema, photoDigest, photoBytes, MAX_PENDING_PHOTO_BYTES } from './photo-attachments.ts';
+import { MAX_PHOTOS } from '../src/photo-attachments.ts';
 
 const SESSION = 'personal-g2';
 const OUTBOUND_LIMIT = 1000;
@@ -20,6 +22,7 @@ const utteranceSchema = z.object({
   id: z.string().uuid(), text: z.string(), createdAt: z.string(),
   status: z.enum(['pending', 'accepted', 'failed', 'replied']),
   reply: z.string().optional(), repliedAt: z.string().optional(), readAt: z.string().optional(),
+  photos: photosSchema.optional(), photoDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PHOTOS).optional(),
 });
 const outboundInput = z.object({
   message_id: z.string().uuid(), text: z.string().trim().min(1).max(8000),
@@ -54,7 +57,7 @@ export const statusTool = {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const pendingTool = {
-  name: 'get_pending_utterances', description: 'Read up to 10 unanswered utterances from the owner of this personal Even G2 bridge, oldest first. Use after an utterance.created notification even when the notification body is unavailable. Reply using each returned utterance_id. Already answered utterances are excluded.',
+  name: 'get_pending_utterances', description: 'Read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Already answered utterances are excluded.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -71,7 +74,10 @@ export class Bridge {
     this.latency = latency;
     this.path = path; this.sender = sender; this.hosts = hosts;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-    try { this.state = stateSchema.parse(JSON.parse(readFileSync(path, 'utf8'))); }
+    try {
+      this.state = stateSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+      if (this.state.messages.reduce((n, item) => n + photoBytes(item.photos), 0) > MAX_PENDING_PHOTO_BYTES) throw new Error('Photo storage limit exceeded');
+    }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Bridge state could not be loaded');
       this.state = { version: 1, messages: [], outbound: [] }; this.save();
@@ -93,9 +99,24 @@ export class Bridge {
     return sub && sub.expiresAt > Date.now() ? sub : undefined;
   }
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
-  history() { return structuredClone(this.state.messages); }
+  private publicMessage(item: State['messages'][number]) {
+    const { photos: _photos, photoDigests, ...message } = item;
+    return { ...message, ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
+  }
+  history() { return this.state.messages.map(item => this.publicMessage(item)); }
+  private pendingMessages() {
+    let count = 0;
+    const messages: State['messages'] = [];
+    for (const item of this.state.messages) {
+      if (item.status === 'replied') continue;
+      const photos = item.photos?.length ?? 0;
+      if (messages.length === 10 || count + photos > MAX_PHOTOS) break;
+      messages.push(item); count += photos;
+    }
+    return messages;
+  }
   pending() {
-    const messages = this.state.messages.filter(item => item.status !== 'replied').slice(0, 10);
+    const messages = this.pendingMessages();
     const at = new Date().toISOString();
     let changed = false;
     for (const item of messages) {
@@ -106,7 +127,19 @@ export class Bridge {
     // acceptance and device history reads alone never mark an utterance read.
     if (changed) this.save();
     return { session_id: SESSION, utterances: messages
-      .map(item => ({ utterance_id: item.id, text: item.text, created_at: item.createdAt })) };
+      .map(item => ({ utterance_id: item.id, text: item.text, created_at: item.createdAt,
+        ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}) })) };
+  }
+  pendingResult() {
+    const value = this.pending();
+    const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
+      { type: 'text', text: JSON.stringify(value) },
+    ];
+    for (const item of this.pendingMessages()) for (const [index, photo] of (item.photos ?? []).entries()) {
+      content.push({ type: 'text', text: `utterance_id: ${item.id}; photo ${index + 1} of ${item.photos!.length}` },
+        { type: 'image', ...photo });
+    }
+    return { content, structuredContent: value };
   }
 
   outboundHistory() {
@@ -157,21 +190,25 @@ export class Bridge {
   }
   submit(input: unknown) {
     return this.serial(async () => {
-      const { text, id } = z.object({ text: z.string().trim().min(1).max(4000), id: z.string().uuid() }).strict().parse(input);
+      const { text, id, photos } = z.object({ text: z.string().trim().max(4000), id: z.string().uuid(), photos: photosSchema.optional() })
+        .strict().refine(value => !!value.text || !!value.photos?.length).parse(input);
+      const photoDigests = photos?.map(photoDigest) ?? [];
       const existing = this.state.messages.find(item => item.id === id);
       if (existing) {
-        if (existing.text !== text) throw new Error('Utterance ID already used for different text');
-        return structuredClone(existing);
+        if (existing.text !== text || JSON.stringify(existing.photoDigests ?? []) !== JSON.stringify(photoDigests)) throw new Error('Utterance ID already used for different content');
+        return this.publicMessage(existing);
       }
       const sub = this.active();
       if (!sub) throw new Error('Dot has not subscribed; nothing was sent');
-      const message: State['messages'][number] = { id, text, createdAt: new Date().toISOString(), status: 'pending' };
+      const retained = this.state.messages.slice(-99);
+      if (retained.reduce((n, item) => n + photoBytes(item.photos), 0) + photoBytes(photos) > MAX_PENDING_PHOTO_BYTES) throw new Error('Pending photo storage is full');
+      const message: State['messages'][number] = { id, text, createdAt: new Date().toISOString(), status: 'pending',
+        ...(photoDigests.length ? { photos, photoDigests } : {}) };
       this.latency.mark(id, 'utterance_created');
-      this.state.messages.push(message);
-      if (this.state.messages.length > 100) this.state.messages.shift();
-      this.save();
+      this.save({ ...this.state, messages: [...retained, message] });
       const event = { eventId: `evt_${id}`, name: 'utterance.created', timestamp: message.createdAt,
-        data: { session_id: SESSION, utterance_id: id, text }, cursor: null };
+        // Keep the event schema compatible; photos travel only through the authenticated tool.
+        data: { session_id: SESSION, utterance_id: id, text: photoDigests.length ? `${text}${text ? '\n\n' : ''}[${photoDigests.length} photo(s) attached. Read get_pending_utterances to view the images.]` : text }, cursor: null };
       // One attempt in the initial proof. A timeout is not treated as an unsent message.
       // Client retries with the same ID return its stored status, preventing duplicates.
       try {
@@ -181,7 +218,7 @@ export class Bridge {
         message.status = result.status >= 200 && result.status < 300 ? 'accepted' : 'failed';
         if (result.status === 410) delete this.state.subscription;
       } catch { this.latency.mark(id, 'webhook_failed'); message.status = 'failed'; }
-      this.save(); return structuredClone(message);
+      this.save(); return this.publicMessage(message);
     });
   }
   async reply(input: unknown) {
@@ -191,7 +228,13 @@ export class Bridge {
       const message = this.state.messages.find(item => item.id === utterance_id);
       if (!message) throw new Error('Unknown utterance');
       if (message.reply !== undefined && message.reply !== text) throw new Error('Reply already exists; conflicting overwrite rejected');
-      if (!message.reply) { message.reply = text; message.repliedAt = new Date().toISOString(); message.status = 'replied'; this.save(); this.latency.mark(utterance_id, 'reply_stored'); }
+      if (!message.reply) {
+        // Publish only after persistence succeeds, so a failed write remains retryable.
+        const { photos: _photos, ...retained } = message;
+        const replied = { ...retained, reply: text, repliedAt: new Date().toISOString(), status: 'replied' as const };
+        this.save({ ...this.state, messages: this.state.messages.map(item => item === message ? replied : item) });
+        this.latency.mark(utterance_id, 'reply_stored');
+      }
       return { utterance_id, delivered_to_bridge: true };
     });
   }

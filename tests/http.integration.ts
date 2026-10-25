@@ -41,7 +41,7 @@ test('real HTTP listener separates device and MCP credentials and rejects browse
   assert.equal((await fetch(base + '/mcp', { ...discovery, headers: { ...discovery.headers, Authorization: `Bearer ${tokens.device}` } })).status, 401);
   assert.equal((await fetch(base + '/mcp', { ...discovery, headers: { ...discovery.headers, Origin: 'https://unexpected.example' } })).status, 403);
   const status = await fetch(base + '/api/status', { headers: { Authorization: `Bearer ${tokens.device}` } });
-  assert.deepEqual(await status.json(), { subscribed: false, messageCount: 0, sessionId: 'personal-g2' });
+  assert.deepEqual(await status.json(), { subscribed: false, messageCount: 0, sessionId: 'personal-g2', photoAttachments: 1 });
   const timingBody = JSON.stringify({ id: randomUUID(), events: [{ stage: 'reply_received', at: Date.now(), elapsedMs: 0 }] });
   for (const key of [tokens.mcp, 'invalid']) assert.equal((await fetch(base + '/api/timings', { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: timingBody })).status, 401);
   assert.equal((await fetch(base + '/api/timings', { method: 'POST', headers: { Authorization: `Bearer ${tokens.device}` }, body: timingBody })).status, 204);

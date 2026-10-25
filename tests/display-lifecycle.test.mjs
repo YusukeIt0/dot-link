@@ -39,7 +39,7 @@ async function launch(options = {}) {
   const clock = {now: () => now, schedule, cancel: id => timers.delete(id)};
   const element = id => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', dataset: {}, checked: false, disabled: false,
-      before() {}, after() {}, attributes: new Map(),
+      before() {}, after() {}, children: [], append(...items) { this.children.push(...items); }, querySelectorAll() { return this.children.flatMap(item => item.children ?? []).filter(item => item.type === 'button'); }, attributes: new Map(),
       setAttribute(name, value) { this.attributes.set(name, String(value)); },
       getAttribute(name) { return this.attributes.get(name) ?? null; },
       removeAttribute(name) { this.attributes.delete(name); }, focus() {}, close() {}, pause() {}, showModal() {},
@@ -71,6 +71,7 @@ async function launch(options = {}) {
   const local = {getItem: k => saved.get(k) ?? null, setItem: (k, v) => saved.set(k, v), removeItem: k => saved.delete(k)};
   const context = vm.createContext({ ...dependencies,
     LocationSharing: class extends dependencies.LocationSharing { constructor(options) { super({...options, now: () => epoch + now, automatic: false}); } },
+    selectPhoto: options.selectPhoto ?? dependencies.selectPhoto,
     loadWakeDetector: options.loadWake ?? dependencies.loadWakeDetector,
     exitDiagnosticsFlag: options.exitDiagnostics ? '1' : '0',
     // This harness models G2 lifecycle, not DOM geometry; viewport behavior has its own tests.
@@ -80,7 +81,7 @@ async function launch(options = {}) {
     Date: class extends Date { static now() { return epoch + now; } },
     DisplayStandby: class extends dependencies.DisplayStandby { constructor(p, changed) { super(p, changed, clock); } },
     waitForEvenAppBridge: async () => bridge,
-    document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
+    document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element, createElement: tag => element(`created-${tag}-${elements.size}`),
       querySelector: element, querySelectorAll: selector => selector === '[data-i18n]' ? [staticLabel] : selector === 'textarea' ? [element('transcript'), element('pair-code')] : [...elements.values()], createComment: element, addEventListener: listen},
     window: {addEventListener: listen, speechSynthesis: {cancel() { options.cancelSpeech?.(); }, speak(speech) { calls.push(['speech', speech.text, speech.lang]); options.speak?.(speech); }}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
@@ -117,7 +118,7 @@ async function launch(options = {}) {
   });
   vm.runInContext(script, context); await flush();
   assert.equal(element('g2-diagnostic').textContent, 'G2_READY');
-  const snapshot = (messages = []) => ({revision: 'same', status: {subscribed: true, deviceName: 'Test Mac', sttProvider: options.provider}, messages});
+  const snapshot = (messages = []) => ({revision: 'same', status: {subscribed: true, photoAttachments: options.legacyPhotos ? undefined : 1, deviceName: 'Test Mac', sttProvider: options.provider}, messages});
   const deliver = async value => {
     assert.ok(requests.length, 'receiver must still be waiting');
     requests.shift()({ok: true, status: 200, json: async () => structuredClone(value)}); await flush();
@@ -646,7 +647,7 @@ test('location toggle reaches native/relay and an OFF blocks late announcements 
 
 test('whole app waits sixty seconds then uses configured idle interval, preserving late replies and all header fields', async t => {
   const app = await launch({typedInput:true,provider:'soniox'}); t.after(app.close);
-  app.element('transcript').value = 'Synthetic waiting question'; await app.element('send').click(); await flush();
+  app.element('transcript').value = 'Synthetic waiting question'; app.element('transcript').oninput(); await app.element('send').click(); await flush();
   const message = vm.runInContext('JSON.parse(JSON.stringify(conversation.selected))',app.context);
   assert.match(app.physical.get(1), /^Dotの返信待ち \(0秒\)$/);
   assert.match(app.physical.get(5), /^未読 \d{2}:\d{2}$/);
@@ -673,7 +674,7 @@ test('whole app waits sixty seconds then uses configured idle interval, preservi
 
 test('operation after the delayed notice restarts idle time, including with the phone page hidden', async t => {
   const app = await launch({typedInput:true}); t.after(app.close);
-  app.element('transcript').value='Synthetic question'; await app.element('send').click(); await flush();
+  app.element('transcript').value='Synthetic question'; app.element('transcript').oninput(); await app.element('send').click(); await flush();
   await app.evaluate('document.hidden = true; pageActive = false; updateRuntime();');
   await app.advance(75_000); assert.equal(app.hidden(),false);
   await app.emit(singleTap);
@@ -808,7 +809,7 @@ test('a send response parsed after forgetting cannot restore history or release 
  const app=await launch({typedInput:true,request:(url)=>url.endsWith('/api/utterances')
   ? Promise.resolve({ok:true,status:200,json:()=>{parsing=true;return body;}}) : undefined});
  t.after(app.close);
- app.element('transcript').value='Synthetic pending request';
+ app.element('transcript').value='Synthetic pending request'; app.element('transcript').oninput();
  const sending=app.element('send').click();
  for(let i=0;i<20&&!parsing;i++) await new Promise(resolve=>setImmediate(resolve));
  assert.equal(parsing,true);
@@ -1260,4 +1261,56 @@ test('disconnect does not interrupt a pairing exchange and becomes available whe
  assert.equal(vm.runInContext('pairingExchange',app.context),false);
  app.element('forget-pairing').click(); await flush();
  assert.equal(vm.runInContext('session.token',app.context),'');
+});
+
+
+test('photo drafts require explicit send and image-only retry retains the same identity', async t => {
+ const sent=[]; let fail=true;
+ const app=await launch({selectPhoto:async()=>({mimeType:'image/jpeg',data:'synthetic-test-only'}),request:(url,init)=>{
+  if (!url.endsWith('/api/utterances')) return;
+  const body=JSON.parse(init.body); sent.push(body);
+  if(fail) return Promise.reject(new Error('offline'));
+  return Promise.resolve({ok:true,status:200,json:async()=>({...body,status:'accepted',createdAt:new Date().toISOString()})});
+ }});t.after(app.close);
+ app.element('auto-send').checked=true;
+ app.element('photos').click();await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),1);
+ assert.equal(app.element('auto-send').disabled,true);
+ assert.equal(app.element('send').disabled,false);assert.equal(sent.length,0);
+ await app.element('send').click();await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),1);
+ fail=false;await app.element('send').click();await flush();
+ assert.equal(sent.length,2); assert.equal(sent[0].id,sent[1].id);
+ assert.equal(sent[0].text,'');assert.equal(sent[0].photos.length,1);
+ assert.equal(vm.runInContext('photos.length',app.context),0);
+ assert.equal(app.element('auto-send').disabled,false);assert.equal(app.element('auto-send').checked,true);
+});
+
+test('cancelled, failed, stale and unsupported photo selection cannot add or send attachments', async t => {
+ let pick=()=>Promise.resolve(null), count=0;
+ const app=await launch({selectPhoto:()=>{count++;return pick();}});t.after(app.close);
+ app.element('camera').click();await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),0);
+ pick=()=>Promise.reject(new Error('denied'));app.element('camera').click();await flush();
+ assert.equal(vm.runInContext('busy',app.context),false);
+ let resolve;pick=()=>new Promise(r=>{resolve=r;});app.element('photos').click();await flush();
+ await app.evaluate("forgetPairing('Gone')");resolve({mimeType:'image/jpeg',data:'stale'});await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),0);
+ assert.equal(count,3);
+ const old=await launch({legacyPhotos:true,selectPhoto:async()=>{throw new Error('must not open');}});t.after(old.close);
+ old.element('photos').click();await flush();assert.equal(vm.runInContext('photos.length',old.context),0);
+ assert.ok(old.element('notice').textContent.includes('Mac'));
+});
+
+test('dictation beside photos preserves both draft and automatic-send preference without sending', async t => {
+ let finish;
+ const app=await launch({selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'}),request:url=>url.endsWith('/api/transcribe')?new Promise(r=>{finish=r;}):undefined});t.after(app.close);
+ app.element('auto-send').checked=true;app.element('photos').click();await flush();
+ await app.element('record').click();await app.emit({audioEvent:{audioPcm:new Uint8Array(3200)}});
+ await app.element('record').click();await flush();
+ finish({ok:true,status:200,json:async()=>({text:'Describe this photo'})});await flush();
+ assert.equal(app.element('transcript').value,'Describe this photo');
+ assert.equal(vm.runInContext('photos.length',app.context),1);
+ assert.equal(app.networkCalls.filter(url=>url.endsWith('/api/utterances')).length,0);
+ assert.equal(app.element('auto-send').checked,true);
 });

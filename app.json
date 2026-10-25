@@ -2,13 +2,13 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.3.36",
+  "version": "0.3.37",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
     {
       "name": "network",
-      "desc": "Connect to your own Mac relay for transcription and messages with your existing Dot.",
+      "desc": "Connect to your own Mac relay for transcription, messages, and photos you choose to send to your existing Dot.",
       "whitelist": []
     },
     {
@@ -18,6 +18,14 @@
     {
       "name": "location",
       "desc": "When you turn on location sharing, share your phone's current location with your own Dot through your Mac for relevant suggestions."
+    },
+    {
+      "name": "camera",
+      "desc": "Take a photo when you tap the camera button. The photo stays in your draft until you tap Send."
+    },
+    {
+      "name": "album",
+      "desc": "Choose photos to attach to a message. Only selected photos are sent to your own Dot through your Mac when you tap Send."
     }
   ],
   "supported_languages": [

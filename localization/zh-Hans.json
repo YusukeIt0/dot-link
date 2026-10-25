@@ -543,5 +543,16 @@
   "mac.notification_schedule_error": "无法注册测试通知：{reason}",
   "mac.notification_scheduled": "已向系统安排测试通知：{id}（不代表已检测到或已显示）",
   "mac.update_available_version": "有可用更新 · {version}",
-  "mac.notification_test_denied_help": "未允许测试通知：请检查“系统设置”→“通知”"
+  "mac.notification_test_denied_help": "未允许测试通知：请检查“系统设置”→“通知”",
+  "even.attached_photos": "已附加照片",
+  "even.photo_number": "照片 {count}",
+  "even.remove_photo_number": "移除照片 {count}",
+  "even.update_mac_for_photos": "请更新 Mac 上的 Dot Link 以发送照片。",
+  "even.photo_limit": "最多可附加 {count} 张照片。",
+  "even.photo_unavailable": "无法打开或处理照片，请重试。",
+  "even.take_photo": "拍照",
+  "even.choose_photo": "选择照片",
+  "even.choosing_photo": "正在选择照片…",
+  "even.photos_send_manually": "已附加照片。准备好后请点发送。",
+  "even.photos_count": "[照片：{count} 张]"
 }

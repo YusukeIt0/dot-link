@@ -91,3 +91,8 @@ main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 #conversation-controls #auto-send { width: 16px; height: 16px; margin: 0; accent-color: #b8d3bc; }
 #phone-control-status { min-height: 21px; margin: 0 0 12px; color: #bec5bf; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 #phone-control-status[data-state=stop-error] { color: #f0a6a0; }
+#photo-previews { display: flex; gap: 8px; overflow-x: auto; padding: 2px 4px 10px; }
+#photo-previews:empty { display: none; }
+.photo-preview { position: relative; flex: 0 0 84px; height: 84px; }
+.photo-preview img { width: 84px; height: 84px; object-fit: cover; border: 1px solid #435446; border-radius: 14px; }
+#conversation-controls .photo-remove { position: absolute; right: -3px; top: -3px; width: 32px; height: 32px; padding: 0; margin: 0; border: 1px solid #79847c; border-radius: 50%; background: #141817; color: #ebeee9; display: grid; place-items: center; font-size: 21px; }

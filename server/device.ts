@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, sep, extname } from 'node:path';
 import { STTError } from './stt.ts';
+import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 import { readSTTProvider, STT_PROVIDERS, type STTProvider } from '../src/stt-providers.ts';
 import { authorized } from './http.ts';
 import { LatencyLog, traceId } from './latency.ts';
@@ -183,7 +184,7 @@ export function deviceServer(options: { token: string; origin: string; directory
           (request.method === 'POST' && ['/api/utterances', '/api/timings', '/api/location/control', '/api/location/update'].includes(path));
         if (!allowed) { json(404, { error: 'Not found' }); return; }
         if (request.method === 'POST' && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
-        const body = request.method === 'POST' ? await boundedBody(request, 32768) : undefined;
+        const body = request.method === 'POST' ? await boundedBody(request, path === '/api/utterances' ? PHOTO_REQUEST_BYTES : 32768) : undefined;
         if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
         const controller = new AbortController();
         const disconnected = () => controller.abort();

@@ -543,5 +543,16 @@
   "mac.notification_schedule_error": "Testmitteilung konnte nicht registriert werden: {reason}",
   "mac.notification_scheduled": "Testmitteilung beim System eingeplant: {id} (keine Bestätigung für Erkennung oder Anzeige)",
   "mac.update_available_version": "Update verfügbar · {version}",
-  "mac.notification_test_denied_help": "Testmitteilung nicht erlaubt: Prüfen Sie Systemeinstellungen → Mitteilungen"
+  "mac.notification_test_denied_help": "Testmitteilung nicht erlaubt: Prüfen Sie Systemeinstellungen → Mitteilungen",
+  "even.attached_photos": "Angehängte Fotos",
+  "even.photo_number": "Foto {count}",
+  "even.remove_photo_number": "Foto {count} entfernen",
+  "even.update_mac_for_photos": "Aktualisieren Sie Dot Link auf Ihrem Mac, um Fotos zu senden.",
+  "even.photo_limit": "Sie können bis zu {count} Fotos anhängen.",
+  "even.photo_unavailable": "Das Foto konnte nicht geöffnet oder vorbereitet werden. Versuchen Sie es erneut.",
+  "even.take_photo": "Foto aufnehmen",
+  "even.choose_photo": "Foto auswählen",
+  "even.choosing_photo": "Foto wird ausgewählt…",
+  "even.photos_send_manually": "Fotos angehängt. Tippen Sie zum Senden auf Senden.",
+  "even.photos_count": "[Fotos: {count}]"
 }

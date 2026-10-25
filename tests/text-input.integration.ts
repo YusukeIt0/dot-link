@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { photoFixture } from './photo-fixture.ts';
 import { Bridge } from '../server/bridge.ts';
 import { bridgeServer } from '../server/http.ts';
 import { deviceServer } from '../server/device.ts';
@@ -70,6 +71,22 @@ test('typed messages bypass STT, credentials and provider connections even with 
     assert.equal(status.sttProvider,provider); assert.equal(status.sttModel,STT_PROVIDERS[provider].model);
     assert.equal((await call('/api/utterances', 'POST', JSON.stringify({id:randomUUID(),text:'Synthetic typed bypass check'}))).status,200);
   }
+  const photos = Array(4).fill(photoFixture(512 * 1024));
+  const photoInput = {id: randomUUID(), text: '', photos};
+  assert.equal((await call('/api/utterances', 'POST', JSON.stringify(photoInput))).status, 200);
+  assert.equal((await call('/api/utterances', 'POST', JSON.stringify(photoInput))).status, 200);
+  assert.equal((await call('/api/status')).body.photoAttachments, 1);
+  const photoHistory = (await call('/api/messages')).body;
+  assert.equal(photoHistory.at(-1).photoCount, 4);
+  assert.equal(JSON.stringify(photoHistory).includes(photos[0].data), false);
+  const rejected = async (path: string, body: string) => {
+    try { assert.equal((await call(path, 'POST', body)).status, 400); }
+    catch(error) { assert.equal((error as NodeJS.ErrnoException).code, 'ECONNRESET'); }
+  };
+  const beforeRejected = bridge.history().length;
+  await rejected('/api/utterances', JSON.stringify({...photoInput, id:randomUUID(),photos:[{...photos[0],data:'A'.repeat(3*1024*1024)}]}));
+  await rejected('/api/timings', JSON.stringify({padding:'A'.repeat(40000)}));
+  assert.equal(bridge.history().length, beforeRejected);
   statusUnavailable = true;
   assert.equal((await call('/api/status')).body.sttProvider, null);
   assert.deepEqual({selections, whisperCalls, keyReads, connections}, {selections: 0, whisperCalls: 0, keyReads: 0, connections: 0});

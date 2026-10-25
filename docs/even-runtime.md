@@ -4,6 +4,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 
 | Owner | Responsibility | Does not decide |
 | --- | --- | --- |
+| `src/photo-attachments.ts` | SDK camera/library selection and bounded pixel re-encoding into one photo format | Draft UI, send policy or relay retention |
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
 | `src/runtime-effects.ts` | Deferred speech, voice eligibility, standby protection and its waiting deadline | DOM/G2 presentation, transport or conversation selection |
@@ -87,3 +88,9 @@ Check dialog cancellation first, then sharing OFF/ON followed by confirmed exit.
 Location sharing renews its relay lease only when it uploads a fresh measurement with a newer native timestamp. Empty heartbeats and repeated cached fixes cannot keep an exited native source sharing indefinitely even if its WebView timer survives. The existing relay lease expires 90 seconds after the last renewal. Saved consent and native acquisition remain active while the app runs, so a new measurement can resume sharing after temporary location loss. Explicit OFF/exit still attempts immediate revocation. This fallback does not identify a confirmed native exit while fresh native measurements continue; physical exit and cancellation checks remain required.
 
 `src/main.ts` sequences the journal barrier before saved-credential restoration and owns explicit-pairing isolation and restore retries.
+
+## Photo attachments
+
+The composer owns an in-memory draft (up to four JPEG photos), with a generation guard for asynchronous system selection. Camera and album use the same preparation path. Photos do not change G2 controls, recording discard, pairing identity or existing text-only message shape. An image draft suspends automatic sending without changing the saved preference.
+
+Only the utterance POST route accepts the larger bounded JSON body. `server/photo-attachments.ts` validates the image envelope, canonical base64 and bounded JPEG frame headers. This is a header/size check, not a full decoder. `Bridge` persists the draft before webhook delivery, keeps image bodies out of ordinary histories, and exposes at most four images per pending MCP result with utterance IDs and ordinals. Replies release the bodies while retaining content digests for identical retries. The device status capability `photoAttachments: 1` prevents sending images to older relays. The existing authenticated transport and subscription remain the only connection path.

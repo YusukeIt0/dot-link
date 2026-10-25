@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Webhook } from 'standardwebhooks';
+import { photoFixture } from './photo-fixture.ts';
 import { Bridge } from '../server/bridge.ts';
 import { authorized, rpc } from '../server/http.ts';
 import { WebhookSender, callbackUrl, publicAddress, type Post } from '../server/webhook.ts';
@@ -244,4 +245,62 @@ test('location guards still prevent rotation and location metadata survives acce
   }}) as {result: {structuredContent: {stored_for_g2: boolean}}};
   assert.equal(value.result.structuredContent.stored_for_g2, true);
   assert.equal(reloaded.outboundHistory().length, 1000);
+});
+
+const syntheticPhoto = photoFixture();
+test('photo-only messages deliver MCP images, keep binaries off events/history, and delete images after reply', async t => {
+  const s = setup(); t.after(s.close); await s.bridge.subscribe(subscription);
+  const input = { id: randomUUID(), text: '', photos: [syntheticPhoto] };
+  const message = await s.bridge.submit(input);
+  assert.equal(message.photoCount, 1);
+  assert.equal('photos' in message, false);
+  assert.equal(JSON.stringify(s.events).includes(syntheticPhoto.data), false);
+  assert.equal(JSON.stringify(s.bridge.history()).includes(syntheticPhoto.data), false);
+  const restored = new Bridge(s.path, s.sender, s.hosts);
+  const result = await rpc(restored, {jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'get_pending_utterances',arguments:{}}});
+  assert.ok(JSON.stringify(result).includes(syntheticPhoto.data));
+  const pending = restored.pendingResult();
+  assert.deepEqual(pending.content[2], {type:'image', ...syntheticPhoto});
+  assert.equal(pending.structuredContent.utterances[0].photo_count, 1);
+  assert.equal(JSON.stringify(pending.structuredContent).includes(syntheticPhoto.data), false);
+  await restored.reply({utterance_id: input.id, text:'A green image'});
+  assert.equal(readFileSync(s.path,'utf8').includes(syntheticPhoto.data), false);
+  const afterReply = new Bridge(s.path,s.sender,s.hosts);
+  assert.equal((await afterReply.submit(input)).status,'replied');
+  assert.equal(s.events.length, 1);
+  await assert.rejects(afterReply.submit({...input,photos:[]}));
+});
+
+test('photo validation rejects unsupported, malformed, empty and excessive drafts before delivery', async t => {
+  const s = setup(); t.after(s.close); await s.bridge.subscribe(subscription);
+  for (const photos of [[], Array(5).fill(syntheticPhoto), [{...syntheticPhoto,mimeType:'image/png'}],
+    [{...syntheticPhoto,data:'AAAA'}], [{...syntheticPhoto,data:syntheticPhoto.data+'='}],
+    [{...syntheticPhoto,path:'/private/photo.jpg'}]]) {
+    await assert.rejects(s.bridge.submit({id:randomUUID(),text:'',photos}));
+  }
+  assert.equal(s.bridge.history().length,0); assert.equal(s.events.length,0);
+});
+
+test('pending image batches preserve ordering and expose at most four photos until replies advance them', async t => {
+  const s = setup(); t.after(s.close); await s.bridge.subscribe(subscription);
+  const first = randomUUID(), second = randomUUID();
+  await s.bridge.submit({id:first,text:'First',photos:Array(3).fill(syntheticPhoto)});
+  await s.bridge.submit({id:second,text:'Second',photos:Array(2).fill(syntheticPhoto)});
+  assert.deepEqual(s.bridge.pending().utterances.map(m=>m.utterance_id),[first]);
+  assert.equal(s.bridge.pendingResult().content.filter(c=>c.type==='image').length,3);
+  await s.bridge.reply({utterance_id:first,text:'First received'});
+  assert.deepEqual(s.bridge.pending().utterances.map(m=>m.utterance_id),[second]);
+});
+
+test('pending photo storage is bounded across reload and a reply frees capacity', async t => {
+ const s=setup();t.after(s.close);await s.bridge.subscribe(subscription);
+ // Valid JPEG with bounded application segments: test relay limits without a large pixel fixture.
+ const photo=photoFixture(512*1024);
+ const first=randomUUID();await s.bridge.submit({id:first,text:'',photos:Array(4).fill(photo)});
+ for(let i=0;i<3;i++) await s.bridge.submit({id:randomUUID(),text:'',photos:Array(4).fill(photo)});
+ const restored=new Bridge(s.path,s.sender,s.hosts);
+ await assert.rejects(restored.submit({id:randomUUID(),text:'',photos:[syntheticPhoto]}),/storage is full/);
+ await restored.reply({utterance_id:first,text:'Received'});
+ await restored.submit({id:randomUUID(),text:'',photos:[syntheticPhoto]});
+ assert.equal(restored.history().length,5);
 });

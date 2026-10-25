@@ -543,5 +543,16 @@
   "mac.notification_schedule_error": "テスト通知登録エラー: {reason}",
   "mac.notification_scheduled": "テスト通知をOSへ予約: {id}（検知・表示の証明ではありません）",
   "mac.update_available_version": "新しいバージョンがあります · {version}",
-  "mac.notification_test_denied_help": "テスト通知の許可なし: システム設定 → 通知で確認"
+  "mac.notification_test_denied_help": "テスト通知の許可なし: システム設定 → 通知で確認",
+  "even.attached_photos": "添付写真",
+  "even.photo_number": "写真 {count}",
+  "even.remove_photo_number": "写真 {count} を削除",
+  "even.update_mac_for_photos": "写真を送るにはMacのDot Linkを更新してください。",
+  "even.photo_limit": "写真は{count}枚まで添付できます。",
+  "even.photo_unavailable": "写真を開くか準備することができませんでした。もう一度お試しください。",
+  "even.take_photo": "写真を撮る",
+  "even.choose_photo": "写真を選ぶ",
+  "even.choosing_photo": "写真を選択中…",
+  "even.photos_send_manually": "写真を添付中です。準備ができたら送信してください。",
+  "even.photos_count": "[写真: {count}枚]"
 }

@@ -21,6 +21,7 @@ import { DisplayStandby, HeadRaiseDetector, type DisplayPreferences } from './di
 import { DisplayPreferenceStore } from './display-preferences.ts';
 import { t, getLanguage, setLanguage, chooseLanguage, translateLabel, speechLocale, supportedLanguages, languageName, message, type TranslationKey } from './i18n.ts';
 import { RelaySettings, PendingUtterance } from './relay-connection.ts';
+import { selectPhoto, MAX_PHOTOS, type PhotoAttachment } from './photo-attachments.ts';
 import { parseInvite, type PairingInvite } from './relay-origin.ts';
 import { LanguagePreferences, isLanguagePreference } from './language-preferences.ts';
 import { LocationSharing, type LocationRelayStatus } from './location-sharing.ts';
@@ -67,6 +68,10 @@ const pairingNotice = el('pair-notice');
 const recordButton = el<HTMLButtonElement>('record');
 const discardButton = el<HTMLButtonElement>('discard');
 const sendButton = el<HTMLButtonElement>('send');
+const photos: PhotoAttachment[] = [];
+let photoRevision = 0;
+let photoSelecting = false;
+let photosSupported = false;
 const transcript = el<HTMLTextAreaElement>('transcript');
 const resizeTranscript = installTranscriptSize(transcript, document.querySelector<HTMLElement>('main')!);
 const pairingInput = el<HTMLTextAreaElement>('pair-code');
@@ -225,6 +230,7 @@ const connectionTransitions = new ConnectionTransitions({
   stopLocation: () => locationSharing.setEnabled(false), clearLegacyPairing: () => pairing.forget(),
   resetInteraction: (pairing, newIdentity) => {
     transcriptionController?.abort(); transcriptionController = undefined;
+    photoRevision++; photoSelecting = false;
     busy = pairing; clearClip(); audioTraceId = undefined; discarding = false;
     el<HTMLButtonElement>('pair').disabled = pairing; sendButton.disabled = pairing || !transcript.value.trim();
     if (newIdentity) { progress.reset(); timing.reset(); } else progress.setPhase('idle');
@@ -232,10 +238,10 @@ const connectionTransitions = new ConnectionTransitions({
   resetConversation: () => conversation.reset(),
   resetDelivery: (origin, clearRetry) => {
     pendingDelivery = new PendingUtterance(() => localStorage, origin ?? location.origin);
-    if (clearRetry) { pendingId = undefined; pendingText = undefined; }
+    if (clearRetry) { pendingId = undefined; pendingText = undefined; clearPhotos(); }
   },
   resetConnectionInfo: () => {
-    subscribed = false; progress.dotConnected = false;
+    subscribed = false; photosSupported = false; progress.dotConnected = false;
     hostName = t('even.relay'); namedHost = false; selectedSTT = readSTTProvider(undefined); selectedSTTModel = undefined;
   },
 });
@@ -349,11 +355,12 @@ function showMessage(): void {
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
-interface Snapshot { revision: string; status: { subscribed: boolean; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus; messages: Message[]; }
+interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
   locationSharing.receive(snapshot.status);
   subscribed = snapshot.status.subscribed;
+  photosSupported = snapshot.status.photoAttachments === 1;
   selectedSTT = readSTTProvider(snapshot.status.sttProvider);
   selectedSTTModel = snapshot.status.sttModel;
   progress.connection = 'online'; progress.dotConnected = subscribed; attachLocation();
@@ -457,28 +464,62 @@ el('previous').onclick = () => { standby?.activity(); conversation.navigate(-1);
 el('next').onclick = () => { standby?.activity(); conversation.navigate(1); showMessage(); };
 let pendingId: string | undefined;
 let pendingText: string | undefined;
+function clearPhotos(): void { photoRevision++; photos.length = 0; photoSelecting = false; renderPhotos(); }
+function renderPhotos(): void {
+  const container = el('photo-previews'); container.textContent = '';
+  for (const [index, photo] of photos.entries()) {
+    const item = document.createElement('div'); item.className = 'photo-preview';
+    const image = document.createElement('img'); image.src = `data:${photo.mimeType};base64,${photo.data}`;
+    image.alt = t('even.photo_number', { count: index + 1 });
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'photo-remove'; remove.textContent = '×';
+    remove.setAttribute('aria-label', t('even.remove_photo_number', { count: index + 1 })); remove.disabled = busy;
+    remove.onclick = () => { if (busy || exited) return; photos.splice(index, 1); photoRevision++; renderPhotos(); updateRuntime(false); };
+    item.append(image, remove); container.append(item);
+  }
+}
+async function choosePhoto(source: 'camera' | 'album'): Promise<void> {
+  if (exited || busy || recorder.state !== 'idle' || !bridge || !session.token) return;
+  if (!photosSupported) { notice.textContent = t('even.update_mac_for_photos'); return; }
+  if (photos.length >= MAX_PHOTOS) { notice.textContent = t('even.photo_limit', { count: MAX_PHOTOS }); return; }
+  const version = session.version, revision = photoRevision;
+  busy = true; photoSelecting = true; notice.textContent = ''; standby?.activity(); updateRuntime(false);
+  try {
+    const photo = await selectPhoto(source, bridge);
+    if (exited || !session.isCurrent(version) || revision !== photoRevision) return;
+    if (photo) { photos.push(photo); photoRevision++; }
+  } catch {
+    if (!exited && session.isCurrent(version)) notice.textContent = t('even.photo_unavailable');
+  } finally {
+    if (!exited && session.isCurrent(version)) { busy = false; photoSelecting = false; renderPhotos(); updateRuntime(false); }
+  }
+}
+el('camera').onclick = () => void choosePhoto('camera');
+el('photos').onclick = () => void choosePhoto('album');
 sendButton.onclick = async () => {
-  const text = transcript.value.trim(); if (!text || busy || !session.token || exited) return;
+  const text = transcript.value.trim(); if ((!text && !photos.length) || busy || recorder.state !== 'idle' || !session.token || exited) return;
+  if (photos.length && !photosSupported) { notice.textContent = t('even.update_mac_for_photos'); return; }
+  const attachments = photos.slice();
+  const identity = attachments.length ? JSON.stringify({ text, photos: attachments }) : text;
   standby?.activity();
   busy = true; sendButton.disabled = true;
   updateRuntime(false);
   const version = session.version;
   try {
-    if (pendingText !== text) {
-      const preparedId = await pendingDelivery.prepare(text, audioTraceId);
+    if (pendingText !== identity) {
+      const preparedId = await pendingDelivery.prepare(identity, audioTraceId);
       if (exited || !session.isCurrent(version)) return;
-      pendingId = preparedId; pendingText = text; audioTraceId = undefined;
+      pendingId = preparedId; pendingText = identity; audioTraceId = undefined;
     }
     if (version !== session.version || exited) return;
     progress.begin(pendingId!, 'sending'); updateRuntime();
     timing.mark(pendingId!, 'utterance_sent');
-    const message = await api<Message>('/api/utterances', 'POST', JSON.stringify({id:pendingId,text}));
+    const message = await api<Message>('/api/utterances', 'POST', JSON.stringify({id:pendingId,text, ...(attachments.length ? {photos: attachments} : {})}));
     timing.mark(pendingId!, 'utterance_accepted');
     reportTiming(pendingId!);
     if (message.status === 'failed') throw new Error(t('even.delivery_was_not_confirmed_retrying_the_same_message_will_not'));
     progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();
-    transcript.value = ''; resizeTranscript(); pendingId = undefined; pendingText = undefined;
+    transcript.value = ''; resizeTranscript(); pendingId = undefined; pendingText = undefined; clearPhotos();
     if (conversation.acceptSent(message).reply) progress.complete(message.id);
     showMessage();
     notice.textContent = '';
@@ -500,7 +541,16 @@ let transcriptionController: AbortController | undefined;
 let lastDisplayText = t('even.hold_to_speak');
 let renderDisplayText: () => string = () => t('even.hold_to_speak');
 
-function syncRuntimeEffects(): void { runtimeEffects.sync(); }
+function syncRuntimeEffects(): void {
+  runtimeEffects.sync();
+  const disabled = exited || busy || recorder.state !== 'idle' || !bridge || !session.token || !relayRestored;
+  el<HTMLButtonElement>('camera').disabled = disabled;
+  el<HTMLButtonElement>('photos').disabled = disabled;
+  sendButton.disabled = exited || busy || recorder.state !== 'idle' || (!transcript.value.trim() && !photos.length);
+  // Preserve the preference; an image draft always requires an explicit Send.
+  el<HTMLInputElement>('auto-send').disabled = photos.length > 0;
+  for (const button of el('photo-previews').querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy || exited;
+}
 function updateRuntime(sendToG2 = true): void {
   syncRuntimeEffects(); refreshStatus(sendToG2);
 }
@@ -559,6 +609,8 @@ function renderPhoneLabels(): void {
   phoneLabel('next', t('even.next_conversation'));
   phoneLabel('discard', t('even.discard_recording'));
   phoneLabel('send', t('even.send_to_dot'));
+  phoneLabel('camera', t('even.take_photo'));
+  phoneLabel('photos', t('even.choose_photo'));
 }
 function renderRecordControl(state: VoiceInput['state']): void {
   recordButton.dataset.recordState = state;
@@ -576,7 +628,8 @@ function renderPhoneStatus(): void {
   const state = recorder.state;
   const status = state === 'stop-error' ? t('even.retry_stopping_the_microphone') : state === 'stopping' ? t('even.stopping_microphone') :
     state === 'starting' ? t('even.starting_microphone') : state === 'recording' ? `${t('even.recording')} · ${t('even.use_the_recording_button_to_stop')}` :
-    progress.phase === 'recognizing' ? t('even.transcribing') : progress.phase === 'sending' ? t('even.sending') : '';
+    progress.phase === 'recognizing' ? t('even.transcribing') : progress.phase === 'sending' ? t('even.sending') :
+    photoSelecting ? t('even.choosing_photo') : photos.length ? t('even.photos_send_manually') : '';
   const caption = el('phone-control-status');
   caption.dataset.state = state;
   if (caption.textContent !== status) caption.textContent = status;
@@ -633,7 +686,7 @@ function applyLanguage(): void {
   for (const id of ['connection', 'notice', 'pair-notice', 'display-settings-status', 'head-raise-status', 'mac-copy-status', 'copy-toast', 'wake-name-status', 'wake-name-save-status', 'hold-save-status', 'diagnostic']) {
     const element = el(id); element.textContent = translateLabel(element.textContent ?? '');
   }
-  renderPhoneLabels(); renderRecordControl(recorder.state);
+  renderPhoneLabels(); renderRecordControl(recorder.state); renderPhotos();
   renderWakeState(); renderOperationSettings();
   renderReadAloudControl();
   if (!namedHost) hostName = t('even.relay');
@@ -683,7 +736,7 @@ const recorder = new VoiceInput({
       progress.review(); notice.textContent = '';
       display(() => t('even.transcribed'), text);
       busy = false; clearClip();
-      if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
+      if (el<HTMLInputElement>('auto-send').checked && !photos.length) sendButton.click();
       else flushPendingDisplay();
       updateRuntime();
     }).catch(error => { if (exited || version !== session.version || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('even.could_not_transcribe_audio'), error.message); flushPendingDisplay(); })
@@ -720,7 +773,7 @@ const recorder = new VoiceInput({
         if (recorder.source === 'wake') {
           audioTraceId = undefined; clearClip(); discardButton.disabled = false;
           if (keepWakeConversation()) updateRuntime();
-          else display(() => t('even.go_ahead'), () => el<HTMLInputElement>('auto-send').checked ? t('even.sends_when_you_finish_speaking') : t('even.transcribes_when_you_finish_speaking'));
+          else display(() => t('even.go_ahead'), () => el<HTMLInputElement>('auto-send').checked && !photos.length ? t('even.sends_when_you_finish_speaking') : t('even.transcribes_when_you_finish_speaking'));
         } else display(() => t('even.recording'), () => `${holdRecording ? t('even.release_to_stop') : t('even.use_the_recording_button_to_stop')}\n${t('even.up_to_30_seconds')}`);
       }
     } finally { syncRuntimeEffects(); renderPhoneStatus(); }
@@ -875,7 +928,7 @@ function stopSession(): void {
   if (exited) return;
   exitDiagnostics.record('stop-session');
   void locationSharing.stop();
-  exited = true; pageActive = false; session.stop();
+  exited = true; pageActive = false; session.stop(); clearPhotos(); pendingText = undefined;
   disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
@@ -886,7 +939,7 @@ function retireSupersededRuntime(): void {
   if (exited) return;
   runtimeNative.retire();
   disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
-  exited = true; pageActive = false;
+  exited = true; pageActive = false; clearPhotos(); pendingText = undefined;
   session.stop(); updates.stop();
   if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   if (imuWatchdog) clearTimeout(imuWatchdog); imuWatchdog = undefined;
