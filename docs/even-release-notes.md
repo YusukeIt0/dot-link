@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## 0.3.38
+## 0.3.39
 
 - Added camera and photo-library attachments, with previews and removal before sending.
 - Added up to four photos per message, with optional typed or dictated text.
