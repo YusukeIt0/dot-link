@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.36
 
 - Added Traditional Chinese, Simplified Chinese, French and German to the phone interface and glasses status messages, with automatic language selection.
 - Read-aloud now turns off when you change the interface language.
