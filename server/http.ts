@@ -6,6 +6,7 @@ import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessag
 import { CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
+import { LocationResponseError } from './location-response-error.ts';
 import { PhotoStorageFullError } from './photo-attachments.ts';
 import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 
@@ -71,6 +72,11 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
     return { jsonrpc: '2.0', id, result };
   } catch (error) {
     // Never include input, callback secrets, or user text in error responses/logs.
+    if (locations && method === 'tools/call' && (params as { name?: string })?.name === 'respond_to_location') {
+      const rejection = error instanceof LocationResponseError ? error : new LocationResponseError('internal_error');
+      return { jsonrpc: '2.0', id, error: { code: rejection.reason === 'internal_error' ? -32603 : -32602,
+        message: rejection.message, data: { reason: rejection.reason } } };
+    }
     if (error instanceof CallbackDestinationError) console.warn(JSON.stringify({ event: 'callback_host_rejected', hostname: error.hostname }));
     if (error instanceof CallbackVerificationError) return { jsonrpc: '2.0', id, error: { code: -32015, message: 'CallbackEndpointError', data: { reason: 'challenge_failed' } } };
     return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Request rejected; check parameters, subscription, and callback verification' } };

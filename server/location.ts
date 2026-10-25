@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
 import { ChangeSignal } from './changes.ts';
+import { LocationResponseError } from './location-response-error.ts';
 import { callbackUrl, signingSecret, type WebhookSender } from './webhook.ts';
 import { distanceMeters, freshLocation, LOCATION_LEASE_MS, LOCATION_FRESH_MS, type LocationFix } from '../src/location-fix.ts';
 
@@ -36,7 +37,7 @@ export const locationContextTool = {
 };
 export const locationResponseTool = {
   name: 'respond_to_location',
-  description: 'Act on a fresh context_id returned by get_location_context. Choose silent when nothing useful merits interrupting the owner, or announce a concise, verified and personally relevant message to G2. Check recent announcements to avoid repetition. This checks sharing is still enabled and the owner has not moved too far; on rejection, re-read context and reconsider. Use this for location-based announcements instead of send_message_to_g2, so stale or stopped sharing is respected. Identical retries are idempotent. No reply goes to a venue. Stored is not proof of physical display.',
+  description: 'Act on a fresh context_id returned by get_location_context. Choose silent when nothing useful merits interrupting the owner and omit text entirely; announce requires a concise, verified and personally relevant text for G2. Check recent announcements to avoid repetition. This checks sharing is still enabled and the latest position has not changed too far. On rejection, follow error.data.reason and the message: correct invalid arguments, or re-read and reconsider expired, unknown or moved context. If sharing is inactive, wait until sharing resumes. Do not overwrite a conflicting decision. Use this for location-based announcements instead of send_message_to_g2, so stale or stopped sharing is respected. Identical retries are idempotent. No reply goes to a venue. Stored is not proof of physical display.',
   inputSchema: { type: 'object', properties: { context_id: { type: 'string', format: 'uuid' }, disposition: { type: 'string', enum: ['silent', 'announce'] }, text: { type: 'string', minLength: 1, maxLength: 2000 } }, required: ['context_id', 'disposition'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -149,18 +150,23 @@ export class LocationContext {
       recent_announcements: [...this.outcomes.values()].filter(o => o.disposition === 'announce').slice(-5).map(o => o.text) };
   }
   respond(raw: unknown) {
-    const p = z.object({ context_id: z.string().uuid(), disposition: z.enum(['silent', 'announce']), text: z.string().trim().min(1).max(2000).optional() }).strict().parse(raw);
-    if ((p.disposition === 'announce') !== (p.text !== undefined)) throw new Error('Announcement requires text; silent does not');
+    const parsed = z.object({ context_id: z.string().uuid(), disposition: z.enum(['silent', 'announce']), text: z.string().trim().min(1).max(2000).optional() }).strict().safeParse(raw);
+    if (!parsed.success) throw new LocationResponseError('invalid_arguments');
+    const p = parsed.data;
+    if (p.disposition === 'silent' && p.text !== undefined) throw new LocationResponseError('text_not_allowed_for_silent');
+    if (p.disposition === 'announce' && p.text === undefined) throw new LocationResponseError('text_required_for_announcement');
     const operation = this.announceTail.then(async () => {
       const previous = this.outcomes.get(p.context_id);
       if (previous) {
-        if (previous.disposition !== p.disposition || previous.text !== p.text) throw new Error('Conflicting location decision');
+        if (previous.disposition !== p.disposition || previous.text !== p.text) throw new LocationResponseError('conflicting_decision');
         return previous.result;
       }
       const read = this.reads.get(p.context_id);
-      if (!read || !this.usable() || !freshLocation(read.fix, this.now()) || !this.latest || distanceMeters(read.fix, this.latest.fix) > 100) throw new Error('Location changed or sharing stopped; read context again');
+      this.requireResponseContext(read);
       const generation = this.generation;
-      const stillAllowed = () => generation === this.generation && this.usable() && freshLocation(read.fix, this.now()) && !!this.latest && distanceMeters(read.fix, this.latest.fix) <= 100;
+      // The bridge rechecks after its own queue. Throw the same safe reason if
+      // consent or location changes while waiting, before anything is stored.
+      const stillAllowed = () => { this.requireResponseContext(read, generation); return true; };
       const result = p.disposition === 'announce' ? await this.announce({ message_id: p.context_id, text: p.text! }, stillAllowed,
         {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()}) : { stored_for_g2: false };
       if (generation !== this.generation) return result;
@@ -175,6 +181,13 @@ export class LocationContext {
       return result;
     });
     this.announceTail = operation.catch(() => {}); return operation;
+  }
+  private requireResponseContext(read: FixRecord | undefined, generation = this.generation): asserts read is FixRecord {
+    this.checkOwner();
+    if (!this.sharingId || this.leaseUntil <= this.now()) throw new LocationResponseError('sharing_inactive');
+    if (generation !== this.generation || !read || !this.latest) throw new LocationResponseError('context_unknown');
+    if (!freshLocation(this.latest.fix, this.now()) || !freshLocation(read.fix, this.now())) throw new LocationResponseError('context_expired');
+    if (distanceMeters(read.fix, this.latest.fix) > 100) throw new LocationResponseError('moved_too_far');
   }
   private clear() {
     this.generation++; this.sharingId = undefined; this.owner = undefined; this.leaseUntil = 0; this.sequence = -1;

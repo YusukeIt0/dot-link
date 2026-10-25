@@ -55,6 +55,14 @@ test('paired phone location reaches a distinct MCP context; token rotation works
   assert.equal(read.data.result.structuredContent.context.latitude, 10);
   assert.equal((await post(relayURL + '/api/location/update', mcpHeaders, {sharing_id: id, sequence: 2, fix})).status, 401);
   const contextId = read.data.result.structuredContent.context.context_id;
+  const invalid = await post(relayURL + '/mcp', mcpHeaders, {jsonrpc: '2.0', id: 2, method: 'tools/call', params: {
+    name: 'respond_to_location', arguments: {context_id: contextId, disposition: 'silent', text: 'Private test text'},
+  }});
+  assert.equal(invalid.status, 200);
+  assert.equal(invalid.data.error.code, -32602);
+  assert.deepEqual(invalid.data.error.data, {reason: 'text_not_allowed_for_silent'});
+  assert.equal(JSON.stringify(invalid.data).includes('Private test text'), false);
+  assert.equal(locations.status().locationDecisionAt, null);
   const announcement = await post(relayURL + '/mcp', mcpHeaders, {jsonrpc: '2.0', id: 2, method: 'tools/call', params: {name: 'respond_to_location', arguments: {context_id: contextId, disposition: 'announce', text: 'Synthetic recommendation'}}});
   assert.equal(announcement.data.result.structuredContent.stored_for_g2, true);
   assert.equal(bridge.outboundHistory()[0].location_sharing_id, id);
@@ -66,5 +74,10 @@ test('paired phone location reaches a distinct MCP context; token rotation works
   assert.equal((await post(deviceURL + '/api/location/update', headers(), {sharing_id: id, sequence: 2, fix})).status, 200);
   assert.equal((await post(deviceURL + '/api/pair/revoke', headers(), {})).status, 204);
   assert.equal(locations.read().context, null);
+  const stopped = await post(relayURL + '/mcp', mcpHeaders, {jsonrpc: '2.0', id: 3, method: 'tools/call', params: {
+    name: 'respond_to_location', arguments: {context_id: contextId, disposition: 'silent'},
+  }});
+  assert.equal(stopped.status, 200);
+  assert.deepEqual(stopped.data.error.data, {reason: 'sharing_inactive'});
   assert.equal((await post(deviceURL + '/api/location/update', headers(), {sharing_id: id, sequence: 3, fix})).status, 403); // Revocation closes this origin as well as its credential.
 });
