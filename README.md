@@ -19,7 +19,7 @@
   <br><sub>AI-generated illustrative scenes with simulator displays. Timing condensed.</sub>
 </p>
 
-Interact with your existing ChatGPT Dot in the way that suits the moment: say **Hey dot** (or a name you choose), hold to talk on Even G2, or type on your phone. Read replies on your glasses, enable read-aloud, and receive proactive messages from Dot—even when speaking aloud or listening to audio is not an option. Your own Mac connects the devices; there is no developer-operated conversation server.
+Interact with your existing ChatGPT Dot in the way that suits the moment: say **Hey dot** (or a name you choose), hold to talk on Even G2, type on your phone, or attach photos from the phone camera or library. Read replies on your glasses, enable read-aloud, and receive proactive messages from Dot—even when speaking aloud or listening to audio is not an option. Your own Mac connects the devices; there is no developer-operated conversation server.
 
 <p align="center">
   <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">

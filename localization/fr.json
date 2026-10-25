@@ -543,5 +543,19 @@
   "mac.notification_schedule_error": "Échec de l’enregistrement de la notification de test : {reason}",
   "mac.notification_scheduled": "Notification de test programmée auprès du système : {id} (ne confirme ni la détection ni l’affichage)",
   "mac.update_available_version": "Mise à jour disponible · {version}",
-  "mac.notification_test_denied_help": "Notification de test non autorisée : vérifiez Réglages Système → Notifications"
+  "mac.notification_test_denied_help": "Notification de test non autorisée : vérifiez Réglages Système → Notifications",
+  "even.attached_photos": "Photos jointes",
+  "even.photo_number": "Photo {count}",
+  "even.remove_photo_number": "Retirer la photo {count}",
+  "even.update_mac_for_photos": "Mettez à jour Dot Link sur votre Mac pour envoyer des photos.",
+  "even.photo_limit": "Vous pouvez joindre jusqu’à {count} photos.",
+  "even.photo_unavailable": "Impossible d’ouvrir la photo. Réessayez.",
+  "even.take_photo": "Prendre une photo",
+  "even.choose_photo": "Choisir une photo",
+  "even.choosing_photo": "Sélection de la photo…",
+  "even.photos_count": "[Photos : {count}]",
+  "even.photos_waiting_for_dot": "Stockage photo plein. Réessayez plus tard.",
+  "even.photos_expired_resend": "Photos expirées. Renvoyez-les.",
+  "even.photo_already_added": "Cette photo est déjà jointe.",
+  "even.photos_ready": "Photos jointes."
 }

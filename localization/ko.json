@@ -543,5 +543,19 @@
   "mac.notification_schedule_error": "테스트 알림 등록 실패: {reason}",
   "mac.notification_scheduled": "OS에 테스트 알림 예약: {id} (감지 또는 표시의 증거가 아님)",
   "mac.update_available_version": "업데이트 있음 · {version}",
-  "mac.notification_test_denied_help": "테스트 알림 허용 안 됨: 시스템 설정 → 알림에서 확인하세요"
+  "mac.notification_test_denied_help": "테스트 알림 허용 안 됨: 시스템 설정 → 알림에서 확인하세요",
+  "even.attached_photos": "첨부 사진",
+  "even.photo_number": "사진 {count}",
+  "even.remove_photo_number": "사진 {count} 삭제",
+  "even.update_mac_for_photos": "사진을 보내려면 Mac의 Dot Link를 업데이트하세요.",
+  "even.photo_limit": "사진은 최대 {count}장까지 첨부할 수 있습니다.",
+  "even.photo_unavailable": "사진을 열 수 없습니다. 다시 시도하세요.",
+  "even.take_photo": "사진 촬영",
+  "even.choose_photo": "사진 선택",
+  "even.choosing_photo": "사진 선택 중…",
+  "even.photos_count": "[사진: {count}장]",
+  "even.photos_waiting_for_dot": "사진 저장 공간이 가득 찼습니다. 나중에 다시 시도하세요.",
+  "even.photos_expired_resend": "사진이 만료되었습니다. 다시 보내세요.",
+  "even.photo_already_added": "이미 추가한 사진입니다.",
+  "even.photos_ready": "사진이 첨부되었습니다."
 }

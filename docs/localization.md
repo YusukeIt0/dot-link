@@ -113,3 +113,5 @@ translation. Post-transcription cue cleanup has its own rule/evidence boundary;
 adding a UI language alone must not add guessed phonetic wake aliases. See
 [post-transcription rules and Korean evidence](wake-transcript-localization.md)
 when adding a text-cleanup rule.
+
+New or changed user-facing copy must be concise in every supported language. State the status and necessary action briefly; keep implementation details out of normal UI guidance. Check translation coverage, meaning and rendered fit across all supported locales. Distinguish automated checks and rendering review from native-speaker acceptance.

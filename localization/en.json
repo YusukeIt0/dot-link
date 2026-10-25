@@ -543,5 +543,19 @@
   "mac.notification_schedule_error": "Test notification registration failed: {reason}",
   "mac.notification_scheduled": "Test notification scheduled with OS: {id} (not proof of detection or display)",
   "mac.update_available_version": "Update available · {version}",
-  "mac.notification_test_denied_help": "Test notification not allowed: Check System Settings → Notifications"
+  "mac.notification_test_denied_help": "Test notification not allowed: Check System Settings → Notifications",
+  "even.attached_photos": "Attached photos",
+  "even.photo_number": "Photo {count}",
+  "even.remove_photo_number": "Remove photo {count}",
+  "even.update_mac_for_photos": "Update Dot Link on your Mac to send photos.",
+  "even.photo_limit": "You can attach up to {count} photos.",
+  "even.photo_unavailable": "Could not open this photo. Try again.",
+  "even.take_photo": "Take a photo",
+  "even.choose_photo": "Choose a photo",
+  "even.choosing_photo": "Choosing photo…",
+  "even.photos_count": "[Photos: {count}]",
+  "even.photos_waiting_for_dot": "Photo storage is full. Try again later.",
+  "even.photos_expired_resend": "Photos expired. Please resend.",
+  "even.photo_already_added": "This photo is already attached.",
+  "even.photos_ready": "Photos attached."
 }

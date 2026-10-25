@@ -2,6 +2,13 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.39
+
+- Added camera and photo-library attachments, with previews and removal before sending.
+- Added up to four photos per message, with optional typed or dictated text.
+- Photo messages follow your automatic speech sending setting; selecting a photo alone never sends it.
+- Prevented adding the same photo more than once to a message.
+
 ## 0.3.36
 
 - Added Traditional Chinese, Simplified Chinese, French and German to the phone interface and glasses status messages, with automatic language selection.
