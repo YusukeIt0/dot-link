@@ -1336,3 +1336,17 @@ test('retrying an expired delivery keeps the draft and requires a new explicit s
  await app.element('send').click();await flush();assert.notEqual(sent[0].id,sent[1].id);
  assert.equal(vm.runInContext('photos.length',app.context),0);
 });
+
+test('photo expiry ends the waiting caption live and after reopening',async t=>{
+ const app=await launch({language:'en',typedInput:true,selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'})});t.after(app.close);
+ app.element('photos').click();await flush();await app.element('send').click();await flush();
+ assert.equal(vm.runInContext('progress.phase',app.context),'waiting');
+ const expired=vm.runInContext('JSON.parse(JSON.stringify({...conversation.selected,photoCount:1,photosExpired:true}))',app.context);
+ await app.deliver(app.snapshot([expired]));
+ assert.equal(vm.runInContext('progress.phase',app.context),'idle');
+ assert.doesNotMatch(app.physical.get(1),/Waiting/);
+ assert.match(app.physical.get(2),/Photos expired\. Please resend\./);
+ const reopened=await launch({language:'en',initialMessages:[expired]});t.after(reopened.close);
+ assert.notEqual(vm.runInContext('progress.phase',reopened.context),'waiting');
+ assert.doesNotMatch(reopened.physical.get(1),/Waiting/);
+});

@@ -352,7 +352,7 @@ function showMessage(): void {
   const current = () => conversation.find(message.id) ?? message;
   display(() => {
     const item = current();
-    return item.reply ? `${conversation.position(item.id)}/${conversation.count}` :
+    return item.reply || item.photosExpired ? `${conversation.position(item.id)}/${conversation.count}` :
       item.status === 'failed' ? t('even.delivery_unconfirmed') : t('even.waiting_for_name', { name: wakeNamePreferences.assistantName });
   }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id);
 }
@@ -370,6 +370,7 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   progress.connection = 'online'; progress.dotConnected = subscribed; attachLocation();
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
   const update = conversation.receive(snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
+  for (const message of snapshot.messages) if (message.photosExpired && !message.reply) progress.stopWaiting(message.id);
   for (const message of update.announcements) {
     progress.complete(message.id);
     timing.mark(message.id, 'reply_received');

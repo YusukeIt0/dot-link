@@ -6,7 +6,7 @@ export interface DisplayMessage {
   photoCount?: number; photosExpired?: boolean;
 }
 export function waitingAge(message: DisplayMessage, now = Date.now()): number | undefined {
-  if (message.kind || message.reply || message.status === 'failed') return;
+  if (message.kind || message.reply || message.status === 'failed' || message.photosExpired) return;
   const created = Date.parse(message.createdAt ?? '');
   return Number.isFinite(created) ? Math.max(0, now - created) : undefined;
 }

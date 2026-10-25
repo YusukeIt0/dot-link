@@ -49,6 +49,9 @@ export class InteractionStatus {
     if (!this.measurements.has(id)) this.measurements.set(id, { started, waitingStarted: started, pausedMs: 0 });
     this.activeId = id; this.phase = 'waiting';
   }
+  stopWaiting(id: string): void {
+    if (this.activeId === id && this.phase === 'waiting') { this.activeId = undefined; this.phase = 'idle'; }
+  }
   get waitingProtectionMs(): number {
     if (this.phase !== 'waiting' || !this.activeId) return 0;
     const started = this.measurements.get(this.activeId)?.waitingStarted;

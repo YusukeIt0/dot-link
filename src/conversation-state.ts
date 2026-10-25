@@ -45,7 +45,7 @@ export class ConversationState {
     if (selectedId) this.index = this.messages.findIndex(message => message.id === selectedId);
     while (this.spoken.size > 200) this.spoken.delete(this.spoken.values().next().value!);
     const latest = this.messages.at(-1);
-    const waiting = initial && latest && !latest.reply && !latest.kind && latest.status !== 'failed' ? latest : undefined;
+    const waiting = initial && latest && !latest.reply && !latest.kind && latest.status !== 'failed' && !latest.photosExpired ? latest : undefined;
     if (initial && update.displayId) { this.restoreId = update.displayId; this.restoring = true; this.browsing = false; }
     this.pending = true;
     return { announcements, waiting };
