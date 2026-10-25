@@ -554,5 +554,6 @@
   "even.choose_photo": "Foto auswählen",
   "even.choosing_photo": "Foto wird ausgewählt…",
   "even.photos_send_manually": "Fotos angehängt. Tippen Sie zum Senden auf Senden.",
-  "even.photos_count": "[Fotos: {count}]"
+  "even.photos_count": "[Fotos: {count}]",
+  "even.photos_waiting_for_dot": "Gesendete Fotos warten auf eine Antwort von Dot. Versuchen Sie es nach der Antwort erneut oder entfernen Sie die Fotos, um Text zu senden."
 }

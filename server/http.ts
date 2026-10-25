@@ -6,6 +6,7 @@ import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessag
 import { CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
+import { PhotoStorageFullError } from './photo-attachments.ts';
 import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
@@ -165,7 +166,10 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       }
       if (request.url === '/mcp') { response.setHeader('Allow', 'POST'); send(405, { error: 'Method not allowed' }); return; }
       send(404, { error: 'Not found' });
-    } catch { send(400, { error: 'Request rejected; no successful delivery is implied' }); }
+    } catch (error) {
+      if (error instanceof PhotoStorageFullError) send(422, { code: 'PHOTO_STORAGE_FULL' });
+      else send(400, { error: 'Request rejected; no successful delivery is implied' });
+    }
   });
   server.once('close', () => { unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); locations?.close(); for (const wake of [...waiting]) wake(); });
   return server;

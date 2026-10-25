@@ -554,5 +554,6 @@
   "even.choose_photo": "选择照片",
   "even.choosing_photo": "正在选择照片…",
   "even.photos_send_manually": "已附加照片。准备好后请点发送。",
-  "even.photos_count": "[照片：{count} 张]"
+  "even.photos_count": "[照片：{count} 张]",
+  "even.photos_waiting_for_dot": "已发送的照片正在等待 Dot 回复。请在回复后重试，或移除照片后发送文字。"
 }

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { ChangeSignal } from './changes.ts';
 import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
 import { LatencyLog } from './latency.ts';
-import { photosSchema, photoDigest, photoBytes, MAX_PENDING_PHOTO_BYTES } from './photo-attachments.ts';
+import { photosSchema, photoDigest, photoBytes, MAX_PENDING_PHOTO_BYTES, PhotoStorageFullError } from './photo-attachments.ts';
 import { MAX_PHOTOS } from '../src/photo-attachments.ts';
 
 const SESSION = 'personal-g2';
@@ -201,7 +201,7 @@ export class Bridge {
       const sub = this.active();
       if (!sub) throw new Error('Dot has not subscribed; nothing was sent');
       const retained = this.state.messages.slice(-99);
-      if (retained.reduce((n, item) => n + photoBytes(item.photos), 0) + photoBytes(photos) > MAX_PENDING_PHOTO_BYTES) throw new Error('Pending photo storage is full');
+      if (retained.reduce((n, item) => n + photoBytes(item.photos), 0) + photoBytes(photos) > MAX_PENDING_PHOTO_BYTES) throw new PhotoStorageFullError();
       const message: State['messages'][number] = { id, text, createdAt: new Date().toISOString(), status: 'pending',
         ...(photoDigests.length ? { photos, photoDigests } : {}) };
       this.latency.mark(id, 'utterance_created');

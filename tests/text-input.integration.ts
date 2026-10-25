@@ -83,6 +83,10 @@ test('typed messages bypass STT, credentials and provider connections even with 
     try { assert.equal((await call(path, 'POST', body)).status, 400); }
     catch(error) { assert.equal((error as NodeJS.ErrnoException).code, 'ECONNRESET'); }
   };
+  for (let i=0;i<3;i++) assert.equal((await call('/api/utterances','POST',JSON.stringify({...photoInput,id:randomUUID()}))).status,200);
+  const full=await call('/api/utterances','POST',JSON.stringify({...photoInput,id:randomUUID()}));
+  assert.equal(full.status,422);assert.deepEqual(full.body,{code:'PHOTO_STORAGE_FULL'});
+  assert.equal((await call('/api/utterances','POST',JSON.stringify({id:randomUUID(),text:'Text still works'}))).status,200);
   const beforeRejected = bridge.history().length;
   await rejected('/api/utterances', JSON.stringify({...photoInput, id:randomUUID(),photos:[{...photos[0],data:'A'.repeat(3*1024*1024)}]}));
   await rejected('/api/timings', JSON.stringify({padding:'A'.repeat(40000)}));

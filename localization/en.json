@@ -554,5 +554,6 @@
   "even.choose_photo": "Choose a photo",
   "even.choosing_photo": "Choosing photo…",
   "even.photos_send_manually": "Photos are attached. Tap Send when ready.",
-  "even.photos_count": "[Photos: {count}]"
+  "even.photos_count": "[Photos: {count}]",
+  "even.photos_waiting_for_dot": "Photos are waiting for Dot. Try again after Dot replies, or remove the photos to send text."
 }

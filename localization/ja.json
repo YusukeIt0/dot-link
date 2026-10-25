@@ -554,5 +554,6 @@
   "even.choose_photo": "写真を選ぶ",
   "even.choosing_photo": "写真を選択中…",
   "even.photos_send_manually": "写真を添付中です。準備ができたら送信してください。",
-  "even.photos_count": "[写真: {count}枚]"
+  "even.photos_count": "[写真: {count}枚]",
+  "even.photos_waiting_for_dot": "送信済みの写真がDotの返答を待っています。返答後に再試行するか、写真を外してテキストを送ってください。"
 }

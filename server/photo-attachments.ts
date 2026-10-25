@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, MAX_PHOTO_EDGE } from '../src/photo-attachments.ts';
 
+export class PhotoStorageFullError extends Error {
+  constructor() { super('Pending photo storage is full'); }
+}
 export const MAX_PENDING_PHOTO_BYTES = 8 * 1024 * 1024;
 /** Bounded JPEG header inspection; the relay never executes or interprets uploaded files. */
 function validJpeg(data: string): boolean {

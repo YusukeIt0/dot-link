@@ -327,6 +327,10 @@ async function api<T>(path: string, method = 'GET', body?: string | Uint8Array, 
   const current = () => { if (exited || !session.isCurrent(version)) throw new Error('Connection changed'); };
   const response = await session.request(path, method, body, trace, requestSignal);
   current();
+  if (!response.ok && path === '/api/utterances' && response.status === 422) {
+    const failure = await response.json().catch(() => ({})); current();
+    throw new Error(failure.code === 'PHOTO_STORAGE_FULL' ? t('even.photos_waiting_for_dot') : t('even.could_not_complete_the_request_check_the_connection_or_recording'));
+  }
   if (!response.ok && path === '/api/transcribe' && response.status === 422) {
     const failure = await response.json().catch(() => ({})); current();
     throw new Error(sttErrorMessage(failure.code) ?? t('even.could_not_complete_the_request_check_the_connection_or_recording'));

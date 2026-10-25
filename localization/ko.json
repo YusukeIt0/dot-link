@@ -554,5 +554,6 @@
   "even.choose_photo": "사진 선택",
   "even.choosing_photo": "사진 선택 중…",
   "even.photos_send_manually": "사진이 첨부되었습니다. 준비되면 전송을 누르세요.",
-  "even.photos_count": "[사진: {count}장]"
+  "even.photos_count": "[사진: {count}장]",
+  "even.photos_waiting_for_dot": "전송한 사진이 Dot의 답변을 기다리고 있습니다. 답변 후 다시 시도하거나 사진을 제거하고 텍스트를 보내세요."
 }
