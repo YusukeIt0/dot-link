@@ -355,3 +355,47 @@ test('expiry during webhook delivery cannot restore an image body or lose the de
  assert.equal(result.status,'accepted');assert.equal(result.photosExpired,true);
  assert.equal(readFileSync(s.path,'utf8').includes(syntheticPhoto.data),false);
 });
+
+test('photo bodies are separate owner-only files, shared until the last reference is released', async t => {
+ const s=setup();t.after(s.close);await s.bridge.subscribe(subscription);
+ const first=randomUUID(),second=randomUUID();
+ await s.bridge.submit({id:first,text:'First',photos:[syntheticPhoto]});
+ await s.bridge.submit({id:second,text:'Second',photos:[syntheticPhoto]});
+ const stored=JSON.parse(readFileSync(s.path,'utf8'));
+ const digest=stored.messages[0].photoFiles[0], body=join(`${s.path}.photos`,digest);
+ assert.equal(stored.messages[0].photos,undefined);
+ assert.equal(stored.messages[1].photoFiles[0],digest);
+ assert.equal(readFileSync(body).toString('base64'),syntheticPhoto.data);
+ assert.equal(statSync(body).mode&0o777,0o600);assert.equal(statSync(`${s.path}.photos`).mode&0o777,0o700);
+ const modified=statSync(body).mtimeMs;
+ await s.bridge.sendMessage({message_id:randomUUID(),text:'Hello'});
+ s.bridge.pending();assert.equal(statSync(body).mtimeMs,modified);
+ await s.bridge.reply({utterance_id:first,text:'One'});assert.ok(statSync(body).isFile());
+ await s.bridge.reply({utterance_id:second,text:'Two'});assert.throws(()=>statSync(body),{code:'ENOENT'});
+});
+
+test('failed conversation commit retains live photos; restart removes orphan bodies and migrates inline state', async t => {
+ const s=setup();t.after(s.close);await s.bridge.subscribe(subscription);
+ const id=randomUUID();await s.bridge.submit({id,text:'',photos:[syntheticPhoto]});
+ const stored=JSON.parse(readFileSync(s.path,'utf8'));const body=join(`${s.path}.photos`,stored.messages[0].photoFiles[0]);
+ mkdirSync(`${s.path}.tmp`);
+ await assert.rejects(s.bridge.reply({utterance_id:id,text:'Reply'}));
+ assert.ok(statSync(body).isFile());assert.equal(s.bridge.history()[0].reply,undefined);
+ rmSync(`${s.path}.tmp`,{recursive:true});s.bridge.close();
+ const orphan=join(`${s.path}.photos`,'a'.repeat(64));writeFileSync(orphan,'unused',{mode:0o600});
+ stored.messages[0].photos=[syntheticPhoto];delete stored.messages[0].photoFiles;
+ writeFileSync(s.path,JSON.stringify(stored));
+ const restored=new Bridge(s.path,s.sender,s.hosts);t.after(()=>restored.close());
+ assert.throws(()=>statSync(orphan),{code:'ENOENT'});
+ assert.equal(JSON.parse(readFileSync(s.path,'utf8')).messages[0].photos,undefined);
+ assert.deepEqual(restored.pendingResult().content[2],{type:'image',...syntheticPhoto});
+});
+
+test('missing photo files fail safely without resetting the conversation state', async t => {
+ const s=setup();t.after(s.close);await s.bridge.subscribe(subscription);
+ await s.bridge.submit({id:randomUUID(),text:'Keep conversation',photos:[syntheticPhoto]});s.bridge.close();
+ const before=readFileSync(s.path,'utf8'),stored=JSON.parse(before);
+ rmSync(join(`${s.path}.photos`,stored.messages[0].photoFiles[0]));
+ assert.throws(()=>new Bridge(s.path,s.sender,s.hosts),/could not be loaded/);
+ assert.equal(readFileSync(s.path,'utf8'),before);
+});

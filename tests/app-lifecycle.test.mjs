@@ -74,14 +74,17 @@ test('legacy uninstall removes known data and models while preserving source and
  await writeFile(join(f.runtime,'mcp-authorization-header'),'fixture header');
  await writeFile(join(f.runtime,'stt.json'),JSON.stringify({version:1,provider:'soniox'}));
  await writeFile(join(f.runtime,'stt-endpoints.json'),JSON.stringify({version:1,microsoft:'https://fixture.cognitiveservices.azure.com'}));
+ await mkdir(join(f.runtime,'bridge-state.json.photos'));await writeFile(join(f.runtime,'bridge-state.json.photos','fixture'),'photo');
  const p=await uninstallPlan(f.directory,f.app,f);
  assert.ok(p.removes.includes(join(f.runtime,'bridge-state.json')));
+ assert.ok(p.removes.includes(join(f.runtime,'bridge-state.json.photos')));
  const r=await uninstallApp(f.directory,f.app,{...f,token:p.token});
  assert.equal(r.uninstalled,true);assert.equal(r.deleteData,true);assert.equal(r.savedData,undefined);
  for(const path of [f.app,join(f.runtime,'models'),join(f.runtime,'bridge-state.json'),join(f.runtime,'device-key'),join(f.runtime,'mcp-authorization-header'),join(f.runtime,'stt.json'),join(f.runtime,'stt-endpoints.json'),f.plists.bridge,f.plists['setup-ui']])assert.equal(await exists(path),false,path);
  assert.equal(await readFile(join(f.directory,'keep-source.txt'),'utf8'),'source');assert.equal(await readFile(join(f.runtime,'deploy-key'),'utf8'),'do not touch');
  const history=(await readdir(r.trash)).find(n=>n.endsWith('-bridge-state.json'));
  assert.equal(await readFile(join(r.trash,history),'utf8'),'private fixture history');
+ assert.equal(await exists(join(f.runtime,'bridge-state.json.photos')),false);
 });
 test('managed uninstall defaults to removing all data with recoverable contents in Trash',async t=>{
  const f=await fixture(t,{managed:true});const p=await uninstallPlan(f.directory,f.app,f);const r=await uninstallApp(f.directory,f.app,{...f,token:p.token});

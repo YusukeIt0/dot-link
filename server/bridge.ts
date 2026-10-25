@@ -7,6 +7,7 @@ import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
 import { LatencyLog } from './latency.ts';
 import { photosSchema, photoDigest, photoBytes, PHOTO_RETENTION, PhotoStorageFullError } from './photo-attachments.ts';
 import { MAX_PHOTOS } from '../src/photo-attachments.ts';
+import { PhotoStore } from './photo-store.ts';
 
 const SESSION = 'personal-g2';
 const OUTBOUND_LIMIT = 1000;
@@ -66,6 +67,7 @@ export class Bridge {
   readonly changes = new ChangeSignal();
   private state: State;
   private path: string;
+  private photoStore: PhotoStore;
   private sender: WebhookSender;
   private hosts: string[];
   readonly latency: LatencyLog;
@@ -79,16 +81,19 @@ export class Bridge {
     this.latency = latency;
     this.path = path; this.sender = sender; this.hosts = hosts;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
+    this.photoStore = new PhotoStore(`${path}.photos`);
     try {
-      this.state = stateSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+      this.state = stateSchema.parse(this.photoStore.load(JSON.parse(readFileSync(path, 'utf8'))));
     }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Bridge state could not be loaded');
       this.state = { version: 1, messages: [], outbound: [] }; this.save();
     }
     this.expirePhotos();
+    // Migrate inline bodies and remove files left by interrupted writes.
+    this.save();
   }
-  close(): void { this.closed = true; clearTimeout(this.photoExpiryTimer); this.photoExpiryTimer = undefined; }
+  close(): void { this.closed = true; this.photoStore.close(); clearTimeout(this.photoExpiryTimer); this.photoExpiryTimer = undefined; }
   private schedulePhotoExpiry(): void {
     clearTimeout(this.photoExpiryTimer); this.photoExpiryTimer = undefined;
     if (this.closed) return;
@@ -128,10 +133,12 @@ export class Bridge {
     else this.schedulePhotoExpiry();
   }
   private save(next = this.state): void {
+    const prepared = this.photoStore.prepare(next);
     const temporary = `${this.path}.tmp`;
-    writeFileSync(temporary, JSON.stringify(next), { mode: 0o600 });
+    writeFileSync(temporary, JSON.stringify(prepared.state), { mode: 0o600 });
     renameSync(temporary, this.path);
     this.state = next;
+    this.photoStore.cleanup(prepared.retained);
     this.schedulePhotoExpiry();
     this.changes.emit();
   }
