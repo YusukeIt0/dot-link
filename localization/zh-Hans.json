@@ -553,8 +553,9 @@
   "even.take_photo": "拍照",
   "even.choose_photo": "选择照片",
   "even.choosing_photo": "正在选择照片…",
-  "even.photos_send_manually": "已附加照片，请点发送。",
   "even.photos_count": "[照片：{count} 张]",
   "even.photos_waiting_for_dot": "照片暂存空间已满，请稍后重试。",
-  "even.photos_expired_resend": "照片已过期，请重新发送。"
+  "even.photos_expired_resend": "照片已过期，请重新发送。",
+  "even.photo_already_added": "已添加这张照片。",
+  "even.photos_ready": "已添加照片。"
 }

@@ -2,6 +2,11 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.38
+
+- Prevented adding the same photo more than once to a message.
+- Improved photo messages to follow your automatic speech sending setting.
+
 ## 0.3.37
 
 - Added camera and photo-library attachments, with previews and removal before sending.

@@ -1264,7 +1264,7 @@ test('disconnect does not interrupt a pairing exchange and becomes available whe
 });
 
 
-test('photo drafts require explicit send and image-only retry retains the same identity', async t => {
+test('photo selection does not send and image-only retry retains the same identity', async t => {
  const sent=[]; let fail=true;
  const app=await launch({selectPhoto:async()=>({mimeType:'image/jpeg',data:'synthetic-test-only'}),request:(url,init)=>{
   if (!url.endsWith('/api/utterances')) return;
@@ -1275,7 +1275,7 @@ test('photo drafts require explicit send and image-only retry retains the same i
  app.element('auto-send').checked=true;
  app.element('photos').click();await flush();
  assert.equal(vm.runInContext('photos.length',app.context),1);
- assert.equal(app.element('auto-send').disabled,true);
+ assert.equal(app.element('auto-send').disabled,false);
  assert.equal(app.element('send').disabled,false);assert.equal(sent.length,0);
  await app.element('send').click();await flush();
  assert.equal(vm.runInContext('photos.length',app.context),1);
@@ -1302,17 +1302,48 @@ test('cancelled, failed, stale and unsupported photo selection cannot add or sen
  assert.ok(old.element('notice').textContent.includes('Mac'));
 });
 
-test('dictation beside photos preserves both draft and automatic-send preference without sending', async t => {
- let finish;
- const app=await launch({selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'}),request:url=>url.endsWith('/api/transcribe')?new Promise(r=>{finish=r;}):undefined});t.after(app.close);
- app.element('auto-send').checked=true;app.element('photos').click();await flush();
- await app.element('record').click();await app.emit({audioEvent:{audioPcm:new Uint8Array(3200)}});
+for (const source of ['manual','wake']) for (const automatic of [false, true]) test(`${source} dictation with photos follows automatic-send=${automatic}`, async t => {
+ let finish, wake; const sent=[];
+ const detector={listen(){},cancel(){},hold(){},finish(){wake({type:'clip',seconds:1,wav:new Uint8Array(3200)});},append(){},dispose(){}};
+ const app=await launch({loadWake:async emit=>{wake=emit;return detector;},selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'}),request:(url,init)=>{
+  if(url.endsWith('/api/transcribe')) return new Promise(r=>{finish=r;});
+  if(url.endsWith('/api/utterances')) { const body=JSON.parse(init.body);sent.push(body);return Promise.resolve({ok:true,status:200,json:async()=>({...body,status:'accepted',createdAt:new Date().toISOString()})}); }
+ }});t.after(app.close);
+ app.element('auto-send').checked=automatic;app.element('photos').click();await flush();
+ assert.equal(sent.length,0);
+ if(source==='wake') { app.element('wake-word').checked=true;app.element('wake-word').onchange();await flush();wake({type:'wake'});await flush(); }
+ else await app.element('record').click();
+ await app.emit({audioEvent:{audioPcm:new Uint8Array(3200)}});
  await app.element('record').click();await flush();
  finish({ok:true,status:200,json:async()=>({text:'Describe this photo'})});await flush();
- assert.equal(app.element('transcript').value,'Describe this photo');
+ if(automatic) { for(let i=0;i<100&&!sent.length;i++) await new Promise(resolve=>setImmediate(resolve)); await flush(); }
+ assert.equal(app.element('auto-send').checked,automatic);
+ assert.equal(app.element('auto-send').disabled,false);
+ assert.equal(sent.length,automatic?1:0);
+ if(automatic) {
+  assert.equal(sent[0].text,'Describe this photo');assert.equal(sent[0].photos[0].data,'test');
+  assert.equal(vm.runInContext('photos.length',app.context),0);
+ } else {
+  assert.equal(app.element('transcript').value,'Describe this photo');
+  assert.equal(vm.runInContext('photos.length',app.context),1);
+ }
+});
+
+test('duplicate photos across camera and album are rejected, but removal permits reattachment', async t => {
+ let data='same';let picks=0;
+ const app=await launch({language:'en',selectPhoto:async()=>{picks++;return {mimeType:'image/jpeg',data};}});t.after(app.close);
+ app.element('camera').click();await flush();
+ app.element('photos').click();await flush();
  assert.equal(vm.runInContext('photos.length',app.context),1);
+ assert.equal(app.element('notice').textContent,'This photo is already attached.');
+ const buttons=app.element('photo-previews').querySelectorAll();buttons.at(-1).onclick();await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),0);
+ app.element('photos').click();await flush();
+ for (data of ['second','third','fourth']) {app.element('photos').click();await flush();}
+ assert.equal(vm.runInContext('photos.length',app.context),4);
+ data='fifth';app.element('photos').click();await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),4);assert.equal(picks,6);
  assert.equal(app.networkCalls.filter(url=>url.endsWith('/api/utterances')).length,0);
- assert.equal(app.element('auto-send').checked,true);
 });
 
 test('a full photo queue explains recovery without losing the draft', async t => {

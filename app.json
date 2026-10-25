@@ -2,7 +2,7 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.3.37",
+  "version": "0.3.38",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
@@ -21,11 +21,11 @@
     },
     {
       "name": "camera",
-      "desc": "Take a photo when you tap the camera button. The photo stays in your draft until you tap Send."
+      "desc": "Take a photo when you tap the camera button. Attach it to your draft and send it with Send, or after voice input when automatic sending is enabled."
     },
     {
       "name": "album",
-      "desc": "Choose photos to attach to a message. Only selected photos are sent to your own Dot through your Mac when you tap Send."
+      "desc": "Choose photos for your draft. Selected photos go to your own Dot through your Mac with Send, or after voice input when automatic sending is enabled."
     }
   ],
   "supported_languages": [

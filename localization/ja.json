@@ -553,8 +553,9 @@
   "even.take_photo": "写真を撮る",
   "even.choose_photo": "写真を選ぶ",
   "even.choosing_photo": "写真を選択中…",
-  "even.photos_send_manually": "写真を添付しました。送信してください。",
   "even.photos_count": "[写真: {count}枚]",
   "even.photos_waiting_for_dot": "写真の一時保存がいっぱいです。後で再試行してください。",
-  "even.photos_expired_resend": "写真の期限切れです。再送してください。"
+  "even.photos_expired_resend": "写真の期限切れです。再送してください。",
+  "even.photo_already_added": "この写真は追加済みです。",
+  "even.photos_ready": "写真を追加しました。"
 }

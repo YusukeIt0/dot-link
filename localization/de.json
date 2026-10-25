@@ -553,8 +553,9 @@
   "even.take_photo": "Foto aufnehmen",
   "even.choose_photo": "Foto auswählen",
   "even.choosing_photo": "Foto wird ausgewählt…",
-  "even.photos_send_manually": "Fotos angehängt. Auf Senden tippen.",
   "even.photos_count": "[Fotos: {count}]",
   "even.photos_waiting_for_dot": "Fotospeicher voll. Bitte später erneut versuchen.",
-  "even.photos_expired_resend": "Fotos abgelaufen. Bitte erneut senden."
+  "even.photos_expired_resend": "Fotos abgelaufen. Bitte erneut senden.",
+  "even.photo_already_added": "Dieses Foto ist bereits angehängt.",
+  "even.photos_ready": "Fotos angehängt."
 }

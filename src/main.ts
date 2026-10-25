@@ -491,7 +491,10 @@ async function choosePhoto(source: 'camera' | 'album'): Promise<void> {
   try {
     const photo = await selectPhoto(source, bridge);
     if (exited || !session.isCurrent(version) || revision !== photoRevision) return;
-    if (photo) { photos.push(photo); photoRevision++; }
+    if (photo) {
+      if (photos.some(existing => existing.data === photo.data)) notice.textContent = t('even.photo_already_added');
+      else { photos.push(photo); photoRevision++; }
+    }
   } catch {
     if (!exited && session.isCurrent(version)) notice.textContent = t('even.photo_unavailable');
   } finally {
@@ -557,8 +560,6 @@ function syncRuntimeEffects(): void {
   el<HTMLButtonElement>('camera').disabled = disabled;
   el<HTMLButtonElement>('photos').disabled = disabled;
   sendButton.disabled = exited || busy || recorder.state !== 'idle' || (!transcript.value.trim() && !photos.length);
-  // Preserve the preference; an image draft always requires an explicit Send.
-  el<HTMLInputElement>('auto-send').disabled = photos.length > 0;
   for (const button of el('photo-previews').querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy || exited;
 }
 function updateRuntime(sendToG2 = true): void {
@@ -639,7 +640,7 @@ function renderPhoneStatus(): void {
   const status = state === 'stop-error' ? t('even.retry_stopping_the_microphone') : state === 'stopping' ? t('even.stopping_microphone') :
     state === 'starting' ? t('even.starting_microphone') : state === 'recording' ? `${t('even.recording')} · ${t('even.use_the_recording_button_to_stop')}` :
     progress.phase === 'recognizing' ? t('even.transcribing') : progress.phase === 'sending' ? t('even.sending') :
-    photoSelecting ? t('even.choosing_photo') : photos.length ? t('even.photos_send_manually') : '';
+    photoSelecting ? t('even.choosing_photo') : photos.length ? t('even.photos_ready') : '';
   const caption = el('phone-control-status');
   caption.dataset.state = state;
   if (caption.textContent !== status) caption.textContent = status;
@@ -746,7 +747,7 @@ const recorder = new VoiceInput({
       progress.review(); notice.textContent = '';
       display(() => t('even.transcribed'), text);
       busy = false; clearClip();
-      if (el<HTMLInputElement>('auto-send').checked && !photos.length) sendButton.click();
+      if (el<HTMLInputElement>('auto-send').checked) sendButton.click();
       else flushPendingDisplay();
       updateRuntime();
     }).catch(error => { if (exited || version !== session.version || controller.signal.aborted) return; busy = false; clearClip(); progress.setPhase('error'); notice.textContent = error.message; display(() => t('even.could_not_transcribe_audio'), error.message); flushPendingDisplay(); })
@@ -783,7 +784,7 @@ const recorder = new VoiceInput({
         if (recorder.source === 'wake') {
           audioTraceId = undefined; clearClip(); discardButton.disabled = false;
           if (keepWakeConversation()) updateRuntime();
-          else display(() => t('even.go_ahead'), () => el<HTMLInputElement>('auto-send').checked && !photos.length ? t('even.sends_when_you_finish_speaking') : t('even.transcribes_when_you_finish_speaking'));
+          else display(() => t('even.go_ahead'), () => el<HTMLInputElement>('auto-send').checked ? t('even.sends_when_you_finish_speaking') : t('even.transcribes_when_you_finish_speaking'));
         } else display(() => t('even.recording'), () => `${holdRecording ? t('even.release_to_stop') : t('even.use_the_recording_button_to_stop')}\n${t('even.up_to_30_seconds')}`);
       }
     } finally { syncRuntimeEffects(); renderPhoneStatus(); }

@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect the camera/photo implementation branch (Mac 0.4.18 and Even 0.3.37); physical acceptance and distribution are pending. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect the camera/photo implementation branch (Mac 0.4.18 and Even 0.3.38); physical acceptance and distribution are pending. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
@@ -18,7 +18,7 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 
 Camera and photo-library access occurs only when you tap the corresponding button in the phone composer. The Even SDK currently selects one image at a time; you can add up to four to a draft. Dot Link re-encodes the pixels as JPEG, with a maximum edge of 2,048 pixels and a limit of 512 KiB per photo. Original file names, device paths and EXIF metadata (including GPS) are not forwarded. Photos may still visibly contain private information.
 
-Only tapping **Send** uploads the draft photos, with optional text, to your paired Mac. Automatic speech sending is suspended while photos are attached. The Mac sends a text notification to your existing Dot; image bodies are available through the authenticated pending-message tool. Photo bodies are not included in webhook notifications, device history, status responses or timing logs. No separate image-analysis provider is used.
+Draft photos upload to your paired Mac when you tap **Send**, or when voice transcription completes with automatic speech sending enabled. Selecting or capturing a photo alone does not upload it. The Mac sends a text notification to your existing Dot; image bodies are available through the authenticated pending-message tool. Photo bodies are not included in webhook notifications, device history, status responses or timing logs. No separate image-analysis provider is used.
 
 Draft photos remain in page memory, not Dot Link browser storage. Stopping or disconnecting clears them; reopening does not restore them. The Mac stores accepted photos in owner-only local files referenced by its conversation state until Dot replies, 24 hours have elapsed since sending, or the conversation is evicted from the latest 100 messages. Expired photos are marked unavailable; resend them if needed. The running relay cleans them up automatically, or on restart if it was stopped. Pending photos are limited to 64 MiB in total; a full queue rejects new photos until capacity is freed. After a reply, the retained conversation includes the photo count and digests for retry detection, not the photo bodies. This does not remove copies already received by Dot or included in system backups.
 
