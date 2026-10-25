@@ -25,6 +25,37 @@ Even app. It is not the Mac app release/build number. For Mac update or support
 identification, use the Mac app's version and build; a Mac-only release can retain
 the same MCP package version.
 
+### Location response errors
+
+`respond_to_location` returns a fixed, non-sensitive `error.data.reason` with a
+short English protocol message. These are tool responses for the connected AI,
+not application UI strings. Expected rejections retain JSON-RPC code `-32602`;
+unexpected internal failures use `-32603`. Successful responses are unchanged.
+
+| Reason | Meaning and next action |
+| --- | --- |
+| `invalid_arguments` | Arguments fail the existing schema. Use a UUID `context_id` and `silent` or `announce`; omit `text` for silent and supply non-empty text for announce. Empty/null text and extra keys remain invalid. |
+| `text_not_allowed_for_silent` | A silent decision included valid non-empty text. Remove `text`. |
+| `text_required_for_announcement` | An announcement omitted text. Supply non-empty text. |
+| `sharing_inactive` | Sharing is stopped, its lease expired, or the pairing owner is no longer authorized. Wait until sharing resumes before reading again. |
+| `context_unknown` | The context is unavailable, evicted, or belongs to a replaced sharing session. Read again and reconsider. |
+| `context_expired` | The read measurement or latest measurement is stale. Read again when fresh data is available. |
+| `moved_too_far` | The read and latest positions differ by more than 100 metres. Read again and reconsider. This does not distinguish actual movement from measurement noise. |
+| `conflicting_decision` | This context already has a different accepted decision. Do not overwrite it; identical retries remain idempotent. |
+| `internal_error` | An unexpected failure occurred. No raw exception details are returned; do not assume successful delivery. |
+
+Validation keeps the 90-second measurement/lease limits, 100-metre distance
+guard, consent checks and retained-decision idempotency. Announcements recheck
+the same conditions immediately before bridge storage. A reason identifies the
+rejecting condition, not necessarily its underlying cause; when several
+conditions fail, one reason is returned. It cannot reconstruct earlier failures.
+
+The vocabulary is defined in `server/location-response-error.ts` so future
+opt-in Debug mode can reuse it. Returning an error to the caller does not enable
+diagnostic collection, persistence or automatic delivery to the developer. No
+coordinates, context IDs, submitted text, callback URLs, secrets or raw
+exceptions are added to the reason or message.
+
 For the standalone introduction page, see [page maintenance and deployment](introduction-page.md).
 
 For Even application state ownership and diagnosis, see [Even runtime ownership](even-runtime.md).
