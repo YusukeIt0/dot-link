@@ -1,8 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { photoDigest, photoSchema } from './photo-attachments.ts';
-import { MAX_PHOTOS } from '../src/photo-attachments.ts';
+import { MAX_PHOTOS, MAX_PHOTO_BYTES } from '../src/photo-attachments.ts';
 import type { PhotoAttachment } from '../src/photo-attachments.ts';
 
 const references = z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PHOTOS);
@@ -19,18 +19,24 @@ export class PhotoStore {
     if (!input || typeof input !== 'object' || !('messages' in input) || !Array.isArray(input.messages)) return input;
     return { ...input, messages: input.messages.map(item => {
       if (!item || typeof item !== 'object' || !('photoFiles' in item)) return item;
-      const { photoFiles, ...message } = item;
+      const { photoFiles, photos: _inline, ...message } = item;
       const digests = references.parse(photoFiles);
-      const photos = digests.map(digest => {
-        let data: string;
-        try { data = readFileSync(join(this.directory, digest)).toString('base64'); }
-        catch { throw new Error('Stored photo body could not be loaded'); }
-        const photo = photoSchema.parse({ mimeType: 'image/jpeg', data });
-        if (photoDigest(photo) !== digest) throw new Error('Photo body does not match its reference');
-        this.present.add(digest);
-        return photo;
-      });
-      return { ...message, photos, photoDigests: digests };
+      try {
+        const photos = digests.map(digest => {
+          const path = join(this.directory, digest);
+          if (statSync(path).size > MAX_PHOTO_BYTES) throw new Error('Stored photo exceeds current limit');
+          const data = readFileSync(path).toString('base64');
+          const photo = photoSchema.parse({ mimeType: 'image/jpeg', data });
+          if (photoDigest(photo) !== digest) throw new Error('Photo body does not match its reference');
+          this.present.add(digest);
+          return photo;
+        });
+        return { ...message, photos, photoDigests: digests };
+      } catch {
+        // A damaged body or a future stricter image limit must not stop ordinary
+        // conversations. Keep retry identity and explicitly request a resend.
+        return { ...message, photoDigests: digests, photosExpired: true };
+      }
     }) };
   }
 

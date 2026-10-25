@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Webhook } from 'standardwebhooks';
-import { PHOTO_RETENTION } from '../server/photo-attachments.ts';
+import { PHOTO_RETENTION, photoDigest } from '../server/photo-attachments.ts';
 import { photoFixture } from './photo-fixture.ts';
 import { Bridge } from '../server/bridge.ts';
 import { authorized, rpc } from '../server/http.ts';
@@ -391,11 +391,25 @@ test('failed conversation commit retains live photos; restart removes orphan bod
  assert.deepEqual(restored.pendingResult().content[2],{type:'image',...syntheticPhoto});
 });
 
-test('missing photo files fail safely without resetting the conversation state', async t => {
+for (const failure of ['missing', 'digest mismatch', 'stricter image limit']) test(`unavailable photo (${failure}) expires without stopping ordinary conversations`, async t => {
  const s=setup();t.after(s.close);await s.bridge.subscribe(subscription);
- await s.bridge.submit({id:randomUUID(),text:'Keep conversation',photos:[syntheticPhoto]});s.bridge.close();
- const before=readFileSync(s.path,'utf8'),stored=JSON.parse(before);
- rmSync(join(`${s.path}.photos`,stored.messages[0].photoFiles[0]));
- assert.throws(()=>new Bridge(s.path,s.sender,s.hosts),/could not be loaded/);
- assert.equal(readFileSync(s.path,'utf8'),before);
+ const id=randomUUID();await s.bridge.submit({id,text:'Keep conversation',photos:[syntheticPhoto]});s.bridge.close();
+ const stored=JSON.parse(readFileSync(s.path,'utf8'));
+ const digest=stored.messages[0].photoFiles[0], body=join(`${s.path}.photos`,digest);
+ if(failure==='missing')rmSync(body);
+ else if(failure==='digest mismatch')writeFileSync(body,Buffer.from(photoFixture(2048).data,'base64'));
+ else {
+  // A body stored under a looser per-image policy exceeds today's bound.
+  const larger=photoFixture(513*1024), largerDigest=photoDigest(larger);
+  writeFileSync(join(`${s.path}.photos`,largerDigest),Buffer.from(larger.data,'base64'));
+  stored.messages[0].photoFiles=[largerDigest];stored.messages[0].photoDigests=[largerDigest];
+  writeFileSync(s.path,JSON.stringify(stored));
+ }
+ const restored=new Bridge(s.path,s.sender,s.hosts);t.after(()=>restored.close());
+ const history=restored.history();assert.equal(history[0].text,'Keep conversation');assert.equal(history[0].photosExpired,true);assert.equal(history[0].photoCount,1);
+ const result=restored.pendingResult();assert.equal(result.content.some(c=>c.type==='image'),false);assert.equal(result.structuredContent.utterances[0].photos_expired,true);
+ assert.deepEqual(JSON.parse(readFileSync(s.path,'utf8')).messages[0].photoDigests,stored.messages[0].photoDigests);
+ await restored.submit({id:randomUUID(),text:'Text still works'});
+ await restored.reply({utterance_id:id,text:'Please resend'});
+ assert.equal(restored.history()[0].reply,'Please resend');
 });
