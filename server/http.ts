@@ -171,6 +171,6 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       else send(400, { error: 'Request rejected; no successful delivery is implied' });
     }
   });
-  server.once('close', () => { unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); locations?.close(); for (const wake of [...waiting]) wake(); });
+  server.once('close', () => { bridge.close(); unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); locations?.close(); for (const wake of [...waiting]) wake(); });
   return server;
 }

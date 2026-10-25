@@ -520,6 +520,11 @@ sendButton.onclick = async () => {
     const message = await api<Message>('/api/utterances', 'POST', JSON.stringify({id:pendingId,text, ...(attachments.length ? {photos: attachments} : {})}));
     timing.mark(pendingId!, 'utterance_accepted');
     reportTiming(pendingId!);
+    if (message.photosExpired && !message.reply) {
+      // The old delivery can no longer expose its images. A later explicit Send gets a new ID.
+      pendingDelivery.clear(); pendingId = undefined; pendingText = undefined;
+      throw new Error(t('even.photos_expired_resend'));
+    }
     if (message.status === 'failed') throw new Error(t('even.delivery_was_not_confirmed_retrying_the_same_message_will_not'));
     progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();

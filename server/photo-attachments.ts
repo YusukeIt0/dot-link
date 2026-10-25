@@ -5,7 +5,8 @@ import { MAX_PHOTOS, MAX_PHOTO_BYTES, MAX_PHOTO_EDGE } from '../src/photo-attach
 export class PhotoStorageFullError extends Error {
   constructor() { super('Pending photo storage is full'); }
 }
-export const MAX_PENDING_PHOTO_BYTES = 8 * 1024 * 1024;
+// One policy point for later adjustments; these are internal limits, not user settings.
+export const PHOTO_RETENTION = { maxBytes: 64 * 1024 * 1024, maxAgeMs: 24 * 60 * 60 * 1000 } as const;
 /** Bounded JPEG header inspection; the relay never executes or interprets uploaded files. */
 function validJpeg(data: string): boolean {
   const bytes = Buffer.from(data, 'base64');

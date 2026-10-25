@@ -30,3 +30,12 @@ test('English uses the same receipt and delayed-wait behavior without translatin
   } finally { setLanguage('ja'); }
   assert.equal(newReplyCaption(2),'新着2件'); assert.equal(newReplyCaption(0),'');
 });
+
+test('expired photo messages give a short resend instruction instead of waiting indefinitely',()=>{
+ setLanguage('en');try {
+  const expired={...message,text:'',photoCount:2,photosExpired:true};
+  assert.match(conversationText(expired,now),/Photos expired\. Please resend\./);
+  assert.doesNotMatch(conversationText(expired,now),/Waiting for a reply/);
+  assert.match(conversationText({...expired,reply:'Already answered'},now),/Already answered/);
+ } finally {setLanguage('ja');}
+});

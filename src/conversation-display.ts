@@ -3,7 +3,7 @@ export const REPLY_DELAY_MS = 60_000;
 export interface DisplayMessage {
   id: string; text: string; reply?: string; status: string; createdAt?: string; repliedAt?: string; readAt?: string;
   kind?: 'notification' | 'proactive'; source_app?: string;
-  photoCount?: number;
+  photoCount?: number; photosExpired?: boolean;
 }
 export function waitingAge(message: DisplayMessage, now = Date.now()): number | undefined {
   if (message.kind || message.reply || message.status === 'failed') return;
@@ -26,7 +26,7 @@ export function newReplyCaption(count: number): string {
 export function conversationText(message: DisplayMessage, now = Date.now(), assistantName = 'Dot'): string {
   if (message.kind === 'proactive') return message.reply ?? '';
   const sender = message.kind === 'notification' ? `${t('even.notification')} (${message.source_app ?? 'Mac'})` : t('even.you');
-  const answer = message.reply ?? (message.status === 'failed' ? t('even.could_not_confirm_delivery') :
+  const answer = message.reply ?? (message.photosExpired ? t('even.photos_expired_resend') : message.status === 'failed' ? t('even.could_not_confirm_delivery') :
     delayedReply(message, now) ? t('even.the_reply_is_taking_longer_than_usual') : t('even.waiting_for_a_reply'));
   const photos = message.photoCount ? t('even.photos_count', { count: message.photoCount }) : '';
   return `${sender}: ${[message.text, photos].filter(Boolean).join('\n')}\n\n${assistantName}: ${answer}`;

@@ -549,11 +549,12 @@
   "even.remove_photo_number": "移除照片 {count}",
   "even.update_mac_for_photos": "請更新 Mac 上的 Dot Link 以傳送照片。",
   "even.photo_limit": "最多可附加 {count} 張照片。",
-  "even.photo_unavailable": "無法開啟或處理照片，請重試。",
+  "even.photo_unavailable": "無法開啟照片，請重試。",
   "even.take_photo": "拍照",
   "even.choose_photo": "選擇照片",
   "even.choosing_photo": "正在選擇照片…",
-  "even.photos_send_manually": "已附加照片。準備好後請點傳送。",
+  "even.photos_send_manually": "已附加照片，請點傳送。",
   "even.photos_count": "[照片：{count} 張]",
-  "even.photos_waiting_for_dot": "已傳送的照片正在等待 Dot 回覆。請在回覆後重試，或移除照片後傳送文字。"
+  "even.photos_waiting_for_dot": "照片暫存空間已滿，請稍後重試。",
+  "even.photos_expired_resend": "照片已過期，請重新傳送。"
 }

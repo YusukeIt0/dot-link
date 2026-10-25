@@ -6,6 +6,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { PHOTO_RETENTION } from '../server/photo-attachments.ts';
 import { photoFixture } from './photo-fixture.ts';
 import { Bridge } from '../server/bridge.ts';
 import { bridgeServer } from '../server/http.ts';
@@ -22,7 +23,7 @@ test('typed messages bypass STT, credentials and provider connections even with 
     const value = JSON.parse(body);
     return {status: 200, body: JSON.stringify(value.type === 'verification' ? {challenge: value.challenge} : {})};
   });
-  const bridge = new Bridge(join(directory, 'state.json'), sender, ['callback.example']);
+  const bridge = new Bridge(join(directory, 'state.json'), sender, ['callback.example'], undefined, {photoRetention:{...PHOTO_RETENTION,maxBytes:8*1024*1024}});
   const inner = bridgeServer(bridge, tokens);
   inner.listen(0, '127.0.0.1'); await once(inner, 'listening');
   const innerAddress = inner.address(); assert(innerAddress && typeof innerAddress !== 'string');

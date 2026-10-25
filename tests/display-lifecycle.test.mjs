@@ -1319,7 +1319,20 @@ test('a full photo queue explains recovery without losing the draft', async t =>
  const app=await launch({language:'en',selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'}),request:url=>url.endsWith('/api/utterances')?Promise.resolve({ok:false,status:422,json:async()=>({code:'PHOTO_STORAGE_FULL'})}):undefined});t.after(app.close);
  app.element('photos').click();await flush();await app.element('send').click();await flush();
  assert.equal(vm.runInContext('photos.length',app.context),1);
- assert.match(app.element('notice').textContent,/Photos are waiting for Dot/);
- assert.match(app.element('notice').textContent,/remove the photos to send text/);
+ assert.equal(app.element('notice').textContent,'Photo storage is full. Try again later.');
  assert.equal(app.element('send').disabled,false);
+});
+
+test('retrying an expired delivery keeps the draft and requires a new explicit send',async t=>{
+ const sent=[];
+ const app=await launch({language:'en',selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'}),request:(url,init)=>{
+  if(!url.endsWith('/api/utterances')) return;
+  const body=JSON.parse(init.body);sent.push(body);
+  return Promise.resolve({ok:true,status:200,json:async()=>({...body,status:'accepted',photoCount:1,photosExpired:sent.length===1,createdAt:new Date().toISOString()})});
+ }});t.after(app.close);
+ app.element('photos').click();await flush();await app.element('send').click();await flush();
+ assert.equal(vm.runInContext('photos.length',app.context),1);
+ assert.equal(sent.length,1);assert.equal(app.element('notice').textContent,'Photos expired. Please resend.');
+ await app.element('send').click();await flush();assert.notEqual(sent[0].id,sent[1].id);
+ assert.equal(vm.runInContext('photos.length',app.context),0);
 });

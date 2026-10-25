@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Webhook } from 'standardwebhooks';
+import { PHOTO_RETENTION } from '../server/photo-attachments.ts';
 import { photoFixture } from './photo-fixture.ts';
 import { Bridge } from '../server/bridge.ts';
 import { authorized, rpc } from '../server/http.ts';
@@ -15,7 +16,7 @@ const subscription = {
   name: 'utterance.created', arguments: { session_id: 'personal-g2' },
   delivery: { mode: 'webhook', url: 'https://callback.example.test/events', secret }, cursor: null,
 };
-function setup(post?: Post) {
+function setup(post?: Post, options?: ConstructorParameters<typeof Bridge>[4]) {
   const directory = mkdtempSync(join(tmpdir(), 'g2-bridge-test-'));
   const path = join(directory, 'state.json');
   const events: Record<string, unknown>[] = [];
@@ -26,7 +27,8 @@ function setup(post?: Post) {
     events.push(decoded); return { status: 202, body: '{}' };
   }));
   const hosts = ['callback.example.test'];
-  return { path, events, sender, hosts, bridge: new Bridge(path, sender, hosts), close: () => rmSync(directory, { recursive: true, force: true }) };
+  const bridge = new Bridge(path, sender, hosts, undefined, options);
+  return { path, events, sender, hosts, bridge, close: () => { bridge.close(); rmSync(directory, { recursive: true, force: true }); } };
 }
 
 test('verified subscription delivers an event and the reply is correlated, persistent, and idempotent', async t => {
@@ -293,14 +295,63 @@ test('pending image batches preserve ordering and expose at most four photos unt
 });
 
 test('pending photo storage is bounded across reload and a reply frees capacity', async t => {
- const s=setup();t.after(s.close);await s.bridge.subscribe(subscription);
+ const policy = { ...PHOTO_RETENTION, maxBytes: 8 * 1024 * 1024 };
+ const s=setup(undefined, {photoRetention: policy});t.after(s.close);await s.bridge.subscribe(subscription);
  // Valid JPEG with bounded application segments: test relay limits without a large pixel fixture.
  const photo=photoFixture(512*1024);
  const first=randomUUID();await s.bridge.submit({id:first,text:'',photos:Array(4).fill(photo)});
  for(let i=0;i<3;i++) await s.bridge.submit({id:randomUUID(),text:'',photos:Array(4).fill(photo)});
- const restored=new Bridge(s.path,s.sender,s.hosts);
+ const restored=new Bridge(s.path,s.sender,s.hosts,undefined,{photoRetention:policy});t.after(()=>restored.close());
  await assert.rejects(restored.submit({id:randomUUID(),text:'',photos:[syntheticPhoto]}),/storage is full/);
  await restored.reply({utterance_id:first,text:'Received'});
  await restored.submit({id:randomUUID(),text:'',photos:[syntheticPhoto]});
  assert.equal(restored.history().length,5);
+});
+
+test('photo retention defaults to 24 hours and 64 MiB; expiry preserves retry identity and informs Dot', async t => {
+ assert.equal(PHOTO_RETENTION.maxAgeMs,24*60*60*1000);assert.equal(PHOTO_RETENTION.maxBytes,64*1024*1024);
+ let now=Date.now();const s=setup(undefined,{now:()=>now});t.after(s.close);await s.bridge.subscribe(subscription);
+ const input={id:randomUUID(),text:'',photos:[syntheticPhoto]};await s.bridge.submit(input);
+ now+=PHOTO_RETENTION.maxAgeMs-1;assert.equal(s.bridge.pendingResult().content.filter(c=>c.type==='image').length,1);
+ now++;const result=s.bridge.pendingResult();
+ assert.equal(result.content.filter(c=>c.type==='image').length,0);
+ assert.equal(result.structuredContent.utterances[0].photos_expired,true);
+ assert.equal(s.bridge.history()[0].photosExpired,true);assert.equal(s.bridge.history()[0].photoCount,1);
+ assert.equal(readFileSync(s.path,'utf8').includes(syntheticPhoto.data),false);
+ assert.equal((await s.bridge.submit(input)).photosExpired,true);
+ assert.equal(s.events.length,1,'an uncertain retry must not silently resend an expired message');
+});
+
+test('restart expires old photos and a reduced policy retires oldest bodies without losing conversations', async t => {
+ let now=Date.now();const s=setup(undefined,{now:()=>now});t.after(s.close);await s.bridge.subscribe(subscription);
+ const first=randomUUID(),second=randomUUID();
+ await s.bridge.submit({id:first,text:'First',photos:[syntheticPhoto]});now+=1000;
+ await s.bridge.submit({id:second,text:'Second',photos:[syntheticPhoto]});s.bridge.close();
+ const onePhoto=Buffer.byteLength(syntheticPhoto.data,'base64');
+ const reduced=new Bridge(s.path,s.sender,s.hosts,undefined,{now:()=>now,photoRetention:{...PHOTO_RETENTION,maxBytes:onePhoto}});t.after(()=>reduced.close());
+ assert.equal(reduced.history().length,2);assert.equal(reduced.history()[0].photosExpired,true);
+ assert.equal(reduced.pendingResult().content.filter(c=>c.type==='image').length,1);
+ reduced.close();now+=PHOTO_RETENTION.maxAgeMs;
+ const restarted=new Bridge(s.path,s.sender,s.hosts,undefined,{now:()=>now});t.after(()=>restarted.close());
+ assert.equal(restarted.history().length,2);assert.ok(restarted.history().every(m=>m.photosExpired));
+ assert.equal(readFileSync(s.path,'utf8').includes(syntheticPhoto.data),false);
+});
+
+test('the running relay removes expired photo bodies without a client read', async t => {
+ const s=setup(undefined,{photoRetention:{...PHOTO_RETENTION,maxAgeMs:40}});t.after(s.close);await s.bridge.subscribe(subscription);
+ await s.bridge.submit({id:randomUUID(),text:'Automatic cleanup',photos:[syntheticPhoto]});
+ await new Promise(resolve=>setTimeout(resolve,100));
+ const stored=JSON.parse(readFileSync(s.path,'utf8'));
+ assert.equal(stored.messages[0].photos,undefined);assert.equal(stored.messages[0].photosExpired,true);
+});
+
+test('expiry during webhook delivery cannot restore an image body or lose the delivery status',async t=>{
+ let now=Date.now(),release!:()=>void,started!:()=>void;
+ const waiting=new Promise<void>(r=>{started=r;});const gate=new Promise<void>(r=>{release=r;});
+ const s=setup(async(_url,body)=>{const p=JSON.parse(body);if(p.type==='verification')return{status:200,body:JSON.stringify({challenge:p.challenge})};started();await gate;return{status:202,body:'{}'};},{now:()=>now});t.after(s.close);
+ await s.bridge.subscribe(subscription);
+ const sending=s.bridge.submit({id:randomUUID(),text:'',photos:[syntheticPhoto]});await waiting;
+ now+=PHOTO_RETENTION.maxAgeMs;s.bridge.history();release();const result=await sending;
+ assert.equal(result.status,'accepted');assert.equal(result.photosExpired,true);
+ assert.equal(readFileSync(s.path,'utf8').includes(syntheticPhoto.data),false);
 });

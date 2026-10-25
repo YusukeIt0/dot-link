@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { ChangeSignal } from './changes.ts';
 import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
 import { LatencyLog } from './latency.ts';
-import { photosSchema, photoDigest, photoBytes, MAX_PENDING_PHOTO_BYTES, PhotoStorageFullError } from './photo-attachments.ts';
+import { photosSchema, photoDigest, photoBytes, PHOTO_RETENTION, PhotoStorageFullError } from './photo-attachments.ts';
 import { MAX_PHOTOS } from '../src/photo-attachments.ts';
 
 const SESSION = 'personal-g2';
@@ -22,7 +22,7 @@ const utteranceSchema = z.object({
   id: z.string().uuid(), text: z.string(), createdAt: z.string(),
   status: z.enum(['pending', 'accepted', 'failed', 'replied']),
   reply: z.string().optional(), repliedAt: z.string().optional(), readAt: z.string().optional(),
-  photos: photosSchema.optional(), photoDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PHOTOS).optional(),
+  photos: photosSchema.optional(), photosExpired: z.boolean().optional(), photoDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PHOTOS).optional(),
 });
 const outboundInput = z.object({
   message_id: z.string().uuid(), text: z.string().trim().min(1).max(8000),
@@ -57,7 +57,7 @@ export const statusTool = {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const pendingTool = {
-  name: 'get_pending_utterances', description: 'Read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Already answered utterances are excluded.',
+  name: 'get_pending_utterances', description: 'Read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -69,25 +69,70 @@ export class Bridge {
   private sender: WebhookSender;
   private hosts: string[];
   readonly latency: LatencyLog;
+  private closed = false;
+  private photoExpiryTimer?: ReturnType<typeof setTimeout>;
+  private now: () => number;
+  private photoRetention: { maxBytes: number; maxAgeMs: number };
   private operation: Promise<unknown> = Promise.resolve();
-  constructor(path: string, sender: WebhookSender, hosts: string[], latency = new LatencyLog()) {
+  constructor(path: string, sender: WebhookSender, hosts: string[], latency = new LatencyLog(), options: { now?: () => number; photoRetention?: { maxBytes: number; maxAgeMs: number } } = {}) {
+    this.now = options.now ?? Date.now; this.photoRetention = options.photoRetention ?? PHOTO_RETENTION;
     this.latency = latency;
     this.path = path; this.sender = sender; this.hosts = hosts;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     try {
       this.state = stateSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
-      if (this.state.messages.reduce((n, item) => n + photoBytes(item.photos), 0) > MAX_PENDING_PHOTO_BYTES) throw new Error('Photo storage limit exceeded');
     }
     catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Bridge state could not be loaded');
       this.state = { version: 1, messages: [], outbound: [] }; this.save();
     }
+    this.expirePhotos();
+  }
+  close(): void { this.closed = true; clearTimeout(this.photoExpiryTimer); this.photoExpiryTimer = undefined; }
+  private schedulePhotoExpiry(): void {
+    clearTimeout(this.photoExpiryTimer); this.photoExpiryTimer = undefined;
+    if (this.closed) return;
+    const deadlines = this.state.messages.filter(item => item.photos?.length)
+      .map(item => Date.parse(item.createdAt) + this.photoRetention.maxAgeMs);
+    if (!deadlines.length) return;
+    this.photoExpiryTimer = setTimeout(() => {
+      void this.serial(async () => this.expirePhotos()).catch(() => {
+        if (this.closed) return;
+        // A failed disk write must not lose bodies in memory; retry cleanup later.
+        this.photoExpiryTimer = setTimeout(() => this.schedulePhotoExpiry(), 60_000);
+        this.photoExpiryTimer.unref();
+      });
+    }, Math.max(1, Math.min(2_147_483_647, Math.min(...deadlines) - this.now())));
+    this.photoExpiryTimer.unref();
+  }
+  private expirePhotos(): void {
+    let changed = false;
+    const now = this.now();
+    const expire = (item: State['messages'][number]): State['messages'][number] => {
+      changed = true;
+      const { photos: _photos, ...retained } = item;
+      return { ...retained, photosExpired: true };
+    };
+    let messages = this.state.messages.map(item => {
+      if (!item.photos?.length) return item;
+      const created = Date.parse(item.createdAt);
+      return !Number.isFinite(created) || now - created >= this.photoRetention.maxAgeMs ? expire(item) : item;
+    });
+    // A future lower capacity must not make an existing state file unloadable.
+    let total = messages.reduce((n, item) => n + photoBytes(item.photos), 0);
+    if (total > this.photoRetention.maxBytes) messages = messages.map(item => {
+      if (!item.photos?.length || total <= this.photoRetention.maxBytes) return item;
+      total -= photoBytes(item.photos); return expire(item);
+    });
+    if (changed) this.save({ ...this.state, messages });
+    else this.schedulePhotoExpiry();
   }
   private save(next = this.state): void {
     const temporary = `${this.path}.tmp`;
     writeFileSync(temporary, JSON.stringify(next), { mode: 0o600 });
     renameSync(temporary, this.path);
     this.state = next;
+    this.schedulePhotoExpiry();
     this.changes.emit();
   }
   private serial<T>(action: () => Promise<T>): Promise<T> {
@@ -103,7 +148,7 @@ export class Bridge {
     const { photos: _photos, photoDigests, ...message } = item;
     return { ...message, ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
   }
-  history() { return this.state.messages.map(item => this.publicMessage(item)); }
+  history() { this.expirePhotos(); return this.state.messages.map(item => this.publicMessage(item)); }
   private pendingMessages() {
     let count = 0;
     const messages: State['messages'] = [];
@@ -116,6 +161,7 @@ export class Bridge {
     return messages;
   }
   pending() {
+    this.expirePhotos();
     const messages = this.pendingMessages();
     const at = new Date().toISOString();
     let changed = false;
@@ -128,7 +174,8 @@ export class Bridge {
     if (changed) this.save();
     return { session_id: SESSION, utterances: messages
       .map(item => ({ utterance_id: item.id, text: item.text, created_at: item.createdAt,
-        ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}) })) };
+        ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}),
+        ...(item.photosExpired ? { photos_expired: true } : {}) })) };
   }
   pendingResult() {
     const value = this.pending();
@@ -190,6 +237,7 @@ export class Bridge {
   }
   submit(input: unknown) {
     return this.serial(async () => {
+      this.expirePhotos();
       const { text, id, photos } = z.object({ text: z.string().trim().max(4000), id: z.string().uuid(), photos: photosSchema.optional() })
         .strict().refine(value => !!value.text || !!value.photos?.length).parse(input);
       const photoDigests = photos?.map(photoDigest) ?? [];
@@ -201,8 +249,8 @@ export class Bridge {
       const sub = this.active();
       if (!sub) throw new Error('Dot has not subscribed; nothing was sent');
       const retained = this.state.messages.slice(-99);
-      if (retained.reduce((n, item) => n + photoBytes(item.photos), 0) + photoBytes(photos) > MAX_PENDING_PHOTO_BYTES) throw new PhotoStorageFullError();
-      const message: State['messages'][number] = { id, text, createdAt: new Date().toISOString(), status: 'pending',
+      if (retained.reduce((n, item) => n + photoBytes(item.photos), 0) + photoBytes(photos) > this.photoRetention.maxBytes) throw new PhotoStorageFullError();
+      const message: State['messages'][number] = { id, text, createdAt: new Date(this.now()).toISOString(), status: 'pending',
         ...(photoDigests.length ? { photos, photoDigests } : {}) };
       this.latency.mark(id, 'utterance_created');
       this.save({ ...this.state, messages: [...retained, message] });
@@ -211,14 +259,19 @@ export class Bridge {
         data: { session_id: SESSION, utterance_id: id, text: photoDigests.length ? `${text}${text ? '\n\n' : ''}[${photoDigests.length} photo(s) attached. Read get_pending_utterances to view the images.]` : text }, cursor: null };
       // One attempt in the initial proof. A timeout is not treated as an unsent message.
       // Client retries with the same ID return its stored status, preventing duplicates.
+      let deliveryStatus: 'accepted' | 'failed' = 'failed';
       try {
         this.latency.mark(id, 'webhook_sent');
         const result = await this.sender.send(sub, event.eventId, event);
         this.latency.mark(id, result.status >= 200 && result.status < 300 ? 'webhook_accepted' : 'webhook_failed');
-        message.status = result.status >= 200 && result.status < 300 ? 'accepted' : 'failed';
+        deliveryStatus = result.status >= 200 && result.status < 300 ? 'accepted' : 'failed';
         if (result.status === 410) delete this.state.subscription;
-      } catch { this.latency.mark(id, 'webhook_failed'); message.status = 'failed'; }
-      this.save(); return this.publicMessage(message);
+      } catch { this.latency.mark(id, 'webhook_failed'); }
+      // A read may expire image bodies while webhook delivery is in flight.
+      const current = this.state.messages.find(item => item.id === id)!;
+      const updated = { ...current, status: deliveryStatus };
+      this.save({ ...this.state, messages: this.state.messages.map(item => item === current ? updated : item) });
+      return this.publicMessage(updated);
     });
   }
   async reply(input: unknown) {
