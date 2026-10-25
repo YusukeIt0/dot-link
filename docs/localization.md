@@ -49,6 +49,10 @@ conversation, notification contents, user input, host names or provider output.
 Technical status codes, version numbers, URLs, model/provider names and the
 compact STT/TTS ON/OFF indicators remain identifiers, not translation keys.
 
+Manually changing the Even language preference (including selecting Auto) stops
+current playback and saves read-aloud as OFF. Automatic host-language updates
+and preference restoration do not change the saved read-aloud choice.
+
 Read-aloud keeps the existing browser speech path. The registered speech locale
 is supplied to both the toggle announcement and reply playback. The browser/OS chooses an available voice; UI translation does not
 install voices or guarantee pronunciation of mixed-language replies. A speech
