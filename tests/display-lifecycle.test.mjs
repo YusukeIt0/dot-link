@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import * as sdk from '@evenrealities/even_hub_sdk';
+import { catalogs, localeMetadata } from '../src/localization-catalogs.ts';
 
 const mainUrl = new URL('../src/main.ts', import.meta.url);
 const source = await readFile(mainUrl, 'utf8');
@@ -81,7 +82,7 @@ async function launch(options = {}) {
     waitForEvenAppBridge: async () => bridge,
     document: {documentElement: {}, body: {dataset: {}}, hidden: false, getElementById: element,
       querySelector: element, querySelectorAll: selector => selector === '[data-i18n]' ? [staticLabel] : selector === 'textarea' ? [element('transcript'), element('pair-code')] : [...elements.values()], createComment: element, addEventListener: listen},
-    window: {addEventListener: listen, speechSynthesis: {cancel() {}, speak(speech) { calls.push(['speech', speech.text, speech.lang]); options.speak?.(speech); }}},
+    window: {addEventListener: listen, speechSynthesis: {cancel() { options.cancelSpeech?.(); }, speak(speech) { calls.push(['speech', speech.text, speech.lang]); options.speak?.(speech); }}},
     SpeechSynthesisUtterance: class { constructor(text) { this.text = text; } },
     navigator: {language: options.language ?? 'ja', userAgent: options.userAgent ?? 'iPhone', maxTouchPoints: 5},
     localStorage: local, sessionStorage: local, location: {origin: options.nativePairing ? 'http://127.0.0.1:57157' : 'https://test.invalid', hash: '', pathname: '/', search: ''},
@@ -484,7 +485,7 @@ test('all provider and actual model labels reach both phone and G2 through statu
 });
 
 
-test('language switches preserve the live session, draft, TTS, history position and future delivery', async t => {
+test('manual language switches mute read-aloud and preserve the session, draft and history', async t => {
   const app = await launch({provider: 'elevenlabs'}); t.after(app.close);
   const first = {id: 'first', kind: 'voice', text: 'Display settings', reply: '長押しで話してください', status: 'replied'};
   await app.deliver(app.snapshot([first, proactive('second')]));
@@ -494,22 +495,22 @@ test('language switches preserve the live session, draft, TTS, history position 
   const credentials = app.saved.get('g2-device-token');
   const beforeRequests = app.networkCalls.length;
   app.element('pair-code').value = 'invalid'; app.element('pair-code').oninput();
-  for (const locale of ['en', 'ko', 'ja', 'ko', 'en']) {
+  for (const locale of [...Object.keys(catalogs), 'en']) {
+    if (app.element('tts').getAttribute('aria-pressed') !== 'true') await app.element('tts').click();
     app.element('language').value = locale; app.element('language').onchange(); await flush();
     assert.equal(app.context.document.documentElement.lang, locale);
-    assert.equal(app.element('pair-notice').textContent, locale === 'en'
-      ? 'The pairing code is invalid or expired. Create a new one on your Mac.'
-      : locale === 'ko' ? '연결 코드가 잘못되었거나 만료되었습니다. Mac에서 새로 만드세요.' : '接続コードが無効か期限切れです。Macで新しく発行してください。');
-    assert.equal(app.element('static-test-label').textContent, locale === 'en' ? 'Display settings' : locale === 'ko' ? '표시 설정' : '表示設定');
-    assert.match(app.element('tts').getAttribute('aria-label'), /ON$/);
-    assert.equal(app.element('tts').getAttribute('aria-pressed'), 'true');
-    assert.equal(app.element('record').getAttribute('aria-label'), locale === 'en' ? 'Start recording' : locale === 'ko' ? '녹음 시작' : '録音を開始');
-    assert.equal(app.element('discard').getAttribute('aria-label'), locale === 'en' ? 'Discard recording' : locale === 'ko' ? '녹음 삭제' : '録音を破棄');
-    assert.equal(app.element('transcript').placeholder, locale === 'en' ? 'Message Dot…' : locale === 'ko' ? 'Dot에게 메시지…' : 'Dotにメッセージ…');
+    assert.equal(app.element('pair-notice').textContent, catalogs[locale]['even.the_pairing_code_is_invalid_or_expired_create_a_new']);
+    assert.equal(app.element('static-test-label').textContent, catalogs[locale]['even.display_settings']);
+    assert.match(app.element('tts').getAttribute('aria-label'), /OFF$/);
+    assert.equal(app.element('tts').getAttribute('aria-pressed'), 'false');
+    assert.equal(app.nativeSaved.get('dot-read-aloud-preference-v1'), 'false');
+    assert.equal(app.element('record').getAttribute('aria-label'), catalogs[locale]['even.start_recording']);
+    assert.equal(app.element('discard').getAttribute('aria-label'), catalogs[locale]['even.discard_recording']);
+    assert.equal(app.element('transcript').placeholder, catalogs[locale]['even.message_dot']);
     assert.equal(app.element('record').disabled, false);
     assert.equal(app.element('transcript').value, 'Unsent draft');
     assert.match(app.physical.get(2), /Display settings\n\nDot: 長押しで話してください$/);
-    assert.ok(app.physical.get(2).startsWith(locale === 'en' ? 'You: ' : locale === 'ko' ? '나: ' : 'あなた: '));
+    assert.ok(app.physical.get(2).startsWith(catalogs[locale]['even.you'] + ': '));
     assert.match(app.physical.get(1), /1\/2/);
     assert.equal(app.element('g2-diagnostic').textContent, 'G2_READY');
   }
@@ -527,8 +528,37 @@ test('language switches preserve the live session, draft, TTS, history position 
   assert.equal(app.physical.get(2), 'Synthetic message third');
 });
 
+test('manual language selection cancels speech and remains muted after native restore', async t => {
+  let cancellations = 0;
+  const app = await launch({nativeReadAloud: true, cancelSpeech: () => cancellations++});
+  t.after(app.close);
+  await app.deliver(app.snapshot([proactive('speaking')]));
+  const spoken = app.calls.filter(c => c[0] === 'speech').length;
+  const before = cancellations;
+  app.element('language').value = 'de'; app.element('language').onchange(); await flush();
+  assert.ok(cancellations > before, 'current playback is cancelled');
+  await app.deliver(app.snapshot([proactive('speaking'), proactive('silent')]));
+  assert.equal(app.calls.filter(c => c[0] === 'speech').length, spoken);
+  const reopened = await launch({nativeState: [...app.nativeSaved]}); t.after(reopened.close);
+  assert.equal(reopened.context.document.documentElement.lang, 'de');
+  assert.equal(reopened.element('tts').getAttribute('aria-pressed'), 'false');
+  await reopened.element('tts').click(); await flush();
+  assert.equal(reopened.calls.filter(c => c[0] === 'speech').at(-1)[2], 'de-DE');
+});
+
+test('automatic language changes preserve read-aloud while explicit Automatic selection mutes it', async t => {
+  const app = await launch({nativeReadAloud: true}); t.after(app.close);
+  await app.locale('fr-FR');
+  assert.equal(app.element('tts').getAttribute('aria-pressed'), 'true');
+  app.element('language').value = 'fr'; app.element('language').onchange(); await flush();
+  assert.equal(app.element('tts').getAttribute('aria-pressed'), 'false', 'same effective language is still an explicit selection');
+  await app.element('tts').click(); await flush();
+  app.element('language').value = 'auto'; app.element('language').onchange(); await flush();
+  assert.equal(app.element('tts').getAttribute('aria-pressed'), 'false');
+});
+
 test('both read-aloud paths use the locale and preserve reply text', async t => {
-  for (const [language, locale] of [['en', 'en-US'], ['ja', 'ja-JP'], ['ko', 'ko-KR']]) {
+  for (const [language, {speechLocale: locale}] of Object.entries(localeMetadata)) {
     const app = await launch({language, speak: speech => speech.onend()});
     t.after(app.close);
     await app.element('tts').click(); await flush();
@@ -555,7 +585,7 @@ test('unavailable Korean speech retains visible reply and reports the existing f
 });
 
 test('automatic locale follows supported host changes without restart', async t => {
-  const app = await launch({language: 'fr-FR'}); t.after(app.close);
+  const app = await launch({language: 'ar-SA'}); t.after(app.close);
   assert.equal(app.element('language').value, 'auto');
   assert.equal(app.context.document.documentElement.lang, 'en');
   await app.locale('ko-KR'); assert.equal(app.context.document.documentElement.lang, 'ko');
@@ -564,7 +594,9 @@ test('automatic locale follows supported host changes without restart', async t 
   await app.locale('ja-JP'); assert.equal(app.context.document.documentElement.lang, 'en');
   app.element('language').value = 'auto'; app.element('language').onchange(); await flush();
   assert.equal(app.context.document.documentElement.lang, 'ja');
-  await app.locale('zh-CN'); assert.equal(app.context.document.documentElement.lang, 'en');
+  for (const [host, expected] of [['zh-CN', 'zh-Hans'], ['zh-TW', 'zh-Hant'], ['zh-Hans-HK', 'zh-Hans'], ['fr-CA', 'fr'], ['de-AT', 'de'], ['ar-SA', 'en']]) {
+    await app.locale(host); assert.equal(app.context.document.documentElement.lang, expected);
+  }
   assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
 });
 
@@ -580,11 +612,14 @@ test('language change keeps a hidden display blank and recording guard preserves
   assert.equal(app.context.document.documentElement.lang, 'en');
 });
 
-test('native language is restored into a new WebView without replacing G2 startup', async t => {
-  const app = await launch({language: 'en-US', nativeLanguage: 'ko'}); t.after(app.close);
-  assert.equal(app.context.document.documentElement.lang, 'ko');
-  assert.equal(app.element('language').value, 'ko');
-  assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
+test('native languages restore into a new WebView without replacing G2 startup', async t => {
+  for (const locale of Object.keys(catalogs)) {
+    const app = await launch({language: 'en-US', nativeLanguage: locale}); t.after(app.close);
+    assert.equal(app.context.document.documentElement.lang, locale);
+    assert.equal(app.element('language').value, locale);
+    assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
+    await app.close();
+  }
 });
 
 test('location toggle reaches native/relay and an OFF blocks late announcements in the whole app', async t => {

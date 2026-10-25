@@ -20,5 +20,43 @@
     "dateLocale": "ko_KR",
     "order": 2,
     "dateFormat": "yyyy년 M월 d일 HH:mm"
+  },
+  "zh-Hant": {
+    "name": "繁體中文",
+    "speechLocale": "zh-TW",
+    "dateLocale": "zh_TW",
+    "order": 3,
+    "dateFormat": "yyyy年M月d日 HH:mm",
+    "matchLocales": [
+      "zh-TW",
+      "zh-HK",
+      "zh-MO"
+    ]
+  },
+  "zh-Hans": {
+    "name": "简体中文",
+    "speechLocale": "zh-CN",
+    "dateLocale": "zh_CN",
+    "order": 4,
+    "dateFormat": "yyyy年M月d日 HH:mm",
+    "matchLocales": [
+      "zh",
+      "zh-CN",
+      "zh-SG"
+    ]
+  },
+  "fr": {
+    "name": "Français",
+    "speechLocale": "fr-FR",
+    "dateLocale": "fr_FR",
+    "order": 5,
+    "dateFormat": "dd/MM/yyyy HH:mm"
+  },
+  "de": {
+    "name": "Deutsch",
+    "speechLocale": "de-DE",
+    "dateLocale": "de_DE",
+    "order": 6,
+    "dateFormat": "dd.MM.yyyy HH:mm"
   }
 }

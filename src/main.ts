@@ -168,7 +168,8 @@ renderPhoneLabels();
 renderRecordControl('idle');
 language.onchange = () => {
   if (busy || recorder.state !== 'idle') { language.value = languagePreferences.value; notice.textContent = t('even.please_wait_for_the_current_task_to_finish'); return; }
-  if (!isLanguagePreference(language.value)) return;
+  if (!isLanguagePreference(language.value) || language.value === languagePreferences.value) return;
+  setReadAloud(false);
   void languagePreferences.save(language.value).then(saved => {
     if (!saved && !exited) notice.textContent = t('even.settings_could_not_be_saved_here_they_may_reset_when');
   });
@@ -442,15 +443,16 @@ el('forget-pairing').onclick = () => {
   display(() => t('even.pair_with_your_mac'), () => t('even.open_setup_on_your_phone'));
   if (credentials) void disconnectRetry.run();
 };
-el('tts').onclick = () => {
-  tts = !tts; renderReadAloudControl();
+function setReadAloud(enabled: boolean): void {
+  tts = enabled; renderReadAloudControl();
   void readAloudPreferences.save(tts).then(saved => {
     if (!saved && !exited) notice.textContent = t('even.settings_could_not_be_saved_here_they_may_reset_when');
   });
   if (tts && 'speechSynthesis' in window) { const speech = new SpeechSynthesisUtterance(t('even.read_aloud_is_on')); speech.lang = speechLocale(); playback.speak(speech); }
   else playback.cancel();
   updateRuntime();
-};
+}
+el('tts').onclick = () => setReadAloud(!tts);
 el('previous').onclick = () => { standby?.activity(); conversation.navigate(-1); showMessage(); };
 el('next').onclick = () => { standby?.activity(); conversation.navigate(1); showMessage(); };
 let pendingId: string | undefined;

@@ -18,6 +18,7 @@ final class Localization {
         let dateLocale: String
         let order: Int
         let legacyPrefix: Bool?
+        let matchLocales: [String]?
         let dateFormat: String?
     }
     static let shared = Localization(directory: Bundle.main.resourceURL!.appendingPathComponent("payload/localization"))
@@ -33,11 +34,14 @@ final class Localization {
     }
     func choose(preferred: String, saved: String? = nil) -> String {
         if let saved, metadata[saved] != nil { return saved }
-        let value = preferred.lowercased()
-        return languages.first { locale in
-            value == locale || value.hasPrefix(locale + "-") || value.hasPrefix(locale + "_") ||
-            (metadata[locale]?.legacyPrefix == true && value.hasPrefix(locale))
-        } ?? "en"
+        let value = preferred.lowercased().replacingOccurrences(of: "_", with: "-")
+        let matches = languages.flatMap { locale in
+            ([locale] + (metadata[locale]?.matchLocales ?? [])).map { (locale: locale, tag: $0.lowercased()) }
+        }.sorted { $0.tag.count > $1.tag.count }
+        return matches.first { match in
+            value == match.tag || value.hasPrefix(match.tag + "-") ||
+            (metadata[match.locale]?.legacyPrefix == true && value.hasPrefix(match.tag))
+        }?.locale ?? "en"
     }
     func text(_ key: String, language: String, _ parameters: [String: String] = [:]) -> String {
         let template = catalogs[language]?[key] ?? catalogs["en"]?[key] ?? key

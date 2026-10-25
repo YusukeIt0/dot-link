@@ -9,8 +9,14 @@ and acoustic wake detection. English is the fallback. See the README for
 - `localization/locales.json` registers each language's native name, selector
   order, speech locale, Mac date locale and saved-key date format. Existing Japanese/English selector
   order is retained; new languages follow them.
+  Locale IDs may include a script (for example, `zh-Hant` and `zh-Hans`).
+  Optional `matchLocales` entries register device-language aliases in the same
+  metadata; the longest matching tag wins. Both clients normalize case and
+  underscores. An explicit script takes precedence over a region: `zh-Hans-TW`
+  remains Simplified Chinese. Region-only `zh-TW`, `zh-HK` and `zh-MO` use
+  Traditional Chinese; `zh-CN`, `zh-SG` and bare `zh` use Simplified Chinese.
 - `localization/en.json` defines stable message IDs and English source text.
-  `ja.json`, `ko.json`, and future locale files use exactly the same IDs.
+  All registered locale files use exactly the same IDs.
   Keep IDs stable when correcting wording. Prefix messages with `even.`, `mac.`,
   `setup.` or `common.` according to ownership.
 - Use named placeholders such as `{host}`, `{name}` and `{count}`. Pass values
@@ -32,7 +38,7 @@ Even owns display-language resolution in `src/i18n.ts`, persistence in
 `src/language-preferences.ts`, and application state in the existing runtime
 controllers. Auto uses the WebView's `navigator.language` and follows its
 `languagechange` event; it does not read a separate G2 language setting. Explicit
-choices override Auto. Preserve the existing language-prefix matching and
+choices override Auto. Preserve legacy language-prefix matching and
 unsupported-language fallback. Preserve the local/native storage keys and
 restore/write ordering when extending the supported set.
 
@@ -43,9 +49,12 @@ conversation, notification contents, user input, host names or provider output.
 Technical status codes, version numbers, URLs, model/provider names and the
 compact STT/TTS ON/OFF indicators remain identifiers, not translation keys.
 
+Manually changing the Even language preference (including selecting Auto) stops
+current playback and saves read-aloud as OFF. Automatic host-language updates
+and preference restoration do not change the saved read-aloud choice.
+
 Read-aloud keeps the existing browser speech path. The registered speech locale
-is supplied to both the toggle announcement and reply playback (Korean:
-`ko-KR`). The browser/OS chooses an available voice; UI translation does not
+is supplied to both the toggle announcement and reply playback. The browser/OS chooses an available voice; UI translation does not
 install voices or guarantee pronunciation of mixed-language replies. A speech
 error keeps the existing visible fallback. User messages and Dot replies are
 never translated or rewritten by the UI language setting.
@@ -70,15 +79,23 @@ and language switching. These require macOS; the update driver needs AppKit.
 ## Adding a language
 
 1. Copy the English catalog to the new language file and translate every entry.
+   Write idiomatic UI copy, not word-for-word translations. Keep actions and
+   status labels concise, use consistent terms, and preserve the precise meaning
+   of consent, failures and destructive actions. Chinese scripts have separate
+   catalogs with their own regional terminology, not runtime character conversion.
    Preserve placeholders, the meaning of permissions/stopping, product names
    and literal wake names. Review short state labels as well as long help/error
    text. Register native name and locale metadata and regenerate imports. Add the
    language to `app.json` using a language code supported by the Even package
    schema; platform support is separate from catalog registration.
+   The current package schema uses `zh` for both Chinese scripts; the app keeps
+   their selection and catalogs separate.
 2. Run `npm test`, `npm run test:http`, and `npm run build`. Test locale/region
    detection, explicit selection, unsupported/invalid preferences, restart and
    native restore. Check that message contents, drafts, pairing and other
    settings survive switches and that recording guards still apply.
+   `tests/fixtures/locale-resolution.json` is shared by the TypeScript and Swift
+   tests so script/region selection and saved-choice precedence stay consistent.
 3. Check static and dynamic text, accessibility, placeholders and units across
    the phone and G2. Test actual glyph rendering, long text/native scrolling,
    text expansion and read-aloud behavior on the intended devices. Width-unit

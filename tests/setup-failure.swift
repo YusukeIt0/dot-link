@@ -7,7 +7,11 @@ import Foundation
         precondition(details.message(language: "en").contains("HTTPS Certificates"))
         precondition(details.message(language: "ja").contains("再試行"))
         precondition(details.message(language: "ko").contains("다시 시도"))
-        precondition(details.message(language: "de") == details.message(language: "en"))
+        precondition(details.message(language: "ar") == details.message(language: "en"))
+        for language in ["zh-Hant", "zh-Hans", "fr", "de"] {
+            precondition(details.message(language: language).contains("HTTPS Certificates"))
+            precondition(details.message(language: language) != details.message(language: "en"))
+        }
         let copy = details.copyText(appVersion: "0.4.7", build: "75")!
         precondition(!copy.contains("private"))
         let json = try JSONSerialization.jsonObject(with: Data(copy.utf8)) as! [String: Any]
