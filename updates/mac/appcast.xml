@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.16</title><sparkle:version>87</sparkle:version><sparkle:shortVersionString>0.4.16</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added Korean across setup, connection status, speech settings, notifications, and update messages.
-- Korean-language Macs now start in Korean unless another application language was already selected.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.16-87/Dot-Link-0.4.16-87-arm64.zip" sparkle:installationType="application" sparkle:edSignature="qLEy64JJ7afeoZslMet4Gl86q/cHN9o6lvd3Sho1WZoKBN1cebIrmS7NstT29q2TQU6VZr+4xzv+Kr6hfAKdAg==" length="59264307" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 0463XqKRjNmxp+D2a9jcyHO1J70QDDhFnxY6UB5YPib/lnT9yr0nGwGvhoqJ/7c9QaCD+5gPPnu5EwNL3ievBQ==
-length: 1232
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.17</title><sparkle:version>89</sparkle:version><sparkle:shortVersionString>0.4.17</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added Traditional Chinese, Simplified Chinese, French and German to setup, settings and status messages.
+- Automatically selects the appropriate Chinese script for your device language.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.17-89/Dot-Link-0.4.17-89-arm64.zip" sparkle:installationType="application" sparkle:edSignature="7SE38diNC5NvVCklDhtgO/wLDKhdUjGV8zHZOEhRd6mRpFz4IgT+DMOtAnFqnU/K5vQPFfPnQJq0ZZmS+1s5AQ==" length="59397218" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: wWXxfJeFqkUO8tAa9maNpEpBZOgGf/AxL4gIx5J8f9IgldROQuFUUDRNybRvLTLvVRtu/Vq11tmOyWkXc5GJCQ==
+length: 1218
 -->
