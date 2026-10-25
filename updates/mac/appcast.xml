@@ -1,11 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.18</title><sparkle:version>91</sparkle:version><sparkle:shortVersionString>0.4.18</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Send photos from the phone camera or photo library to your existing Dot, with optional typed or dictated text.
-- Keep photo drafts available for retry when a send fails.
-- Remove temporary relay photos after a reply or after 24 hours.
-
-Photo attachments require the updated Dot Link app in Even Hub.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.18-91/Dot-Link-0.4.18-91-arm64.zip" sparkle:installationType="application" sparkle:edSignature="hWDDEqYpkJfvzUAgvaj3qKIbrMF3cyDcpYeGBGduftN3Xp5r2ezrGwmVFkzVvYqtX2PPCNesGVYT0JAPVOg1CQ==" length="59411585" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: fUJBws2MVsacE9kk9JEBnNfLvDDb+qhvyKEFzlQS06f34elPw2wY2rRhrQXLt3CuwXJAdJWHuZwUCcvmMEtYCQ==
-length: 1332
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.19</title><sparkle:version>92</sparkle:version><sparkle:shortVersionString>0.4.19</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved location handling so Dot can identify why a response was rejected and retry when appropriate.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.19-92/Dot-Link-0.4.19-92-arm64.zip" sparkle:installationType="application" sparkle:edSignature="KuMqjPwJsecHTaF6mU3aw6pZvFk/8w0E/4hhF1Igejf8VpX8Q6atQxVFlqH6O3fw6M3WdTDM4+XG6q23Zy4MDg==" length="59412993" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: 5sNMoSw7nVN72kRSIeuE05KUt3LC/L6tLxpPski+lHq3qYst8nOtuFY5Sz1A2y8CdddiXaQC5AhzoBf6mO4MDA==
+length: 1135
 -->
