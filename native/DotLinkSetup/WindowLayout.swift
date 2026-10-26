@@ -63,4 +63,3 @@ enum SetupWindowLayout {
         return NSRect(x: visible.midX - width / 2, y: visible.midY - height / 2, width: width, height: height)
     }
 }
-
