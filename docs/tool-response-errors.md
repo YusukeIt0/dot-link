@@ -119,3 +119,6 @@ response handling remains separate so downstream conversation errors cannot
 escape as location response reasons. HTTP authentication, JSON parsing,
 unsupported RPC methods, asynchronous delivery results and device-screen errors
 are outside this extension. No new UI strings or diagnostic collection is added.
+The existing local `callback_host_rejected` warning retains its sanitized
+hostname for setup troubleshooting; it never contains the full URL or secret
+and is not included in the Dot error response.

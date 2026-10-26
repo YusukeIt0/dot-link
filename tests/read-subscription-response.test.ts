@@ -131,3 +131,19 @@ for (const name of ['utterance.created', 'notification.created', 'location.updat
     assert.equal(JSON.parse(readFileSync(path, 'utf8')).subscription, undefined);
   });
 }
+
+test('rejected destinations retain sanitized operator diagnostics without exposing URL paths or secrets', async t => {
+  const f = await toolFixture(t);
+  const warnings: string[] = [];
+  const original = console.warn;
+  console.warn = value => warnings.push(String(value));
+  try {
+    const params = { ...f.subscription, name: 'utterance.created', delivery: { ...f.subscription.delivery, url: 'https://rejected.example.test/PRIVATE?secret=PRIVATE' } };
+    const response = await rpc(f.bridge, { jsonrpc: '2.0', id: 7, method: 'events/subscribe', params });
+    rejection(response, 'callback_destination_rejected');
+    assert(!JSON.stringify(response).includes('rejected.example.test'));
+    assert.deepEqual(warnings.map(value => JSON.parse(value)), [{ event: 'callback_host_rejected', hostname: 'rejected.example.test' }]);
+    assert(!warnings.join('').includes('PRIVATE'));
+    assert(!warnings.join('').includes(f.subscription.delivery.secret));
+  } finally { console.warn = original; }
+});

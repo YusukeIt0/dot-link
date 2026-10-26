@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ToolRejection, rpcResponse } from './tool-response.ts';
-import { callbackUrl, signingSecret, CallbackVerificationError } from './webhook.ts';
+import { callbackUrl, signingSecret, CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
 
 const messages = {
   invalid_arguments: 'Subscription arguments are invalid. Use the selected event schema to correct them.',
@@ -22,7 +22,13 @@ export function subscriptionArguments<T>(schema: z.ZodType<T>, input: unknown): 
 
 export function subscriptionDelivery(delivery: { url: string; secret: string }, hosts: readonly string[]) {
   try { callbackUrl(delivery.url, hosts); }
-  catch { throw new SubscriptionResponseError('callback_destination_rejected'); }
+  catch (error) {
+    if (error instanceof CallbackDestinationError) {
+      // Preserve existing operator diagnostics, never the URL or signing secret.
+      console.warn(JSON.stringify({ event: 'callback_host_rejected', hostname: error.hostname }));
+    } else if (!(error instanceof TypeError)) throw error;
+    throw new SubscriptionResponseError('callback_destination_rejected');
+  }
   try { signingSecret(delivery.secret); }
   catch { throw new SubscriptionResponseError('invalid_signing_secret'); }
 }
