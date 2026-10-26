@@ -1,3 +1,4 @@
+import { geographicRetryDelay } from './retry.ts';
 import { Worker } from 'node:worker_threads';
 import { GeographicCache } from './cache.ts';
 import type { GeographicEvidence, GeographicFix } from './types.ts';
@@ -20,11 +21,15 @@ export class LocalGeography implements GeographyLoader {
   private closed=false;
   private generation = 0;
   private retryAfter = 0;
+  private crashes = 0;
+  private readonly now:()=>number;
+  private readonly createWorker:()=>Worker;
   private readonly maintenance: ReturnType<typeof setInterval>;
   private readonly directory: string;
   private readonly onUpdate: (result: GeographyUpdate) => void;
-  constructor(directory: string, onUpdate: (result: GeographyUpdate) => void) {
-    this.directory=directory; this.onUpdate=onUpdate;
+  constructor(directory: string, onUpdate: (result: GeographyUpdate) => void, options:{now?:()=>number;createWorker?:()=>Worker}={}) {
+    this.directory=directory; this.onUpdate=onUpdate;this.now=options.now??Date.now;
+    this.createWorker=options.createWorker??(()=>new Worker(new URL('./worker.ts',import.meta.url), {workerData:{directory:this.directory},resourceLimits:{maxOldGenerationSizeMb:256,maxYoungGenerationSizeMb:32}}));
     const cache=new GeographicCache(directory);
     const maintain=()=>{
       if(this.worker||this.terminating||this.maintenanceRun||this.closed)return;
@@ -41,19 +46,20 @@ export class LocalGeography implements GeographyLoader {
     this.latestFix={...fix};
     if(this.terminating||this.maintenanceRun) {this.queuedFix=fix;return;}
     if(!this.worker) {
-      if(Date.now()<this.retryAfter)return;
+      if(this.now()<this.retryAfter)return;
       const generation=++this.generation;
-      const worker=new Worker(new URL('./worker.ts',import.meta.url), {workerData:{directory:this.directory},resourceLimits:{maxOldGenerationSizeMb:256,maxYoungGenerationSizeMb:32}});
+      const worker=this.createWorker();
       this.worker=worker; worker.unref();
       worker.on('message',(message:GeographyUpdate)=>{
         if(this.worker!==worker||generation!==this.generation)return;
         const fix=this.latestFix;
         if(!fix||!message.fix||message.fix.latitude!==fix.latitude||message.fix.longitude!==fix.longitude||message.fix.accuracy!==fix.accuracy)return;
+        if(message.state==='ready'){this.crashes=0;this.retryAfter=0;}
         this.onUpdate(message);
       });
       const failed=()=>{
         if(this.worker!==worker||generation!==this.generation)return;
-        this.worker=undefined;this.retryAfter=Date.now()+60_000;
+        this.worker=undefined;this.crashes++;this.retryAfter=this.now()+geographicRetryDelay(this.crashes);
         this.onUpdate({state:'unavailable',revision:`failed-${generation}`});
       };
       worker.on('error',failed); worker.on('exit',failed);
@@ -62,7 +68,7 @@ export class LocalGeography implements GeographyLoader {
   }
   stop() {
     this.queuedFix=undefined;this.latestFix=undefined;
-    const worker=this.worker; this.worker=undefined; this.generation++; this.retryAfter=0;
+    const worker=this.worker; this.worker=undefined; this.generation++; this.retryAfter=0;this.crashes=0;
     // Abort first so pending writes clean up, then bound shutdown even if parsing is busy.
     if(worker) {
       worker.postMessage({type:'stop'});

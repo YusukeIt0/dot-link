@@ -1,3 +1,4 @@
+import { geographicRetryDelay } from './retry.ts';
 import { createHash } from 'node:crypto';
 import type { GeographicCache } from './cache.ts';
 import { acquireGeography, geographicRegion, type GeographicRegion } from './overture.ts';
@@ -76,7 +77,7 @@ export class GeographicResolver {
   }
   private backoff() {
     this.refreshNeeded=true;this.failures++;
-    this.retryAfter=this.now()+Math.min(3_600_000,60_000*2**Math.min(6,this.failures-1));
+    this.retryAfter=this.now()+geographicRetryDelay(this.failures);
   }
   private async load() {
     if(this.stopped||this.active||!this.fix||!this.latestKey||this.now()<this.retryAfter)return;

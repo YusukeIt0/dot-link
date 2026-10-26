@@ -232,3 +232,18 @@ decoded data per row group; geometry to 128 MiB. Selected compressed column rang
 are limited to 64 MiB. The downloader fills one result allocation from bounded
 batches rather than retaining and copying the whole range repeatedly. These
 limits can still produce partial coverage for very large geographic features.
+
+A public Amazon-region fixture returned a nearby unnamed river (74 m), the named
+Igarapé Tarumã Mirim (709 m), and an unnamed path (928 m). It did not establish
+river-area containment. The earlier compressed-range/decoded-size rejection was
+removed with bounded narrow-row reads and single-allocation range assembly.
+A 13-minute worker session still did not finish acquisition; a subsequent cached
+continuation fetched 1.05 MB, reused 105.1 MB and completed in 10.8 seconds. The
+actual resource-limited worker then returned the same references from source
+cache in 1.0 second, and from a normalized region in 133 ms. These are successive
+warm observations, not independent cold-start measurements. Initial latency and
+very large-feature coverage remain explicit limitations.
+
+Worker crashes also use increasing one-minute-to-one-hour delays, retained by
+the loader across replacement workers. A ready result or explicit stop resets
+that crash history. Real worker-exit model tests cover escalation and reset.
