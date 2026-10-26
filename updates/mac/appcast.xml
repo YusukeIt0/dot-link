@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.21</title><sparkle:version>95</sparkle:version><sparkle:shortVersionString>0.4.21</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved recovery guidance when messages or notifications cannot be accepted.
-- Fixed notification retries after a storage failure.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.21-95/Dot-Link-0.4.21-95-arm64.zip" sparkle:installationType="application" sparkle:edSignature="8VtMAdpp/YwqehJ6Euonx/DV0r3hR8nVPRPHkNVkQCaRGzAbqEopEKpm3/wl0+7ugNAgFzxsswFHMJEXYeXoCw==" length="59416272" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: GLpLm752bBx/dUmMeklY5d75NPjkWMfVxe907JnkaOuluBRJoOWZbilDyMmB7XhEU50VcEMN+Kq0xdW+B+X6BQ==
-length: 1164
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.22</title><sparkle:version>96</sparkle:version><sparkle:shortVersionString>0.4.22</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved recovery guidance when Dot cannot read context or manage event subscriptions.
+- Fixed subscription retries after a storage failure.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.22-96/Dot-Link-0.4.22-96-arm64.zip" sparkle:installationType="application" sparkle:edSignature="rLeeg83yGe5J3ML5iSzUpCo+Cm6TZpbAKFy6+R4kVflpuTLlmgMKMZ+OBfsTo9i8osnCljqi8UYGP4wg6N7SDw==" length="59418300" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: XpMED2xQTxf2qaBvIxaOkKWLEiY7eivhJ7RowYC9/bZXhNMm4jMORVLA8Z2Wo5izO8RvS4IqVrWivvS6ZOIcDA==
+length: 1173
 -->
