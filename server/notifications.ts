@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { z } from 'zod';
 import { ChangeSignal } from './changes.ts';
 import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
+import { NotificationResponseError } from './notification-response-error.ts';
 
 const session = 'personal-g2';
 const eventName = 'notification.created';
@@ -42,14 +43,14 @@ export const pendingNotificationsTool = {
 };
 export const announceNotificationTool = {
   name: 'announce_notification_to_g2',
-  description: 'Store a short notification announcement for the owner’s paired G2. Requires a real notification_id from get_pending_notifications. This never sends a reply to LINE or any source application. Stored does not prove the physical G2 displayed it. Identical retries are idempotent.',
+  description: 'Store a short notification announcement for the owner’s paired G2. Requires a real notification_id from get_pending_notifications. This never sends a reply to LINE or any source application. Stored does not prove the physical G2 displayed it. Identical retries are idempotent. On rejection, follow error.data.reason and the message; do not overwrite an announcement or bypass a silent decision.',
   inputSchema: { type: 'object', properties: { notification_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['notification_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 
 export const notificationDispositionTool = {
   name: 'set_notification_disposition',
-  description: 'Mark a real shared notification as later (defer without a scheduled wakeup) or silent (no G2 announcement needed). Use the owner’s preferences and context. This sends nothing to G2 or the source app. Later items remain readable with include_deferred=true while retained in the latest 100 notifications. Do not claim a reminder was scheduled.',
+  description: 'Mark a real shared notification as later (defer without a scheduled wakeup) or silent (no G2 announcement needed). Use the owner’s preferences and context. This sends nothing to G2 or the source app. Later items remain readable with include_deferred=true while retained in the latest 100 notifications. Do not claim a reminder was scheduled. On rejection, follow error.data.reason and the message; an announced notification cannot be changed to later or silent.',
   inputSchema: { type: 'object', properties: { notification_id: { type: 'string', format: 'uuid' }, disposition: { type: 'string', enum: ['later', 'silent'] } }, required: ['notification_id', 'disposition'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -72,9 +73,10 @@ export class NotificationInbox {
       this.state = { version: 1, notifications: [] }; this.save();
     }
   }
-  private save(emit = true) {
-    writeFileSync(`${this.path}.tmp`, JSON.stringify(this.state), { mode: 0o600 });
+  private save(emit = true, next = this.state) {
+    writeFileSync(`${this.path}.tmp`, JSON.stringify(next), { mode: 0o600 });
     renameSync(`${this.path}.tmp`, this.path);
+    this.state = next;
     if (emit) this.changes.emit();
   }
   private serial<T>(fn: () => Promise<T>): Promise<T> {
@@ -91,14 +93,17 @@ export class NotificationInbox {
   }
   decide(input: unknown) {
     return this.serial(async () => {
-      const p = z.object({ notification_id: z.string().uuid(), disposition: z.enum(['later', 'silent']) }).strict().parse(input);
+      const parsed = z.object({ notification_id: z.string().uuid(), disposition: z.enum(['later', 'silent']) }).strict().safeParse(input);
+      if (!parsed.success) throw new NotificationResponseError('invalid_arguments');
+      const p = parsed.data;
       const n = this.state.notifications.find(n => n.id === p.notification_id);
-      if (!n) throw new Error('Unknown notification');
-      if (n.status === 'announced') throw new Error('Notification already announced');
+      if (!n) throw new NotificationResponseError('notification_unknown');
+      if (n.status === 'announced') throw new NotificationResponseError('notification_already_announced');
       if (n.disposition !== p.disposition) {
-        n.disposition = p.disposition; n.decided_at = new Date().toISOString(); this.save(false);
+        const decided = { ...n, disposition: p.disposition, decided_at: new Date().toISOString() };
+        this.save(false, { ...this.state, notifications: this.state.notifications.map(item => item === n ? decided : item) });
       }
-      return { notification_id: n.id, disposition: n.disposition, stored_for_g2: false, wakeup_scheduled: false };
+      return { notification_id: n.id, disposition: p.disposition, stored_for_g2: false, wakeup_scheduled: false };
     });
   }
   deliveryStatus(input: unknown) {
@@ -171,14 +176,17 @@ export class NotificationInbox {
   }
   announce(input: unknown) {
     return this.serial(async () => {
-      const p = z.object({ notification_id: z.string().uuid(), text: z.string().trim().min(1).max(8000) }).strict().parse(input);
+      const parsed = z.object({ notification_id: z.string().uuid(), text: z.string().trim().min(1).max(8000) }).strict().safeParse(input);
+      if (!parsed.success) throw new NotificationResponseError('invalid_arguments');
+      const p = parsed.data;
       const n = this.state.notifications.find(n => n.id === p.notification_id);
-      if (!n) throw new Error('Unknown notification');
-      if (n.disposition === 'silent') throw new Error('Notification marked silent');
-      if (n.announcement !== undefined && n.announcement !== p.text) throw new Error('Conflicting announcement');
+      if (!n) throw new NotificationResponseError('notification_unknown');
+      if (n.disposition === 'silent') throw new NotificationResponseError('notification_silent');
+      if (n.announcement !== undefined && n.announcement !== p.text) throw new NotificationResponseError('announcement_conflict');
       if (n.announcement === undefined) {
-        delete n.disposition; delete n.decided_at;
-        n.announcement = p.text; n.announced_at = new Date().toISOString(); n.status = 'announced'; this.save();
+        const { disposition: _disposition, decided_at: _decidedAt, ...retained } = n;
+        const announced = { ...retained, announcement: p.text, announced_at: new Date().toISOString(), status: 'announced' as const };
+        this.save(true, { ...this.state, notifications: this.state.notifications.map(item => item === n ? announced : item) });
       }
       return { notification_id: p.notification_id, stored_for_g2: true };
     });

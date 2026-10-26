@@ -9,6 +9,7 @@ import { LocationContext, locationEvent, locationContextTool, locationResponseTo
 import { LocationResponseError } from './location-response-error.ts';
 import { PhotoStorageFullError } from './photo-attachments.ts';
 import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
+import { toolResponse } from './tool-response.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -36,9 +37,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
         if ((params as { name?: string })?.name === 'send_message_to_g2') {
-          const input = z.object({ name: z.literal('send_message_to_g2'), arguments: z.unknown() }).parse(params);
-          const value = await bridge.sendMessage(input.arguments);
-          result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
+          return { jsonrpc: '2.0', id, ...await toolResponse(() => bridge.sendMessage((params as { arguments?: unknown }).arguments)) };
         }
         if (notifications && (params as { name?: string })?.name === 'get_pending_notifications') {
           const input = z.object({ name: z.literal('get_pending_notifications'), arguments: z.unknown().optional() }).parse(params);
@@ -46,14 +45,10 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
         if (notifications && (params as { name?: string })?.name === 'set_notification_disposition') {
-          const input = z.object({ name: z.literal('set_notification_disposition'), arguments: z.unknown() }).parse(params);
-          const value = await notifications.decide(input.arguments);
-          result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
+          return { jsonrpc: '2.0', id, ...await toolResponse(() => notifications.decide((params as { arguments?: unknown }).arguments)) };
         }
         if (notifications && (params as { name?: string })?.name === 'announce_notification_to_g2') {
-          const input = z.object({ name: z.literal('announce_notification_to_g2'), arguments: z.unknown() }).parse(params);
-          const value = await notifications.announce(input.arguments);
-          result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
+          return { jsonrpc: '2.0', id, ...await toolResponse(() => notifications.announce((params as { arguments?: unknown }).arguments)) };
         }
         // MCP envelopes may contain metadata such as _meta/progressToken.
         // Ignore envelope extensions; validate the actual tool arguments strictly.
@@ -63,9 +58,10 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
           const status = { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
           result = { content: [{ type: 'text', text: JSON.stringify(status) }], structuredContent: status }; break;
         }
-        const input = z.object({ name: z.literal('reply_to_g2'), arguments: z.unknown() }).parse(params);
-        const reply = await bridge.reply(input.arguments);
-        result = { content: [{ type: 'text', text: JSON.stringify(reply) }], structuredContent: reply }; break;
+        if ((params as { name?: string })?.name === 'reply_to_g2') {
+          return { jsonrpc: '2.0', id, ...await toolResponse(() => bridge.reply((params as { arguments?: unknown }).arguments)) };
+        }
+        throw new Error('Unknown or invalid tool call');
       }
       default: return { jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } };
     }
