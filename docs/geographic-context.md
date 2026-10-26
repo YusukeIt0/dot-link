@@ -129,3 +129,52 @@ coordinate lookup; a mandatory unsolicited announcement is not a success metric.
 Record source commit, Beta artifact identity, affected devices, results and
 remaining limitations in the related issues/PRs. No real coordinates, private
 conversations, identifying endpoints or raw runtime logs belong in public records.
+
+## Data implementation under review
+
+The data child uses official Overture GeoParquet releases, with no geocoding,
+places, search or paid API. A daily cached catalog selects one immutable release;
+base `land_use`, `land`, `water` and transportation `segment` supply geometry and
+names. Individual trees and the places theme are excluded. Source availability
+and completeness remain external dependencies. The Fused mirror was not selected:
+its public release listing ended in May 2026 at measurement time.
+
+The Mac downloads selected column ranges from the official Azure distribution,
+using a 0.02-degree cell and approximately one-kilometre margins. Dateline margins
+are split. Polar fixes beyond 85 degrees retain coordinate-only behavior. Large
+features, dense detail and unsupported geometry can be omitted; returned evidence
+states this limitation. Nearby named streets are retained alongside nearer unnamed
+paths. Map labels are untrusted reference data, never instructions.
+
+Acquisition is isolated in a Node worker. Each acquisition allows at most three
+concurrent requests, 80 MiB, 500 requests and six minutes; an individual response
+has a 30-second timeout. Response status, exact range and decoded-size/geometry
+limits are checked. Roads, land use, land and water arrive progressively. There is
+no assumption that initial acquisition is fast or that all themes succeed.
+
+Reusable source ranges and normalized regions share a 256 MiB / 2,048-file cache.
+Files have checksums and owner-only permissions. Use timestamps are rounded to a
+day, unused files expire after 30 days, and capacity eviction prefers older use
+days. Normalized regions refresh after seven days independently of use time;
+source bytes are tied to immutable release URLs. Maintenance runs at startup and
+every six hours while the relay runs, including when sharing is off. It resumes
+on the next launch if the relay is not running. A stopped worker is aborted and
+terminated; no exact phone fix is persisted by this component.
+
+A Bangkok public example established named park containment and nearby internal
+paths. A preliminary 0.02-degree-cell run reused 21.5 MB of earlier source ranges
+and fetched another 19.0 MB in 163 seconds; this is **not** a cold-start result.
+An immediate repeat read 40.5 MB from cache, transferred zero network bytes and
+finished in 2.1 seconds. Normalized region reuse avoids that repeated parsing.
+The earlier narrow-bounds lazy-column measurement transferred 33.1 MB in 270
+seconds. Dense-road limits are reported as partial coverage. Mountain and other
+regional samples, integrated lifecycle behavior and actual Dot acceptance remain
+under validation.
+
+Run an explicit public example with `node scripts/measure-geography.mjs fuji
+/path/to/temporary-cache` (one line). This network measurement is separate from
+automated tests and does not accept an arbitrary live phone coordinate. Other
+examples are `bangkok`, `tokyo`, `yosemite`, `berlin`, `nairobi` and `amazon`.
+Attribution and data licensing follow [Overture's theme-specific source
+requirements](https://docs.overturemaps.org/attribution/); cached data is separate
+from Dot Link's MIT-licensed code.
