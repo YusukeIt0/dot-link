@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.41
+
+- Updated the phone send button to a paper-plane icon matching the camera and photo controls.
+
 ## 0.3.39
 
 - Added camera and photo-library attachments, with previews and removal before sending.
