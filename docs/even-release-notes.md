@@ -2,6 +2,11 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.42
+
+- Clarified how nearby map data is kept on your Mac when location sharing is enabled.
+- Use with Dot Link for Mac 0.4.23 or later for automatic geographic references alongside shared coordinates.
+
 ## 0.3.41
 
 - Updated the phone send button to a paper-plane icon matching the camera and photo controls.

@@ -6,6 +6,7 @@ import { safePost, WebhookSender } from './webhook.ts';
 import { NotificationInbox } from './notifications.ts';
 import { LatencyLog } from './latency.ts';
 import { LocationContext } from './location.ts';
+import { LocalGeography } from './geography/loader.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 import { createHash } from 'node:crypto';
 
@@ -24,9 +25,10 @@ const pairing = new PairingAuthority(resolve('.runtime/pairing'));
 const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
 const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts,
   (input, guard, context) => bridge.sendMessage(input, guard, context), Date.now,
-  owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner));
+  owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
+  output=>new LocalGeography(resolve('.runtime/geography'),output));
 const server = bridgeServer(bridge, tokens, notifications, locations);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.listen(port, '127.0.0.1', () => console.log(`Private Dot bridge listening on 127.0.0.1:${port}; Dot connection not verified`));
-for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => server.close(() => process.exit(0)));
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {locations.close();server.close(() => process.exit(0));});

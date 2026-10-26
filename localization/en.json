@@ -126,7 +126,7 @@
   "even.send_after_transcription": "Send after transcription",
   "even.location_sharing": "Location sharing",
   "even.share_my_location": "Share my location",
-  "even.share_your_phone_s_current_location_with_your_existing_dot": "Share your phone's current location with your existing Dot through your Mac. Dot can use your location and preferences to offer relevant suggestions on G2. You can stop sharing here at any time.",
+  "even.share_your_phone_s_current_location_with_your_existing_dot": "Share your phone's location with your Dot through your Mac. Stop sharing anytime. Nearby map data stays on your Mac until unused for 30 days and can reveal past areas.",
   "even.your_mac_must_be_awake_and_connected_location_sharing_pauses": "Your Mac must be awake and connected. Location sharing pauses when you exit Dot Link on the glasses and resumes when you reopen it with this setting on.",
   "even.operation_settings": "Operation settings",
   "even.disable_hold_to_record": "Disable hold-to-record",

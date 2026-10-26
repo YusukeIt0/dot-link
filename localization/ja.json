@@ -126,7 +126,7 @@
   "even.send_after_transcription": "認識後に自動送信",
   "even.location_sharing": "位置情報の共有",
   "even.share_my_location": "位置情報を共有する",
-  "even.share_your_phone_s_current_location_with_your_existing_dot": "スマートフォンの現在地を、自分のMac経由でいつものDotに共有します。Dotが好みや場所を踏まえた案内に使います。共有はここからいつでも停止できます。",
+  "even.share_your_phone_s_current_location_with_your_existing_dot": "現在地をMac経由でDotに共有します。いつでも停止できます。周辺の地図データはMacに残り、過去の利用地域が分かる場合があります。30日間使われなければ削除されます。",
   "even.your_mac_must_be_awake_and_connected_location_sharing_pauses": "Macが起動・接続している間に使えます。G2でDot Linkを終了すると共有は停止し、この設定がオンのまま開き直すと再開します。",
   "even.operation_settings": "操作設定",
   "even.disable_hold_to_record": "長押しで録音を無効",
