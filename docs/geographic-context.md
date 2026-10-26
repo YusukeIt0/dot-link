@@ -212,3 +212,11 @@ approximately 200-metre cell-edge margin avoids cancellation from boundary jitte
 Already downloaded source bytes remain reusable. Each worker result identifies
 the fix it resolved; the loader rejects results for an older requested coordinate.
 The model suite also covers refresh failure and cell-edge jitter explicitly.
+
+Retries preserve any existing same-area evidence, including a partial first load.
+Repeated failures back off from one minute to one hour; they do not continuously
+replace useful data with roads-only progress. Continuously used, stationary areas
+still become stale and refresh after seven days. Cache maintenance has one active
+owner: the worker while running, otherwise the loader. Chunk writes use an
+in-memory size/use index instead of rescanning every file, and temporary files
+retain their real modification time until activation.

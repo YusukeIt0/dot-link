@@ -7,7 +7,7 @@ import type { GeographicDataset, GeographicFix } from './types.ts';
 import type { GeographyState, GeographyUpdate } from './loader.ts';
 
 const DAY=86_400_000;
-type Current={key:string;dataset:GeographicDataset;state:GeographyState;revision:string};
+type Current={createdDay:number;key:string;dataset:GeographicDataset;state:GeographyState;revision:string};
 
 /** Resolves requested areas only. Consent, freshness and notifications belong to the caller. */
 export class GeographicResolver {
@@ -18,6 +18,8 @@ export class GeographicResolver {
   private active?:AbortController;
   private stopped=false;
   private retryAfter=0;
+  private failures=0;
+  private lastUseDay=-1;
   private refreshNeeded=false;
   private readonly cache:GeographicCache;
   private readonly acquire:typeof acquireGeography;
@@ -37,7 +39,12 @@ export class GeographicResolver {
     }
     if(!region) {this.latestKey=undefined;this.region=undefined;this.active?.abort();this.output({fix:this.fix,state:'unavailable',revision:'unsupported'});return;}
     const changed=this.latestKey!==region.key;this.latestKey=region.key;this.region=region;
-    if(changed) {this.retryAfter=0;this.refreshNeeded=false;this.active?.abort();}
+    if(changed) {this.retryAfter=0;this.failures=0;this.refreshNeeded=false;this.active?.abort();}
+    const day=Math.floor(this.now()/DAY);
+    if(this.current?.key===region.key) {
+      if(this.current.state==='ready'&&day-this.current.createdDay>=7) {this.current={...this.current,state:'stale'};this.refreshNeeded=true;}
+      if(day!==this.lastUseDay) {this.lastUseDay=day;void this.cache.get(`normalized-${region.key}`).catch(()=>{});}
+    }
     this.emit();
     // Returning to a cached place must not wait behind another area's download.
     if(changed&&this.active)void this.reuse(region.key);
@@ -51,10 +58,10 @@ export class GeographicResolver {
       catch {this.output({fix:this.fix,state:'unavailable',revision:'unsupported'});}
     } else this.output({fix:{...this.fix},state:this.now()<this.retryAfter?'unavailable':'pending',revision:`waiting-${this.latestKey}`});
   }
-  private publish(key:string,dataset:GeographicDataset,state:GeographyState) {
+  private publish(key:string,dataset:GeographicDataset,state:GeographyState,createdDay=Math.floor(this.now()/DAY)) {
     if(this.stopped||key!==this.latestKey)return;
     const hash=createHash('sha256').update(JSON.stringify([dataset.release,dataset.features,dataset.limitations])).digest('hex').slice(0,16);
-    this.current={key,dataset,state,revision:`${key}-${hash}`};this.emit();
+    this.current={createdDay,key,dataset,state,revision:`${key}-${hash}`};this.emit();
   }
   private async reuse(key:string):Promise<boolean> {
     try {
@@ -63,9 +70,13 @@ export class GeographicResolver {
       const dataset=JSON.parse(Buffer.from(cached.bytes).toString('utf8'));
       if(!validatedDataset(dataset))return false;
       const stale=Math.floor(this.now()/DAY)-cached.createdDay>=7;
-      this.publish(key,dataset,stale?'stale':'ready');
+      this.publish(key,dataset,stale?'stale':'ready',cached.createdDay);
       return !stale;
     }catch{return false;}
+  }
+  private backoff() {
+    this.refreshNeeded=true;this.failures++;
+    this.retryAfter=this.now()+Math.min(3_600_000,60_000*2**Math.min(6,this.failures-1));
   }
   private async load() {
     if(this.stopped||this.active||!this.fix||!this.latestKey||this.now()<this.retryAfter)return;
@@ -75,17 +86,17 @@ export class GeographicResolver {
       if(await this.reuse(key))return;
       if(this.stopped)return;
       // Keep the last complete stale map while a replacement is incomplete.
-      const fallback=this.current?.key===key&&this.current.state==='stale'?this.current:undefined;
+      const fallback=this.current?.key===key?this.current:undefined;
       const result=await this.acquire({region,cache:this.cache,signal:controller.signal,now:this.now,progress:dataset=>{if(!fallback)this.publish(key,dataset,'pending');}});
       if(this.stopped||controller.signal.aborted)return;
       if(result.complete||!fallback)this.publish(key,result.dataset,result.complete?'ready':'partial');
-      if(key===this.latestKey) {this.refreshNeeded=!result.complete;this.retryAfter=result.complete?0:this.now()+60_000;}
+      if(key===this.latestKey) {if(result.complete){this.refreshNeeded=false;this.retryAfter=0;this.failures=0;}else this.backoff();}
       const encoded=Buffer.from(JSON.stringify(result.dataset));
       if(result.complete&&encoded.byteLength<=16*1024*1024)await this.cache.put(`normalized-${key}`,encoded,controller.signal);
     }catch {
       if(this.stopped)return;
       if(key===this.latestKey) {
-        this.refreshNeeded=true;this.retryAfter=this.now()+60_000;
+        this.backoff();
         if(this.current?.key===key)this.current={...this.current,state:this.current.state==='stale'?'stale':'partial'};
         this.emit();
       }

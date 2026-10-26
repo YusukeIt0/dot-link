@@ -14,6 +14,7 @@ export interface GeographyLoader {
 export class LocalGeography implements GeographyLoader {
   private worker?: Worker;
   private terminating?: Promise<void>;
+  private maintenanceRun?:Promise<void>;
   private queuedFix?: GeographicFix;
   private latestFix?: GeographicFix;
   private closed=false;
@@ -25,13 +26,20 @@ export class LocalGeography implements GeographyLoader {
   constructor(directory: string, onUpdate: (result: GeographyUpdate) => void) {
     this.directory=directory; this.onUpdate=onUpdate;
     const cache=new GeographicCache(directory);
-    const maintain=()=>{void cache.maintain().catch(()=>{});};
+    const maintain=()=>{
+      if(this.worker||this.terminating||this.maintenanceRun||this.closed)return;
+      this.maintenanceRun=cache.maintain().catch(()=>{}).finally(()=>{
+        this.maintenanceRun=undefined;
+        const fix=this.queuedFix;this.queuedFix=undefined;
+        if(fix&&!this.closed)this.update(fix);
+      });
+    };
     maintain();this.maintenance=setInterval(maintain,6*60*60*1000);this.maintenance.unref();
   }
   update(fix: GeographicFix) {
     if(this.closed)return;
     this.latestFix={...fix};
-    if(this.terminating) {this.queuedFix=fix;return;}
+    if(this.terminating||this.maintenanceRun) {this.queuedFix=fix;return;}
     if(!this.worker) {
       if(Date.now()<this.retryAfter)return;
       const generation=++this.generation;

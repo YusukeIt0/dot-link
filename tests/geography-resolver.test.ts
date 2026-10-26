@@ -119,3 +119,29 @@ test('cell-edge jitter preserves the acquisition, but genuine movement cancels i
   s.calls[1].resolve(dataset({...first,longitude:.025}));await until(()=>s.updates.at(-1)?.state==='ready');
  }finally{await s.close();}
 });
+
+test('partial evidence survives repeated failed retries and retry delay increases instead of spinning',async()=>{
+ const s=await setup();try {
+  s.resolver.update(first);await until(()=>s.calls.length===1);s.calls[0].resolve(dataset(first,'Retained partial map'),false);
+  await until(()=>s.updates.at(-1)?.state==='partial');const revision=s.updates.at(-1)?.revision;
+  s.advance(61_000);s.resolver.update(first);await until(()=>s.calls.length===2);
+  s.calls[1].options.progress!({...dataset(),features:[]});
+  assert.equal(s.updates.at(-1)?.state,'partial');assert.equal(s.updates.at(-1)?.revision,revision);
+  s.calls[1].reject(new Error('still unavailable'));await new Promise(resolve=>setTimeout(resolve,10));
+  assert.equal(s.updates.at(-1)?.evidence?.landmarks[0].name,'Retained partial map');
+  s.advance(61_000);s.resolver.update(first);await new Promise(resolve=>setTimeout(resolve,10));assert.equal(s.calls.length,2);
+  s.advance(60_000);s.resolver.update(first);await until(()=>s.calls.length===3);s.calls[2].resolve(dataset(first,'Complete map'));
+  await until(()=>s.updates.at(-1)?.state==='ready');assert.equal(s.updates.at(-1)?.evidence?.landmarks[0].name,'Complete map');
+ }finally{await s.close();}
+});
+
+test('a continuously used stationary region still refreshes when its map ages',async()=>{
+ const s=await setup();try {
+  s.resolver.update(first);await until(()=>s.calls.length===1);s.calls[0].resolve(dataset(first,'Initial map'));
+  await until(()=>s.updates.at(-1)?.state==='ready');await new Promise(resolve=>setTimeout(resolve,10));
+  s.advance(8*86_400_000);s.resolver.update(first);await until(()=>s.calls.length===2);
+  assert.equal(s.updates.at(-1)?.state,'stale');assert.equal(s.updates.at(-1)?.evidence?.landmarks[0].name,'Initial map');
+  s.calls[1].resolve(dataset(first,'Refreshed map'));await until(()=>s.updates.at(-1)?.state==='ready');
+  s.resolver.update(first);await new Promise(resolve=>setTimeout(resolve,10));assert.equal(s.calls.length,2);
+ }finally{await s.close();}
+});
