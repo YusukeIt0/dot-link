@@ -3,13 +3,14 @@ import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
 import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessageTool } from './bridge.ts';
-import { CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
 import { LocationResponseError } from './location-response-error.ts';
 import { PhotoStorageFullError } from './photo-attachments.ts';
 import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
-import { toolResponse } from './tool-response.ts';
+import { toolResponse, rpcResponse, ToolRejection } from './tool-response.ts';
+import { ReadResponseError } from './read-response-error.ts';
+import { subscriptionResponse } from './subscription-response-error.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -27,54 +28,68 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
       case 'initialize': result = { protocolVersion: '2025-11-25', serverInfo: { name: 'even-g2-dot', version: packageVersion }, capabilities: { tools: {}, experimental: { events: {} } } }; break;
       case 'ping': result = {}; break;
       case 'events/list': result = { events: [eventDefinition, ...(notifications ? [notificationEvent] : []), ...(locations ? [locationEvent] : [])] }; break;
-      case 'events/subscribe': result = locations && (params as { name?: string })?.name === 'location.updated' ? await locations.subscribe(params) : notifications && (params as { name?: string })?.name === 'notification.created' ? await notifications.subscribe(params) : await bridge.subscribe(params); break;
-      case 'events/unsubscribe': result = locations && (params as { name?: string })?.name === 'location.updated' ? await locations.unsubscribe(params) : notifications && (params as { name?: string })?.name === 'notification.created' ? await notifications.unsubscribe(params) : await bridge.unsubscribe(params); break;
+      case 'events/subscribe':
+      case 'events/unsubscribe': {
+        const p = z.object({ name: z.string().min(1) }).safeParse(params);
+        if (!p.success) throw new ToolRejection('invalid_arguments', 'Specify an event name from events/list.');
+        const { name } = p.data;
+        if (!['utterance.created', 'notification.created', 'location.updated'].includes(name)) {
+          throw new ToolRejection('unknown_event', 'The event is unknown. Refresh events/list and select an available event.');
+        }
+        const feature = name === 'utterance.created' ? bridge : name === 'notification.created' ? notifications : locations;
+        if (!feature) throw new ToolRejection('event_unavailable', 'The event is unavailable. Refresh events/list and use an available event.');
+        return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
+          method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
+      }
       case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, locationResponseTool] : [])] }; break;
       case 'tools/call': {
-        if (locations && ['get_location_context', 'respond_to_location'].includes((params as { name?: string })?.name ?? '')) {
-          const p = z.object({ name: z.enum(['get_location_context', 'respond_to_location']), arguments: z.unknown().optional() }).parse(params);
-          const value = p.name === 'get_location_context' ? locations.read(p.arguments) : await locations.respond(p.arguments);
+        // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
+        const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
+        if (!parsedCall.success) throw new ToolRejection('invalid_arguments', 'Specify a tool name from tools/list.');
+        const { name, arguments: args } = parsedCall.data;
+        const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
+        const locationNames = ['get_location_context', 'respond_to_location'];
+        if (![...notificationNames, ...locationNames, 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
+          throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
+        }
+        if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name))) {
+          throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
+        }
+        if (name === 'respond_to_location') {
+          const value = await locations!.respond(args);
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
-        if ((params as { name?: string })?.name === 'send_message_to_g2') {
-          return { jsonrpc: '2.0', id, ...await toolResponse(() => bridge.sendMessage((params as { arguments?: unknown }).arguments)) };
+        if (name === 'get_pending_utterances') {
+          return { jsonrpc: '2.0', id, ...await rpcResponse(() => bridge.pendingResult(args)) };
         }
-        if (notifications && (params as { name?: string })?.name === 'get_pending_notifications') {
-          const input = z.object({ name: z.literal('get_pending_notifications'), arguments: z.unknown().optional() }).parse(params);
-          const value = notifications.pending(input.arguments);
-          result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
-        }
-        if (notifications && (params as { name?: string })?.name === 'set_notification_disposition') {
-          return { jsonrpc: '2.0', id, ...await toolResponse(() => notifications.decide((params as { arguments?: unknown }).arguments)) };
-        }
-        if (notifications && (params as { name?: string })?.name === 'announce_notification_to_g2') {
-          return { jsonrpc: '2.0', id, ...await toolResponse(() => notifications.announce((params as { arguments?: unknown }).arguments)) };
-        }
-        // MCP envelopes may contain metadata such as _meta/progressToken.
-        // Ignore envelope extensions; validate the actual tool arguments strictly.
-        const statusCall = z.object({ name: z.enum(['get_status', 'get_pending_utterances']), arguments: z.object({}).strict().optional() }).safeParse(params);
-        if (statusCall.success) {
-          if (statusCall.data.name === 'get_pending_utterances') { result = bridge.pendingResult(); break; }
-          const status = { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
-          result = { content: [{ type: 'text', text: JSON.stringify(status) }], structuredContent: status }; break;
-        }
-        if ((params as { name?: string })?.name === 'reply_to_g2') {
-          return { jsonrpc: '2.0', id, ...await toolResponse(() => bridge.reply((params as { arguments?: unknown }).arguments)) };
-        }
-        throw new Error('Unknown or invalid tool call');
+        return { jsonrpc: '2.0', id, ...await toolResponse(() => {
+          switch (name) {
+            case 'get_status': {
+              if (!z.object({}).strict().safeParse(args === undefined ? {} : args).success) throw new ReadResponseError();
+              return { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
+            }
+            case 'get_pending_notifications': return notifications!.pending(args);
+            case 'get_location_context': return locations!.read(args);
+            case 'send_message_to_g2': return bridge.sendMessage(args);
+            case 'reply_to_g2': return bridge.reply(args);
+            case 'set_notification_disposition': return notifications!.decide(args);
+            case 'announce_notification_to_g2': return notifications!.announce(args);
+          }
+        }) };
       }
       default: return { jsonrpc: '2.0', id, error: { code: -32601, message: 'Method not found' } };
     }
     return { jsonrpc: '2.0', id, result };
   } catch (error) {
     // Never include input, callback secrets, or user text in error responses/logs.
+    if (error instanceof ToolRejection && !(locations && method === 'tools/call' && (params as { name?: string })?.name === 'respond_to_location')) {
+      return { jsonrpc: '2.0', id, error: { code: error.code, message: error.message, data: { reason: error.reason } } };
+    }
     if (locations && method === 'tools/call' && (params as { name?: string })?.name === 'respond_to_location') {
       const rejection = error instanceof LocationResponseError ? error : new LocationResponseError('internal_error');
       return { jsonrpc: '2.0', id, error: { code: rejection.reason === 'internal_error' ? -32603 : -32602,
         message: rejection.message, data: { reason: rejection.reason } } };
     }
-    if (error instanceof CallbackDestinationError) console.warn(JSON.stringify({ event: 'callback_host_rejected', hostname: error.hostname }));
-    if (error instanceof CallbackVerificationError) return { jsonrpc: '2.0', id, error: { code: -32015, message: 'CallbackEndpointError', data: { reason: 'challenge_failed' } } };
     return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Request rejected; check parameters, subscription, and callback verification' } };
   }
 }

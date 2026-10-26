@@ -1,6 +1,6 @@
 # Tool response reasons
 
-## Stage 1 contract
+## Response mutation contract
 
 This contract covers `reply_to_g2`, `send_message_to_g2`,
 `announce_notification_to_g2` and `set_notification_disposition`. Implementation
@@ -33,12 +33,11 @@ not an inferred root cause.
   Each feature validates its own arguments and throws a typed rejection at the
   point the condition is known. Never classify errors by matching their text.
 - `tool-response.ts` owns only the safe rejection base type and conversion of a
-  selected tool invocation into the existing result/error envelope. It does not
+  selected invocation into the existing result/error envelope. It does not
   know tool names, validation schemas, feature state, retry rules or telemetry.
 - `http.ts` selects an enabled tool before invoking that adapter. Missing or
-  invalid arguments reach the selected feature's argument check. Unknown tools,
-  disabled notification tools and unrelated malformed calls keep their existing
-  generic rejection. Metadata in the call envelope remains supported.
+  invalid arguments reach the selected feature's argument check. Routing reasons
+  are defined below. Metadata in the call envelope remains supported.
 - `respond_to_location` retains its existing boundary. If its bridge callback
   fails with a new conversation rejection, that remains a location
   `internal_error`, not a leaked conversation reason.
@@ -64,9 +63,9 @@ proof that the owner heard an announcement.
 No new application-screen codes, asynchronous result events, diagnostic logs,
 developer upload or consent controls are added. Responses work with Debug mode
 off. Future diagnostics may consume approved reasons, but must not export raw
-tool results or make normal operations depend on an uploader. Future event,
-microphone, transcription, display and connection work needs a separately scoped
-contract; it is not required for this stage.
+tool results or make normal operations depend on an uploader. Asynchronous event
+delivery, microphone, transcription, display and connection failures need
+separately scoped contracts.
 
 Verify every scoped rejection through RPC and the HTTP envelope, unchanged
 successful responses, identical/conflicting retries, and recovery after a failed
@@ -76,3 +75,50 @@ Responses must not contain supplied text, identifiers, paths, URLs, secrets or
 raw exception details. Record exact-build runtime acceptance separately from
 fixtures and actual Dot-provider observations. Complete affected-component
 formal distribution and normal update verification before closing this stage.
+
+## Read, subscription and routing contract (#203)
+
+The four reads (`get_status`, `get_pending_utterances`,
+`get_pending_notifications`, `get_location_context`) use `invalid_arguments`
+for their own input validation and `internal_error` for unexpected execution
+failures. Omitted arguments remain equivalent to `{}`. Empty queues, unavailable
+location context and unsubscribed status remain successful results. Photo content
+in pending utterances is preserved.
+
+For `events/subscribe` and `events/unsubscribe`, all three event domains use:
+
+| Reason | Meaning and next action |
+| --- | --- |
+| `invalid_arguments` | Correct the selected event's arguments/delivery envelope. |
+| `callback_destination_rejected` | Supply a valid, allowed HTTPS callback URL. |
+| `invalid_signing_secret` | Supply a valid webhook signing secret. |
+| `subscription_conflict` | Another callback is active. Unsubscribe it only if replacement is intended. |
+| `challenge_failed` | Callback verification failed; inspect the callback endpoint before retrying. This retains code `-32015` and message `CallbackEndpointError`. |
+| `internal_error` | An unexpected failure occurred; the outcome is unconfirmed. |
+
+The destination, secret, conflict and challenge reasons apply to subscription
+creation/renewal. Unsubscription keeps its existing no-op success for an absent
+or different URL. Successful renewal of the same URL and existing TTL semantics
+remain unchanged. Persist subscription replacement/removal before publishing the
+new in-memory state; a failed write/rename leaves the previous state available
+for an identical retry. This does not promise rollback of external verification
+or subsequent delivery side effects.
+
+Routing validates the name before selecting a feature. Missing/malformed names
+use `invalid_arguments`; unknown names use `unknown_tool` or `unknown_event`;
+recognized but disabled features use `tool_unavailable` or `event_unavailable`.
+The latter names are not reported as unknown. Callers should refresh `tools/list`
+or `events/list` and use an available operation. Envelope metadata remains
+accepted. These routing reasons supersede the Stage 1 generic routing behavior.
+Expected rejections use `-32602`; unexpected failures use `-32603`.
+
+Feature-owned read/subscription validation throws fixed typed rejections.
+The shared RPC adapter only converts results and safe rejections; the
+subscription adapter alone preserves callback verification errors. Location
+response handling remains separate so downstream conversation errors cannot
+escape as location response reasons. HTTP authentication, JSON parsing,
+unsupported RPC methods, asynchronous delivery results and device-screen errors
+are outside this extension. No new UI strings or diagnostic collection is added.
+The existing local `callback_host_rejected` warning retains its sanitized
+hostname for setup troubleshooting; it never contains the full URL or secret
+and is not included in the Dot error response.

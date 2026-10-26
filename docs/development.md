@@ -58,12 +58,13 @@ exceptions are added to the reason or message.
 
 For the standalone introduction page, see [page maintenance and deployment](introduction-page.md).
 
-### Conversation and notification response errors
+### Tool and subscription response errors
 
-The four mutating conversation/notification tools return fixed
-`error.data.reason` values for invalid arguments, unavailable records and
-conflicting decisions. Expected rejections use `-32602`; unexpected failures use
-`-32603` with `internal_error`. These are ordinary English protocol responses,
+Conversation/notification mutations, all four read tools and event subscription
+operations return fixed `error.data.reason` values. Routing distinguishes unknown
+operations from known but unavailable features. Expected rejections use `-32602`;
+unexpected failures use `-32603` with `internal_error`. Callback verification
+retains `-32015` with `challenge_failed`. These are ordinary English protocol responses,
 not application UI or opt-in diagnostic collection. See
 [tool response reasons](tool-response-errors.md) for the vocabulary, module
 ownership, persistence/retry semantics and compatibility boundaries.

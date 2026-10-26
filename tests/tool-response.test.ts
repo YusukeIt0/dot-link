@@ -98,16 +98,15 @@ test('only caller argument validation becomes invalid_arguments, including absen
   assert.equal(f.inbox.history().length, 0);
 });
 
-test('unknown, disabled and malformed unrelated tools keep generic errors', async t => {
+test('unknown, disabled and malformed tools expose routing or argument reasons', async t => {
   const f = await toolFixture(t);
-  const generic = { code: -32602, message: 'Request rejected; check parameters, subscription, and callback verification' };
   for (const [name, args, inbox] of [
     ['unknown_tool', {}, f.inbox], ['get_status', { extra: true }, f.inbox],
     ['get_pending_utterances', { extra: true }, f.inbox], ['get_pending_notifications', { extra: true }, f.inbox],
     ['announce_notification_to_g2', {}, undefined], ['set_notification_disposition', {}, undefined],
   ] as const) {
     const result = await rpc(f.bridge, { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name, arguments: args } }, inbox) as any;
-    assert.deepEqual(result.error, generic);
+    rejection(result, name === 'unknown_tool' ? 'unknown_tool' : !inbox ? 'tool_unavailable' : 'invalid_arguments');
   }
 });
 
