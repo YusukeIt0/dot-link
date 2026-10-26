@@ -1,7 +1,5 @@
 import AppKit
 
-final class SetupClipView: NSClipView { override var isFlipped: Bool { true } }
-
 // Native help remains available to pointer, keyboard and accessibility users.
 final class HelpButton: NSButton {
     private var explanation = ""
@@ -38,6 +36,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var orbitTimer: Timer?
     var orbitAngle: CGFloat = 0
     var window: NSWindow!
+    var contentScroll: NSScrollView!
     var statusItem: NSStatusItem!
     var stack: NSStackView!
     var state: [String: Any] = [:]
@@ -96,9 +95,14 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updateMenu()
         updateAppMenu()
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.minSize = NSSize(width: 580, height: 620); window.title = "Dot Link"; window.delegate = self; window.isReleasedWhenClosed = false
+        window.minSize = NSSize(width: 360, height: 300); window.title = "Dot Link"; window.delegate = self; window.isReleasedWhenClosed = false
         window.titlebarAppearsTransparent = true; window.backgroundColor = .windowBackgroundColor
-        window.center(); render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
+        if let screen = window.screen ?? NSScreen.main {
+            window.minSize = NSSize(width: min(360, screen.visibleFrame.width), height: min(300, screen.visibleFrame.height))
+            window.setFrame(SetupWindowLayout.initialFrame(for: window, within: screen.visibleFrame), display: false)
+        } else { window.center() }
+        contentScroll = SetupWindowLayout.install(in: window)
+        render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         automaticResumePending = !CommandLine.arguments.contains("--background")
         configureUpdater()
         perform("update-recover")
@@ -271,7 +275,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func label(_ text: String, size: CGFloat = 14, bold: Bool = false) -> NSTextField {
         let l = NSTextField(wrappingLabelWithString: text); l.font = .systemFont(ofSize: size, weight: bold ? .semibold : .regular); l.maximumNumberOfLines = 0; l.setContentCompressionResistancePriority(.required, for: .vertical); return l
     }
-    func add(_ text: String, size: CGFloat = 14, bold: Bool = false) { stack.addArrangedSubview(label(text, size: size, bold: bold)) }
+    func add(_ text: String, size: CGFloat = 14, bold: Bool = false) {
+        let text = label(text, size: size, bold: bold)
+        stack.addArrangedSubview(text)
+        text.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+    }
     @discardableResult func button(_ text: String, primary: Bool = false, _ action: @escaping () -> Void) -> NSButton {
         let b = ActionButton(text, action); b.controlSize = .large; b.isEnabled = !busy
         if primary { b.keyEquivalent = "\r" }
@@ -311,11 +319,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func open(_ url: String) { if let value = URL(string: url) { NSWorkspace.shared.open(value) } }
     func render() {
         updateMenu()
-        let scroll = NSScrollView(); scroll.contentView = SetupClipView(); scroll.hasVerticalScroller = true; scroll.drawsBackground = false
         stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 14; stack.edgeInsets = NSEdgeInsets(top: 28, left: 32, bottom: 28, right: 32); stack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.documentView = stack; window.contentView = scroll
-        stack.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor).isActive = true
-        stack.topAnchor.constraint(equalTo: scroll.contentView.topAnchor).isActive = true
+        SetupWindowLayout.display(stack, in: contentScroll)
         let top = NSStackView(); top.orientation = .horizontal; top.spacing = 12
         let mark = NSImageView(); mark.image = DotStatus.ready.image(); mark.contentTintColor = .labelColor; mark.imageScaling = .scaleProportionallyUpOrDown
         mark.widthAnchor.constraint(equalToConstant: 28).isActive = true; mark.heightAnchor.constraint(equalToConstant: 28).isActive = true
@@ -508,7 +513,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if step == "pair" {
             button(count > 0 ? tr("mac.change_or_add_a_connection") : tr("mac.create_pairing_code"), primary: true) { [weak self] in self?.perform("pair") }
             if let code = pairingCode, pairingExpiry > Date().timeIntervalSince1970 * 1000 {
-                let f = field(""); f.stringValue = code; f.isEditable = false; f.font = .monospacedSystemFont(ofSize: 12, weight: .regular); codeField = f
+                let codeView = SetupWindowLayout.pairingCode(code)
+                stack.addArrangedSubview(codeView.scroll)
+                codeView.scroll.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+                codeField = codeView.field
                 copyButton = button(tr("mac.copy_pairing_code")) { [weak self] in self?.copyPairing() }
                 let l = label(""); expiryLabel = l; stack.addArrangedSubview(l)
                 add(tr("mac.paste_the_full_code_into_dot_link_in_the_even_app_and_tap_connect_existi"))
