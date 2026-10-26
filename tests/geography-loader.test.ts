@@ -31,13 +31,13 @@ test('worker resolves reusable region data against each latest fix without persi
 
 test('repeated worker crashes back off across fresh workers and stop resets the crash cadence',async()=>{
  const directory=await mkdtemp(join(tmpdir(),'dot-map-crash-'));let loader:LocalGeography|undefined;
- let time=0,created=0,failed=0;
+ let time=0,created=0,failed=0;const updates:GeographyUpdate[]=[];
  const until=async(check:()=>boolean)=>{for(let i=0;i<200&&!check();i++)await new Promise(r=>setTimeout(r,5));assert.ok(check());};
  try {
-  loader=new LocalGeography(directory,r=>{if(r.state==='unavailable')failed++;},{now:()=>time,createWorker:()=>{created++;return new Worker('process.exit(1)',{eval:true});}});
+  loader=new LocalGeography(directory,r=>{updates.push(r);if(r.state==='unavailable'&&r.revision.startsWith('failed-'))failed++;},{now:()=>time,createWorker:()=>{created++;return new Worker('process.exit(1)',{eval:true});}});
   const fix={longitude:0,latitude:0,accuracy:5};
   loader.update(fix);await until(()=>failed===1);
-  time=59_999;loader.update(fix);assert.equal(created,1);
+  time=59_999;loader.update(fix);assert.equal(created,1);assert.equal(updates.at(-1)?.state,'unavailable');assert.deepEqual(updates.at(-1)?.fix,fix);assert.match(updates.at(-1)!.revision,/^backoff-/);
   time=60_000;loader.update(fix);await until(()=>failed===2);
   time=120_000;loader.update(fix);assert.equal(created,2);
   time=180_000;loader.update(fix);await until(()=>failed===3);
@@ -53,7 +53,7 @@ test('a ready result resets previous worker-crash backoff',async()=>{
  const fix={longitude:0,latitude:0,accuracy:5};
  const until=async(check:()=>boolean)=>{for(let i=0;i<200&&!check();i++)await new Promise(r=>setTimeout(r,5));assert.ok(check());};
  try {
-  loader=new LocalGeography(directory,r=>{if(r.state==='unavailable')failed++;if(r.state==='ready')ready++;},{now:()=>time,createWorker:()=>{
+  loader=new LocalGeography(directory,r=>{if(r.state==='unavailable'&&r.revision.startsWith('failed-'))failed++;if(r.state==='ready')ready++;},{now:()=>time,createWorker:()=>{
    created++;
    return new Worker(created===3?`const {parentPort}=require('node:worker_threads');parentPort.once('message',()=>{parentPort.postMessage({fix:${JSON.stringify(fix)},state:'ready',revision:'fixture'});setTimeout(()=>process.exit(1),5);});`:'process.exit(1)',{eval:true});
   }});

@@ -24,8 +24,8 @@ const fixSchema = z.object({
 }).strict();
 type Subscription = z.infer<typeof subscriptionSchema>;
 type GeographicContext={status:GeographyState}&Partial<GeographicEvidence>;
-interface FixRecord { id: string; fix: LocationFix; receivedAt: number; geography?:GeographicContext; geographyRevision?:string; }
-interface Pending { id: string; anchor: LocationFix; createdAt: number; status: 'sending' | 'accepted' | 'failed'; attempts: number; geographyRevision?:string; }
+interface FixRecord { id: string; contextSequence:number; fix: LocationFix; receivedAt: number; geography?:GeographicContext; geographyRevision?:string; }
+interface Pending { id: string; contextSequence:number; anchor: LocationFix; createdAt: number; status: 'sending' | 'accepted' | 'failed'; attempts: number; geographyRevision?:string; }
 
 export const locationEvent = {
   name: EVENT,
@@ -68,6 +68,7 @@ export class LocationContext {
   private announceTail: Promise<unknown> = Promise.resolve();
   private subscriptions: Promise<unknown> = Promise.resolve();
   private generation = 0;
+  private contextSequence=0;
   private readonly geography?:GeographyLoader;
   private geographyActive=false;
   private geographyExpiry?:ReturnType<typeof setTimeout>;
@@ -146,7 +147,7 @@ export class LocationContext {
     if (p.fix && !freshLocation(p.fix, this.now())) throw new Error('Location is stale');
     this.sequence = p.sequence; this.leaseUntil = this.now() + LOCATION_LEASE_MS;
     if (p.fix && (!this.latest || Date.parse(p.fix.measured_at) >= Date.parse(this.latest.fix.measured_at))) {
-      this.latest = { id: randomUUID(), fix: p.fix, receivedAt: this.now() }; this.received++;
+      this.latest = { id: randomUUID(), contextSequence:++this.contextSequence, fix: p.fix, receivedAt: this.now() }; this.received++;
     }
     this.syncGeography(true);this.maybeEvent(); this.changes.emit();
     return { accepted: true, ...this.status() };
@@ -191,7 +192,7 @@ export class LocationContext {
       this.lastAnchor = read.fix;
       if(this.geographyDirty===read.geographyRevision)this.geographyDirty=undefined;
       // A response to an older read must not consume a later geography event.
-      if(!this.pending?.geographyRevision||this.pending.geographyRevision===read.geographyRevision) {
+      if(!this.pending||read.contextSequence>=this.pending.contextSequence) {
         this.pending=undefined;if(this.retry)clearTimeout(this.retry);
       }
       this.scheduleGeographyEvent();
@@ -222,7 +223,7 @@ export class LocationContext {
     const moved = !this.lastAnchor || distanceMeters(fix, this.lastAnchor) >= Math.max(50, fix.accuracy + this.lastAnchor.accuracy);
     if ((!moved&&!enriched) || this.now() - this.lastEventAt < 30_000) {if(enriched)this.scheduleGeographyEvent();return;}
     this.lastEventAt = this.now();
-    this.pending = { id: randomUUID(), anchor: fix, createdAt: this.now(), status: 'sending', attempts: 0, geographyRevision:this.latest.geographyRevision };
+    this.pending = { id: randomUUID(), contextSequence:this.latest.contextSequence, anchor: fix, createdAt: this.now(), status: 'sending', attempts: 0, geographyRevision:this.latest.geographyRevision };
     void this.deliver(this.pending, this.generation);if(enriched)this.scheduleGeographyEvent();
   }
   private async deliver(pending: Pending, generation: number) {
@@ -272,7 +273,7 @@ export class LocationContext {
     if(this.geographyEvent)clearTimeout(this.geographyEvent);this.geographyEvent=undefined;
     if(this.geographyActive)this.geography?.stop();this.geographyActive=false;
     this.geographySignature=undefined;this.geographyDirty=undefined;
-    if(this.latest?.geography)this.latest={id:randomUUID(),fix:this.latest.fix,receivedAt:this.latest.receivedAt};
+    if(this.latest?.geography)this.latest={id:randomUUID(),contextSequence:++this.contextSequence,fix:this.latest.fix,receivedAt:this.latest.receivedAt};
   }
   private syncGeography(update=false) {
     if(!this.geography)return;
@@ -297,7 +298,7 @@ export class LocationContext {
     const signature=geography.source?createHash('sha256').update(JSON.stringify([geography.source,geography.release,
       references.map(group=>group.map(({id,kind,name,names,relation})=>({id,kind,name,names,relation})))])).digest('hex'):undefined;
     if(JSON.stringify(previous)===JSON.stringify(geography))return;
-    this.latest={...this.latest,id:randomUUID(),geography,geographyRevision:signature};
+    this.latest={...this.latest,id:randomUUID(),contextSequence:++this.contextSequence,geography,geographyRevision:signature};
     if(signature&&signature!==this.geographySignature) {
       this.geographySignature=signature;
       this.geographyDirty=references.some(group=>group.length)?signature:undefined;

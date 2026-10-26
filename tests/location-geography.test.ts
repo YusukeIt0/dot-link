@@ -155,3 +155,14 @@ test('the real cached worker reaches MCP text and structured location context wi
   assert.equal(message.error,undefined);assert.equal(bridge.outboundHistory().length,1);
  }finally{context?.close();await new Promise(resolve=>setTimeout(resolve,300));rmSync(directory,{recursive:true,force:true});}
 });
+
+test('responding to a newer coordinate-only read consumes the older geographic event and allows the next move',async t=>{
+ const f=fixture(t);await f.start();f.emit();
+ await f.context.respond({context_id:f.context.read().context!.context_id,disposition:'silent'});
+ await f.advance(30_000);f.emit(evidence(['New reference']));await flush();assert.equal(f.events.length,2);
+ await f.advance(1000);f.update(10.0006);const current=f.context.read().context!;
+ assert.equal(current.geography?.status,'pending');
+ await f.context.respond({context_id:current.context_id,disposition:'silent'});
+ assert.equal(f.context.read().context!.update_id,null);
+ await f.advance(30_000);f.update(10.0012);await flush();assert.equal(f.events.length,3);
+});

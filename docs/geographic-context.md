@@ -246,7 +246,8 @@ very large-feature coverage remain explicit limitations.
 
 Worker crashes also use increasing one-minute-to-one-hour delays, retained by
 the loader across replacement workers. A ready result or explicit stop resets
-that crash history. Real worker-exit model tests cover escalation and reset.
+that crash history. New fixes during backoff report unavailable rather than pending.
+Real worker-exit model tests cover escalation, status and reset.
 
 ## Location integration under review
 
@@ -261,7 +262,9 @@ measurement and arrival times. Decisions on earlier reads remain idempotent.
 Geographic notifications coalesce under the existing 30-second interval and
 pending-event window. A silent decision before acquisition completes does not
 consume later references, and a response to an older read cannot consume a newer
-geographic event. Unchanged cached features and small distance changes do not
+geographic event. A newer coordinate-only read can consume an older geographic
+event using context creation order, without waiting for the retry window.
+Unchanged cached features and small distance changes do not
 create repeated geographic notifications. No additional download-management UI
 is required.
 
