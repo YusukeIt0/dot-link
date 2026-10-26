@@ -75,3 +75,53 @@ test('four tool reasons cross authenticated HTTP without leaking content or chan
     assert((await call(name, args)).result);
   }
 });
+
+test('read, routing and subscription reasons cross authenticated HTTP with safe envelopes', async t => {
+  const f = await toolFixture(t);
+  const tokens = { mcp: randomBytes(32).toString('hex'), device: randomBytes(32).toString('hex'), notification: randomBytes(32).toString('hex') };
+  const server = bridgeServer(f.bridge, tokens, f.inbox, f.location);
+  t.after(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); assert(address && typeof address !== 'string');
+  const call = async (method: string, params: unknown) => {
+    const response = await fetch(`http://127.0.0.1:${address.port}/mcp`, { method: 'POST',
+      headers: { Authorization: `Bearer ${tokens.mcp}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 9, method, params }) });
+    assert.equal(response.status, 200); return response.json();
+  };
+  const check = (value: any, reason: string) => {
+    assert.equal(value.id, 9);
+    assert.equal(value.error.code, reason === 'internal_error' ? -32603 : reason === 'challenge_failed' ? -32015 : -32602);
+    assert.deepEqual(value.error.data, { reason });
+    for (const secret of ['PRIVATE', ...Object.values(tokens), f.directory, f.subscription.delivery.secret, f.subscription.delivery.url]) assert(!JSON.stringify(value).includes(secret));
+  };
+  for (const name of ['get_status', 'get_pending_utterances', 'get_pending_notifications', 'get_location_context']) {
+    check(await call('tools/call', { name, arguments: { PRIVATE: true } }), 'invalid_arguments');
+    assert((await call('tools/call', { name })).result);
+  }
+  check(await call('tools/call', { name: 'PRIVATE' }), 'unknown_tool');
+  check(await call('events/subscribe', { name: 'PRIVATE' }), 'unknown_event');
+  check(await call('events/unsubscribe', {}), 'invalid_arguments');
+  const status = f.bridge.status;
+  f.bridge.status = () => { throw new Error('PRIVATE'); };
+  check(await call('tools/call', { name: 'get_status' }), 'internal_error');
+  f.bridge.status = status;
+  for (const name of ['utterance.created', 'notification.created', 'location.updated']) {
+    const params = { ...f.subscription, name };
+    const unsub = { name, arguments: params.arguments, delivery: { mode: 'webhook', url: params.delivery.url } };
+    assert((await call('events/subscribe', params)).result);
+    check(await call('events/subscribe', { ...params, arguments: null }), 'invalid_arguments');
+    check(await call('events/unsubscribe', { ...unsub, delivery: null }), 'invalid_arguments');
+    check(await call('events/subscribe', { ...params, delivery: { ...params.delivery, url: 'PRIVATE' } }), 'callback_destination_rejected');
+    check(await call('events/subscribe', { ...params, delivery: { ...params.delivery, secret: 'PRIVATE' } }), 'invalid_signing_secret');
+    check(await call('events/subscribe', { ...params, delivery: { ...params.delivery, url: params.delivery.url + '/PRIVATE' } }), 'subscription_conflict');
+    const verify = f.sender.verify;
+    f.sender.verify = async () => { const { CallbackVerificationError } = await import('../server/webhook.ts'); throw new CallbackVerificationError(); };
+    check(await call('events/subscribe', params), 'challenge_failed');
+    f.sender.verify = async () => { throw new Error('PRIVATE'); };
+    check(await call('events/subscribe', params), 'internal_error');
+    f.sender.verify = verify;
+    assert.deepEqual((await call('events/unsubscribe', unsub)).result, {});
+    assert.deepEqual((await call('events/unsubscribe', unsub)).result, {});
+  }
+});

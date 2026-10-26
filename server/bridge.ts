@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
+import { ReadResponseError } from './read-response-error.ts';
+import { SubscriptionResponseError, subscriptionArguments, subscriptionDelivery } from './subscription-response-error.ts';
 import { ChangeSignal } from './changes.ts';
-import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
+import { WebhookSender } from './webhook.ts';
 import { LatencyLog } from './latency.ts';
 import { photosSchema, photoDigest, photoBytes, PHOTO_RETENTION, PhotoStorageFullError } from './photo-attachments.ts';
 import { MAX_PHOTOS } from '../src/photo-attachments.ts';
@@ -185,7 +187,8 @@ export class Bridge {
         ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}),
         ...(item.photosExpired ? { photos_expired: true } : {}) })) };
   }
-  pendingResult() {
+  pendingResult(input: unknown = {}) {
+    if (!z.object({}).strict().safeParse(input).success) throw new ReadResponseError();
     const value = this.pending();
     const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
       { type: 'text', text: JSON.stringify(value) },
@@ -224,24 +227,24 @@ export class Bridge {
 
   subscribe(input: unknown) {
     return this.serial(async () => {
-      const params = subscribeSchema.parse(input);
-      callbackUrl(params.delivery.url, this.hosts); signingSecret(params.delivery.secret);
+      const params = subscriptionArguments(subscribeSchema, input);
+      subscriptionDelivery(params.delivery, this.hosts);
       const id = 'sub_' + createHash('sha256').update(JSON.stringify([SESSION, params.name, params.delivery.url])).digest('hex').slice(0, 32);
       const active = this.active();
-      if (active && active.id !== id) throw new Error('This bridge already has a subscriber; unsubscribe it first');
+      if (active && active.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: params.delivery.url, secret: params.delivery.secret,
         expiresAt: Date.now() + (params.ttlMs ?? 3_600_000) };
       // Verify before storing; a rejected callback never becomes an active subscriber.
       await this.sender.verify(sub);
-      this.state.subscription = sub; this.save();
+      this.save({ ...this.state, subscription: sub });
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
   }
   unsubscribe(input: unknown) {
     return this.serial(async () => {
-      const params = z.object({ name: z.literal('utterance.created'), arguments: argsSchema,
-        delivery: deliverySchema.omit({ secret: true }) }).parse(input);
-      if (this.state.subscription?.url === params.delivery.url) { delete this.state.subscription; this.save(); }
+      const params = subscriptionArguments(z.object({ name: z.literal('utterance.created'), arguments: argsSchema,
+        delivery: deliverySchema.omit({ secret: true }) }), input);
+      if (this.state.subscription?.url === params.delivery.url) { this.save({ ...this.state, subscription: undefined }); }
       return {};
     });
   }

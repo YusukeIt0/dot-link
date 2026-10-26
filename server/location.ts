@@ -2,9 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
+import { ReadResponseError } from './read-response-error.ts';
+import { SubscriptionResponseError, subscriptionArguments, subscriptionDelivery } from './subscription-response-error.ts';
 import { ChangeSignal } from './changes.ts';
 import { LocationResponseError } from './location-response-error.ts';
-import { callbackUrl, signingSecret, type WebhookSender } from './webhook.ts';
+import type { WebhookSender } from './webhook.ts';
 import { distanceMeters, freshLocation, LOCATION_LEASE_MS, LOCATION_FRESH_MS, type LocationFix } from '../src/location-fix.ts';
 
 const SESSION = 'personal-g2';
@@ -84,7 +86,7 @@ export class LocationContext {
       this.disk = { version: 1, revoked: [] }; this.save();
     }
   }
-  private save() { writeFileSync(`${this.path}.tmp`, JSON.stringify(this.disk), { mode: 0o600 }); renameSync(`${this.path}.tmp`, this.path); }
+  private save(next = this.disk) { writeFileSync(`${this.path}.tmp`, JSON.stringify(next), { mode: 0o600 }); renameSync(`${this.path}.tmp`, this.path); this.disk = next; }
   private active(): Subscription | undefined { const sub = this.disk.subscription; return sub && sub.expiresAt > this.now() ? sub : undefined; }
   private checkOwner() {
     if (this.owner && !this.ownerAuthorized(this.owner)) this.clear();
@@ -138,7 +140,7 @@ export class LocationContext {
     return { accepted: true, ...this.status() };
   }
   read(raw: unknown = {}) {
-    z.object({}).strict().parse(raw);
+    if (!z.object({}).strict().safeParse(raw).success) throw new ReadResponseError();
     const status = this.status();
     if (!this.usable() || !this.latest) return { ...status, context: null, recent_announcements: [] as (string | undefined)[] };
     const current = this.latest;
@@ -227,20 +229,20 @@ export class LocationContext {
   }
   subscribe(raw: unknown) {
     const run = this.subscriptions.then(async () => {
-      const p = z.object({ name: z.literal(EVENT), arguments: eventArgs, delivery, cursor: z.null().optional(), ttlMs: z.number().int().positive().max(86_400_000).nullable().optional() }).parse(raw);
-      callbackUrl(p.delivery.url, this.hosts); signingSecret(p.delivery.secret);
+      const p = subscriptionArguments(z.object({ name: z.literal(EVENT), arguments: eventArgs, delivery, cursor: z.null().optional(), ttlMs: z.number().int().positive().max(86_400_000).nullable().optional() }), raw);
+      subscriptionDelivery(p.delivery, this.hosts);
       const id = 'sub_' + createHash('sha256').update(JSON.stringify([SESSION, EVENT, p.delivery.url])).digest('hex').slice(0, 32);
-      if (this.active() && this.active()!.id !== id) throw new Error('Location subscriber already exists');
+      if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
-      await this.sender.verify(sub); this.disk.subscription = sub; this.save(); this.maybeEvent(); this.changes.emit();
+      await this.sender.verify(sub); this.save({ ...this.disk, subscription: sub }); this.maybeEvent(); this.changes.emit();
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
     this.subscriptions = run.catch(() => {}); return run;
   }
   unsubscribe(raw: unknown) {
     const run = this.subscriptions.then(() => {
-      const p = z.object({ name: z.literal(EVENT), arguments: eventArgs, delivery: delivery.omit({ secret: true }) }).parse(raw);
-      if (this.disk.subscription?.url === p.delivery.url) { delete this.disk.subscription; this.save(); this.pending = undefined; if (this.retry) clearTimeout(this.retry); this.changes.emit(); }
+      const p = subscriptionArguments(z.object({ name: z.literal(EVENT), arguments: eventArgs, delivery: delivery.omit({ secret: true }) }), raw);
+      if (this.disk.subscription?.url === p.delivery.url) { this.save({ ...this.disk, subscription: undefined }); this.pending = undefined; if (this.retry) clearTimeout(this.retry); this.changes.emit(); }
       return {};
     });
     this.subscriptions = run.catch(() => {}); return run;

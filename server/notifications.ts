@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
+import { ReadResponseError } from './read-response-error.ts';
+import { SubscriptionResponseError, subscriptionArguments, subscriptionDelivery } from './subscription-response-error.ts';
 import { ChangeSignal } from './changes.ts';
-import { callbackUrl, signingSecret, WebhookSender } from './webhook.ts';
+import { WebhookSender } from './webhook.ts';
 import { NotificationResponseError } from './notification-response-error.ts';
 
 const session = 'personal-g2';
@@ -85,7 +87,9 @@ export class NotificationInbox {
   private active() { const sub = this.state.subscription; return sub && sub.expiresAt > Date.now() ? sub : undefined; }
   status() { return { notificationSubscribed: !!this.active(), notificationCount: this.state.notifications.length }; }
   pending(input: unknown = {}) {
-    const { include_deferred } = z.object({ include_deferred: z.boolean().optional() }).strict().parse(input);
+    const parsed = z.object({ include_deferred: z.boolean().optional() }).strict().safeParse(input);
+    if (!parsed.success) throw new ReadResponseError();
+    const { include_deferred } = parsed.data;
     const notifications = this.state.notifications.filter(n => n.status !== 'announced' && n.disposition !== 'silent' && (include_deferred || n.disposition !== 'later')).slice(0, 10);
     const unread = notifications.filter(n => !n.dot_read_at);
     if (unread.length) { const at = new Date().toISOString(); for (const n of unread) n.dot_read_at = at; try { this.save(false); } catch { /* Optional receipt metadata must not block the Dot read. */ } }
@@ -132,19 +136,19 @@ export class NotificationInbox {
   }
   subscribe(input: unknown) {
     return this.serial(async () => {
-      const p = subscribe.parse(input);
-      callbackUrl(p.delivery.url, this.hosts); signingSecret(p.delivery.secret);
+      const p = subscriptionArguments(subscribe, input);
+      subscriptionDelivery(p.delivery, this.hosts);
       const id = 'sub_' + createHash('sha256').update(JSON.stringify([session, eventName, p.delivery.url])).digest('hex').slice(0, 32);
-      if (this.active() && this.active()!.id !== id) throw new Error('Notification subscriber already exists');
+      if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: Date.now() + (p.ttlMs ?? 3_600_000) };
-      await this.sender.verify(sub); this.state.subscription = sub; this.save();
+      await this.sender.verify(sub); this.save(true, { ...this.state, subscription: sub });
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
   }
   unsubscribe(input: unknown) {
     return this.serial(async () => {
-      const p = z.object({ name: z.literal(eventName), arguments: args, delivery: delivery.omit({ secret: true }) }).parse(input);
-      if (this.state.subscription?.url === p.delivery.url) { delete this.state.subscription; this.save(); }
+      const p = subscriptionArguments(z.object({ name: z.literal(eventName), arguments: args, delivery: delivery.omit({ secret: true }) }), input);
+      if (this.state.subscription?.url === p.delivery.url) { this.save(true, { ...this.state, subscription: undefined }); }
       return {};
     });
   }
