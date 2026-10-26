@@ -21,8 +21,8 @@ test('bounded range reader reuses only exact validated bytes and caps concurrenc
   const download=new MapDownload(new GeographicCache(directory),new AbortController().signal,request);
   const file=await download.file(URL,source.length);
   assert.deepEqual(Buffer.from(await file.slice(10,900_000)),source.subarray(10,900_000));
-  const count=calls; await file.slice(10,900_000); assert.equal(calls,count); assert.ok(maximum<=3);
-  assert.equal(download.stats.downloadedBytes,899_990); assert.equal(download.stats.cacheBytes,899_990);
+  const count=calls; await file.slice(10,900_000);assert.deepEqual(Buffer.from(await file.slice(100,800_000)),source.subarray(100,800_000)); assert.equal(calls,count); assert.ok(maximum<=3);
+  assert.equal(download.stats.downloadedBytes,1_000_000); assert.equal(download.stats.cacheBytes,2_000_000);
  } finally {await rm(directory,{recursive:true,force:true});}
 });
 
@@ -30,7 +30,7 @@ test('source allowlist, range status, range identity, truncation, oversize and c
  const directory = await mkdtemp(join(tmpdir(),'dot-map-download-'));
  try {
   for(const url of ['http://stac.overturemaps.org/a','https://localhost/a','https://stac.overturemaps.org:444/a','https://user@stac.overturemaps.org/a','https://stac.overturemaps.org/a?q=b']) assert.throws(()=>validMapURL(url));
-  const cases = [new Response('abcd'),new Response('abcd',{status:206,headers:{'Content-Range':'bytes 1-4/10'}}),new Response('ab',{status:206,headers:{'Content-Range':'bytes 0-3/10'}}),new Response('abcde',{status:206,headers:{'Content-Range':'bytes 0-3/10'}})];
+  const cases = [new Response('abcd'),new Response('abcd',{status:206,headers:{'Content-Range':'bytes 1-4/10'}}),new Response('ab',{status:206,headers:{'Content-Range':'bytes 0-9/10'}}),new Response('abcdefghijk',{status:206,headers:{'Content-Range':'bytes 0-9/10'}})];
   for (const response of cases) {
    const download=new MapDownload(new GeographicCache(directory),new AbortController().signal,(async()=>response) as typeof fetch);
    const file=await download.file(URL,10); await assert.rejects(file.slice(0,4));

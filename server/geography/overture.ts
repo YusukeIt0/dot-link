@@ -41,7 +41,8 @@ export function overtureFeature(theme: Theme, raw: unknown): GeographicFeature |
   const klass = text(row.class,60), subtype = text(row.subtype,60);
   if (!klass || !/^[a-z_]+$/.test(klass) || (subtype && !/^[a-z_]+$/.test(subtype))) return;
   // Individual trees and commercial POIs are not a substitute for area context.
-  if (theme === 'land' && klass === 'tree') return;
+  if (theme === 'land' && ['tree','land'].includes(klass)) return;
+  if (theme === 'segment' && subtype !== 'road') return;
   const geometry = row.geometry;
   const category = geometry.type === 'Polygon' || geometry.type === 'MultiPolygon' ? 'area' : geometry.type === 'LineString' || geometry.type === 'MultiLineString' ? 'line' : 'landmark';
   if (theme === 'segment' && category !== 'line') return;
@@ -86,7 +87,7 @@ export async function acquireGeography(options: {
   if (Number(catalogMetadata.num_rows)>10_000||!Number.isFinite(catalogDecoded)||catalogDecoded>32*1024*1024) throw new Error('Map catalog limit');
   const entries=await parquetReadObjects({file:catalogFile,metadata:catalogMetadata,compressors});
   const features: GeographicFeature[]=[];
-  const limitations=new Set<string>(['Reference data is not navigation or access guidance.','Very large features and excessive detail may be omitted by resource limits.']);
+  const limitations=new Set<string>(['Reference data is not navigation or access guidance.','Very large features and excessive detail may be omitted by resource limits. Individual trees, generic land extents and rail networks are excluded.']);
   const dataset = (): GeographicDataset => ({source:'Overture Maps',release:release!,
     attribution:'© OpenStreetMap contributors, Overture Maps Foundation. Transportation includes TomTom data. Base includes Daylight, ESA WorldCover / Copernicus Sentinel, ETOPO1 and GLOBathy.',
     license_url:'https://docs.overturemaps.org/attribution/',features:[...features],limitations:[...limitations]});
@@ -128,9 +129,13 @@ export async function acquireGeography(options: {
           const indices:number[]=[];
           Array.from(boxes).forEach((raw,i)=>{const b=box(raw);if(b&&b.xmax-b.xmin<20&&b.ymax-b.ymin<20&&options.region.boxes.some(region=>overlaps(b,region)))indices.push(i);});
           if(!indices.length)continue;
+          const classes=await scan.readColumn({...range,column:'class'});
+          const subtypes=await scan.readColumn({...range,column:'subtype'});
+          const relevant=indices.filter(i=>theme==='land'?!['tree','land'].includes(String(classes[i])):theme==='segment'?subtypes[i]==='road':true);
+          if(!relevant.length)continue;
           const columns=['id','geometry','names','class','subtype'];
-          const values=await Promise.all(columns.map(column=>scan.readColumn({...range,column})));
-          for(const i of indices) {
+          const values=await Promise.all(columns.map(column=>column==='class'?classes:column==='subtype'?subtypes:scan.readColumn({...range,column})));
+          for(const i of relevant) {
             const feature=overtureFeature(theme,Object.fromEntries(columns.map((c,j)=>[c,values[j][i]])));
             if(!feature)continue;
             // Count validated coordinates without allocating a flattened copy.

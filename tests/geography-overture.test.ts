@@ -16,7 +16,7 @@ test('Overture adapter preserves geographic names without guessing label joins o
  const park=overtureFeature('land_use',{id:'a',class:'park',subtype:'recreation',names:{primary:'สวนลุมพินี',common:{en:'Lumphini Park',ja:'ルンピニー公園',ko:'룸피니 공원'}},geometry:{type:'Polygon',coordinates:[[[0,0],[1,0],[1,1],[0,0]]]}})!;
  assert.equal(park.name,'สวนลุมพินี');assert.equal(park.category,'area');assert.equal(park.names?.ja,'ルンピニー公園');
  const rail=overtureFeature('segment',{id:'b',class:'subway',subtype:'rail',geometry:{type:'LineString',coordinates:[[0,0],[1,1]]}})!;
- assert.equal(rail.kind,'rail/subway');assert.equal(rail.name,undefined);
+ assert.equal(rail,undefined);
  const peak=overtureFeature('land',{id:'c',class:'peak',geometry:{type:'Point',coordinates:[138.7,35.3]},names:{primary:'富士山'}})!;
  assert.equal(peak.category,'landmark');assert.equal(peak.name,'富士山');
  assert.equal(overtureFeature('land',{id:'d',class:'tree',geometry:{type:'Point',coordinates:[0,0]}}),undefined);

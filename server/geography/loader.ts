@@ -3,7 +3,7 @@ import { GeographicCache } from './cache.ts';
 import type { GeographicEvidence, GeographicFix } from './types.ts';
 
 export type GeographyState = 'pending' | 'ready' | 'partial' | 'stale' | 'unavailable';
-export interface GeographyUpdate { state: GeographyState; evidence?: GeographicEvidence; revision: string }
+export interface GeographyUpdate { fix?: GeographicFix; state: GeographyState; evidence?: GeographicEvidence; revision: string }
 export interface GeographyLoader {
   update(fix: GeographicFix): void;
   stop(): void;
@@ -15,6 +15,7 @@ export class LocalGeography implements GeographyLoader {
   private worker?: Worker;
   private terminating?: Promise<void>;
   private queuedFix?: GeographicFix;
+  private latestFix?: GeographicFix;
   private closed=false;
   private generation = 0;
   private retryAfter = 0;
@@ -29,6 +30,7 @@ export class LocalGeography implements GeographyLoader {
   }
   update(fix: GeographicFix) {
     if(this.closed)return;
+    this.latestFix={...fix};
     if(this.terminating) {this.queuedFix=fix;return;}
     if(!this.worker) {
       if(Date.now()<this.retryAfter)return;
@@ -36,7 +38,10 @@ export class LocalGeography implements GeographyLoader {
       const worker=new Worker(new URL('./worker.ts',import.meta.url), {workerData:{directory:this.directory},resourceLimits:{maxOldGenerationSizeMb:256,maxYoungGenerationSizeMb:32}});
       this.worker=worker; worker.unref();
       worker.on('message',(message:GeographyUpdate)=>{
-        if(this.worker===worker&&generation===this.generation)this.onUpdate(message);
+        if(this.worker!==worker||generation!==this.generation)return;
+        const fix=this.latestFix;
+        if(!fix||!message.fix||message.fix.latitude!==fix.latitude||message.fix.longitude!==fix.longitude||message.fix.accuracy!==fix.accuracy)return;
+        this.onUpdate(message);
       });
       const failed=()=>{
         if(this.worker!==worker||generation!==this.generation)return;
@@ -48,7 +53,7 @@ export class LocalGeography implements GeographyLoader {
     this.worker.postMessage({type:'fix',fix});
   }
   stop() {
-    this.queuedFix=undefined;
+    this.queuedFix=undefined;this.latestFix=undefined;
     const worker=this.worker; this.worker=undefined; this.generation++; this.retryAfter=0;
     // Abort first so pending writes clean up, then bound shutdown even if parsing is busy.
     if(worker) {

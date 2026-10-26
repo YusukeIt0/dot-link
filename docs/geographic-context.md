@@ -135,7 +135,7 @@ conversations, identifying endpoints or raw runtime logs belong in public record
 The data child uses official Overture GeoParquet releases, with no geocoding,
 places, search or paid API. A daily cached catalog selects one immutable release;
 base `land_use`, `land`, `water` and transportation `segment` supply geometry and
-names. Individual trees and the places theme are excluded. Source availability
+names. Individual trees, generic land extents, rail networks and the places theme are excluded. Source availability
 and completeness remain external dependencies. The Fused mirror was not selected:
 its public release listing ended in May 2026 at measurement time.
 
@@ -153,7 +153,7 @@ limits are checked. Roads, land use, land and water arrive progressively. There 
 no assumption that initial acquisition is fast or that all themes succeed.
 
 Reusable source ranges and normalized regions share a 256 MiB / 2,048-file cache.
-Files have checksums and owner-only permissions. Use timestamps are rounded to a
+Source chunks align to fixed file offsets so overlapping queries reuse bytes. Files have checksums and owner-only permissions. Use timestamps are rounded to a
 day, unused files expire after 30 days, and capacity eviction prefers older use
 days. Normalized regions refresh after seven days independently of use time;
 source bytes are tied to immutable release URLs. Maintenance runs at startup and
@@ -178,3 +178,37 @@ examples are `bangkok`, `tokyo`, `yosemite`, `berlin`, `nairobi` and `amazon`.
 Attribution and data licensing follow [Overture's theme-specific source
 requirements](https://docs.overturemaps.org/attribution/); cached data is separate
 from Dot Link's MIT-licensed code.
+
+## Model-case validation
+
+The data resolver has deterministic cases for immediate coordinate-compatible
+pending state, partial/completed evidence, movement within a cell, movement to a
+new cell, late progress after stop, returning to a cached area during another
+acquisition, offline interruption/retry, independent refresh age, empty coverage
+and unsupported coordinates. Returning to a known area must not wait for an
+unrelated download. An old area's progress cannot replace the current area's
+reference data.
+
+Geometry cases cover named and unnamed areas, polygon holes and disjoint parts,
+both sides of uncertain boundaries, the antimeridian, parallel/crossing lines,
+dense unnamed paths hiding named streets, and invalid/oversized geometry. These
+are evidence and lifecycle checks, not a claim of complete worldwide map coverage.
+
+The Mount Fuji public sample returned Fuji-Hakone-Izu National Park containment,
+Mount Fuji and Kengamine references, nearby trails, and an uncertain crater-rim
+boundary. A cold attempt reached the six-minute bound; a cached continuation
+fetched 20.9 MB, reused 47.3 MB and completed in 166 seconds. This confirms useful
+content and recovery, while first-visit latency remains a limitation. The public
+measurement script reports partial progress even if a later theme times out.
+
+Provider-visible event timing, decision idempotency, freshness/consent revocation,
+ordinary conversation during acquisition, and actual Dot/device behavior belong
+to the dependent integration validation. No automatic test substitutes for that
+bounded physical acceptance session.
+
+Review follow-up: stale complete maps remain available throughout an incomplete or
+failed refresh. Genuine movement cancels the old region acquisition, while an
+approximately 200-metre cell-edge margin avoids cancellation from boundary jitter.
+Already downloaded source bytes remain reusable. Each worker result identifies
+the fix it resolved; the loader rejects results for an older requested coordinate.
+The model suite also covers refresh failure and cell-edge jitter explicitly.
