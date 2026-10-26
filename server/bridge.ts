@@ -8,6 +8,7 @@ import { LatencyLog } from './latency.ts';
 import { photosSchema, photoDigest, photoBytes, PHOTO_RETENTION, PhotoStorageFullError } from './photo-attachments.ts';
 import { MAX_PHOTOS } from '../src/photo-attachments.ts';
 import { PhotoStore } from './photo-store.ts';
+import { BridgeResponseError } from './bridge-response-error.ts';
 
 const SESSION = 'personal-g2';
 const OUTBOUND_LIMIT = 1000;
@@ -42,13 +43,13 @@ export const eventDefinition = {
   }, required: ['session_id', 'utterance_id', 'text'], additionalProperties: false },
 };
 export const replyTool = {
-  name: 'reply_to_g2', description: 'Deliver a reply to an existing utterance on the owner’s paired Even G2. Use its utterance_id; identical retries do not duplicate replies.',
+  name: 'reply_to_g2', description: 'Deliver a reply to an existing utterance on the owner’s paired Even G2. Use its utterance_id; identical retries do not duplicate replies. On rejection, follow error.data.reason and the message; do not overwrite an existing reply or substitute a proactive message for an unavailable utterance. Receipt confirms bridge storage, not physical display.',
   inputSchema: { type: 'object', properties: { utterance_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['utterance_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const sendMessageTool = {
   name: 'send_message_to_g2',
-  description: 'Send a NEW proactive message or follow-up to the owner’s G2 at any time, without an utterance ID or event subscription. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that same ID and identical text on retry. Duplicate and conflicting-ID checks cover only the latest 1,000 accepted outbound messages; an evicted ID can be accepted again as new. This sends now, not at a scheduled time. Receipt confirms storage for G2, not physical display. Do not overwrite an earlier reply_to_g2 response.',
+  description: 'Send a NEW proactive message or follow-up to the owner’s G2 at any time, without an utterance ID or event subscription. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that same ID and identical text on retry. Duplicate and conflicting-ID checks cover only the latest 1,000 accepted outbound messages; an evicted ID can be accepted again as new. This sends now, not at a scheduled time. Receipt confirms storage for G2, not physical display. Do not overwrite an earlier reply_to_g2 response. On rejection, follow error.data.reason and the message; do not change the ID to bypass a conflict.',
   inputSchema: { type: 'object', properties: { message_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['message_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -206,9 +207,11 @@ export class Bridge {
   sendMessage(input: unknown, stillAllowed?: () => boolean, location?: {sharing_id: string; expires_at: string}) {
     return this.serial(async () => {
       if (stillAllowed && !stillAllowed()) throw new Error('Message context is no longer valid');
-      const p = outboundInput.parse(input);
+      const parsed = outboundInput.safeParse(input);
+      if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
+      const p = parsed.data;
       const existing = this.state.outbound.find(m => m.message_id === p.message_id);
-      if (existing && existing.text !== p.text) throw new Error('Message ID conflicts');
+      if (existing && existing.text !== p.text) throw new BridgeResponseError('message_id_conflict');
       if (!existing) {
         // Rotate in acceptance order. Retried retained IDs never refresh that order.
         // Publish the replacement only after persistence succeeds.
@@ -282,12 +285,14 @@ export class Bridge {
     });
   }
   async reply(input: unknown) {
-    const { utterance_id, text } = replySchema.parse(input);
+    const parsed = replySchema.safeParse(input);
+    if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
+    const { utterance_id, text } = parsed.data;
     this.latency.mark(utterance_id, 'dot_reply_received');
     return this.serial(async () => {
       const message = this.state.messages.find(item => item.id === utterance_id);
-      if (!message) throw new Error('Unknown utterance');
-      if (message.reply !== undefined && message.reply !== text) throw new Error('Reply already exists; conflicting overwrite rejected');
+      if (!message) throw new BridgeResponseError('utterance_unknown');
+      if (message.reply !== undefined && message.reply !== text) throw new BridgeResponseError('reply_conflict');
       if (!message.reply) {
         // Publish only after persistence succeeds, so a failed write remains retryable.
         const { photos: _photos, ...retained } = message;
