@@ -83,7 +83,7 @@ main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 #conversation-controls #transcript { display: block; height: 40px; min-height: 40px; max-height: 136px; overflow-y: hidden; margin: 0; padding: 8px 10px; border: 0; border-radius: 12px; resize: none; background: transparent; font-size: 16px; line-height: 1.5; }
 #conversation-controls #transcript::placeholder { color: #999f9c; }
 #conversation-controls .conversation-actions { display: flex; align-items: center; gap: 0; margin-top: 4px; }
-#conversation-controls #send { margin-left: auto; background: #ebeee9; color: #141817; }
+#conversation-controls #send { margin-left: auto; }
 #record[data-record-state=idle] .record-stop, #record:not([data-record-state=idle]) .record-start { display: none; }
 #conversation-controls #record:not([data-record-state=idle]) { color: #f0a6a0; background: #f0a6a016; }
 #conversation-controls #discard { color: #d0d7d1; }
