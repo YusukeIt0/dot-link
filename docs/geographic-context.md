@@ -104,8 +104,8 @@ These are one-run observations, not performance guarantees or device acceptance.
   The selected mountain sample does not establish complete peak-name coverage.
 - Overture raw base themes retain names with geometry and are being measured.
   Initial direct GeoParquet reads timed out on large selected column ranges.
-  Source selection remains open pending bounded, repeatable acquisition and
-  quality measurements. No source is selected based on schema alone.
+  The data child below uses Overture after verifying named geometry in public
+  samples; integrated experience and broader quality remain under validation.
 
 References: [VersaTiles extraction](https://docs.versatiles.org/guides/download_tiles.html),
 [Shortbread](https://shortbread-tiles.org/schema/1.0/),
@@ -220,3 +220,15 @@ still become stale and refresh after seven days. Cache maintenance has one activ
 owner: the worker while running, otherwise the loader. Chunk writes use an
 in-memory size/use index instead of rescanning every file, and temporary files
 retain their real modification time until activation.
+
+Rapid A→B→A movement now restarts a cancelled acquisition without treating it as a
+network failure or imposing failure backoff. Both rejection and late resolution
+of the cancelled operation are covered, including suppression of late progress.
+
+Geometry reads narrow the selected row span so unrelated compressed pages can be
+skipped. A file has a 96 MiB cumulative Zstandard decoded-byte budget and each
+page retains a 16 MiB output cap. Metadata columns are limited to 32 MiB declared
+decoded data per row group; geometry to 128 MiB. Selected compressed column ranges
+are limited to 64 MiB. The downloader fills one result allocation from bounded
+batches rather than retaining and copying the whole range repeatedly. These
+limits can still produce partial coverage for very large geographic features.

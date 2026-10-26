@@ -145,3 +145,19 @@ test('a continuously used stationary region still refreshes when its map ages',a
   s.resolver.update(first);await new Promise(resolve=>setTimeout(resolve,10));assert.equal(s.calls.length,2);
  }finally{await s.close();}
 });
+
+for(const settles of ['reject','resolve'] as const)test(`returning A to B to A restarts cancelled acquisition after ${settles} without failure backoff`,async()=>{
+ const s=await setup();try {
+  s.resolver.update(first);await until(()=>s.calls.length===1);
+  s.resolver.update(distant);s.resolver.update(first);
+  assert.equal(s.calls[0].options.signal.aborted,true);
+  const count=s.updates.length;s.calls[0].options.progress!(dataset(first,'Cancelled'));
+  assert.equal(s.updates.length,count);
+  if(settles==='reject')s.calls[0].reject(new Error('aborted'));else s.calls[0].resolve(dataset(first,'Cancelled'));
+  await until(()=>s.calls.length===2);
+  assert.equal(s.updates.some(update=>update.state==='unavailable'),false);
+  assert.equal(s.calls[1].options.region.key,geographicRegion(first)!.key);
+  s.calls[1].resolve(dataset(first,'Resumed'));await until(()=>s.updates.at(-1)?.state==='ready');
+  assert.equal(s.updates.at(-1)?.evidence?.landmarks[0].name,'Resumed');
+ }finally{await s.close();}
+});

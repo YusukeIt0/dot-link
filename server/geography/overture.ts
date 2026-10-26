@@ -1,5 +1,5 @@
 import { parquetMetadataAsync, parquetReadObjects, parquetScan } from 'hyparquet';
-import { mapCompressors as compressors } from './compression.ts';
+import { mapCompressors as compressors, boundedMapCompressors } from './compression.ts';
 import { GeographicCache } from './cache.ts';
 import { MapDownload } from './download.ts';
 import { validGeometry } from './geometry.ts';
@@ -60,6 +60,7 @@ export function overtureFeature(theme: Theme, raw: unknown): GeographicFeature |
 export async function acquireGeography(options: {
   region: GeographicRegion; cache: GeographicCache; signal: AbortSignal;
   progress?: (dataset: GeographicDataset) => void; request?: typeof fetch; now?: () => number;
+  diagnostic?: (event:{theme:Theme;reason:string})=>void;
 }): Promise<{dataset: GeographicDataset; complete: boolean; stats:{downloadedBytes:number;cacheBytes:number}}> {
   const now = options.now ?? Date.now;
   const signal = AbortSignal.any([options.signal,AbortSignal.timeout(360_000)]);
@@ -108,7 +109,8 @@ export async function acquireGeography(options: {
         const metadata=await parquetMetadataAsync(file);
         if (metadata.row_groups.length>1024 || metadata.schema.length>1024) throw new Error('Map metadata limit');
         const filter={$or:options.region.boxes.map(b=>({'bbox.xmin':{$lte:b.xmax},'bbox.xmax':{$gte:b.xmin},'bbox.ymin':{$lte:b.ymax},'bbox.ymax':{$gte:b.ymin}}))};
-        const scan=await parquetScan({file,metadata,compressors,pruningFilter:filter});
+        const boundedCompressors=boundedMapCompressors();
+        const scan=await parquetScan({file,metadata,compressors:boundedCompressors,pruningFilter:filter});
         if(scan.ranges.length>32) throw new Error('Map row group limit');
         for (const range of scan.ranges) {
           signal.throwIfAborted();
@@ -120,8 +122,9 @@ export async function acquireGeography(options: {
             if(groupStart<range.rowEnd&&groupEnd>range.rowStart) {
               const selectedColumns=group.columns.filter(c=>['bbox','id','geometry','names','class','subtype'].includes(c.meta_data?.path_in_schema[0]??''));
               if(selectedColumns.some(c=>!['ZSTD','UNCOMPRESSED'].includes(c.meta_data?.codec??'')))throw new Error('Unsupported map compression');
-              const decoded=selectedColumns.reduce((sum,c)=>sum+Number(c.meta_data?.total_uncompressed_size??Infinity),0);
-              if(!Number.isFinite(decoded)||decoded>64*1024*1024) throw new Error('Map decoded column limit');
+              const decoded=selectedColumns.filter(c=>c.meta_data?.path_in_schema[0]!=='geometry').reduce((sum,c)=>sum+Number(c.meta_data?.total_uncompressed_size??Infinity),0);
+              const geometryBytes=selectedColumns.filter(c=>c.meta_data?.path_in_schema[0]==='geometry').reduce((sum,c)=>sum+Number(c.meta_data?.total_uncompressed_size??Infinity),0);
+              if(!Number.isFinite(decoded)||decoded>32*1024*1024||!Number.isFinite(geometryBytes)||geometryBytes>128*1024*1024) throw new Error('Map decoded column limit');
             }
             groupStart=groupEnd;
           }
@@ -134,9 +137,12 @@ export async function acquireGeography(options: {
           const relevant=indices.filter(i=>theme==='land'?!['tree','land'].includes(String(classes[i])):theme==='segment'?subtypes[i]==='road':true);
           if(!relevant.length)continue;
           const columns=['id','geometry','names','class','subtype'];
-          const values=await Promise.all(columns.map(column=>column==='class'?classes:column==='subtype'?subtypes:scan.readColumn({...range,column})));
+          // Geometry is flat WKB: narrowing the row span skips unrelated pages before
+          // decompression. Keep original indices for the smaller metadata columns.
+          const first=relevant[0], last=relevant.at(-1)!;
+          const values=await Promise.all(columns.map(column=>column==='class'?classes:column==='subtype'?subtypes:scan.readColumn(column==='geometry'?{column,rowStart:range.rowStart+first,rowEnd:range.rowStart+last+1}:{...range,column})));
           for(const i of relevant) {
-            const feature=overtureFeature(theme,Object.fromEntries(columns.map((c,j)=>[c,values[j][i]])));
+            const feature=overtureFeature(theme,Object.fromEntries(columns.map((c,j)=>[c,values[j][c==='geometry'?i-first:i]])));
             if(!feature)continue;
             // Count validated coordinates without allocating a flattened copy.
             const count=(v:unknown):number=>Array.isArray(v)?typeof v[0]==='number'?1:v.reduce((n,item)=>n+count(item),0):0;
@@ -147,8 +153,11 @@ export async function acquireGeography(options: {
           }
         }
         successes++;
-      } catch {
+      } catch (error) {
         signal.throwIfAborted();
+        const message=error instanceof Error?error.message:'';
+        const reasons:Record<string,string>={'Map download budget':'transfer_budget','Invalid map range':'range_limit','Map row group limit':'row_group_limit','Map row count limit':'row_count_limit','Map decoded column limit':'decoded_size_limit','Map metadata limit':'metadata_limit','Map page limit':'page_limit','Map response status':'http_status','Map response range':'range_mismatch','Map response length':'response_length','Truncated map range':'truncated_range'};
+        options.diagnostic?.({theme,reason:reasons[message]??(error instanceof Error&&error.name==='TimeoutError'?'request_timeout':'source_or_parse_failure')});
         failures++;
         limitations.add(`${theme}: some source data could not be loaded; coverage is partial.`);
       }

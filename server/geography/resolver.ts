@@ -84,17 +84,17 @@ export class GeographicResolver {
     const key=region.key,controller=new AbortController();this.active=controller;
     try {
       if(await this.reuse(key))return;
-      if(this.stopped)return;
+      if(this.stopped||controller.signal.aborted)return;
       // Keep the last complete stale map while a replacement is incomplete.
       const fallback=this.current?.key===key?this.current:undefined;
-      const result=await this.acquire({region,cache:this.cache,signal:controller.signal,now:this.now,progress:dataset=>{if(!fallback)this.publish(key,dataset,'pending');}});
+      const result=await this.acquire({region,cache:this.cache,signal:controller.signal,now:this.now,progress:dataset=>{if(!fallback&&!controller.signal.aborted)this.publish(key,dataset,'pending');}});
       if(this.stopped||controller.signal.aborted)return;
       if(result.complete||!fallback)this.publish(key,result.dataset,result.complete?'ready':'partial');
       if(key===this.latestKey) {if(result.complete){this.refreshNeeded=false;this.retryAfter=0;this.failures=0;}else this.backoff();}
       const encoded=Buffer.from(JSON.stringify(result.dataset));
       if(result.complete&&encoded.byteLength<=16*1024*1024)await this.cache.put(`normalized-${key}`,encoded,controller.signal);
     }catch {
-      if(this.stopped)return;
+      if(this.stopped||controller.signal.aborted)return;
       if(key===this.latestKey) {
         this.backoff();
         if(this.current?.key===key)this.current={...this.current,state:this.current.state==='stale'?'stale':'partial'};
@@ -102,7 +102,7 @@ export class GeographicResolver {
       }
     }finally {
       this.active=undefined;
-      if(!this.stopped&&this.latestKey!==key) {this.retryAfter=0;void this.load();}
+      if(!this.stopped&&(this.latestKey!==key||controller.signal.aborted)) {this.retryAfter=0;void this.load();}
     }
   }
 }

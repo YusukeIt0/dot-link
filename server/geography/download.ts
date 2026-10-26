@@ -64,10 +64,10 @@ export class MapDownload {
     validMapURL(url);
     if (!Number.isSafeInteger(byteLength) || byteLength < 8 || byteLength > 10_000_000_000) throw new Error('Invalid map file size');
     return {byteLength, slice: async (start: number, end = byteLength): Promise<ArrayBuffer> => {
-      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > byteLength || end < start || end - start > 32 * 1024 * 1024) throw new Error('Invalid map range');
+      if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end > byteLength || end < start || end - start > 64 * 1024 * 1024) throw new Error('Invalid map range');
       if(start===end)return new ArrayBuffer(0);
       const alignedStart=Math.floor(start/CHUNK)*CHUNK,alignedEnd=Math.min(byteLength,Math.ceil(end/CHUNK)*CHUNK);
-      const parts: Uint8Array[] = [];
+      const data = new Uint8Array(end-start);
       // Bounded batches: never queue a whole planet file or unbounded requests.
       for (let offset = alignedStart; offset < alignedEnd; offset += CHUNK * 3) {
         this.signal.throwIfAborted();
@@ -83,10 +83,13 @@ export class MapDownload {
             await this.cache.put(identity,bytes,this.signal); return bytes;
           })());
         }
-        parts.push(...await Promise.all(batch));
+        const parts=await Promise.all(batch);
+        for(let index=0;index<parts.length;index++) {
+          const position=offset+index*CHUNK,from=Math.max(start,position),to=Math.min(end,position+parts[index].byteLength);
+          if(to>from)data.set(parts[index].subarray(from-position,to-position),from-start);
+        }
       }
-      const data = Buffer.concat(parts).subarray(start-alignedStart,end-alignedStart);
-      return data.buffer.slice(data.byteOffset,data.byteOffset+data.byteLength) as ArrayBuffer;
+      return data.buffer;
     }};
   }
 }

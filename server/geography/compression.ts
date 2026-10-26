@@ -9,3 +9,13 @@ export function decompressMapPage(input: Uint8Array, length: number): Uint8Array
   return output;
 }
 export const mapCompressors:Compressors={ZSTD:decompressMapPage};
+
+/** Bound cumulative page expansion for one source file, including repeated reads. */
+export function boundedMapCompressors(maximumBytes=96*1024*1024) {
+  let decodedBytes=0;
+  return {ZSTD:(input:Uint8Array,length:number)=>{
+    decodedBytes+=length;
+    if(!Number.isSafeInteger(decodedBytes)||decodedBytes>maximumBytes)throw new Error('Map decoded column limit');
+    return decompressMapPage(input,length);
+  }};
+}
