@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.20</title><sparkle:version>94</sparkle:version><sparkle:shortVersionString>0.4.20</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved the startup window size to fit the display while keeping it freely resizable.
-- Added horizontal scrolling for narrow windows and long connection codes.
-- Kept the window size stable when switching screens or refreshing content.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.20-94/Dot-Link-0.4.20-94-arm64.zip" sparkle:installationType="application" sparkle:edSignature="DfbhNcDZ8q18wwiMaWy56quE7MZqds/AHqqQGNmHiuYkciWVscJ8lBgzYSejB8/E+yGCyc/qU7NGQSDb2R1eBw==" length="59413542" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: L8xT13W/rCNueVA0ClaktRdhOQA0R/HFu7RqpT6f+WRXT8giYlJWulxfC5e/x8so3W2Fkscb1dfLG3q9jujbDg==
-length: 1270
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.21</title><sparkle:version>95</sparkle:version><sparkle:shortVersionString>0.4.21</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved recovery guidance when messages or notifications cannot be accepted.
+- Fixed notification retries after a storage failure.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.21-95/Dot-Link-0.4.21-95-arm64.zip" sparkle:installationType="application" sparkle:edSignature="8VtMAdpp/YwqehJ6Euonx/DV0r3hR8nVPRPHkNVkQCaRGzAbqEopEKpm3/wl0+7ugNAgFzxsswFHMJEXYeXoCw==" length="59416272" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: GLpLm752bBx/dUmMeklY5d75NPjkWMfVxe907JnkaOuluBRJoOWZbilDyMmB7XhEU50VcEMN+Kq0xdW+B+X6BQ==
+length: 1164
 -->
