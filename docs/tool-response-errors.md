@@ -4,7 +4,7 @@
 
 This contract covers `reply_to_g2`, `send_message_to_g2`,
 `announce_notification_to_g2` and `set_notification_disposition`. Implementation
-is planned under #198, with integration and delivery tracked by #197. It follows
+is tracked under #198, with integration and delivery tracked by #197. It follows
 the existing `respond_to_location` reason envelope without changing its reasons.
 
 Expected rejections use JSON-RPC `error.code: -32602` and a fixed
