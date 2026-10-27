@@ -2,7 +2,7 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.3.41",
+  "version": "0.3.42",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "When you turn on location sharing, share your phone's current location with your own Dot through your Mac for relevant suggestions."
+      "desc": "When enabled, share your phone's location with your Dot through your Mac. Your Mac caches nearby map data, which can reveal past areas, until unused for 30 days. You can stop sharing anytime."
     },
     {
       "name": "camera",

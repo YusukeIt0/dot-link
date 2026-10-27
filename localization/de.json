@@ -126,7 +126,7 @@
   "even.send_after_transcription": "Nach der Texterkennung senden",
   "even.location_sharing": "Standortfreigabe",
   "even.share_my_location": "Meinen Standort teilen",
-  "even.share_your_phone_s_current_location_with_your_existing_dot": "Teilen Sie den aktuellen Standort Ihres Smartphones über Ihren Mac mit Ihrem gewohnten Dot. Dot kann anhand Ihres Standorts und Ihrer Vorlieben passende Vorschläge auf der G2 machen. Sie können die Freigabe hier jederzeit beenden.",
+  "even.share_your_phone_s_current_location_with_your_existing_dot": "Teilen Sie den Standort Ihres Smartphones über Ihren Mac mit Ihrem Dot. Sie können die Freigabe jederzeit beenden. Kartendaten bleiben auf dem Mac, bis sie 30 Tage ungenutzt sind, und können frühere Aufenthaltsgebiete erkennen lassen.",
   "even.your_mac_must_be_awake_and_connected_location_sharing_pauses": "Ihr Mac muss verbunden sein und darf nicht im Ruhezustand sein. Wenn Sie Dot Link auf der Brille beenden, pausiert die Standortfreigabe. Beim erneuten Öffnen wird sie fortgesetzt, sofern diese Einstellung aktiviert ist.",
   "even.operation_settings": "Bedienung",
   "even.disable_hold_to_record": "Aufnahme per Gedrückthalten deaktivieren",

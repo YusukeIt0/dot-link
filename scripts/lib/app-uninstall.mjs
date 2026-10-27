@@ -6,7 +6,7 @@ import { run } from './setup.mjs';
 import { ownedJobs, regularPath, suspendServices } from './app-lifecycle.mjs';
 import { projectIdentity } from './mac-install.mjs';
 
-const dataNames = ['bridge-state.json','bridge-state.json.photos','notification-state.json','mcp-key','mcp-authorization-header','device-key','notification-key',
+const dataNames = ['bridge-state.json','bridge-state.json.photos','geography','notification-state.json','mcp-key','mcp-authorization-header','device-key','notification-key',
  'stt.json','stt-endpoints.json','pairing','tunnel.yaml','tunnel-api-key','device-config.json','beta-pairing.txt','beta-pairing.png',
  'latency-bridge.jsonl','latency-device.jsonl','notification-menu-unified','lifecycle.json',
  'bridge-service.log','device-service.log','tunnel-service.log','menu-service.log'];

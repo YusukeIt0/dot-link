@@ -126,7 +126,7 @@
   "even.send_after_transcription": "Envoyer après transcription",
   "even.location_sharing": "Partage de position",
   "even.share_my_location": "Partager ma position",
-  "even.share_your_phone_s_current_location_with_your_existing_dot": "Partagez la position actuelle de votre téléphone avec votre Dot habituel, via votre Mac. Dot peut s’appuyer sur votre position et vos préférences pour vous proposer des suggestions pertinentes sur les G2. Vous pouvez arrêter le partage ici à tout moment.",
+  "even.share_your_phone_s_current_location_with_your_existing_dot": "Partagez la position de votre téléphone avec votre Dot via votre Mac. Vous pouvez arrêter à tout moment. Les données cartographiques restent sur votre Mac jusqu’à 30 jours sans utilisation et peuvent révéler les zones où vous vous trouviez.",
   "even.your_mac_must_be_awake_and_connected_location_sharing_pauses": "Votre Mac doit rester éveillé et connecté. Le partage de position se met en pause lorsque vous quittez Dot Link sur les lunettes. Il reprend à la réouverture si cette option est activée.",
   "even.operation_settings": "Réglages des commandes",
   "even.disable_hold_to_record": "Désactiver l’enregistrement par appui long",

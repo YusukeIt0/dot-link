@@ -126,7 +126,7 @@
   "even.send_after_transcription": "转为文字后发送",
   "even.location_sharing": "位置共享",
   "even.share_my_location": "共享我的位置",
-  "even.share_your_phone_s_current_location_with_your_existing_dot": "通过 Mac，将手机当前位置共享给您原本的 Dot。Dot 可以结合位置和偏好，在 G2 上提供相关建议。您随时可以在这里停止共享。",
+  "even.share_your_phone_s_current_location_with_your_existing_dot": "通过 Mac 向您的 Dot 共享手机位置，可随时停止。周边地图数据会保留在 Mac 上，连续 30 天未使用后删除，并可能透露您过去所在的区域。",
   "even.your_mac_must_be_awake_and_connected_location_sharing_pauses": "Mac 必须保持唤醒并保持连接。在眼镜上退出 Dot Link 会暂停位置共享；如果此设置仍然开启，重新打开应用后便会继续共享。",
   "even.operation_settings": "操作设置",
   "even.disable_hold_to_record": "禁用长按录音",
