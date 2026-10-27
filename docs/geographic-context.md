@@ -1,7 +1,8 @@
 # Geographic location context
 
-Design and feasibility record for [#207](https://github.com/YusukeIt0/dot-link/issues/207).
-This document describes work in progress, not a shipped capability.
+Implementation and bounded validation record for [#207](https://github.com/YusukeIt0/dot-link/issues/207),
+reviewed October 27, 2026. Release and publication status are tracked separately
+in the associated PR and release records.
 
 ## Intended experience
 
@@ -54,8 +55,8 @@ capacity ceiling, protecting active reads. Refresh age is independent of use age
 OFF/exit/revocation cancel acquisition and discard live derived context. Reusable
 map files may remain for the stated retention period; stopping sharing must not
 be described as deleting them. Region contents and use days can reveal approximate
-past areas. Document this change from the current memory-only location baseline,
-along with distribution-host visibility of requested regions, before Beta.
+past areas. The privacy notice and sharing disclosure describe this change from
+the earlier memory-only location baseline and distribution-host visibility of requested regions.
 Use private directory/file permissions and the existing data-deletion route.
 
 Validate source identity, range responses, compressed/uncompressed limits,
@@ -102,10 +103,10 @@ These are one-run observations, not performance guarantees or device acceptance.
   polygons have a kind but no name; named park points are separate. Merged
   polygons and separate labels prevent an unconditional named-containment claim.
   The selected mountain sample does not establish complete peak-name coverage.
-- Overture raw base themes retain names with geometry and are being measured.
+- Overture raw base themes retain names with geometry.
   Initial direct GeoParquet reads timed out on large selected column ranges.
-  The data child below uses Overture after verifying named geometry in public
-  samples; integrated experience and broader quality remain under validation.
+  The implementation below uses Overture after verifying named geometry in public
+  samples. The integrated Beta observations below do not establish exhaustive coverage.
 
 References: [VersaTiles extraction](https://docs.versatiles.org/guides/download_tiles.html),
 [Shortbread](https://shortbread-tiles.org/schema/1.0/),
@@ -130,7 +131,7 @@ Record source commit, Beta artifact identity, affected devices, results and
 remaining limitations in the related issues/PRs. No real coordinates, private
 conversations, identifying endpoints or raw runtime logs belong in public records.
 
-## Data implementation under review
+## Data acquisition and cache
 
 The data child uses official Overture GeoParquet releases, with no geocoding,
 places, search or paid API. A daily cached catalog selects one immutable release;
@@ -168,8 +169,8 @@ An immediate repeat read 40.5 MB from cache, transferred zero network bytes and
 finished in 2.1 seconds. Normalized region reuse avoids that repeated parsing.
 The earlier narrow-bounds lazy-column measurement transferred 33.1 MB in 270
 seconds. Dense-road limits are reported as partial coverage. Mountain and other
-regional samples, integrated lifecycle behavior and actual Dot acceptance remain
-under validation.
+regional samples, integrated lifecycle tests and bounded actual-Dot acceptance
+are recorded below; their limits remain distinct from worldwide coverage guarantees.
 
 Run an explicit public example with `node scripts/measure-geography.mjs fuji
 /path/to/temporary-cache` (one line). This network measurement is separate from
@@ -249,7 +250,7 @@ the loader across replacement workers. A ready result or explicit stop resets
 that crash history. New fixes during backoff report unavailable rather than pending.
 Real worker-exit model tests cover escalation, status and reset.
 
-## Location integration under review
+## Location integration
 
 The location owner now starts geographic acquisition only with enabled, fresh
 sharing and an active Dot subscription. Coordinates are returned immediately.
@@ -279,5 +280,22 @@ Integration model tests cover delayed stationary enrichment after silence,
 coalesced phases, older decisions overlapping newer events, unchanged references,
 movement fencing, partial fallback, empty coverage, and every stop/expiry path.
 A cached real-worker fixture reaches both MCP text and structured content while
-ordinary messages still work. These checks are not actual-Dot or physical-device
-acceptance; those remain required on the exact Beta artifacts.
+ordinary messages still work. These model checks are separate from actual-Dot
+and physical-device acceptance.
+
+## Beta validation
+
+Mac 0.4.23 (97) Beta and Even 0.3.42 Beta from `bc888ec` were checked on
+October 27, 2026. Actual Dot used geographic evidence and returned a sourced
+spot-research result; the wearer confirmed that result and an unrelated greeting
+were readable on G2. A separate empty-cache sequence confirmed ordinary conversation
+during acquisition and G2 exit stopping an incomplete download. Sharing OFF,
+cached reuse and restoration were also observed. See the
+[bounded device record](https://github.com/YusukeIt0/dot-link/pull/212#issuecomment-6431272869)
+and [cold-acquisition record](https://github.com/YusukeIt0/dot-link/pull/212#issuecomment-6431490666).
+
+These results do not establish every rendering state, native-speaker review of
+all translations, exhaustive worldwide coverage or provider-internal search steps.
+The earlier iPhone-host-exit observation used the documented 90-second lease
+fallback. Formal release, the selected Even Hub submission permission-screen check
+and normal update-path acceptance remain separate release steps.
