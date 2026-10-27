@@ -46,7 +46,7 @@ export class LocalGeography implements GeographyLoader {
     this.latestFix={...fix};
     if(this.terminating||this.maintenanceRun) {this.queuedFix=fix;return;}
     if(!this.worker) {
-      if(this.now()<this.retryAfter)return;
+      if(this.now()<this.retryAfter){this.onUpdate({fix:{...fix},state:'unavailable',revision:`backoff-${this.generation}`});return;}
       const generation=++this.generation;
       const worker=this.createWorker();
       this.worker=worker; worker.unref();

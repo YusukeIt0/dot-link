@@ -80,7 +80,9 @@ In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Updat
 
 Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Then ask your existing Dot to monitor location changes and notify you on G2 only when useful information matches your preferences. Dot must create an event subscription; updating tools alone does not start announcements.
 
-Sharing starts off. Turning it off stops new sharing and clears the relay's current location. If the Mac cannot receive the stop, sharing expires 90 seconds after the last relay update. The subscription stays available for later use but cannot read a location while sharing is off. Stopping does not delete locations already read by Dot or saved announcements. Background updates and battery impact depend on the phone and OS. See [data handling](privacy.md#location-sharing).
+With Mac 0.4.23 or later, nearby streets, paths, areas and terrain references are added automatically while Dot is subscribed. Coordinates remain available during map loading or failure; a first area can take several minutes, while cached areas are faster. No region-download step is needed. References are not navigation or evidence that you entered a venue.
+
+Sharing starts off. Turning it off stops new sharing and clears the relay's current location. If the Mac cannot receive the stop, sharing expires 90 seconds after the last relay update. The subscription stays available for later use but cannot read a location while sharing is off. Stopping does not delete locations already read by Dot, saved announcements or cached map data. The Mac removes map entries after 30 days without use; their contents and use days can reveal approximate past areas. Background updates and battery impact depend on the phone and OS. See [data handling](privacy.md#location-sharing).
 
 ## Updates
 

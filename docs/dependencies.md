@@ -9,6 +9,7 @@ Dot Link's own source is MIT-licensed. Dependencies retain their own licenses an
 | OpenAI tunnel-client | 0.0.16 | Apache-2.0, upstream NOTICE and bundled dependency notices |
 | Sparkle | 2.10.0 | Upstream Sparkle license |
 | Even Hub SDK | 0.0.16 | MIT |
+| hyparquet | 1.31.5 | MIT |
 | ipaddr.js | 2.5.0 | MIT |
 | zod | 4.6.7 | MIT |
 | standardwebhooks | 1.1.1 | See the qualification below |
@@ -16,6 +17,8 @@ Dot Link's own source is MIT-licensed. Dependencies retain their own licenses an
 | Silero VAD | SHA-256 pinned in wake manifest | MIT |
 | Wake WASM: ONNX Runtime / Emscripten | 1.28.2 / 4.0.23 | Bundled third-party notices in `wake-assets/THIRD-PARTY-NOTICES.txt` |
 | qrcode and transitive npm dependencies | package-lock.json | Individual package license files |
+
+Geographic map data is downloaded separately from Overture Maps and retains its [source-specific attribution and licenses](https://docs.overturemaps.org/attribution/); it is not covered by Dot Link’s MIT license.
 
 The Mac bundle includes license texts in `Contents/Resources/licenses` and within the unmodified npm packages in its payload. Frontend license texts are also in `public/THIRD_PARTY_NOTICES.txt`. The Mac transcription model and Tailscale app are not bundled. The Even wake-detection models are bundled.
 

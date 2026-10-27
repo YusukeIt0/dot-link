@@ -246,4 +246,38 @@ very large-feature coverage remain explicit limitations.
 
 Worker crashes also use increasing one-minute-to-one-hour delays, retained by
 the loader across replacement workers. A ready result or explicit stop resets
-that crash history. Real worker-exit model tests cover escalation and reset.
+that crash history. New fixes during backoff report unavailable rather than pending.
+Real worker-exit model tests cover escalation, status and reset.
+
+## Location integration under review
+
+The location owner now starts geographic acquisition only with enabled, fresh
+sharing and an active Dot subscription. Coordinates are returned immediately.
+`context.geography` carries status and any available source-attributed references;
+map data is explicitly untrusted reference material in the tool description.
+There is no map-image attachment, and no image-receipt claim.
+
+A material geographic update creates a new context ID while preserving the phone
+measurement and arrival times. Decisions on earlier reads remain idempotent.
+Geographic notifications coalesce under the existing 30-second interval and
+pending-event window. A silent decision before acquisition completes does not
+consume later references, and a response to an older read cannot consume a newer
+geographic event. A newer coordinate-only read can consume an older geographic
+event using context creation order, without waiting for the retry window.
+Unchanged cached features and small distance changes do not
+create repeated geographic notifications. No additional download-management UI
+is required.
+
+Consent, owner authorization, lease, measurement freshness and subscription expiry
+remain owned by `LocationContext`. Expiry timers stop acquisition even without a
+further phone update. Stop, unsubscribe, revocation and shutdown clear live
+geographic context. One `LocalGeography` owns the cache directory; uninstall stops
+services before moving its files to Trash. The location-sharing disclosure covers
+the approximate-area and retention implications in all seven interface languages.
+
+Integration model tests cover delayed stationary enrichment after silence,
+coalesced phases, older decisions overlapping newer events, unchanged references,
+movement fencing, partial fallback, empty coverage, and every stop/expiry path.
+A cached real-worker fixture reaches both MCP text and structured content while
+ordinary messages still work. These checks are not actual-Dot or physical-device
+acceptance; those remain required on the exact Beta artifacts.
