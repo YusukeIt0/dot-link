@@ -99,12 +99,15 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         targetBuild = target; startupProgress = true; progressFraction = nil
         status("mac.restoring_connection", working: true); beginProgress()
     }
-    func startupRecoveryFinished(success: Bool, currentBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") {
-        guard startupProgress else { return }
-        if !success { status("mac.the_connection_could_not_be_restored_click_retry_recovery"); return }
+    @discardableResult func startupRecoveryFinished(success: Bool, currentBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") -> Bool {
+        guard startupProgress else { return false }
+        if !success { status("mac.the_connection_could_not_be_restored_click_retry_recovery"); return false }
         startupProgress = false
         progressDefaults.removeObject(forKey: progressMarkerKey)
-        status(currentBuild == targetBuild ? "mac.update_progress_complete" : "mac.update_failed_click_check_for_updates_to_retry")
+        let completed = currentBuild == targetBuild
+        status(completed ? "mac.update_progress_complete" : "mac.update_failed_click_check_for_updates_to_retry")
+        if completed { progressWindow?.close(); progressActive = false }
+        return completed
     }
     // Keep the previous user preference so a future build can lift the policy
     // pause without deleting the updater or losing the user's setting.

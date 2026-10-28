@@ -637,7 +637,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
-            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) }
+            var showAfterUpdate = false
+            if currentAction == "update-recover" {
+                let completed = appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) ?? false
+                // Older updaters do not write a progress handoff. A recovered
+                // journal still warrants showing the restored app, without
+                // claiming that an unverified target build was installed.
+                let recovered = (value["updateRecovery"] as? [String: Any])?["recovered"] as? Bool == true
+                showAfterUpdate = completed || recovered
+            }
             if currentAction == "revoke-pairings" {
                 pairingCode = nil; pairingExpiry = 0
                 switch value["pairingRemoval"] as? String {
@@ -663,6 +671,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFinished(); messageRecord = LocalizedMessage("mac.notifications_moved_the_old_app_will_no_longer_start_at_login") }
             if let code = value["pairingCode"] as? String { pairingCode = code; pairingExpiry = value["expiresAt"] as? Double ?? 0 }
             render()
+            if showAfterUpdate { showWindow() }
             if automaticResumePending {
                 automaticResumePending = false
                 if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
