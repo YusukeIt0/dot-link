@@ -8,7 +8,7 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Send voice recordings, messages and selected photos to your own Mac relay, and receive replies from your existing Dot.",
+      "desc": "Connect and pair with your Mac relay to send voice recordings, messages, selected photos and location you choose to share, and receive Dot replies and connection status. Network access also supports reconnecting and revoking this phone's connection.",
       "whitelist": []
     },
     {
