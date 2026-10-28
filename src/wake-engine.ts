@@ -10,6 +10,7 @@ export interface KeywordSpotter {
   createStream(): KeywordStream;
   isReady(stream: KeywordStream): boolean;
   decode(stream: KeywordStream): void;
+  reset(stream: KeywordStream): void;
   getResult(stream: KeywordStream): { keyword?: string; start_time?: number; timestamps?: number[] };
   free(): void;
 }
@@ -96,7 +97,11 @@ export class WakeEngine {
         // mixed, stale or invalid metadata preserves existing activation.
         const first = result.timestamps?.[0];
         const cueStart = Math.floor(((result.start_time ?? 0) + (first ?? NaN)) * SAMPLE_RATE);
-        if (this.otherCue(cueStart, end)) continue;
+        if (this.otherCue(cueStart, end)) {
+          // Consume the match explicitly before continuing the same audio timeline.
+          this.kws.reset(stream);
+          continue;
+        }
         // Never substitute the whole ring for an old/future timestamp: it could include pre-wake speech.
         const start = end >= Math.max(0, this.received - this.ring.length) && end <= this.received ? end : this.received;
         const preRoll = new Uint8Array((this.received - start) * 2);

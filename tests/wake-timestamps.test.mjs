@@ -53,7 +53,7 @@ test('real KWS timestamps remain absolute after automatic silence resets', async
     const events=[];
     const engine=new WakeEngine({
       createStream:()=>kws.createStream(), isReady:stream=>kws.isReady(stream),
-      decode:stream=>kws.decode(stream), getResult:stream=>{
+      reset:stream=>kws.reset(stream), decode:stream=>kws.decode(stream), getResult:stream=>{
         const result=kws.getResult(stream);
         return {...result,keyword:result.keyword ? 'HEY_DOT' : ''};
       }, free:()=>{},
@@ -61,7 +61,7 @@ test('real KWS timestamps remain absolute after automatic silence resets', async
     const feed=(audio,role)=>{for(let offset=0;offset<audio.length;offset+=640)engine.append(audio.subarray(offset,offset+640),role);};
     try {
       engine.listen();
-      feed(pcm,'other');feed(Buffer.alloc(32000),'other');
+      feed(pcm,'other');feed(Buffer.alloc(160000),'unknown');
       assert.deepEqual(events,[],'other-speaker cue must not activate with the real decoder');
       feed(pcm,'self');feed(Buffer.alloc(32000),'self');
       assert.deepEqual(events.filter(event=>event.type==='wake'),[{type:'wake'}],'owner cue after suppression must activate once');
