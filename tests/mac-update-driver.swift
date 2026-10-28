@@ -256,7 +256,7 @@ let relaunched = AppUpdater(automaticUpdatesEnabled: false, presentProgress: fal
 relaunched.beginStartupRecovery()
 precondition(relaunched.progressActive && relaunched.working && relaunched.message == "Restoring connection…")
 relaunched.startupRecoveryFinished(success: false, currentBuild: "102")
-precondition(!relaunched.working && relaunched.message.contains("Retry recovery"))
+precondition(!relaunched.working && relaunched.message.contains("Retry recovery") && relaunched.checkTitle == "Retry recovery")
 precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") != nil)
 var startupRetries = 0
 relaunched.retryStartupRecovery = { startupRetries += 1; relaunched.beginStartupRecovery() }

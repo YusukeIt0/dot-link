@@ -49,7 +49,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private(set) var preparing = false
     var blocksActions: Bool { preparing || recovering || prepared }
     var checkTitle: String {
-        recoveryRequired ? tr("mac.retry_recovery") : readyReply != nil ? tr("mac.retry_update") : tr("mac.check_for_updates")
+        (recoveryRequired || startupProgress) ? tr("mac.retry_recovery") : readyReply != nil ? tr("mac.retry_update") : tr("mac.check_for_updates")
     }
     private let repository = Bundle.main.object(forInfoDictionaryKey: "DotLinkUpdateRepository") as? String ?? ""
     var silentRelaunch: Bool { !manuallyApproved }

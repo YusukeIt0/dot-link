@@ -142,7 +142,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         }
         updater.retryStartupRecovery = { [weak self] in
-            guard let self, !self.busy else { return }
+            guard let self, !self.busy, self.appUpdater?.blocksActions != true else { return }
             self.appUpdater?.beginStartupRecovery(); self.perform("update-recover")
         }
         updater.start()
