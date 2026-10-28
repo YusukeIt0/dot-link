@@ -19,7 +19,10 @@ test(`packaged worker initializes ${process.env.DOT_TEST_WAKE_NAME ?? 'dot'} wit
   assert.deepEqual(messages,[{type:'ready'}]);
   for(let generation=1;generation<=3;generation++){
     await message({data:{type:'listen',generation}});
-    for(let i=0;i<100;i++)await message({data:{type:'audio',generation,pcm:new Uint8Array(640)}});
+    for(let i=0;i<100;i++)await message({data:{type:'audio',generation,pcm:new Uint8Array(640),role:['self','other','unknown'][i%3]}});
+    const processed=messages.filter(m=>m.type==='processed').length;
+    await message({data:{type:'audio',generation:generation-1,pcm:new Uint8Array(640),role:'other'}});
+    assert.equal(messages.filter(m=>m.type==='processed').length,processed,'stale audio is rejected');
     await message({data:{type:'cancel',generation:generation+1}});
   }
   assert.equal(messages.filter(m=>m.type==='processed').length,300);
