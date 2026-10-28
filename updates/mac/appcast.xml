@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.24</title><sparkle:version>99</sparkle:version><sparkle:shortVersionString>0.4.24</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Keep the first answer with its question, including location-based answers, while additional replies appear on later pages.
-- Preserve independent messages from Dot as separate conversation pages.
-- Use with the updated Even app for readable web addresses on your phone, link placeholders on glasses, and read-aloud that skips web addresses.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.24-99/Dot-Link-0.4.24-99-arm64.zip" sparkle:installationType="application" sparkle:edSignature="DLXawNZV6z8JdtpihzCIsJV498Bvd/l/LtvMNGrtGSeJmeJhTSIH7JF7CXjdazQhkyxH/2Y6BYC6hvL2SlXYBg==" length="59564208" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: SlObK/1MMWy0PG4q1q71nzhOaDA6T2JECH3CbrUQcLbn1Sd4w49a1y3WQsCo0VSqoyY/6lYvhDUS+Ty/jbQxDw==
-length: 1373
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.25</title><sparkle:version>100</sparkle:version><sparkle:shortVersionString>0.4.25</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Prevent recordings with no detected speech from creating and automatically sending unintended messages.
+- Preserve short acknowledgements and quiet speech during voice transcription.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.25-100/Dot-Link-0.4.25-100-arm64.zip" sparkle:installationType="application" sparkle:edSignature="9w/6IfdoOpPf0BaaW0XKsto6ZiTesjNzK4gGaOgH9hkp2SAdTnMOXj+QgRNhXglMcJ8XoJ87o1CbavZ3FDl9Aw==" length="59567899" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: fFzA0B7GoyTBXi03P1ZbxtB03DyNXgI3vdMf0mdR3DzHPpd6kagJm1TrOXz+k3+71zapytKcLK8Uv6bAnRt7AQ==
+length: 1218
 -->
