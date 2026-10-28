@@ -1,3 +1,4 @@
+import { speechActivityConfig } from './speech-activity.ts';
 import { WakeEngine, type KeywordSpotter, type SpeechDetector } from './wake-engine.ts';
 import { validateWakeName, wakeNameTokens, type WakeVocabulary } from './wake-name.ts';
 
@@ -45,11 +46,7 @@ async function initialize(assets: string, name = 'dot'): Promise<void> {
       tokens: '/tokens.txt', numThreads: 1, provider: 'cpu', debug: 0, modelType: 'zipformer2', modelingUnit: 'bpe', bpeVocab: '' },
     maxActivePaths: 4, numTrailingBlanks: 1, keywordsScore: 3, keywordsThreshold: 0.1, keywords: '/keywords.txt',
   });
-  const vad = vadApi.createVad(module, {
-    sileroVad: { model: '/silero_vad.onnx', threshold: 0.5, minSilenceDuration: 1.2,
-      minSpeechDuration: 0.3, maxSpeechDuration: 30, windowSize: 512 },
-    sampleRate: 16000, numThreads: 1, provider: 'cpu', debug: 0, bufferSizeInSeconds: 32,
-  });
+  const vad = vadApi.createVad(module, speechActivityConfig('/silero_vad.onnx'));
   if (!kws.handle || !vad.handle) throw new Error('Detector unavailable');
   // Sessions own the model data now; don't keep a second copy in the virtual FS.
   for (const name of names) module.FS.unlink(`/${name}`);

@@ -49,7 +49,7 @@ test('all added providers route independently and never fall back when selected 
   for (const provider of providers) {
     let calls = 0;
     const fail = async () => { assert.fail('wrong provider'); };
-    const run = selectableTranscriber({selection:async()=>provider,whisper:fail,soniox:fail,
+    const run = selectableTranscriber({ speech: async () => true,selection:async()=>provider,whisper:fail,soniox:fail,
       providers:Object.fromEntries(providers.map(p=>[p,p===provider ? async()=>{calls++;throw new Error('selected failed');} : fail]))});
     await assert.rejects(run(recording()),/selected failed/); assert.equal(calls,1);
   }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { PcmRecording } from '../src/audio.ts';
 import { validateWav } from '../server/asr.ts';
 
-test('only bounded non-silent G2 PCM WAV reaches the transcription process', () => {
+test('WAV validation enforces bounded G2 PCM format; speech detection is separate', () => {
   const recording = new PcmRecording();
   const pcm = new Int16Array(8000).fill(1000);
   recording.append(new Uint8Array(pcm.buffer));
@@ -14,5 +14,5 @@ test('only bounded non-silent G2 PCM WAV reaches the transcription process', () 
   assert.throws(() => validateWav(wav.subarray(0, 400)));
   assert.throws(() => validateWav(Buffer.alloc(960046)));
   const silent = Buffer.from(wav); silent.fill(0, 44);
-  assert.throws(() => validateWav(silent), /silent/);
+  assert.doesNotThrow(() => validateWav(silent));
 });

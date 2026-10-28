@@ -1,0 +1,198 @@
+[
+  {
+    "file": "en-short.wav",
+    "locale": "en",
+    "voice": "Samantha",
+    "text": "Yes.",
+    "kind": "short"
+  },
+  {
+    "file": "en-sentence.wav",
+    "locale": "en",
+    "voice": "Samantha",
+    "text": "What is the weather tomorrow?",
+    "kind": "sentence"
+  },
+  {
+    "file": "ja-short.wav",
+    "locale": "ja",
+    "voice": "Kyoko",
+    "text": "はい。",
+    "kind": "short"
+  },
+  {
+    "file": "ja-sentence.wav",
+    "locale": "ja",
+    "voice": "Kyoko",
+    "text": "明日の天気を教えて。",
+    "kind": "sentence"
+  },
+  {
+    "file": "ko-short.wav",
+    "locale": "ko",
+    "voice": "Yuna",
+    "text": "네.",
+    "kind": "short"
+  },
+  {
+    "file": "ko-sentence.wav",
+    "locale": "ko",
+    "voice": "Yuna",
+    "text": "내일 날씨를 알려 주세요.",
+    "kind": "sentence"
+  },
+  {
+    "file": "zh-Hans-short.wav",
+    "locale": "zh-Hans",
+    "voice": "Tingting",
+    "text": "好的。",
+    "kind": "short"
+  },
+  {
+    "file": "zh-Hans-sentence.wav",
+    "locale": "zh-Hans",
+    "voice": "Tingting",
+    "text": "请告诉我明天的天气。",
+    "kind": "sentence"
+  },
+  {
+    "file": "zh-Hant-short.wav",
+    "locale": "zh-Hant",
+    "voice": "Meijia",
+    "text": "好的。",
+    "kind": "short"
+  },
+  {
+    "file": "zh-Hant-sentence.wav",
+    "locale": "zh-Hant",
+    "voice": "Meijia",
+    "text": "請告訴我明天的天氣。",
+    "kind": "sentence"
+  },
+  {
+    "file": "fr-short.wav",
+    "locale": "fr",
+    "voice": "Thomas",
+    "text": "Oui.",
+    "kind": "short"
+  },
+  {
+    "file": "fr-sentence.wav",
+    "locale": "fr",
+    "voice": "Thomas",
+    "text": "Quel temps fera-t-il demain ?",
+    "kind": "sentence"
+  },
+  {
+    "file": "de-short.wav",
+    "locale": "de",
+    "voice": "Anna",
+    "text": "Ja.",
+    "kind": "short"
+  },
+  {
+    "file": "de-sentence.wav",
+    "locale": "de",
+    "voice": "Anna",
+    "text": "Wie wird das Wetter morgen?",
+    "kind": "sentence"
+  },
+  {
+    "file": "en-short-second.wav",
+    "locale": "en",
+    "voice": "Fred",
+    "text": "No.",
+    "kind": "short"
+  },
+  {
+    "file": "en-sentence-second.wav",
+    "locale": "en",
+    "voice": "Fred",
+    "text": "Can you help me?",
+    "kind": "sentence"
+  },
+  {
+    "file": "ja-short-second.wav",
+    "locale": "ja",
+    "voice": "Eddy (日本語（日本）)",
+    "text": "いいえ。",
+    "kind": "short"
+  },
+  {
+    "file": "ja-sentence-second.wav",
+    "locale": "ja",
+    "voice": "Eddy (日本語（日本）)",
+    "text": "少し手伝ってください。",
+    "kind": "sentence"
+  },
+  {
+    "file": "ko-short-second.wav",
+    "locale": "ko",
+    "voice": "Eddy (韓国語（韓国）)",
+    "text": "아니요.",
+    "kind": "short"
+  },
+  {
+    "file": "ko-sentence-second.wav",
+    "locale": "ko",
+    "voice": "Eddy (韓国語（韓国）)",
+    "text": "도와주시겠어요?",
+    "kind": "sentence"
+  },
+  {
+    "file": "zh-Hans-short-second.wav",
+    "locale": "zh-Hans",
+    "voice": "Eddy (中国語（中国本土）)",
+    "text": "不用了。",
+    "kind": "short"
+  },
+  {
+    "file": "zh-Hans-sentence-second.wav",
+    "locale": "zh-Hans",
+    "voice": "Eddy (中国語（中国本土）)",
+    "text": "你能帮我吗？",
+    "kind": "sentence"
+  },
+  {
+    "file": "zh-Hant-short-second.wav",
+    "locale": "zh-Hant",
+    "voice": "Eddy (中国語（台湾）)",
+    "text": "不用了。",
+    "kind": "short"
+  },
+  {
+    "file": "zh-Hant-sentence-second.wav",
+    "locale": "zh-Hant",
+    "voice": "Eddy (中国語（台湾）)",
+    "text": "你能幫我嗎？",
+    "kind": "sentence"
+  },
+  {
+    "file": "fr-short-second.wav",
+    "locale": "fr",
+    "voice": "Jacques",
+    "text": "Non.",
+    "kind": "short"
+  },
+  {
+    "file": "fr-sentence-second.wav",
+    "locale": "fr",
+    "voice": "Jacques",
+    "text": "Pouvez-vous m’aider ?",
+    "kind": "sentence"
+  },
+  {
+    "file": "de-short-second.wav",
+    "locale": "de",
+    "voice": "Eddy (ドイツ語（ドイツ）)",
+    "text": "Nein.",
+    "kind": "short"
+  },
+  {
+    "file": "de-sentence-second.wav",
+    "locale": "de",
+    "voice": "Eddy (ドイツ語（ドイツ）)",
+    "text": "Kannst du mir helfen?",
+    "kind": "sentence"
+  }
+]
