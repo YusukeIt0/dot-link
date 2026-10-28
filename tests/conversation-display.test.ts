@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { conversationText, delayedReply, receiptCaption, newReplyCaption, type DisplayMessage } from '../src/conversation-display.ts';
+import { conversationText, conversationHudText, delayedReply, receiptCaption, newReplyCaption, type DisplayMessage } from '../src/conversation-display.ts';
 import { setLanguage } from '../src/i18n.ts';
 const now = new Date(2026, 9, 12, 19, 10, 0).getTime();
 const message: DisplayMessage = {id:'speech',text:'Synthetic question',status:'accepted',createdAt:new Date(now).toISOString()};
+
+test('URL-only question answers have a G2 hint while original phone text stays unchanged', () => {
+  setLanguage('en');
+  try {
+    const linked = {...message, reply:'https://example.com'};
+    assert.equal(conversationHudText(linked,now), 'You: Synthetic question\n\nDot: [Link shown on phone]');
+    assert.equal(conversationText(linked,now), 'You: Synthetic question\n\nDot: https://example.com');
+    assert.equal(linked.reply,'https://example.com');
+    assert.equal(conversationHudText({...message,text:'See https://example.com',reply:'[Guide](https://example.org)'},now), 'You: See [Link shown on phone]\n\nDot: Guide [Link shown on phone]');
+  } finally {setLanguage('ja');}
+});
 
 test('receipt uses fixed local send time, changes only its state, and excludes incoming messages', () => {
   setLanguage('ja');

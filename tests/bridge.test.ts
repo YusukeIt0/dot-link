@@ -119,6 +119,58 @@ test('RPC limits tools to status, pending utterances and replies and never expos
 });
 
 
+test('linked delivery pairs the first answer and retains subsequent answers as ordered standalone pages', async t => {
+  const s = setup(); t.after(s.close);
+  await s.bridge.subscribe(subscription);
+  const id = randomUUID();
+  await s.bridge.submit({ id, text: 'Question' });
+  const first = {message_id:randomUUID(), utterance_id:id, text:'First answer'};
+  const second = {message_id:randomUUID(), utterance_id:id, text:'Follow-up'};
+  await s.bridge.sendMessage(first);
+  await s.bridge.sendMessage(second);
+  await s.bridge.sendMessage(first);
+  assert.equal(s.bridge.history()[0].reply, 'First answer');
+  assert.equal(s.bridge.pending().utterances.length, 0);
+  assert.deepEqual(s.bridge.outboundHistory().map(m => [m.utterance_id,m.reply]), [[id,'Follow-up']]);
+  await assert.rejects(s.bridge.reply({utterance_id:id,text:'Summary'}), /different reply/);
+  const restored = new Bridge(s.path, s.sender, s.hosts); t.after(() => restored.close());
+  await restored.sendMessage(first); await restored.sendMessage(second);
+  assert.equal(restored.outboundHistory().length, 1);
+  assert.equal(restored.history()[0].reply, 'First answer');
+  await assert.rejects(restored.sendMessage({...first,utterance_id:randomUUID()}), /conflicts/);
+  await assert.rejects(restored.sendMessage({...first,utterance_id:undefined}), /conflicts/);
+  await assert.rejects(restored.sendMessage({message_id:randomUUID(),utterance_id:randomUUID(),text:'Unknown question'}), /unavailable/);
+});
+
+test('linked follow-up keeps a reply delivered through reply_to_g2 and leaves other pending questions untouched', async t => {
+  const s = setup(); t.after(s.close);
+  await s.bridge.subscribe(subscription);
+  const first = randomUUID(), second = randomUUID();
+  await s.bridge.submit({id:first,text:'First question'});
+  await s.bridge.submit({id:second,text:'Second question'});
+  await s.bridge.reply({utterance_id:first,text:'Original answer'});
+  await s.bridge.sendMessage({message_id:randomUUID(),utterance_id:first,text:'More detail'});
+  await s.bridge.sendMessage({message_id:randomUUID(),text:'Independent message'});
+  assert.equal(s.bridge.history()[0].reply, 'Original answer');
+  assert.equal(s.bridge.history()[1].reply, undefined);
+  assert.deepEqual(s.bridge.outboundHistory().map(m => m.reply), ['More detail','Independent message']);
+});
+
+test('failed linked answer persistence leaves the question pending and retries without duplicate pages', async t => {
+  const s = setup(); t.after(s.close);
+  await s.bridge.subscribe(subscription);
+  const id = randomUUID(); await s.bridge.submit({id,text:'Question'});
+  const input = {message_id:randomUUID(),utterance_id:id,text:'Answer'};
+  mkdirSync(`${s.path}.tmp`);
+  await assert.rejects(s.bridge.sendMessage(input));
+  assert.equal(s.bridge.history()[0].reply, undefined);
+  assert.equal(s.bridge.outboundHistory().length, 0);
+  rmSync(`${s.path}.tmp`, {recursive:true});
+  await s.bridge.sendMessage(input);
+  assert.equal(s.bridge.history()[0].reply, 'Answer');
+  assert.equal(s.bridge.outboundHistory().length, 0);
+});
+
 test('Dot sends independent follow-ups without a pending utterance or subscription; retries persist once', async t => {
   const s = setup(); t.after(s.close);
   // Load an original version-1 file that has no outbound field.
