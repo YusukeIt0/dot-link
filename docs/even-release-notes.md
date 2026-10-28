@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.44
+
+- Clarified why Dot Link uses network, G2 microphone, location, camera and photo-library access.
+
 ## 0.3.43
 
 - Clarified how nearby map data is kept on your Mac when location sharing is enabled.
