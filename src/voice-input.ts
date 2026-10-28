@@ -1,7 +1,7 @@
 import { Recorder, type RecordingState } from './audio.ts';
 import { MicrophoneLease } from './microphone-lease.ts';
 import type { LoadWakeDetector, WakeDetector } from './wake-detector.ts';
-import type { WakeEvent } from './wake-engine.ts';
+import type { WakeEvent, SpeakerRole } from './wake-engine.ts';
 import { t } from './i18n.ts';
 import { validateWakeName } from './wake-name.ts';
 
@@ -138,13 +138,13 @@ export class VoiceInput {
     }
     await this.manual.stop(discard);
   }
-  append(pcm: Uint8Array): void {
+  append(pcm: Uint8Array, role: SpeakerRole = 'unknown'): void {
     if (this.disposed) return;
     this.manual.append(pcm);
     if (!this.detectorActive) return;
     if (this.now() - this.lastFrame > 5000) { this.fail(); return; }
     this.lastFrame = this.now();
-    this.detector?.append(pcm);
+    this.detector?.append(pcm, role);
   }
   async dispose(): Promise<void> {
     this.disposed = true; this.enabled = false; this.loadVersion++;

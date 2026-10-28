@@ -1060,7 +1060,7 @@ async function connect(): Promise<void> {
   appBridge.onEvenHubEvent(event => {
     exitDiagnostics.observe(event, exited);
     if (exited) return;
-    if (event.audioEvent && event.audioEvent.source !== AudioInputSource.Phone) recorder.append(event.audioEvent.audioPcm);
+    if (event.audioEvent && event.audioEvent.source !== AudioInputSource.Phone) recorder.append(event.audioEvent.audioPcm, event.audioEvent.speakerRole);
     const eventType = event.sysEvent?.eventType ?? event.textEvent?.eventType ?? event.listEvent?.eventType;
     if (eventType === OsEventTypeList.SYSTEM_EXIT_EVENT) exitDiagnostics.record('system-exit');
     if (eventType === OsEventTypeList.ABNORMAL_EXIT_EVENT) exitDiagnostics.record('abnormal-exit');

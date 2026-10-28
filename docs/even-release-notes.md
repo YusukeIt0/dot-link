@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Skip voice activation when Even identifies the whole wake phrase as another speaker.
+
 ## 0.3.47
 
 - Keep the first answer with its question and additional replies on later pages, including location-based answers, with Dot Link for Mac 0.4.24 or later.

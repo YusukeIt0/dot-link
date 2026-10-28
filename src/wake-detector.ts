@@ -1,4 +1,4 @@
-import type { WakeEvent } from './wake-engine.ts';
+import type { WakeEvent, SpeakerRole } from './wake-engine.ts';
 import { validateWakeName } from './wake-name.ts';
 
 export interface WakeDetector {
@@ -6,7 +6,7 @@ export interface WakeDetector {
   cancel(): void;
   hold(): void;
   finish(discard: boolean): void;
-  append(pcm: Uint8Array): void;
+  append(pcm: Uint8Array, role?: SpeakerRole): void;
   dispose(): void;
 }
 export type LoadWakeDetector = (event: (event: WakeEvent) => void, error: () => void, name?: string) => Promise<WakeDetector>;
@@ -29,12 +29,12 @@ export const loadWakeDetector: LoadWakeDetector = (event, error, name = 'dot') =
     cancel() { generation++; pendingBytes = 0; send('cancel'); },
     hold() { send('hold'); },
     finish(discard) { send('finish', { discard }); },
-    append(pcm) {
+    append(pcm, role = 'unknown') {
       if (disposed) return;
       // A suspended or overloaded worker must not build an unbounded audio queue.
       if (pcm.length % 2 || pcm.length > 32_000 || pendingBytes + pcm.length > 48_000) { fail(); return; }
       const copy = pcm.slice(); pendingBytes += copy.length;
-      worker.postMessage({ type: 'audio', generation, pcm: copy }, [copy.buffer]);
+      worker.postMessage({ type: 'audio', generation, pcm: copy, role }, [copy.buffer]);
     },
     dispose,
   };
