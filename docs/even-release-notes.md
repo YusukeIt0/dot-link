@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Fixed the waiting indicator remaining active when a location answer arrives after location sharing stops or expires.
+
 ## 0.3.44
 
 - Improved web links: hidden on glasses, skipped in read-aloud, and available to open on your phone.
