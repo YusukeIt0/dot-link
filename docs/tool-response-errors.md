@@ -18,13 +18,19 @@ not an inferred root cause.
 | --- | --- | --- |
 | Reply | `utterance_unknown` | The utterance is unavailable. Re-read pending utterances; do not substitute a proactive message for this reply. |
 | Reply | `reply_conflict` | A different reply already exists. Do not overwrite it; identical retries remain allowed. |
-| Proactive message | `message_id_conflict` | A retained ID already has different text. Do not change the ID merely to bypass this conflict. |
+| Outbound message | `message_id_conflict` | A retained ID already has different text or a different question reference. Do not change the ID merely to bypass this conflict. |
 | Notification announcement or disposition | `notification_unknown` | The notification is unavailable. Re-read pending notifications; do not invent a replacement ID. |
 | Notification announcement | `notification_silent` | The notification was marked silent. Do not bypass that decision by sending a proactive message. |
 | Notification announcement | `announcement_conflict` | A different announcement already exists. Do not overwrite it; identical retries remain allowed. |
 | Notification disposition | `notification_already_announced` | An announcement already exists. It cannot be changed to later or silent. |
 | All four | `invalid_arguments` | Correct the arguments for this operation using its schema. |
 | All four | `internal_error` | An unexpected failure occurred. The outcome is not confirmed; do not change identifiers or content to force a retry. |
+
+## Question-linked answers and follow-ups
+
+For a question response, `send_message_to_g2` accepts its explicit `utterance_id` together with the existing `message_id` and `text`. Include the question reference on both the first answer and each follow-up. The first delivery to an unanswered question is atomically stored as its reply, with its outbound ID retained for retry protection; it does not create a duplicate standalone page. Later deliveries appear as standalone follow-ups. `reply_to_g2` remains compatible for the first answer and rejects replacement text.
+
+Independent proactive messages omit the question reference and do not consume pending questions. Unknown references are rejected with `utterance_unknown`, rather than guessing from the latest question. Retried retained IDs must match both text and reference, even after the question leaves the 100-conversation history. New linked deliveries to an evicted question are rejected. The 1,000-record outbound retention bound is unchanged; after an ID is evicted, identical-retry protection for that ID ends. Old unlinked history is not re-associated. Tool descriptions guide the connected AI to supply the reference; they cannot infer a missing association from message contents.
 
 ## Ownership
 

@@ -14,6 +14,7 @@ import { TimingTracker } from './timing.ts';
 import { ConversationState, type ConversationMessage as Message } from './conversation-state.ts';
 import { conversationText, receiptCaption, newReplyCaption } from './conversation-display.ts';
 import { wrapHudText } from './hud-text.ts';
+import { renderMessageLinks, withoutMessageUrls } from './message-links.ts';
 import { LiveUpdates } from './live-updates.ts';
 import { Pairing } from './pairing.ts';
 import { InteractionStatus } from './interaction-status.ts';
@@ -374,8 +375,9 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   for (const message of update.announcements) {
     progress.complete(message.id);
     timing.mark(message.id, 'reply_received');
-    if (tts && 'speechSynthesis' in window) {
-      const speech = new SpeechSynthesisUtterance(message.reply); speech.lang = speechLocale();
+    const spokenText = withoutMessageUrls(message.reply ?? '');
+    if (tts && spokenText && 'speechSynthesis' in window) {
+      const speech = new SpeechSynthesisUtterance(spokenText); speech.lang = speechLocale();
       playback.speak(speech);
     }
   }
@@ -592,7 +594,7 @@ const playback = new SpeechPlayback({
 const g2Display = new G2Display({
   ready: () => !!bridge && glassesReady,
   hidden: () => standby?.hidden ?? false,
-  frame: () => ({status: hudCaption(), conversation: wrapHudText(lastDisplayText),
+  frame: () => ({status: hudCaption(), conversation: wrapHudText(withoutMessageUrls(lastDisplayText)),
     help: recordingHint(), speech: speechDisplayCaption(), receipt: currentReceipt(), newReplies: currentNewReplies()}),
   writer: () => {
     const activeBridge = bridge!;
@@ -654,7 +656,7 @@ function refreshStatus(sendToG2 = true): void {
   baseStatus = renderBaseStatus();
   const nextText = renderDisplayText();
   if (nextText !== lastDisplayText) {
-    lastDisplayText = nextText; el('hud-content').textContent = nextText;
+    lastDisplayText = nextText; renderMessageLinks(el('hud-content'), nextText);
     if (sendToG2) queueDisplayFrame();
   }
   const caption = hudCaption();
@@ -676,7 +678,7 @@ function display(state: string | (() => string), text: string | (() => string), 
   if (trace && !timing.report(trace)) trace = undefined;
   refreshStatus(false);
   lastDisplayText = renderDisplayText();
-  el('hud-content').textContent = lastDisplayText;
+  renderMessageLinks(el('hud-content'), lastDisplayText);
   queueDisplayFrame(trace);
 }
 
@@ -703,7 +705,7 @@ function applyLanguage(): void {
   if (!namedHost) hostName = t('even.relay');
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('even.dot_connected') : t('even.dot_disconnected')) : progress.connection === 'unpaired' ? t('even.pair_with_your_mac') : t('even.reconnecting')}`;
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
-  el('hud-content').textContent = lastDisplayText;
+  renderMessageLinks(el('hud-content'), lastDisplayText);
   g2Display.invalidate();
   refreshStatus(false); queueDisplayFrame();
 }

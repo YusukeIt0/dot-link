@@ -4,6 +4,8 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 ## 0.3.44
 
+- Keep the first answer with its question and show follow-ups on subsequent pages when sent with the question reference.
+- Hide web URLs on glasses and skip them in read-aloud, while keeping them available as links on your phone.
 - Clarified why Dot Link uses network, G2 microphone, location, camera and photo-library access.
 
 ## 0.3.43
