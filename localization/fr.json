@@ -557,5 +557,6 @@
   "even.photos_waiting_for_dot": "Stockage photo plein. Réessayez plus tard.",
   "even.photos_expired_resend": "Photos expirées. Renvoyez-les.",
   "even.photo_already_added": "Cette photo est déjà jointe.",
-  "even.photos_ready": "Photos jointes."
+  "even.photos_ready": "Photos jointes.",
+  "even.link_on_phone": "[Lien affiché sur le téléphone]"
 }

@@ -557,5 +557,6 @@
   "even.photos_waiting_for_dot": "照片暂存空间已满，请稍后重试。",
   "even.photos_expired_resend": "照片已过期，请重新发送。",
   "even.photo_already_added": "已添加这张照片。",
-  "even.photos_ready": "已添加照片。"
+  "even.photos_ready": "已添加照片。",
+  "even.link_on_phone": "[链接显示在手机上]"
 }

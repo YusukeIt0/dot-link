@@ -2,8 +2,19 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.46
+
+- Fixed the waiting indicator remaining active when a location answer arrives after location sharing stops or expires.
+
+## 0.3.45
+
+- Web addresses remain visible as plain text on your phone, so tapping them no longer leaves the conversation.
+- Glasses show a localized placeholder where a web address appears. Read-aloud skips both web addresses and placeholders.
+
 ## 0.3.44
 
+- Improved web links: hidden on glasses, skipped in read-aloud, and available to open on your phone.
+- Added a short phone-link hint on glasses for replies containing only a web URL.
 - Clarified why Dot Link uses network, G2 microphone, location, camera and photo-library access.
 
 ## 0.3.43

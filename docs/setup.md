@@ -44,6 +44,8 @@ The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; th
 
 ## Conversation and display
 
+The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.
+
 Hold to record on G2 and release to stop, or tap the microphone in the Even companion. Tap the same button again to stop and transcribe; the adjacent trash button discards recording or transcription without sending. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to edit the text before sending with the up arrow. Use the left/right arrows to browse conversation history and the speaker button to turn read aloud on or off. **Display settings** controls idle timeout, wake gestures and head-raise behavior.
 
 The companion's Mac connection section contains setup instructions, a copyable download URL, pairing-code entry and **Revoke this device**. If copying is unavailable, enter the displayed URL in your Mac browser. Older public companions may show these controls separately. Revoke stops this device immediately. If the Mac is unreachable, Dot Link saves the removal request and retries while running or when reopened. The existing connection section shows whether Mac removal is still pending. If saving fails, keep the app open; reopening may restore the connection. You can also remove connections from the Mac. Update both the Mac and Even companion to use persistent disconnect and cross-origin retry.
@@ -63,6 +65,8 @@ Speech input requires Even 0.2.14 or later. Provider labels and detailed errors 
 Local Whisper is free and runs on your Mac. External recordings go directly from the Mac to the selected service, under your account's charges and limits. Changes apply to the next recording; there is no automatic fallback. Saving a key does not test provider access—try a recording. Typed messages do not use speech recognition.
 
 Keys are stored separately in macOS Keychain. Choose **Always Allow** when prompted; an app update may require permission again. To replace a key, delete it and save the new one. Deleting the active service key switches speech input back to Whisper.
+
+Web addresses remain visible as plain text in the phone conversation and do not open when tapped. On the glasses, each address is replaced by a short localized placeholder indicating that the link is shown on the phone. Read-aloud skips both web addresses and these placeholders.
 
 For **read-aloud**, use the switch in the Even companion. It starts OFF on first use and remembers your ON/OFF choice when you reopen the app. Selecting a different interface language turns read-aloud OFF; turn it on again when you want to listen. Reopening does not replay earlier replies. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
 
@@ -89,6 +93,8 @@ Sharing starts off. Turning it off stops new sharing and clears the relay's curr
 Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. Starting a manual update interrupts the active conversation while the Mac app restarts. If the app says **Finish the current settings operation, then click Retry update**, finish that operation and choose **Retry update**.
 
 Updates preserve connection settings, pairing and history. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
+
+When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your Dot Link connection → Update tools**. If your existing Dot still uses the previous tools, finish any active work and choose **Restart** from that Dot's action menu. In the conversation-ordering update, updating the registered tools alone did not refresh an already-running Dot; restarting it made the new question-reference inputs available. Keep the existing Dot and connection. This step concerns tool-definition changes, not every app update.
 
 ## Troubleshooting
 

@@ -1,6 +1,7 @@
 /** Fixed, non-sensitive response vocabulary; safe for future opt-in diagnostics. */
 const messages = {
-  invalid_arguments: 'Invalid location response arguments; use a UUID context_id and silent or announce. Omit text for silent; announce requires non-empty text.',
+  invalid_arguments: 'Invalid location response arguments; use a UUID context_id and silent or announce. Omit text and utterance_id for silent; announce requires non-empty text. A question reference must be a UUID.',
+  utterance_unknown: 'The question is unavailable; re-read pending utterances. Do not omit the question reference or substitute an independent announcement to bypass this rejection.',
   text_not_allowed_for_silent: 'Silent decisions must omit text; retry without text.',
   text_required_for_announcement: 'Announcements require non-empty text.',
   sharing_inactive: 'Location sharing is inactive; wait until sharing resumes before reading context again.',

@@ -39,6 +39,8 @@ async function launch(options = {}) {
   const clock = {now: () => now, schedule, cancel: id => timers.delete(id)};
   const element = id => {
     if (!elements.has(id)) elements.set(id, {textContent: '', value: '', dataset: {}, checked: false, disabled: false,
+      get ownerDocument() { return {createTextNode: text => ({textContent:text}), createElement: tag => element(`created-${tag}-${elements.size}`)}; },
+      replaceChildren(...items) { this.children = items; this.textContent = items.map(item => item.textContent).join(''); },
       before() {}, after() {}, children: [], append(...items) { this.children.push(...items); }, querySelectorAll() { return this.children.flatMap(item => item.children ?? []).filter(item => item.type === 'button'); }, attributes: new Map(),
       setAttribute(name, value) { this.attributes.set(name, String(value)); },
       getAttribute(name) { return this.attributes.get(name) ?? null; },
@@ -569,6 +571,30 @@ test('both read-aloud paths use the locale and preserve reply text', async t => 
     assert.equal(speech.length, 2);
     assert.equal(speech[0][2], locale);
     assert.deepEqual(speech[1], ['speech', reply.reply, locale]);
+    await app.close();
+  }
+});
+
+test('URLs remain plain text on the phone and absent from G2 and speech in every locale', async t => {
+  for (const language of Object.keys(localeMetadata)) {
+    const app = await launch({language, speak: speech => speech.onend()});
+    t.after(app.close);
+    await app.element('tts').click(); await flush();
+    const reply = {...proactive('linked'), reply: 'Source [Guide](https://example.com/guide) https://example.org'};
+    await app.deliver(app.snapshot([reply]));
+    assert.equal(app.element('hud-content').textContent, reply.reply);
+    assert.deepEqual(app.element('hud-content').children.filter(node => node.href), []);
+    assert.equal(app.physical.get(2).replace(/\s/g, ''), `Source Guide ${catalogs[language]['even.link_on_phone']} ${catalogs[language]['even.link_on_phone']}`.replace(/\s/g, ''));
+    assert.doesNotMatch(app.physical.get(2), /https?:|example\./);
+    assert.equal(app.calls.filter(call => call[0] === 'speech').at(-1)[1], 'Source Guide');
+    const speechCount = app.calls.filter(call => call[0] === 'speech').length;
+    await app.deliver(app.snapshot([reply, {...proactive('url-only'), reply: 'https://example.net'}]));
+    assert.equal(app.calls.filter(call => call[0] === 'speech').length, speechCount);
+    await app.element('next').click(); await flush();
+    assert.equal(app.physical.get(2), catalogs[language]['even.link_on_phone']);
+    assert.equal(app.element('hud-content').textContent, 'https://example.net');
+    await app.deliver(app.snapshot([reply]));
+    assert.equal(app.calls.filter(call => call[0] === 'speech').length, speechCount);
     await app.close();
   }
 });
@@ -1380,4 +1406,32 @@ test('photo expiry ends the waiting caption live and after reopening',async t=>{
  const reopened=await launch({language:'en',initialMessages:[expired]});t.after(reopened.close);
  assert.notEqual(vm.runInContext('progress.phase',reopened.context),'waiting');
  assert.doesNotMatch(reopened.physical.get(1),/Waiting/);
+});
+
+test('a suppressed location answer completes its question without speech or wake', async t => {
+ for (const reason of ['sharing-off', 'expired']) {
+  const app=await launch({language:'en',typedInput:true});t.after(app.close);
+  await app.element('tts').click();await flush();
+  assert.equal(app.element('tts').getAttribute('aria-pressed'),'true');
+  app.element('location-share').checked=true;app.element('location-share').onchange();await flush();
+  const control=app.calls.find(c=>c[0]==='location-api'&&c[2].enabled===true);
+  app.element('transcript').value='Synthetic location question';app.element('transcript').oninput();
+  await app.element('send').click();await flush();
+  const question=vm.runInContext('JSON.parse(JSON.stringify(conversation.selected))',app.context);
+  if(reason==='sharing-off') {
+   app.element('location-share').checked=false;app.element('location-share').onchange();await flush();
+  }
+  await app.advance(90_000);
+  assert.equal(app.hidden(),true);
+  assert.equal(vm.runInContext('progress.phase',app.context),'waiting');
+  const reply={...question,reply:'Synthetic location answer',status:'replied',repliedAt:new Date(app.now()).toISOString(),
+   location_sharing_id:control[2].sharing_id,
+   location_expires_at:new Date(reason==='expired'?app.now()-1:app.now()+90_000).toISOString()};
+  const speechBefore=app.calls.filter(c=>c[0]==='speech').length;
+  await app.deliver(app.snapshot([reply]));
+  assert.equal(vm.runInContext('progress.phase',app.context),'idle',reason);
+  assert.equal(app.hidden(),true,reason);
+  assert.equal(app.calls.filter(c=>c[0]==='speech').length,speechBefore,reason);
+  assert.equal(vm.runInContext('conversation.selected.reply',app.context),'Synthetic location answer');
+ }
 });

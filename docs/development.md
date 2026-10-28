@@ -25,6 +25,27 @@ Even app. It is not the Mac app release/build number. For Mac update or support
 identification, use the Mac app's version and build; a Mac-only release can retain
 the same MCP package version.
 
+### Verify tool-definition updates in the active consumer
+
+For a tool-schema change, compare the running relay's authenticated `tools/list`,
+ChatGPT's registered app details, and the definitions available to the existing
+Dot that actually answers device events. A successful refresh or a new test chat
+does not prove that an already-running Dot has adopted the new schema.
+
+During conversation-ordering acceptance, the relay and registered app exposed
+`utterance_id` on both `send_message_to_g2` and `respond_to_location`, while the
+existing Dot retained the old definitions even after an explicit plugin mention.
+After the maintainer restarted that Dot, it exposed the new fields and a new
+location answer was stored with its question. Treat this as an observed update
+requirement, not a guarantee about every host version. Follow the user guide's
+update steps before repeating affected physical acceptance.
+
+Verify actual stored question references as well as the rendered pages. Keep
+first answers, linked follow-ups and independent proactive messages distinct.
+Do not infer an association from timing, rewrite old history, or count a
+per-user instruction to the AI as product acceptance. Keep private conversation
+text, locations, credentials and identifiers out of public evidence.
+
 ### Location response errors
 
 `respond_to_location` returns a fixed, non-sensitive `error.data.reason` with a
@@ -86,6 +107,12 @@ node scripts/build-mac-app.mjs
 ```
 
 Output: `.runtime/mac-app/Dot Link.app`. Runtime downloads and Sparkle are pinned by version and SHA-256. No speech model, account credential, pairing, or conversation data is included. The speech model downloads during initial setup.
+
+### Validation builds and conversation-state rollback
+
+Before running a validation relay against an existing installation, stop its owned services and make an owner-only local backup of the installed app plus `.runtime/bridge-state.json` and its `.runtime/bridge-state.json.photos` directory. Use the configured installation directory (normally `~/Library/Application Support/Dot Link`), not an unrelated checkout. Verify the backup against the originals before starting the test. These files contain private conversations and may contain credentials; never upload them or include them in a build.
+
+Question-linked outbound records add `utterance_id` and `initial_reply` fields. Older relay versions reject these fields, so replacing only the app is not a supported downgrade after linked messages have been stored. To return to the previous version, stop the relay, preserve the post-test state separately, and restore the verified app and matching pre-test state/photo backup together before restarting. The restored history ends at the backup time; messages accepted during testing are retained only in the separate post-test copy. Do not delete the state file to force startup, and do not replay pending messages to recover history. If the backup is absent, retain the newer compatible relay until a reviewed migration is available.
 
 The app uses one public update feed at `https://raw.githubusercontent.com/YusukeIt0/dot-link/main/updates/mac/appcast.xml`. Release ZIPs are downloaded from this repository's public GitHub Releases. Users need no GitHub account, token, or development-channel setting.
 

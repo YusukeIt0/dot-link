@@ -26,12 +26,14 @@ const utteranceSchema = z.object({
   id: z.string().uuid(), text: z.string(), createdAt: z.string(),
   status: z.enum(['pending', 'accepted', 'failed', 'replied']),
   reply: z.string().optional(), repliedAt: z.string().optional(), readAt: z.string().optional(),
+  location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional(),
   photos: photosSchema.optional(), photosExpired: z.boolean().optional(), photoDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PHOTOS).optional(),
 });
 const outboundInput = z.object({
   message_id: z.string().uuid(), text: z.string().trim().min(1).max(8000),
+  utterance_id: z.string().uuid().optional(),
 }).strict();
-const outboundRecord = outboundInput.extend({ createdAt: z.string(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
+const outboundRecord = outboundInput.extend({ createdAt: z.string(), initial_reply: z.boolean().optional(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
 const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(OUTBOUND_LIMIT).default([]) });
 type State = z.infer<typeof stateSchema>;
 type Subscription = z.infer<typeof subscriptionSchema>;
@@ -45,14 +47,14 @@ export const eventDefinition = {
   }, required: ['session_id', 'utterance_id', 'text'], additionalProperties: false },
 };
 export const replyTool = {
-  name: 'reply_to_g2', description: 'Deliver a reply to an existing utterance on the owner’s paired Even G2. Use its utterance_id; identical retries do not duplicate replies. On rejection, follow error.data.reason and the message; do not overwrite an existing reply or substitute a proactive message for an unavailable utterance. Receipt confirms bridge storage, not physical display.',
+  name: 'reply_to_g2', description: 'Deliver the FIRST answer to an existing utterance on the owner’s paired Even G2, paired with the question. Use its utterance_id; identical retries do not duplicate replies. For a later follow-up, use send_message_to_g2 with the SAME utterance_id and a fresh message_id. Do not send an answer as an unrelated proactive message and use this tool only for its summary. On rejection, follow error.data.reason; do not overwrite a reply or substitute a proactive message for an unavailable utterance. Receipt confirms storage, not physical display.',
   inputSchema: { type: 'object', properties: { utterance_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['utterance_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const sendMessageTool = {
   name: 'send_message_to_g2',
-  description: 'Send a NEW proactive message or follow-up to the owner’s G2 at any time, without an utterance ID or event subscription. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that same ID and identical text on retry. Duplicate and conflicting-ID checks cover only the latest 1,000 accepted outbound messages; an evicted ID can be accepted again as new. This sends now, not at a scheduled time. Receipt confirms storage for G2, not physical display. Do not overwrite an earlier reply_to_g2 response. On rejection, follow error.data.reason and the message; do not change the ID to bypass a conflict.',
-  inputSchema: { type: 'object', properties: { message_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['message_id', 'text'], additionalProperties: false },
+  description: 'Send a message to the owner’s G2 now. For an answer or follow-up to a question, ALWAYS include its utterance_id from get_pending_utterances or utterance.created: the first answer is paired with that question and later messages appear on subsequent pages. Do not send the first answer as an unrelated proactive message, then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive message. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that ID, text and utterance_id on retry. Duplicate checks cover the latest 1,000 accepted outbound messages; an evicted ID can be accepted again. Receipt confirms storage, not physical display. On rejection, follow error.data.reason; do not change the ID or omit utterance_id to bypass a conflict.',
+  inputSchema: { type: 'object', properties: { message_id: { type: 'string', format: 'uuid' }, utterance_id: { type: 'string', format: 'uuid', description: 'Required for an answer or follow-up to a question; omit only for independent proactive messages.' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['message_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const statusTool = {
@@ -201,9 +203,10 @@ export class Bridge {
   }
 
   outboundHistory() {
-    return this.state.outbound.map(m => ({
+    return this.state.outbound.filter(m => !m.initial_reply).map(m => ({
       id: `dot:${m.message_id}`, kind: 'proactive' as const, text: '', reply: m.text,
       status: 'replied', createdAt: m.createdAt,
+      ...(m.utterance_id ? {utterance_id: m.utterance_id} : {}),
       ...(m.location_sharing_id ? {location_sharing_id: m.location_sharing_id, location_expires_at: m.location_expires_at} : {}),
     }));
   }
@@ -214,12 +217,23 @@ export class Bridge {
       if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
       const p = parsed.data;
       const existing = this.state.outbound.find(m => m.message_id === p.message_id);
-      if (existing && existing.text !== p.text) throw new BridgeResponseError('message_id_conflict');
+      if (existing && (existing.text !== p.text || existing.utterance_id !== p.utterance_id)) throw new BridgeResponseError('message_id_conflict');
       if (!existing) {
+        const question = p.utterance_id ? this.state.messages.find(item => item.id === p.utterance_id) : undefined;
+        if (p.utterance_id && !question) throw new BridgeResponseError('utterance_unknown');
+        const initialReply = !!question && question.reply === undefined;
+        const at = new Date().toISOString();
+        let messages = this.state.messages;
+        if (initialReply) {
+          const { photos: _photos, ...retained } = question!;
+          messages = messages.map(item => item === question ? { ...retained, reply: p.text, repliedAt: at, status: 'replied' as const,
+            ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) } : item);
+        }
         // Rotate in acceptance order. Retried retained IDs never refresh that order.
-        // Publish the replacement only after persistence succeeds.
-        const outbound = [...this.state.outbound, { ...p, createdAt: new Date().toISOString(), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) }].slice(-OUTBOUND_LIMIT);
-        this.save({ ...this.state, outbound });
+        // Persist first-answer pairing and its retry identity in one transaction.
+        const outbound = [...this.state.outbound, { ...p, createdAt: at, ...(initialReply ? {initial_reply: true} : {}), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) }].slice(-OUTBOUND_LIMIT);
+        this.save({ ...this.state, messages, outbound });
+        if (initialReply) this.latency.mark(p.utterance_id!, 'reply_stored');
       }
       return { message_id: p.message_id, stored_for_g2: true, physical_display_confirmed: false };
     });
