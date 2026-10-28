@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { discoverInstallation, installPayload, exists, nextSetupStep } from './lib/mac-install.mjs';
 import { installMenuApp, registerMenuApp } from './lib/menu-install.mjs';
-import { prepareUpdate, finishUpdate } from './lib/app-update.mjs';
+import { prepareUpdate, finishUpdate, initialSetupReady } from './lib/app-update.mjs';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
 import { pairingStatus } from './lib/pairing-status.mjs';
@@ -117,7 +117,19 @@ try {
     result = await prepareUpdate(found.directory, {interrupt:action==='update-prepare-manual',...(process.argv[3]!==undefined?{hostPID:Number(process.argv[3])}:{})});
   }
   else if (action === 'update-adopt') { const found = await discoverInstallation(); await prepareUpdate(found.directory, {bootstrap:true}); await finishUpdate(found.directory); result = await inspect(); }
-  else if (action === 'update-recover') { const found = await discoverInstallation(); const updateRecovery = await finishUpdate(found.directory,{backgroundCleanup:true}); result = {...await inspect(),updateRecovery}; }
+  else if (action === 'update-recover') {
+    const found = await discoverInstallation();
+    const updateRecovery = await finishUpdate(found.directory,{backgroundCleanup:true});
+    result = await inspect();
+    // A previous helper may have finished before its result reached the GUI.
+    // Reuse the strict no-services/no-prior-runtime proof for initial setup;
+    // missing service files alone must never qualify as successful recovery.
+    if (!updateRecovery.recovered && result.installed && !result.servicesConfigured) {
+      try { updateRecovery.initialSetupReady = await initialSetupReady(found.directory,{home:homedir(),execute:run,app:appBundle}); }
+      catch { updateRecovery.initialSetupReady = false; }
+    }
+    result.updateRecovery = updateRecovery;
+  }
   else if (action === 'update-abort') { const found = await discoverInstallation(); result = await finishUpdate(found.directory, {rollback:true}); }
   else if (action === 'inspect') result = await inspect();
   else if (action === 'stt-select') {

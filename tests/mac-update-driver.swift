@@ -300,9 +300,9 @@ precondition(AppUpdater.recoveredStateIsReady(["installed": true, "bridge": true
 precondition(AppUpdater.recoveredStateIsReady(["installed": true, "lifecycleStopped": true]))
 print("PASS: completion requires the actual running or paused installation")
 
-precondition(AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": true, "initialSetup": true]]))
+precondition(AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": true, "stopped": false]]))
 precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "servicesConfigured": false]))
-precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetup": true]]))
+precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false]]))
 progressDefaults.set(["target": "102", "at": Date().timeIntervalSince1970], forKey: "DotLinkManualUpdateProgress")
 let expiredRetry = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: progressDefaults)
 expiredRetry.beginStartupRecovery()
@@ -311,3 +311,10 @@ expiredRetry.beginStartupRecovery(now: Date().addingTimeInterval(90000))
 precondition(!expiredRetry.working && expiredRetry.checkTitle == "Check for updates")
 precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") == nil)
 print("PASS: verified unconfigured setup completes; missing services alone do not; expiry during retry releases the startup state")
+
+precondition(AppUpdater.recoveredStateIsReady(["installed": true, "bridge": false, "device": false, "tunnel": false, "updateRecovery": ["recovered": true, "stopped": false]]))
+print("PASS: a verified recovery is not overwritten by a later transient health probe")
+
+precondition(AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetupReady": true]]))
+precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetupReady": false]]))
+print("PASS: strict initial-setup proof also supports retry after a lost recovery result")

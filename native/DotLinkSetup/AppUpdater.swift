@@ -4,8 +4,9 @@ import Sparkle
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     static func recoveredStateIsReady(_ state: [String: Any]) -> Bool {
         let recovery = state["updateRecovery"] as? [String: Any] ?? [:]
-        let initialSetupRestored = recovery["recovered"] as? Bool == true && recovery["initialSetup"] as? Bool == true
-        return state["installed"] as? Bool == true && (initialSetupRestored || state["lifecycleStopped"] as? Bool == true ||
+        // finishUpdate already verifies running, paused and initial-setup recovery.
+        // Do not replace that evidence with a single later network probe.
+        return state["installed"] as? Bool == true && (recovery["recovered"] as? Bool == true || recovery["initialSetupReady"] as? Bool == true || state["lifecycleStopped"] as? Bool == true ||
             ["bridge", "device", "tunnel"].allSatisfy { state[$0] as? Bool == true })
     }
     static func preparationResult(_ result: [String: Any]) -> String {
