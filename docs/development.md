@@ -48,26 +48,10 @@ text, locations, credentials and identifiers out of public evidence.
 
 ### Location response errors
 
-`respond_to_location` returns a fixed, non-sensitive `error.data.reason` with a
-short English protocol message. These are tool responses for the connected AI,
-not application UI strings. Expected rejections retain JSON-RPC code `-32602`;
-unexpected internal failures use `-32603`. Successful responses are unchanged.
-
-See the [canonical location-response reason table](tool-response-errors.md) for
-all reasons, argument constraints and recovery actions. Keep that table as the
-single reference when adding question-reference or location-response errors.
-
-Validation keeps the 90-second measurement/lease limits, 100-metre distance
-guard, consent checks and retained-decision idempotency. Announcements recheck
-the same conditions immediately before bridge storage. A reason identifies the
-rejecting condition, not necessarily its underlying cause; when several
-conditions fail, one reason is returned. It cannot reconstruct earlier failures.
-
-The vocabulary is defined in `server/location-response-error.ts` so future
-opt-in Debug mode can reuse it. Returning an error to the caller does not enable
-diagnostic collection, persistence or automatic delivery to the developer. No
-coordinates, context IDs, submitted text, callback URLs, secrets or raw
-exceptions are added to the reason or message.
+See the [location response contract](tool-response-errors.md#location-response-contract)
+for the complete `respond_to_location` reason list, argument constraints,
+validation order, consent/freshness guards, retry semantics and privacy boundary.
+Maintain those details there rather than duplicating an error table in this guide.
 
 For the standalone introduction page, see [page maintenance and deployment](introduction-page.md).
 

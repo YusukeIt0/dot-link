@@ -4,8 +4,8 @@
 
 This contract covers `reply_to_g2`, `send_message_to_g2`,
 `announce_notification_to_g2` and `set_notification_disposition`. Implementation
-is tracked under #198, with integration and delivery tracked by #197. It follows
-the existing `respond_to_location` reason envelope. Question-linked location answers additionally report `utterance_unknown` when their question is unavailable.
+is tracked under #198, with integration and delivery tracked by #197. The separate
+[`respond_to_location` contract](#location-response-contract) is documented below.
 
 Expected rejections use JSON-RPC `error.code: -32602` and a fixed
 `error.data.reason`. Unexpected failures use `-32603` with `internal_error`.
@@ -32,7 +32,62 @@ For a question response, `send_message_to_g2` accepts its explicit `utterance_id
 
 Independent proactive messages omit the question reference and do not consume pending questions. Unknown references are rejected with `utterance_unknown`, rather than guessing from the latest question. Retried retained IDs must match both text and reference, even after the question leaves the 100-conversation history. New linked deliveries to an evicted question are rejected. The 1,000-record outbound retention bound is unchanged; after an ID is evicted, identical-retry protection for that ID ends. Old unlinked history is not re-associated. Tool descriptions guide the connected AI to supply the reference; they cannot infer a missing association from message contents.
 
-Location-based question answers use `respond_to_location` with both `context_id` and `utterance_id`. They use the same atomic first-answer pairing and follow-up behavior while retaining location consent and freshness checks. The saved reply retains its sharing identity and expiry for phone announcement gating. Silent decisions omit the question reference. Retry identity includes the question reference; changing or removing it is a `conflicting_decision`. Independent location announcements still omit it.
+Location-based question answers use the [location response contract](#location-response-contract) below.
+
+## Location response contract
+
+`respond_to_location` accepts a UUID `context_id`, a `silent` or `announce`
+disposition, and optional `text` and UUID `utterance_id`. Announcements require
+text trimmed to 1–2,000 characters. Silent decisions omit both text and the
+question reference. Extra keys and null values are invalid.
+
+For a location-based answer, include the originating question's `utterance_id`
+on the first answer and each follow-up. First answers are stored atomically
+with their question; later answers remain follow-up pages. Independent location
+announcements omit the question reference. The stored answer retains its sharing
+identity and expiry so the phone can suppress display and speech after sharing
+stops or the measurement expires.
+
+This is the complete location-response reason list. Expected rejections use
+JSON-RPC `-32602`; unexpected failures use `-32603` and `internal_error`. Messages
+are fixed English protocol guidance for the connected AI, not localized UI.
+The vocabulary is owned by `server/location-response-error.ts`; validation and
+bridge-error translation are owned by `server/location.ts`, with the safe RPC
+envelope in `server/http.ts`.
+
+| Reason | Condition and next action |
+| --- | --- |
+| `invalid_arguments` | Arguments fail the schema, or a silent decision includes `utterance_id`. Use UUID identifiers and a valid disposition; omit both `text` and `utterance_id` for silent. An announcement requires text trimmed to 1–2,000 characters. Empty/whitespace-only, null, wrongly typed or excessive text and extra keys fail the schema. |
+| `text_not_allowed_for_silent` | A silent decision includes otherwise valid non-empty text. Omit text (and any question reference). Invalid text is rejected by schema validation first. |
+| `text_required_for_announcement` | An announcement omits text. Supply non-empty text; invalid supplied text instead produces `invalid_arguments`. |
+| `utterance_unknown` | The referenced question is unavailable to the relay. Re-read pending utterances. Do not drop the reference or substitute an independent announcement to bypass the rejection. |
+| `sharing_inactive` | Sharing is stopped, its lease expired, or the pairing owner is no longer authorized. Wait until the user resumes sharing before reading context again. |
+| `context_unknown` | The read context is unavailable or evicted, there is no latest measurement, or the sharing session changed before storage. Read a current context and reconsider the answer. |
+| `context_expired` | The read measurement or latest measurement is stale. Read again when fresh data is available. |
+| `moved_too_far` | The read and latest positions differ by more than 100 metres. Read again and reconsider. This does not distinguish movement from measurement noise. |
+| `conflicting_decision` | A retained decision for this context has different disposition, trimmed text or question reference (including a removed reference), or the relay rejects the context-derived outbound ID as `message_id_conflict`. Do not overwrite the decision or change identifiers to bypass the conflict. Identical retained retries remain idempotent. |
+| `internal_error` | An unexpected execution or callback failure occurred. The outcome is unconfirmed; do not assume delivery or change identifiers/content to force a retry. Raw exception details are not returned. |
+
+Schema validation precedes the semantic checks in the table. If several
+conditions fail, one reason is returned; it does not reconstruct earlier failures
+or establish an underlying cause. The sharing lease and measurement freshness
+limits are 90 seconds, and the distance guard is 100 metres. Announcements
+recheck consent, context identity, freshness and distance immediately before
+bridge storage.
+
+A retained identical decision returns its original result before context
+revalidation; this acknowledges the earlier decision rather than sending again.
+Retry identity includes disposition, trimmed text and question reference. The
+bridge rejects an unknown question before consuming the decision and translates
+`utterance_unknown` to the location reason of the same name. Its outbound ID
+conflict becomes `conflicting_decision`; other unexpected callback errors become
+`internal_error`. Failed bridge persistence does not consume the question or
+location decision, so an identical retry can succeed after recovery.
+
+Returning an error does not enable diagnostic collection, persistence or delivery
+to a developer. Reasons and messages include no submitted text, coordinates,
+context/question IDs, callback URLs, secrets or raw exceptions. Acknowledged
+storage is not proof of physical display or speech.
 
 ## Ownership
 
@@ -46,7 +101,7 @@ Location-based question answers use `respond_to_location` with both `context_id`
 - `http.ts` selects an enabled tool before invoking that adapter. Missing or
   invalid arguments reach the selected feature's argument check. Routing reasons
   are defined below. Metadata in the call envelope remains supported.
-- `respond_to_location` translates a bridge `utterance_unknown` into its fixed location reason of the same name and `message_id_conflict` into `conflicting_decision`. Other unexpected callback failures remain a location `internal_error`; raw bridge errors are never exposed.
+- Location validation and translation follow the separate [location response contract](#location-response-contract); downstream conversation errors do not escape unchanged.
 - No catch-all classification of Zod errors: only an operation's own failed
   argument parse is `invalid_arguments`. An execution-time validation failure
   is an internal failure.
