@@ -26,6 +26,7 @@ const utteranceSchema = z.object({
   id: z.string().uuid(), text: z.string(), createdAt: z.string(),
   status: z.enum(['pending', 'accepted', 'failed', 'replied']),
   reply: z.string().optional(), repliedAt: z.string().optional(), readAt: z.string().optional(),
+  location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional(),
   photos: photosSchema.optional(), photosExpired: z.boolean().optional(), photoDigests: z.array(z.string().regex(/^[a-f0-9]{64}$/)).max(MAX_PHOTOS).optional(),
 });
 const outboundInput = z.object({
@@ -218,7 +219,6 @@ export class Bridge {
       const existing = this.state.outbound.find(m => m.message_id === p.message_id);
       if (existing && (existing.text !== p.text || existing.utterance_id !== p.utterance_id)) throw new BridgeResponseError('message_id_conflict');
       if (!existing) {
-        if (location && p.utterance_id) throw new BridgeResponseError('invalid_arguments');
         const question = p.utterance_id ? this.state.messages.find(item => item.id === p.utterance_id) : undefined;
         if (p.utterance_id && !question) throw new BridgeResponseError('utterance_unknown');
         const initialReply = !!question && question.reply === undefined;
@@ -226,7 +226,8 @@ export class Bridge {
         let messages = this.state.messages;
         if (initialReply) {
           const { photos: _photos, ...retained } = question!;
-          messages = messages.map(item => item === question ? { ...retained, reply: p.text, repliedAt: at, status: 'replied' as const } : item);
+          messages = messages.map(item => item === question ? { ...retained, reply: p.text, repliedAt: at, status: 'replied' as const,
+            ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) } : item);
         }
         // Rotate in acceptance order. Retried retained IDs never refresh that order.
         // Persist first-answer pairing and its retry identity in one transaction.

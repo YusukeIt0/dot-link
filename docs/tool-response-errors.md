@@ -5,7 +5,7 @@
 This contract covers `reply_to_g2`, `send_message_to_g2`,
 `announce_notification_to_g2` and `set_notification_disposition`. Implementation
 is tracked under #198, with integration and delivery tracked by #197. It follows
-the existing `respond_to_location` reason envelope without changing its reasons.
+the existing `respond_to_location` reason envelope. Question-linked location answers additionally report `utterance_unknown` when their question is unavailable.
 
 Expected rejections use JSON-RPC `error.code: -32602` and a fixed
 `error.data.reason`. Unexpected failures use `-32603` with `internal_error`.
@@ -32,6 +32,8 @@ For a question response, `send_message_to_g2` accepts its explicit `utterance_id
 
 Independent proactive messages omit the question reference and do not consume pending questions. Unknown references are rejected with `utterance_unknown`, rather than guessing from the latest question. Retried retained IDs must match both text and reference, even after the question leaves the 100-conversation history. New linked deliveries to an evicted question are rejected. The 1,000-record outbound retention bound is unchanged; after an ID is evicted, identical-retry protection for that ID ends. Old unlinked history is not re-associated. Tool descriptions guide the connected AI to supply the reference; they cannot infer a missing association from message contents.
 
+Location-based question answers use `respond_to_location` with both `context_id` and `utterance_id`. They use the same atomic first-answer pairing and follow-up behavior while retaining location consent and freshness checks. The saved reply retains its sharing identity and expiry for phone announcement gating. Silent decisions omit the question reference. Retry identity includes the question reference; changing or removing it is a `conflicting_decision`. Independent location announcements still omit it.
+
 ## Ownership
 
 - `bridge-response-error.ts` owns conversation/proactive rejection vocabulary;
@@ -44,9 +46,7 @@ Independent proactive messages omit the question reference and do not consume pe
 - `http.ts` selects an enabled tool before invoking that adapter. Missing or
   invalid arguments reach the selected feature's argument check. Routing reasons
   are defined below. Metadata in the call envelope remains supported.
-- `respond_to_location` retains its existing boundary. If its bridge callback
-  fails with a new conversation rejection, that remains a location
-  `internal_error`, not a leaked conversation reason.
+- `respond_to_location` translates a bridge `utterance_unknown` into its fixed location reason of the same name and `message_id_conflict` into `conflicting_decision`. Other unexpected callback failures remain a location `internal_error`; raw bridge errors are never exposed.
 - No catch-all classification of Zod errors: only an operation's own failed
   argument parse is `invalid_arguments`. An execution-time validation failure
   is an internal failure.

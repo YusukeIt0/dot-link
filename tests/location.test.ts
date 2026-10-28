@@ -1,14 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { tmpdir } from 'node:os';
 import { LocationContext } from '../server/location.ts';
 import { WebhookSender } from '../server/webhook.ts';
 import { Bridge } from '../server/bridge.ts';
 import { rpc } from '../server/http.ts';
 import { phoneLocation } from '../src/location-fix.ts';
+import { reconcileHistory } from '../src/message-history.ts';
 
 const owner = 'a'.repeat(64);
 const request = {name: 'location.updated', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/location', secret: 'whsec_' + randomBytes(32).toString('base64')}};
@@ -31,7 +32,7 @@ function fixture(t: {after: (fn: () => void) => void}) {
     return bridge.sendMessage(input, guard, location);
   }, () => time, () => ownerAllowed);
   const context = create();
-  t.after(() => {context.close(); rmSync(directory, {recursive: true, force: true});});
+  t.after(() => {context.close(); bridge.close(); rmSync(directory, {recursive: true, force: true});});
   const sharing = randomUUID();
   let sequence = 0;
   const fix = (latitude = 10, accuracy = 5) => ({latitude, longitude: 20, accuracy, measured_at: new Date(time).toISOString()});
@@ -51,6 +52,43 @@ function rejection(result: any, reason: string) {
   assert.doesNotMatch(result.error.message, /subscription|callback/);
 }
 
+test('location answers pair with the question, follow-ups stay after it, and retries cannot change the association', async t => {
+  const f=fixture(t); f.enable(); f.update();
+  await f.bridge.subscribe({...request,name:'utterance.created'});
+  const utterance_id=randomUUID(); await f.bridge.submit({id:utterance_id,text:'Synthetic nearby-place question'});
+  const first={context_id:f.context.read().context!.context_id,utterance_id,disposition:'announce',text:'First location answer'};
+  assert.equal((await respond(f,first)).result.structuredContent.stored_for_g2,true);
+  assert.equal(f.bridge.history()[0].reply,first.text);
+  assert.equal(f.bridge.history()[0].location_sharing_id,f.sharing);
+  assert.ok(f.bridge.history()[0].location_expires_at);
+  assert.equal(f.bridge.outboundHistory().length,0);
+  assert.equal(f.bridge.pending().utterances.length,0);
+  await respond(f,first);
+  rejection(await respond(f,{...first,utterance_id:undefined}),'conflicting_decision');
+  rejection(await respond(f,{...first,utterance_id:randomUUID()}),'conflicting_decision');
+  f.advance(1000);f.update();
+  const followup={context_id:f.context.read().context!.context_id,utterance_id,disposition:'announce',text:'Location follow-up'};
+  await respond(f,followup);
+  const pages=reconcileHistory([], [...f.bridge.history(),...f.bridge.outboundHistory()],true,()=>true).messages;
+  assert.deepEqual(pages.map(p=>[p.text,p.reply]),[['Synthetic nearby-place question','First location answer'],['','Location follow-up']]);
+  await assert.rejects(f.bridge.reply({utterance_id,text:'Summary'}),/different reply/);
+});
+
+test('unknown question and failed linked location persistence cannot consume the decision', async t=>{
+  const f=fixture(t);f.enable();f.update();
+  const context_id=f.context.read().context!.context_id;
+  rejection(await respond(f,{context_id,utterance_id:randomUUID(),disposition:'announce',text:'Unknown'}),'utterance_unknown');
+  assert.equal(f.context.status().locationDecisionAt,null);
+  await f.bridge.subscribe({...request,name:'utterance.created'});
+  const utterance_id=randomUUID();await f.bridge.submit({id:utterance_id,text:'Question'});
+  const input={context_id,utterance_id,disposition:'announce',text:'Answer'};
+  const blocked=join(dirname(f.path),'bridge.json.tmp');mkdirSync(blocked);
+  rejection(await respond(f,input),'internal_error');
+  assert.equal(f.bridge.history()[0].reply,undefined);assert.equal(f.context.status().locationDecisionAt,null);
+  rmSync(blocked,{recursive:true});await respond(f,input);
+  assert.equal(f.bridge.history()[0].reply,'Answer');assert.equal(f.bridge.outboundHistory().length,0);
+});
+
 test('location response argument errors expose fixed reasons, never submitted values', async t => {
   const f = fixture(t); f.enable(); f.update();
   const context_id = f.context.read().context!.context_id;
@@ -62,6 +100,7 @@ test('location response argument errors expose fixed reasons, never submitted va
     [{context_id, disposition: 'silent', extra: secret}, 'invalid_arguments'],
     ...['', ' ', null, 5].map(text => [{context_id, disposition: 'silent', text}, 'invalid_arguments'] as [unknown, string]),
     [{context_id, disposition: 'silent', text: secret}, 'text_not_allowed_for_silent'],
+    [{context_id, disposition: 'silent', utterance_id: randomUUID()}, 'invalid_arguments'],
     [{context_id, disposition: 'announce'}, 'text_required_for_announcement'],
     [{context_id, disposition: 'announce', text: ''}, 'invalid_arguments'],
     [{context_id, disposition: 'announce', text: 'x'.repeat(2001)}, 'invalid_arguments'],
@@ -149,6 +188,8 @@ test('conflicting decisions return a reason and never overwrite the original ann
 test('announcement revalidation reports the reason when context changes before storage', async t => {
   for (const change of ['off', 'move', 'expire', 'replace'] as const) {
     const f = fixture(t); f.enable(); f.update();
+    await f.bridge.subscribe({...request,name:'utterance.created'});
+    const utterance_id=randomUUID();await f.bridge.submit({id:utterance_id,text:'Question'});
     const id = f.context.read().context!.context_id;
     f.beforeAnnouncement(async () => {
       if (change === 'off') f.disable();
@@ -159,9 +200,10 @@ test('announcement revalidation reports the reason when context changes before s
         f.context.update({sharing_id, sequence: 1, fix: f.fix()}, owner);
       }
     });
-    rejection(await respond(f, {context_id: id, disposition: 'announce', text: 'Must not be stored'}),
+    rejection(await respond(f, {context_id: id, utterance_id, disposition: 'announce', text: 'Must not be stored'}),
       {off: 'sharing_inactive', move: 'moved_too_far', expire: 'context_expired', replace: 'context_unknown'}[change]);
     assert.equal(f.bridge.outboundHistory().length, 0);
+    assert.equal(f.bridge.history()[0].reply,undefined);
     assert.equal(f.context.status().locationDecisionAt, null);
   }
 });

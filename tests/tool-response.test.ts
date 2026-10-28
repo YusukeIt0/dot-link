@@ -179,7 +179,7 @@ test('location bridge conflicts stay inside the location error contract', async 
   const id = f.location.read().context!.context_id;
   await f.bridge.sendMessage({ message_id: id, text: 'PRIVATE existing message' });
   const response = await f.call('respond_to_location', { context_id: id, disposition: 'announce', text: 'PRIVATE conflicting location' });
-  rejection(response, 'internal_error', [id, 'PRIVATE', 'message_id_conflict']);
+  rejection(response, 'conflicting_decision', [id, 'PRIVATE', 'message_id_conflict']);
   assert.equal(f.bridge.outboundHistory()[0].reply, 'PRIVATE existing message');
 });
 
