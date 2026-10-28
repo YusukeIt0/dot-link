@@ -590,6 +590,9 @@ test('URLs stay linked on the phone but are absent from G2 and speech in every l
     const speechCount = app.calls.filter(call => call[0] === 'speech').length;
     await app.deliver(app.snapshot([reply, {...proactive('url-only'), reply: 'https://example.net'}]));
     assert.equal(app.calls.filter(call => call[0] === 'speech').length, speechCount);
+    await app.element('next').click(); await flush();
+    assert.equal(app.physical.get(2), catalogs[language]['even.link_on_phone']);
+    assert.equal(app.element('hud-content').textContent, 'https://example.net');
     await app.deliver(app.snapshot([reply]));
     assert.equal(app.calls.filter(call => call[0] === 'speech').length, speechCount);
     await app.close();

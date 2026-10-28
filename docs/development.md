@@ -87,6 +87,12 @@ node scripts/build-mac-app.mjs
 
 Output: `.runtime/mac-app/Dot Link.app`. Runtime downloads and Sparkle are pinned by version and SHA-256. No speech model, account credential, pairing, or conversation data is included. The speech model downloads during initial setup.
 
+### Validation builds and conversation-state rollback
+
+Before running a validation relay against an existing installation, stop its owned services and make an owner-only local backup of the installed app plus `.runtime/bridge-state.json` and its `.runtime/bridge-state.json.photos` directory. Use the configured installation directory (normally `~/Library/Application Support/Dot Link`), not an unrelated checkout. Verify the backup against the originals before starting the test. These files contain private conversations and may contain credentials; never upload them or include them in a build.
+
+Question-linked outbound records add `utterance_id` and `initial_reply` fields. Older relay versions reject these fields, so replacing only the app is not a supported downgrade after linked messages have been stored. To return to the previous version, stop the relay, preserve the post-test state separately, and restore the verified app and matching pre-test state/photo backup together before restarting. The restored history ends at the backup time; messages accepted during testing are retained only in the separate post-test copy. Do not delete the state file to force startup, and do not replay pending messages to recover history. If the backup is absent, retain the newer compatible relay until a reviewed migration is available.
+
 The app uses one public update feed at `https://raw.githubusercontent.com/YusukeIt0/dot-link/main/updates/mac/appcast.xml`. Release ZIPs are downloaded from this repository's public GitHub Releases. Users need no GitHub account, token, or development-channel setting.
 
 ### Manual update behavior

@@ -1,4 +1,5 @@
 import { t } from './i18n.ts';
+import { withoutMessageUrls } from './message-links.ts';
 export const REPLY_DELAY_MS = 60_000;
 export interface DisplayMessage {
   id: string; text: string; reply?: string; status: string; createdAt?: string; repliedAt?: string; readAt?: string;
@@ -30,4 +31,10 @@ export function conversationText(message: DisplayMessage, now = Date.now(), assi
     delayedReply(message, now) ? t('even.the_reply_is_taking_longer_than_usual') : t('even.waiting_for_a_reply'));
   const photos = message.photoCount ? t('even.photos_count', { count: message.photoCount }) : '';
   return `${sender}: ${[message.text, photos].filter(Boolean).join('\n')}\n\n${assistantName}: ${answer}`;
+}
+
+export function conversationHudText(message: DisplayMessage, now = Date.now(), assistantName = 'Dot'): string {
+  const reply = message.reply === undefined ? undefined :
+    withoutMessageUrls(message.reply) || t('even.link_on_phone');
+  return conversationText({...message, text: withoutMessageUrls(message.text), reply}, now, assistantName);
 }

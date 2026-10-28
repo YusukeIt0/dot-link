@@ -557,5 +557,6 @@
   "even.photos_waiting_for_dot": "사진 저장 공간이 가득 찼습니다. 나중에 다시 시도하세요.",
   "even.photos_expired_resend": "사진이 만료되었습니다. 다시 보내세요.",
   "even.photo_already_added": "이미 추가한 사진입니다.",
-  "even.photos_ready": "사진이 첨부되었습니다."
+  "even.photos_ready": "사진이 첨부되었습니다.",
+  "even.link_on_phone": "휴대폰에서 링크 확인"
 }

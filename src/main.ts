@@ -12,7 +12,7 @@ import { validateWakeName } from './wake-name.ts';
 import { wakeTranscript } from './wake-transcript.ts';
 import { TimingTracker } from './timing.ts';
 import { ConversationState, type ConversationMessage as Message } from './conversation-state.ts';
-import { conversationText, receiptCaption, newReplyCaption } from './conversation-display.ts';
+import { conversationText, conversationHudText, receiptCaption, newReplyCaption } from './conversation-display.ts';
 import { wrapHudText } from './hud-text.ts';
 import { renderMessageLinks, withoutMessageUrls } from './message-links.ts';
 import { LiveUpdates } from './live-updates.ts';
@@ -355,7 +355,8 @@ function showMessage(): void {
     const item = current();
     return item.reply || item.photosExpired ? `${conversation.position(item.id)}/${conversation.count}` :
       item.status === 'failed' ? t('even.delivery_unconfirmed') : t('even.waiting_for_name', { name: wakeNamePreferences.assistantName });
-  }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id);
+  }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id,
+    () => conversationHudText(current(), Date.now(), wakeNamePreferences.assistantName));
 }
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
@@ -555,6 +556,7 @@ let operationPreferencesReady = false;
 let transcriptionController: AbortController | undefined;
 let lastDisplayText = t('even.hold_to_speak');
 let renderDisplayText: () => string = () => t('even.hold_to_speak');
+let renderG2Text: () => string = () => withoutMessageUrls(renderDisplayText());
 
 function syncRuntimeEffects(): void {
   runtimeEffects.sync();
@@ -594,7 +596,7 @@ const playback = new SpeechPlayback({
 const g2Display = new G2Display({
   ready: () => !!bridge && glassesReady,
   hidden: () => standby?.hidden ?? false,
-  frame: () => ({status: hudCaption(), conversation: wrapHudText(withoutMessageUrls(lastDisplayText)),
+  frame: () => ({status: hudCaption(), conversation: wrapHudText(renderG2Text()),
     help: recordingHint(), speech: speechDisplayCaption(), receipt: currentReceipt(), newReplies: currentNewReplies()}),
   writer: () => {
     const activeBridge = bridge!;
@@ -670,10 +672,11 @@ function refreshStatus(sendToG2 = true): void {
   if (sendToG2) g2Display.refreshStatus();
 }
 
-function display(state: string | (() => string), text: string | (() => string), trace?: string): void {
+function display(state: string | (() => string), text: string | (() => string), trace?: string, g2Text?: () => string): void {
   if (exited) return;
   renderBaseStatus = typeof state === 'function' ? state : () => state;
   renderDisplayText = typeof text === 'function' ? text : () => text;
+  renderG2Text = g2Text ?? (() => withoutMessageUrls(renderDisplayText()));
   baseStatus = renderBaseStatus(); conversation.present(trace);
   if (trace && !timing.report(trace)) trace = undefined;
   refreshStatus(false);
