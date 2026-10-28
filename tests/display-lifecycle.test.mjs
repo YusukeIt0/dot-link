@@ -1407,3 +1407,31 @@ test('photo expiry ends the waiting caption live and after reopening',async t=>{
  assert.notEqual(vm.runInContext('progress.phase',reopened.context),'waiting');
  assert.doesNotMatch(reopened.physical.get(1),/Waiting/);
 });
+
+test('a suppressed location answer completes its question without speech or wake', async t => {
+ for (const reason of ['sharing-off', 'expired']) {
+  const app=await launch({language:'en',typedInput:true});t.after(app.close);
+  await app.element('tts').click();await flush();
+  assert.equal(app.element('tts').getAttribute('aria-pressed'),'true');
+  app.element('location-share').checked=true;app.element('location-share').onchange();await flush();
+  const control=app.calls.find(c=>c[0]==='location-api'&&c[2].enabled===true);
+  app.element('transcript').value='Synthetic location question';app.element('transcript').oninput();
+  await app.element('send').click();await flush();
+  const question=vm.runInContext('JSON.parse(JSON.stringify(conversation.selected))',app.context);
+  if(reason==='sharing-off') {
+   app.element('location-share').checked=false;app.element('location-share').onchange();await flush();
+  }
+  await app.advance(90_000);
+  assert.equal(app.hidden(),true);
+  assert.equal(vm.runInContext('progress.phase',app.context),'waiting');
+  const reply={...question,reply:'Synthetic location answer',status:'replied',repliedAt:new Date(app.now()).toISOString(),
+   location_sharing_id:control[2].sharing_id,
+   location_expires_at:new Date(reason==='expired'?app.now()-1:app.now()+90_000).toISOString()};
+  const speechBefore=app.calls.filter(c=>c[0]==='speech').length;
+  await app.deliver(app.snapshot([reply]));
+  assert.equal(vm.runInContext('progress.phase',app.context),'idle',reason);
+  assert.equal(app.hidden(),true,reason);
+  assert.equal(app.calls.filter(c=>c[0]==='speech').length,speechBefore,reason);
+  assert.equal(vm.runInContext('conversation.selected.reply',app.context),'Synthetic location answer');
+ }
+});

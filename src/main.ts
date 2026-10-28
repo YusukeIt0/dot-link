@@ -372,9 +372,13 @@ function receiveUpdate(snapshot: Snapshot, initial = false): void {
   progress.connection = 'online'; progress.dotConnected = subscribed; attachLocation();
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
   const update = conversation.receive(snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
-  for (const message of snapshot.messages) if (message.photosExpired && !message.reply) progress.stopWaiting(message.id);
+  for (const message of snapshot.messages) {
+    // A stored answer completes the request even when consent/freshness blocks
+    // its announcement. Completion must not wake the display or start speech.
+    if (message.reply) progress.complete(message.id);
+    else if (message.photosExpired) progress.stopWaiting(message.id);
+  }
   for (const message of update.announcements) {
-    progress.complete(message.id);
     timing.mark(message.id, 'reply_received');
     const spokenText = withoutMessageUrls(message.reply ?? '');
     if (tts && spokenText && 'speechSynthesis' in window) {

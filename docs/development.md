@@ -25,6 +25,27 @@ Even app. It is not the Mac app release/build number. For Mac update or support
 identification, use the Mac app's version and build; a Mac-only release can retain
 the same MCP package version.
 
+### Verify tool-definition updates in the active consumer
+
+For a tool-schema change, compare the running relay's authenticated `tools/list`,
+ChatGPT's registered app details, and the definitions available to the existing
+Dot that actually answers device events. A successful refresh or a new test chat
+does not prove that an already-running Dot has adopted the new schema.
+
+During conversation-ordering acceptance, the relay and registered app exposed
+`utterance_id` on both `send_message_to_g2` and `respond_to_location`, while the
+existing Dot retained the old definitions even after an explicit plugin mention.
+After the maintainer restarted that Dot, it exposed the new fields and a new
+location answer was stored with its question. Treat this as an observed update
+requirement, not a guarantee about every host version. Follow the user guide's
+update steps before repeating affected physical acceptance.
+
+Verify actual stored question references as well as the rendered pages. Keep
+first answers, linked follow-ups and independent proactive messages distinct.
+Do not infer an association from timing, rewrite old history, or count a
+per-user instruction to the AI as product acceptance. Keep private conversation
+text, locations, credentials and identifiers out of public evidence.
+
 ### Location response errors
 
 `respond_to_location` returns a fixed, non-sensitive `error.data.reason` with a
