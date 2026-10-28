@@ -2,9 +2,14 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.46
 
 - Fixed the waiting indicator remaining active when a location answer arrives after location sharing stops or expires.
+
+## 0.3.45
+
+- Web addresses remain visible as plain text on your phone, so tapping them no longer leaves the conversation.
+- Glasses show a localized placeholder where a web address appears. Read-aloud skips both web addresses and placeholders.
 
 ## 0.3.44
 

@@ -1,5 +1,5 @@
 import { t } from './i18n.ts';
-import { withoutMessageUrls } from './message-links.ts';
+import { withMessageUrlPlaceholders } from './message-links.ts';
 export const REPLY_DELAY_MS = 60_000;
 export interface DisplayMessage {
   id: string; text: string; reply?: string; status: string; createdAt?: string; repliedAt?: string; readAt?: string;
@@ -35,6 +35,6 @@ export function conversationText(message: DisplayMessage, now = Date.now(), assi
 
 export function conversationHudText(message: DisplayMessage, now = Date.now(), assistantName = 'Dot'): string {
   const reply = message.reply === undefined ? undefined :
-    withoutMessageUrls(message.reply) || t('even.link_on_phone');
-  return conversationText({...message, text: withoutMessageUrls(message.text), reply}, now, assistantName);
+    withMessageUrlPlaceholders(message.reply, t('even.link_on_phone'));
+  return conversationText({...message, text: withMessageUrlPlaceholders(message.text, t('even.link_on_phone')), reply}, now, assistantName);
 }

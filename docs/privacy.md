@@ -14,7 +14,7 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 - **Mac notifications:** This optional prototype reads Notification Center title, description and value strings through macOS Accessibility while monitoring is active. Ordinary application notification strings may be read into memory for classification. With “Share all Mac notifications with Dot” enabled, visible sender names, headings and text from readable new notifications go through the Mac relay to your existing Dot. Sharing defaults to off. Notifications may be shared without an identified source; unknown sources and senders are not inferred. Chats and emails are not opened to retrieve content beyond the notification. Dot decides whether and when to announce it. Not every notification format or immediate arrival is guaranteed, and replying in the source app is not supported. Pausing notifications alone does not stop the conversation relay.
 - **Read aloud:** When enabled, Dot replies with web URLs omitted are passed to the device's Web Speech API. Whether speech processing stays on the device depends on the device and voice engine.
 
-Phone links are created locally without fetching previews. Only tapping a link opens its destination, subject to the Even host browser policy. Original URL text remains in the Mac conversation history.
+Web addresses in conversation messages remain plain text on the phone. Dot Link does not open their destinations or fetch previews. Original URL text remains in the Mac conversation history.
 
 ## Photos
 

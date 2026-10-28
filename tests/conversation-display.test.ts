@@ -9,10 +9,10 @@ test('URL-only question answers have a G2 hint while original phone text stays u
   setLanguage('en');
   try {
     const linked = {...message, reply:'https://example.com'};
-    assert.equal(conversationHudText(linked,now), 'You: Synthetic question\n\nDot: Link on phone');
+    assert.equal(conversationHudText(linked,now), 'You: Synthetic question\n\nDot: [Link shown on phone]');
     assert.equal(conversationText(linked,now), 'You: Synthetic question\n\nDot: https://example.com');
     assert.equal(linked.reply,'https://example.com');
-    assert.match(conversationHudText({...message,text:'See https://example.com',reply:'[Guide](https://example.org)'},now), /You: See\n\nDot: Guide/);
+    assert.equal(conversationHudText({...message,text:'See https://example.com',reply:'[Guide](https://example.org)'},now), 'You: See [Link shown on phone]\n\nDot: Guide [Link shown on phone]');
   } finally {setLanguage('ja');}
 });
 

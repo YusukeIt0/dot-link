@@ -66,7 +66,7 @@ Local Whisper is free and runs on your Mac. External recordings go directly from
 
 Keys are stored separately in macOS Keychain. Choose **Always Allow** when prompted; an app update may require permission again. To replace a key, delete it and save the new one. Deleting the active service key switches speech input back to Whisper.
 
-Web URLs stay visible as links on your phone, but are omitted on the glasses and in read-aloud. Opening a link depends on the Even host allowing external browser navigation; device verification is required before claiming browser support.
+Web addresses remain visible as plain text in the phone conversation and do not open when tapped. On the glasses, each address is replaced by a short localized placeholder indicating that the link is shown on the phone. Read-aloud skips both web addresses and these placeholders.
 
 For **read-aloud**, use the switch in the Even companion. It starts OFF on first use and remembers your ON/OFF choice when you reopen the app. Selecting a different interface language turns read-aloud OFF; turn it on again when you want to listen. Reopening does not replay earlier replies. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
 

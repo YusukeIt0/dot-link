@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { messageParts, withoutMessageUrls, renderMessageLinks } from '../src/message-links.ts';
+import { messageParts, withoutMessageUrls, withMessageUrlPlaceholders } from '../src/message-links.ts';
 
-test('phone keeps original text and links only explicit HTTP(S) and www addresses', () => {
+test('URL parsing preserves original text and identifies only explicit HTTP(S) and www addresses', () => {
   const text = 'See https://example.com/a?q=one&b=two and www.example.org. <script>alert(1)</script> javascript:alert(1)';
   const parts = messageParts(text);
   assert.equal(parts.map(part => part.text).join(''), text);
@@ -23,12 +23,12 @@ test('URL punctuation is excluded from destinations without breaking balanced pa
   assert.deepEqual(messageParts('(https://example.com/a_(b)).').filter(p => p.href).map(p => p.text), ['https://example.com/a_(b)']);
   assert.equal(messageParts('https://example.com/path）次').find(p => p.href)?.text, 'https://example.com/path');
 });
-test('phone rendering uses text nodes and safe new-window links, never HTML injection', () => {
-  const nodes: any[] = [];
-  const container = { ownerDocument: {
-    createTextNode: (text: string) => ({ text }),
-    createElement: (tag: string) => ({ tag }),
-  }, replaceChildren: (...items: any[]) => nodes.push(...items) };
-  renderMessageLinks(container as unknown as HTMLElement, '<img onerror=alert(1)> https://example.com');
-  assert.deepEqual(nodes, [{text:'<img onerror=alert(1)> '}, {tag:'a',textContent:'https://example.com',href:'https://example.com/',target:'_blank',rel:'noopener noreferrer'}]);
+
+test('HUD placeholders retain URL positions and Markdown labels without changing speech filtering', () => {
+  const hint='[リンクはスマホで表示]';
+  assert.equal(withMessageUrlPlaceholders('店舗情報：https://example.com。次です。',hint),`店舗情報：${hint}。次です。`);
+  assert.equal(withMessageUrlPlaceholders('[Guide](https://example.com) https://example.org',hint),`Guide ${hint} ${hint}`);
+  assert.equal(withMessageUrlPlaceholders('[https://example.com](https://example.com)',hint),hint);
+  assert.equal(withMessageUrlPlaceholders('https://example.com',hint),hint);
+  assert.equal(withoutMessageUrls('Guide https://example.com'),'Guide');
 });
