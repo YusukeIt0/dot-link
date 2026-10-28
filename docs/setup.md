@@ -44,6 +44,8 @@ The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; th
 
 ## Conversation and display
 
+The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.
+
 Hold to record on G2 and release to stop, or tap the microphone in the Even companion. Tap the same button again to stop and transcribe; the adjacent trash button discards recording or transcription without sending. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to edit the text before sending with the up arrow. Use the left/right arrows to browse conversation history and the speaker button to turn read aloud on or off. **Display settings** controls idle timeout, wake gestures and head-raise behavior.
 
 The companion's Mac connection section contains setup instructions, a copyable download URL, pairing-code entry and **Revoke this device**. If copying is unavailable, enter the displayed URL in your Mac browser. Older public companions may show these controls separately. Revoke stops this device immediately. If the Mac is unreachable, Dot Link saves the removal request and retries while running or when reopened. The existing connection section shows whether Mac removal is still pending. If saving fails, keep the app open; reopening may restore the connection. You can also remove connections from the Mac. Update both the Mac and Even companion to use persistent disconnect and cross-origin retry.
@@ -91,6 +93,8 @@ Sharing starts off. Turning it off stops new sharing and clears the relay's curr
 Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. Starting a manual update interrupts the active conversation while the Mac app restarts. If the app says **Finish the current settings operation, then click Retry update**, finish that operation and choose **Retry update**.
 
 Updates preserve connection settings, pairing and history. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
+
+When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your Dot Link connection → Update tools**. If your existing Dot still uses the previous tools, finish any active work and choose **Restart** from that Dot's action menu. In the conversation-ordering update, updating the registered tools alone did not refresh an already-running Dot; restarting it made the new question-reference inputs available. Keep the existing Dot and connection. This step concerns tool-definition changes, not every app update.
 
 ## Troubleshooting
 
