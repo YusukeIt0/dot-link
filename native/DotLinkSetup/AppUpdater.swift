@@ -2,6 +2,10 @@ import AppKit
 import Sparkle
 
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
+    static func recoveredStateIsReady(_ state: [String: Any]) -> Bool {
+        state["installed"] as? Bool == true && (state["lifecycleStopped"] as? Bool == true ||
+            ["bridge", "device", "tunnel"].allSatisfy { state[$0] as? Bool == true })
+    }
     static func preparationResult(_ result: [String: Any]) -> String {
         if result["prepared"] as? Bool == true { return "prepared" }
         if result["kind"] == nil || ["UPDATE_RECOVERY_REQUIRED", "UPDATE_ALREADY_PREPARED"].contains(result["code"] as? String ?? "") { return "recovery-required" }
@@ -160,6 +164,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         }
     }
     func check() {
+        if startupProgress {
+            if working { progressWindow?.present() } else { retryStartupRecovery?() }
+            return
+        }
         if working && progressActive { progressWindow?.present(); return }
         guard !blocksActions && !extracting else { return }
         if recoveryRequired { restoreService(); return }

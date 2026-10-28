@@ -141,7 +141,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if succeeded { self.inspect() }
             }
         }
-        updater.retryStartupRecovery = { [weak self] in self?.appUpdater?.beginStartupRecovery(); self?.perform("update-recover") }
+        updater.retryStartupRecovery = { [weak self] in
+            guard let self, !self.busy else { return }
+            self.appUpdater?.beginStartupRecovery(); self.perform("update-recover")
+        }
         updater.start()
     }
     func updateHelper(_ action: String, completion: @escaping ([String: Any]) -> Void) {
@@ -634,7 +637,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
-            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: yes("installed") && (yes("lifecycleStopped") || (yes("bridge") && yes("device") && yes("tunnel")))) }
+            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) }
             if currentAction == "revoke-pairings" {
                 pairingCode = nil; pairingExpiry = 0
                 switch value["pairingRemoval"] as? String {

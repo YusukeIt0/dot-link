@@ -258,7 +258,10 @@ precondition(relaunched.progressActive && relaunched.working && relaunched.messa
 relaunched.startupRecoveryFinished(success: false, currentBuild: "102")
 precondition(!relaunched.working && relaunched.message.contains("Retry recovery"))
 precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") != nil)
-relaunched.beginStartupRecovery()
+var startupRetries = 0
+relaunched.retryStartupRecovery = { startupRetries += 1; relaunched.beginStartupRecovery() }
+relaunched.check()
+precondition(startupRetries == 1 && relaunched.working, "Check must retry startup recovery, not start a competing update")
 relaunched.startupRecoveryFinished(success: true, currentBuild: "102")
 precondition(relaunched.message == "Dot Link is up to date." && !relaunched.working)
 precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") == nil)
@@ -290,3 +293,9 @@ if CommandLine.arguments.contains("--preview-progress") {
     preview.render(title: "Dot Linkを更新中", message: "アップデートをダウンロード中… 35%", fraction: 0.35, working: true, actionTitle: nil, action: nil)
     preview.present(); app.run()
 }
+
+precondition(!AppUpdater.recoveredStateIsReady([:]))
+precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "bridge": true, "device": false, "tunnel": true]))
+precondition(AppUpdater.recoveredStateIsReady(["installed": true, "bridge": true, "device": true, "tunnel": true]))
+precondition(AppUpdater.recoveredStateIsReady(["installed": true, "lifecycleStopped": true]))
+print("PASS: completion requires the actual running or paused installation")
