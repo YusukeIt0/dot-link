@@ -3,7 +3,9 @@ import Sparkle
 
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     static func recoveredStateIsReady(_ state: [String: Any]) -> Bool {
-        state["installed"] as? Bool == true && (state["lifecycleStopped"] as? Bool == true ||
+        let recovery = state["updateRecovery"] as? [String: Any] ?? [:]
+        let initialSetupRestored = recovery["recovered"] as? Bool == true && recovery["initialSetup"] as? Bool == true
+        return state["installed"] as? Bool == true && (initialSetupRestored || state["lifecycleStopped"] as? Bool == true ||
             ["bridge", "device", "tunnel"].allSatisfy { state[$0] as? Bool == true })
     }
     static func preparationResult(_ result: [String: Any]) -> String {
@@ -88,7 +90,10 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         guard let marker = progressDefaults.dictionary(forKey: progressMarkerKey),
               let at = marker["at"] as? Double, now.timeIntervalSince1970 - at >= 0,
               now.timeIntervalSince1970 - at < 86400, let target = marker["target"] as? String else {
-            progressDefaults.removeObject(forKey: progressMarkerKey); return
+            progressDefaults.removeObject(forKey: progressMarkerKey)
+            startupProgress = false; targetBuild = nil
+            if progressActive { status("mac.update_failed_click_check_for_updates_to_retry") }
+            return
         }
         targetBuild = target; startupProgress = true; progressFraction = nil
         status("mac.restoring_connection", working: true); beginProgress()

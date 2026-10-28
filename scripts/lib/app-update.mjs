@@ -133,7 +133,7 @@ async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join
   if(journal.originals.length!==0||!await initialSetupReady(directory,{home,execute,app,...options}))throw new Error('UPDATE_SETUP_CHANGED');
   await unlink(journalPath(directory));
   if(!backgroundCleanup)await cleanup(directory,{app,execute});
-  return {recovered:true,stopped:journal.stopped};
+  return {recovered:true,stopped:journal.stopped,initialSetup:true};
  }
  if(rollback)for(const j of journal.originals)await writeFile(j.path,j.content,{mode:0o600});
  if(!journal.stopped){

@@ -67,7 +67,7 @@ test('prepared setup updates and recovers without creating services or changing 
   for(const [name,value] of Object.entries(saved))await writeFile(join(f.runtime,name),value);
   assert.deepEqual(await prepareUpdate(f.directory,f),{prepared:true});
   assert.equal(JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8')).initialSetup,true);
-  assert.deepEqual(await finishUpdate(f.directory,{...f,rollback}),{recovered:true,stopped:true});
+  assert.deepEqual(await finishUpdate(f.directory,{...f,rollback}),{recovered:true,stopped:true,initialSetup:true});
   for(const [name,value] of Object.entries(saved))assert.equal(await readFile(join(f.runtime,name),'utf8'),value);
   assert.equal(f.calls.some(([cmd,action])=>cmd==='/bin/launchctl'&&action!=='print'),false);
   await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
@@ -76,7 +76,7 @@ test('prepared setup updates and recovers without creating services or changing 
 
 test('never-started setup retains absent lifecycle state across a successful update',async t=>{
  const f=await fixture(t,{initialSetup:true});
- await prepareUpdate(f.directory,f);assert.deepEqual(await finishUpdate(f.directory,f),{recovered:true,stopped:false});
+ await prepareUpdate(f.directory,f);assert.deepEqual(await finishUpdate(f.directory,f),{recovered:true,stopped:false,initialSetup:true});
  await assert.rejects(readFile(join(f.runtime,'lifecycle.json')),/ENOENT/);
 });
 
