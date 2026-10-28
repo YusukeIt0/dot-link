@@ -111,7 +111,7 @@ test('persistent lock files are reusable and symlinked locks are rejected',async
  await writeFile(lock,'old contents are not lock ownership');
  assert.equal(await withUpdateStorage(f.directory,async()=>42),42);
  await withUpdateStorage(f.directory,async()=>{
-  await assert.rejects(withUpdateStorage(f.directory,async()=>42,{timeout:0}),/UPDATE_ALREADY_PREPARED/);
+  await assert.rejects(withUpdateStorage(f.directory,async()=>42,{timeout:0}),/UPDATE_STORAGE_BUSY/);
  });
  await rm(lock);await symlink(join(f.app,'Contents/Info.plist'),lock);
  await assert.rejects(withUpdateStorage(f.directory,async()=>42),/UNSAFE_INSTALL_PATH/);

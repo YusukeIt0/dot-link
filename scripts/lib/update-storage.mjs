@@ -27,7 +27,7 @@ export async function withUpdateStorage(directory,operation,{timeout=10}={}){
  try{
   await new Promise((resolve,reject)=>{
    child.once('error',reject);
-   child.once('exit',()=>{if(!acquired)reject(new Error('UPDATE_ALREADY_PREPARED'));});
+   child.once('exit',()=>{if(!acquired)reject(new Error('UPDATE_STORAGE_BUSY'));});
    child.stdout.once('data',()=>{acquired=true;resolve();});
   });
   return await operation();
