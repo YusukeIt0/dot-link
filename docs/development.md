@@ -53,17 +53,9 @@ short English protocol message. These are tool responses for the connected AI,
 not application UI strings. Expected rejections retain JSON-RPC code `-32602`;
 unexpected internal failures use `-32603`. Successful responses are unchanged.
 
-| Reason | Meaning and next action |
-| --- | --- |
-| `invalid_arguments` | Arguments fail the existing schema. Use a UUID `context_id` and `silent` or `announce`; omit `text` for silent and supply non-empty text for announce. Empty/null text and extra keys remain invalid. |
-| `text_not_allowed_for_silent` | A silent decision included valid non-empty text. Remove `text`. |
-| `text_required_for_announcement` | An announcement omitted text. Supply non-empty text. |
-| `sharing_inactive` | Sharing is stopped, its lease expired, or the pairing owner is no longer authorized. Wait until sharing resumes before reading again. |
-| `context_unknown` | The context is unavailable, evicted, or belongs to a replaced sharing session. Read again and reconsider. |
-| `context_expired` | The read measurement or latest measurement is stale. Read again when fresh data is available. |
-| `moved_too_far` | The read and latest positions differ by more than 100 metres. Read again and reconsider. This does not distinguish actual movement from measurement noise. |
-| `conflicting_decision` | This context already has a different accepted decision. Do not overwrite it; identical retries remain idempotent. |
-| `internal_error` | An unexpected failure occurred. No raw exception details are returned; do not assume successful delivery. |
+See the [canonical location-response reason table](tool-response-errors.md) for
+all reasons, argument constraints and recovery actions. Keep that table as the
+single reference when adding question-reference or location-response errors.
 
 Validation keeps the 90-second measurement/lease limits, 100-metre distance
 guard, consent checks and retained-decision idempotency. Announcements recheck
