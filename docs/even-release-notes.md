@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.46
 
 - Fixed the waiting indicator remaining active when a location answer arrives after location sharing stops or expires.
 
