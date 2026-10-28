@@ -244,3 +244,9 @@ the main-to-parent context of a child PR. These bounds allow complete shared
 translation catalogs to be reviewed. Larger inputs stop without an assessment;
 no files are silently omitted. Discussion, file-count, verification-context,
 authorization and result-validation bounds remain separate.
+
+### Acceptance effort and deterministic boundary tests
+
+Use automated tests, simulation or a controlled test environment for races, narrow timing windows, delayed replies, expiry and fault timing. Do not ask the maintainer to race an incoming response or repeat timing-sensitive actions. Physical acceptance covers ordinary use and observations unavailable to automation, such as the actual glasses display and speech. Read machine-visible state directly and reuse applicable evidence when the tested runtime is unchanged. Record automated boundary coverage separately from physical observations; absence of a manual race reproduction alone is not a release blocker.
+
+The maintainer defines UX and reports the experience. The implementer owns implementation choices, dependency order, test design and issue/PR integration. Complete child work in order, integrate it into the parent and close the child PR before advancing the overall outcome. Preserve separate main-merge and distribution authorization boundaries without asking the maintainer to manage internal task sequencing.

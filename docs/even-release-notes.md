@@ -2,25 +2,13 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## 0.3.46
+## 0.3.47
 
-- Fixed the waiting indicator remaining active when a location answer arrives after location sharing stops or expires.
-
-## 0.3.45
-
-- Web addresses remain visible as plain text on your phone, so tapping them no longer leaves the conversation.
-- Glasses show a localized placeholder where a web address appears. Read-aloud skips both web addresses and placeholders.
-
-## 0.3.44
-
-- Improved web links: hidden on glasses, skipped in read-aloud, and available to open on your phone.
-- Added a short phone-link hint on glasses for replies containing only a web URL.
-- Clarified why Dot Link uses network, G2 microphone, location, camera and photo-library access.
-
-## 0.3.43
-
-- Clarified how nearby map data is kept on your Mac when location sharing is enabled.
-- Use with Dot Link for Mac 0.4.23 or later for automatic geographic references alongside shared coordinates.
+- Keep the first answer with its question and additional replies on later pages, including location-based answers, with Dot Link for Mac 0.4.24 or later.
+- Show web addresses as plain text on your phone and localized placeholders on glasses. Read-aloud skips both web addresses and placeholders.
+- Clear the waiting indicator when a location answer arrives after location sharing stops or expires.
+- Clarified why network, G2 microphone, location, camera and photo-library access are used.
+- Your Mac provides nearby geographic references while location sharing is enabled and caches map data locally.
 
 ## 0.3.41
 
