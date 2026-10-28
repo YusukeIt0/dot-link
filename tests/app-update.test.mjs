@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,realpath} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {run} from '../scripts/lib/setup.mjs';
@@ -21,6 +21,7 @@ async function fixture(t,{initialSetup=false}={}){
  const execute=async(cmd,args)=>{
   calls.push([cmd,...args]);
   if(cmd==='/usr/bin/codesign')return '';
+  if(cmd==='/bin/ps'&&args[0]==='-axo')return '';
   if(cmd==='/usr/bin/plutil'){if(args[0]==='-extract')return args[1]==='CFBundleVersion'?'1':'app.tripsurf.dotlink.mac';return run(cmd,args);}
   if(cmd==='/bin/launchctl'){const name=args[1].split('.').at(-1);if(args[0]==='print'){if(!loaded.has(name))throw Object.assign(new Error('not loaded'),{code:113});return 'state = running';}if(args[0]==='disable')disabled.add(name);if(args[0]==='enable')disabled.delete(name);if(args[0]==='bootout')loaded.delete(name);if(args[0]==='bootstrap'){const p=JSON.parse(await run('/usr/bin/plutil',['-convert','json','-o','-',args[2]]));loaded.add(p.Label.split('.').at(-1));}return '';}
   throw new Error('unexpected command');
@@ -184,4 +185,29 @@ test('live-host rollback cancels exit recovery before ownership checks can fail'
  await assert.rejects(finishUpdate(f.directory,{...f,rollback:true}),/CONFLICT/);
  const journal=JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8'));
  assert.equal(journal.exitRecoveryCancelled,true);assert.equal(journal.stopped,false);
+});
+
+test('repeated real preparation and finish, including aborted updates, retain only the latest backup',async t=>{
+ const f=await fixture(t),root=join(f.runtime,'update-backups');
+ for(let n=0;n<30;n++){
+  await prepareUpdate(f.directory,{...f,interrupt:true});
+  const journal=JSON.parse(await readFile(join(f.runtime,'app-update.json'),'utf8'));
+  assert.ok((await readdir(root)).length<=2);
+  await finishUpdate(f.directory,{...f,rollback:n%3===0});
+  assert.deepEqual(await readdir(root),[journal.backup.split('/').at(-2)]);
+  assert.equal(f.loaded.size,4);
+ }
+});
+
+test('failed health preserves all recovery copies, then successful recovery prunes and startup retries',async t=>{
+ const f=await fixture(t),root=join(f.runtime,'update-backups');
+ await prepareUpdate(f.directory,{...f,interrupt:true});await finishUpdate(f.directory,f);
+ await prepareUpdate(f.directory,{...f,interrupt:true});
+ await assert.rejects(finishUpdate(f.directory,{...f,verify:async()=>false}),/UPDATE_RECOVERY_REQUIRED/);
+ assert.equal((await readdir(root)).length,2);
+ await finishUpdate(f.directory,f);assert.equal((await readdir(root)).length,1);
+ // An interrupted cleanup/legacy generation is removed even with no journal.
+ const orphan=join(root,'1700000000000');await mkdir(orphan);
+ await finishUpdate(f.directory,{...f,verify:async()=>false});assert.equal((await readdir(root)).length,2);
+ assert.deepEqual(await finishUpdate(f.directory,f),{recovered:false});assert.equal((await readdir(root)).length,1);
 });
