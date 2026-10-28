@@ -2,6 +2,19 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.49
+
+- Skip voice activation when Even identifies the whole wake phrase as another speaker.
+- Keep the first answer with its question and additional replies on later pages, including location-based answers, with Dot Link for Mac 0.4.24 or later.
+- Show web addresses as plain text on your phone and localized placeholders on glasses. Read-aloud skips both web addresses and placeholders.
+- Clear the waiting indicator when a location answer arrives after location sharing stops or expires.
+- Clarified why network, G2 microphone, location, camera and photo-library access are used.
+- Your Mac provides nearby geographic references while location sharing is enabled and caches map data locally.
+
+## 0.3.48
+
+- Skip voice activation when Even identifies the whole wake phrase as another speaker.
+
 ## 0.3.47
 
 - Keep the first answer with its question and additional replies on later pages, including location-based answers, with Dot Link for Mac 0.4.24 or later.

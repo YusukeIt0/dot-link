@@ -6,7 +6,7 @@ function fixture(detectAt=50,lastTimestamp=0.5) {
   let ready=false, frames=0, frees=0, end=false, speech=false;
   const events: WakeEvent[]=[];
   const engine=new WakeEngine({createStream:()=>({acceptWaveform:()=>{frames++;ready=frames===detectAt;},free:()=>{frees++;}}),
-    isReady:()=>ready,decode:()=>{ready=false;},getResult:()=>({keyword:'HEY_DOT',start_time:0,timestamps:[0.1,0.2,0.4,lastTimestamp]}),free:()=>{}},
+    reset:()=>{},isReady:()=>ready,decode:()=>{ready=false;},getResult:()=>({keyword:'HEY_DOT',start_time:0,timestamps:[0.1,0.2,0.4,lastTimestamp]}),free:()=>{}},
     {acceptWaveform:()=>{},isDetected:()=>speech,isEmpty:()=>!end,reset:()=>{end=false;speech=false;},free:()=>{}}, e=>events.push(e));
   const feed=(seconds:number,value=123)=>{const b=new Uint8Array(640);const v=new DataView(b.buffer);for(let i=0;i<320;i++)v.setInt16(i*2,value,true);for(let i=0;i<seconds*50;i++)engine.append(b);};
   engine.listen();

@@ -26,6 +26,26 @@ The compiled runtime exports only keyword spotting and VAD APIs. A small source 
 
 To rebuild the runtime, install CMake, Git and a C/C++ build tool, then run `node scripts/build-wake-runtime.mjs`. This installs the pinned Emscripten toolchain only under `.runtime/`, applies `distribution/wake/runtime.patch`, strips local source paths, rebuilds the binary/wrappers and updates integrity hashes. Review regenerated files and licenses before committing. Different host/build paths can change binary hashes; the manifest identifies the accepted build, not a claim of byte-identical cross-platform reproducibility. The complete third-party notices are kept compressed in the repository to bound review size and unpacked unchanged for distribution. They are packaged as `wake-assets/THIRD-PARTY-NOTICES.txt`.
 
+## Speaker-role support
+
+Wake activation uses the Even SDK's per-frame speaker role as a supporting signal.
+A cue is suppressed before readiness or capture only when its entire observed interval
+(from the first token onset through the existing 200 ms post-token margin) is labelled
+`other`. Any `self`, unknown or missing role allows the existing detector result.
+Invalid, future or expired cue intervals also retain existing behavior. This conservative
+rule avoids choosing an unmeasured majority/confidence threshold; it may allow false
+activations when labels are mixed.
+
+Roles stay aligned with the unchanged PCM timeline in a bounded two-second phone-local
+buffer and are cleared on cancellation/restart and capture. Suppression keeps listening.
+Manual hold-to-talk and post-cue audio ignore roles. No voiceprint enrollment, additional
+permission, service, persistent role log or speaker authentication is introduced.
+SDK 0.0.16 documents this as an Even App algorithm result; older hosts may report unknown.
+Real-device role coverage, false activations and missed owner activations remain unverified.
+Before release, check owner speech, nearby speech/media and noise in one bounded session,
+including supported lock/background/display-standby behavior and manual fallback.
+Record app/device/build versions and false activations separately from missed activations.
+
 ## Validation and physical checklist
 
 Automated tests cover cue trimming, no-speech cancellation, silence/manual endpoints, 30-second bounds, microphone ownership, OFF/loading races, stale results, disconnection, close retries, preserved manual input and preference restore races. A runtime test initializes the actual WASM and both models with local files and processes/cancels silent sessions without network access. A second regression uses the upstream model archive's own test sample to verify a 30-second timestamp shift after silence. It fails with the unpatched runtime and passes with the patched runtime. The fixture comes from the same hash-pinned model archive; a missing build cache requires downloading that archive again.

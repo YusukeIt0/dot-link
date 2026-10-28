@@ -51,7 +51,7 @@ test('hold takes over an utterance and remains usable if wake activation is swit
 test('manual capture reuses a listening microphone and wake listening resumes after release', async () => {
   const s=setup(); await s.voice.setEnabled(true); await tick();
   await s.voice.start(); assert.deepEqual(s.calls,[true]);
-  s.voice.append(new Uint8Array([1,0])); await s.voice.stop(); await tick();
+  s.voice.append(new Uint8Array([1,0]), 'other'); await s.voice.stop(); await tick();
   assert.deepEqual(s.clips,['manual']); assert.deepEqual(s.calls,[true,false,true]);
   await s.voice.dispose(); assert.deepEqual(s.calls,[true,false,true,false]);
 });

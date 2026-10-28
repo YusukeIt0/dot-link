@@ -1,5 +1,7 @@
 import { MAX_RECORDING_SECONDS, PcmRecording, SAMPLE_RATE } from './audio.ts';
 
+export type SpeakerRole = 'self' | 'other' | 'unknown';
+
 export interface KeywordStream {
   acceptWaveform(rate: number, samples: Float32Array): void;
   free(): void;
@@ -8,6 +10,7 @@ export interface KeywordSpotter {
   createStream(): KeywordStream;
   isReady(stream: KeywordStream): boolean;
   decode(stream: KeywordStream): void;
+  reset(stream: KeywordStream): void;
   getResult(stream: KeywordStream): { keyword?: string; start_time?: number; timestamps?: number[] };
   free(): void;
 }
@@ -29,6 +32,7 @@ export class WakeEngine {
   private mode: 'idle' | 'listening' | 'capture' = 'idle';
   private ring = new Int16Array(SAMPLE_RATE * 2);
   private received = 0;
+  private roles = new Uint8Array(SAMPLE_RATE * 2);
   private clip = new PcmRecording();
   private speechSeen = false;
   private held = false;
@@ -46,7 +50,7 @@ export class WakeEngine {
   cancel(): void {
     this.mode = 'idle';
     this.stream?.free(); this.stream = undefined;
-    this.ring.fill(0); this.received = 0;
+    this.ring.fill(0); this.roles.fill(0); this.received = 0;
     this.clip.clear(); this.speechSeen = false; this.held = false;
     this.vad.reset(); this.vadFrame.fill(0); this.vadUsed = 0;
   }
@@ -62,7 +66,7 @@ export class WakeEngine {
   }
   dispose(): void { this.cancel(); this.kws.free(); this.vad.free(); }
 
-  append(pcm: Uint8Array): void {
+  append(pcm: Uint8Array, role: SpeakerRole = 'unknown'): void {
     if (pcm.byteLength % 2 || pcm.byteLength > SAMPLE_RATE * 2) throw new Error('Invalid audio frame');
     if (this.mode === 'idle') return;
     const input = new DataView(pcm.buffer, pcm.byteOffset, pcm.byteLength);
@@ -73,7 +77,9 @@ export class WakeEngine {
       for (let i = 0; i < samples.length; i++) {
         const value = input.getInt16(offset + i * 2, true);
         samples[i] = value / 32768;
-        this.ring[this.received++ % this.ring.length] = value;
+        const index = this.received++ % this.ring.length;
+        this.ring[index] = value;
+        this.roles[index] = this.mode === 'listening' && role === 'other' ? 1 : 0;
       }
       if (this.mode === 'capture') { this.capture(bytes, samples); continue; }
       const stream = this.stream!;
@@ -87,8 +93,16 @@ export class WakeEngine {
         // Token timestamps mark onset, not word completion. Keep a short post-token
         // margin; retain following speech already received during decoder latency.
         const end = Math.round(((result.start_time ?? 0) + last + 0.20) * SAMPLE_RATE);
-        // Never substitute the whole ring when a detector supplies an old or
-        // future timestamp: that could include the cue or pre-wake speech.
+        // Suppress only an entirely observed cue classified as other. Missing,
+        // mixed, stale or invalid metadata preserves existing activation.
+        const first = result.timestamps?.[0];
+        const cueStart = Math.floor(((result.start_time ?? 0) + (first ?? NaN)) * SAMPLE_RATE);
+        if (this.otherCue(cueStart, end)) {
+          // Consume the match explicitly before continuing the same audio timeline.
+          this.kws.reset(stream);
+          continue;
+        }
+        // Never substitute the whole ring for an old/future timestamp: it could include pre-wake speech.
         const start = end >= Math.max(0, this.received - this.ring.length) && end <= this.received ? end : this.received;
         const preRoll = new Uint8Array((this.received - start) * 2);
         const view = new DataView(preRoll.buffer);
@@ -98,11 +112,19 @@ export class WakeEngine {
           view.setInt16(i * 2, value, true); floats[i] = value / 32768;
         }
         this.mode = 'capture'; this.stream?.free(); this.stream = undefined;
-        this.ring.fill(0); this.vad.reset();
+        this.ring.fill(0); this.roles.fill(0); this.vad.reset();
         this.event({ type: 'wake' });
         this.capture(preRoll, floats);
       }
     }
+  }
+  private otherCue(start: number, end: number): boolean {
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < Math.max(0, this.received - this.roles.length)
+      || end > this.received || end <= start) return false;
+    for (let sample = start; sample < end; sample++) {
+      if (this.roles[sample % this.roles.length] !== 1) return false;
+    }
+    return true;
   }
   private get active(): boolean { return this.mode !== 'idle'; }
   private capture(pcm: Uint8Array, samples: Float32Array): void {

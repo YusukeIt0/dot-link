@@ -71,7 +71,7 @@ globalThis.onmessage = async ({ data }) => {
     if (data.type === 'hold') engine.hold();
     if (data.type === 'finish') engine.finish(data.discard === true);
     if (data.type === 'audio') {
-      engine.append(data.pcm);
+      engine.append(data.pcm, data.role);
       host.postMessage({ type: 'processed', generation, bytes: data.pcm.length });
     }
   } catch {
