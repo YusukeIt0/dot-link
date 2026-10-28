@@ -21,7 +21,7 @@
     },
     {
       "name": "camera",
-      "desc": "Use your phone camera to take a photo for a message to Dot when you tap Camera. The photo stays in your draft until you tap Send or complete voice input with automatic sending enabled."
+      "desc": "Use your phone camera to take a photo for a message to Dot when you tap the camera button. The photo stays in your draft until you tap Send or complete voice input with automatic sending enabled."
     },
     {
       "name": "album",
