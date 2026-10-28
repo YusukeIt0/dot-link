@@ -639,12 +639,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             state = value; lastChecked = Date()
             var showAfterUpdate = false
             if currentAction == "update-recover" {
-                let completed = appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) ?? false
-                // Older updaters do not write a progress handoff. A recovered
-                // journal still warrants showing the restored app, without
-                // claiming that an unverified target build was installed.
-                let recovered = (value["updateRecovery"] as? [String: Any])?["recovered"] as? Bool == true
-                showAfterUpdate = completed || recovered
+                showAfterUpdate = appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) ?? false
             }
             if currentAction == "revoke-pairings" {
                 pairingCode = nil; pairingExpiry = 0

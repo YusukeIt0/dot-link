@@ -273,6 +273,7 @@ progressDefaults.set(["target": "102", "at": Date().timeIntervalSince1970 - 9000
 let stale = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: progressDefaults)
 stale.beginStartupRecovery()
 precondition(!stale.progressActive && progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") == nil)
+precondition(!stale.startupRecoveryFinished(success: true, currentBuild: "102"), "A background recovery without a manual handoff must not request a window reveal")
 print("PASS: measured progress, indeterminate stages, prepared-only handoff, restart recovery, failure/retry, target match and stale handoff")
 
 let preview = UpdateProgressWindow()
