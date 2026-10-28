@@ -558,5 +558,8 @@
   "even.photos_expired_resend": "사진이 만료되었습니다. 다시 보내세요.",
   "even.photo_already_added": "이미 추가한 사진입니다.",
   "even.photos_ready": "사진이 첨부되었습니다.",
-  "even.link_on_phone": "[링크는 휴대폰에 표시]"
+  "even.link_on_phone": "[링크는 휴대폰에 표시]",
+  "mac.update_progress_title": "Dot Link 업데이트 중",
+  "mac.update_progress_complete": "Dot Link 업데이트가 완료되었습니다.",
+  "mac.update_progress_close": "닫기"
 }

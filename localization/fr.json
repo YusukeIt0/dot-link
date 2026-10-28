@@ -558,5 +558,8 @@
   "even.photos_expired_resend": "Photos expirées. Renvoyez-les.",
   "even.photo_already_added": "Cette photo est déjà jointe.",
   "even.photos_ready": "Photos jointes.",
-  "even.link_on_phone": "[Lien affiché sur le téléphone]"
+  "even.link_on_phone": "[Lien affiché sur le téléphone]",
+  "mac.update_progress_title": "Mise à jour de Dot Link",
+  "mac.update_progress_complete": "Dot Link est à jour.",
+  "mac.update_progress_close": "Fermer"
 }

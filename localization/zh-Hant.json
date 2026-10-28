@@ -558,5 +558,8 @@
   "even.photos_expired_resend": "照片已過期，請重新傳送。",
   "even.photo_already_added": "已加入這張照片。",
   "even.photos_ready": "已加入照片。",
-  "even.link_on_phone": "[連結顯示於手機]"
+  "even.link_on_phone": "[連結顯示於手機]",
+  "mac.update_progress_title": "正在更新 Dot Link",
+  "mac.update_progress_complete": "Dot Link 更新完成。",
+  "mac.update_progress_close": "關閉"
 }

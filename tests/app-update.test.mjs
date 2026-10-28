@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {run} from '../scripts/lib/setup.mjs';
 import {withUpdateStorage} from '../scripts/lib/update-storage.mjs';
 import {ownedService} from '../scripts/lib/service-management.mjs';
-import {prepareUpdate,finishUpdate,updateReadiness} from '../scripts/lib/app-update.mjs';
+import {initialSetupReady,prepareUpdate,finishUpdate,updateReadiness} from '../scripts/lib/app-update.mjs';
 async function fixture(t,{initialSetup=false}={}){
  const home=await realpath(await mkdtemp(join(tmpdir(),'dot-update-')));t.after(()=>rm(home,{recursive:true,force:true}));
  const directory=join(home,initialSetup?'Library/Application Support/Dot Link':'even-g2-dot'),runtime=join(directory,'.runtime'),app=join(home,'Applications/Dot Link.app'),agents=join(home,'Library/LaunchAgents');
@@ -234,4 +234,14 @@ test('a normal GUI launch does not wait for an older background sweep lock',asyn
   assert.deepEqual(await finishUpdate(f.directory,{...f,backgroundCleanup:true,launchCleanup:()=>{launched++;}}),{recovered:false});
  });
  assert.equal(launched,1);
+});
+
+
+test('initial setup can prove readiness after a completed recovery result was lost',async t=>{
+ const f=await fixture(t,{initialSetup:true});
+ await prepareUpdate(f.directory,f);await finishUpdate(f.directory,f);
+ assert.equal((await finishUpdate(f.directory,f)).recovered,false);
+ assert.equal(await initialSetupReady(f.directory,f),true);
+ await writeFile(join(f.runtime,'bridge-state.json'),'{}');
+ assert.equal(await initialSetupReady(f.directory,f),false);
 });

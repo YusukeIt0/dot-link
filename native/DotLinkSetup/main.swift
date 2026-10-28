@@ -105,6 +105,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         automaticResumePending = !CommandLine.arguments.contains("--background")
         configureUpdater()
+        appUpdater?.beginStartupRecovery()
         perform("update-recover")
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateExpiry()
@@ -139,6 +140,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 reply(succeeded)
                 if succeeded { self.inspect() }
             }
+        }
+        updater.retryStartupRecovery = { [weak self] in
+            guard let self, !self.busy, self.appUpdater?.blocksActions != true else { return }
+            self.appUpdater?.beginStartupRecovery(); self.perform("update-recover")
         }
         updater.start()
     }
@@ -632,6 +637,10 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
+            var showAfterUpdate = false
+            if currentAction == "update-recover" {
+                showAfterUpdate = appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) ?? false
+            }
             if currentAction == "revoke-pairings" {
                 pairingCode = nil; pairingExpiry = 0
                 switch value["pairingRemoval"] as? String {
@@ -657,12 +666,14 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFinished(); messageRecord = LocalizedMessage("mac.notifications_moved_the_old_app_will_no_longer_start_at_login") }
             if let code = value["pairingCode"] as? String { pairingCode = code; pairingExpiry = value["expiresAt"] as? Double ?? 0 }
             render()
+            if showAfterUpdate { showWindow() }
             if automaticResumePending {
                 automaticResumePending = false
                 if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
             }
         case "error":
             busy = false; helper = nil; automaticResumePending = false
+            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: false) }
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFailed() }
             let code = value["code"] as? String ?? "SETUP_FAILED"

@@ -2,11 +2,27 @@ import AppKit
 import Sparkle
 
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
+    static func recoveredStateIsReady(_ state: [String: Any]) -> Bool {
+        let recovery = state["updateRecovery"] as? [String: Any] ?? [:]
+        // finishUpdate already verifies running, paused and initial-setup recovery.
+        // Do not replace that evidence with a single later network probe.
+        return state["installed"] as? Bool == true && (recovery["recovered"] as? Bool == true || recovery["initialSetupReady"] as? Bool == true || state["lifecycleStopped"] as? Bool == true ||
+            ["bridge", "device", "tunnel"].allSatisfy { state[$0] as? Bool == true })
+    }
     static func preparationResult(_ result: [String: Any]) -> String {
         if result["prepared"] as? Bool == true { return "prepared" }
         if result["kind"] == nil || ["UPDATE_RECOVERY_REQUIRED", "UPDATE_ALREADY_PREPARED"].contains(result["code"] as? String ?? "") { return "recovery-required" }
         return result["waiting"] as? Bool == true ? "waiting" : "failed"
     }
+    private let progressDefaults: UserDefaults
+    private let presentProgress: Bool
+    private let progressMarkerKey = "DotLinkManualUpdateProgress"
+    private var progressWindow: UpdateProgressWindow?
+    private(set) var progressActive = false
+    private(set) var progressFraction: Double?
+    private var targetBuild: String?
+    private var startupProgress = false
+    var retryStartupRecovery: (() -> Void)?
     var updater: SPUUpdater!
     let automaticUpdatesEnabled: Bool
     private let savedAutomaticPreferenceKey = "DotLinkAutomaticChecksBeforePolicyPause"
@@ -36,15 +52,62 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     private(set) var preparing = false
     var blocksActions: Bool { preparing || recovering || prepared }
     var checkTitle: String {
-        recoveryRequired ? tr("mac.retry_recovery") : readyReply != nil ? tr("mac.retry_update") : tr("mac.check_for_updates")
+        (recoveryRequired || startupProgress) ? tr("mac.retry_recovery") : readyReply != nil ? tr("mac.retry_update") : tr("mac.check_for_updates")
     }
     private let repository = Bundle.main.object(forInfoDictionaryKey: "DotLinkUpdateRepository") as? String ?? ""
     var silentRelaunch: Bool { !manuallyApproved }
     var automatic: Bool { automaticUpdatesEnabled && (updater?.automaticallyChecksForUpdates ?? false) }
-    init(automaticUpdatesEnabled: Bool? = nil) {
+    init(automaticUpdatesEnabled: Bool? = nil, presentProgress: Bool = true, progressDefaults: UserDefaults = .standard) {
+        self.presentProgress = presentProgress; self.progressDefaults = progressDefaults
         self.automaticUpdatesEnabled = automaticUpdatesEnabled ?? (Bundle.main.object(forInfoDictionaryKey: "DotLinkAutomaticUpdatesEnabled") as? Bool ?? false)
         super.init()
         updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: self, delegate: self)
+    }
+    private func renderProgress() {
+        guard progressActive, presentProgress else { return }
+        if progressWindow == nil { progressWindow = UpdateProgressWindow() }
+        let retryable = !working && (readyReply != nil || recoveryRequired || startupProgress)
+        progressWindow?.render(title: tr("mac.update_progress_title"), message: message,
+            fraction: progressFraction, working: working,
+            actionTitle: working ? nil : retryable ? (startupProgress ? tr("mac.retry_recovery") : checkTitle) : tr("mac.update_progress_close"),
+            action: { [weak self] in
+                guard let self else { return }
+                if retryable {
+                    if self.startupProgress { self.retryStartupRecovery?() } else { self.check() }
+                } else { self.progressWindow?.close(); self.progressActive = false }
+            })
+    }
+    private func beginProgress() {
+        progressActive = true; renderProgress(); progressWindow?.present()
+    }
+    // Only a prepared manual install leaves a handoff. The target build prevents an
+    // aborted installer or an ordinary restart from being reported as an update.
+    private func saveProgressHandoff() {
+        guard manuallyApproved, let targetBuild else { return }
+        progressDefaults.set(["target": targetBuild, "at": Date().timeIntervalSince1970], forKey: progressMarkerKey)
+        progressDefaults.synchronize()
+    }
+    func beginStartupRecovery(now: Date = Date()) {
+        guard let marker = progressDefaults.dictionary(forKey: progressMarkerKey),
+              let at = marker["at"] as? Double, now.timeIntervalSince1970 - at >= 0,
+              now.timeIntervalSince1970 - at < 86400, let target = marker["target"] as? String else {
+            progressDefaults.removeObject(forKey: progressMarkerKey)
+            startupProgress = false; targetBuild = nil
+            if progressActive { status("mac.update_failed_click_check_for_updates_to_retry") }
+            return
+        }
+        targetBuild = target; startupProgress = true; progressFraction = nil
+        status("mac.restoring_connection", working: true); beginProgress()
+    }
+    @discardableResult func startupRecoveryFinished(success: Bool, currentBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") -> Bool {
+        guard startupProgress else { return false }
+        if !success { status("mac.the_connection_could_not_be_restored_click_retry_recovery"); return false }
+        startupProgress = false
+        progressDefaults.removeObject(forKey: progressMarkerKey)
+        let completed = currentBuild == targetBuild
+        status(completed ? "mac.update_progress_complete" : "mac.update_failed_click_check_for_updates_to_retry")
+        if completed { progressWindow?.close(); progressActive = false }
+        return completed
     }
     // Keep the previous user preference so a future build can lift the policy
     // pause without deleting the updater or losing the user's setting.
@@ -73,14 +136,14 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     private func status(_ key: String, _ parameters: [String: String] = [:], working: Bool = false) {
         statusText = LocalizedMessage(key, parameters)
-        let next = tr(key, parameters); if message == next && self.working == working { return }
-        self.working = working; message = next; statusLabel?.stringValue = message; refreshCheckButton(); changed?()
+        let next = tr(key, parameters); if message == next && self.working == working { renderProgress(); return }
+        self.working = working; message = next; statusLabel?.stringValue = message; refreshCheckButton(); renderProgress(); changed?()
     }
     private func refreshCheckButton() {
         checkButton?.title = checkTitle
         checkButton?.isEnabled = !blocksActions && !extracting
     }
-    func refreshLanguage() { if let value = statusText { message = tr(value.key, value.parameters); statusLabel?.stringValue = message; refreshCheckButton(); changed?() } }
+    func refreshLanguage() { defer { renderProgress() }; if let value = statusText { message = tr(value.key, value.parameters); statusLabel?.stringValue = message; refreshCheckButton(); changed?() } }
     func settingsView() -> NSView {
         let box = NSStackView(); box.orientation = .vertical; box.alignment = .leading; box.spacing = 10
         let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") + ((Bundle.main.object(forInfoDictionaryKey: "DotLinkBeta") as? Bool == true) ? " Beta" : "")
@@ -110,6 +173,11 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         }
     }
     func check() {
+        if startupProgress {
+            if working { progressWindow?.present() } else { retryStartupRecovery?() }
+            return
+        }
+        if working && progressActive { progressWindow?.present(); return }
         guard !blocksActions && !extracting else { return }
         if recoveryRequired { restoreService(); return }
         if readyReply != nil { attemptInstall(); return }
@@ -160,7 +228,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     func show(_ request: SPUUpdatePermissionRequest, reply: @escaping (SUUpdatePermissionResponse) -> Void) { reply(SUUpdatePermissionResponse(automaticUpdateChecks: automaticUpdatesEnabled, sendSystemProfile: false)) }
     func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) { cancelDownload = cancellation; status("mac.checking_for_updates") }
     func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState, reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        cancelDownload = nil; manuallyApproved = false
+        cancelDownload = nil; manuallyApproved = false; targetBuild = appcastItem.versionString
         status("mac.update_available_version", ["version": appcastItem.displayVersionString])
         guard !appcastItem.isInformationOnlyUpdate else { reply(.dismiss); return }
         if !state.userInitiated && automatic {
@@ -168,18 +236,20 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             return
         }
         guard state.userInitiated else { reply(state.stage == .installing ? .skip : .dismiss); return }
-        confirmManualUpdate(version: appcastItem.displayVersionString, notes: appcastItem.itemDescription)
+        confirmManualUpdate(version: appcastItem.displayVersionString, notes: appcastItem.itemDescription, build: appcastItem.versionString)
         if state.stage == .installing {
             if manuallyApproved { showReady(toInstallAndRelaunch: reply) } else { reply(.skip) }
         } else { reply(manuallyApproved ? .install : .dismiss) }
     }
-    func confirmManualUpdate(version: String, notes: String?) {
+    func confirmManualUpdate(version: String, notes: String?, build: String? = nil) {
+        if let build { targetBuild = build }
         let alert = NSAlert(); alert.messageText = tr("mac.an_update_is_available") + " · " + version
         alert.informativeText = String((notes ?? tr("mac.update_dot_link_your_settings_and_history_are_preserved")).prefix(4000))
         alert.informativeText += "\n\n" + tr("mac.updating_interrupts_the_connection_and_any_conversation_in_progress_then")
         alert.addButton(withTitle: tr("mac.later")); alert.addButton(withTitle: tr("mac.update"))
         manuallyApproved = runAlert(alert) == .alertSecondButtonReturn
         if !manuallyApproved { status("mac.you_can_install_this_update_later") }
+        else { progressFraction = nil; status("mac.downloading_update", working: true); beginProgress() }
     }
     func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
     func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
@@ -190,7 +260,8 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) {
         let showAlert = manualCheck || manuallyApproved
-        extracting = false
+        extracting = false; progressFraction = nil
+        progressDefaults.removeObject(forKey: progressMarkerKey)
         retry?.invalidate(); retry = nil; readyReply = nil
         if prepared {
             UserDefaults.standard.removeObject(forKey: "updateBackgroundRelaunchAt"); prepared = false
@@ -204,13 +275,13 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         }
         acknowledgement()
     }
-    func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0; cancelDownload = cancellation; status("mac.downloading_update", working: true) }
+    func showDownloadInitiated(cancellation: @escaping () -> Void) { received = 0; expected = 0; progressFraction = nil; cancelDownload = cancellation; status("mac.downloading_update", working: true) }
     func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) { expected = expectedContentLength }
-    func showDownloadDidReceiveData(ofLength length: UInt64) { received += length; if expected > 0 { let p = min(100, Int(Double(received) / Double(expected) * 100)); status("mac.downloading_update_p", ["p": String(p)], working: true) } }
-    func showDownloadDidStartExtractingUpdate() { extracting = true; cancelDownload = nil; status("mac.verifying_update", working: true) }
-    func showExtractionReceivedProgress(_ progress: Double) {}
+    func showDownloadDidReceiveData(ofLength length: UInt64) { received += length; if expected > 0 { progressFraction = min(1, Double(received) / Double(expected)); let p = min(100, Int(Double(received) / Double(expected) * 100)); status("mac.downloading_update_p", ["p": String(p)], working: true) } }
+    func showDownloadDidStartExtractingUpdate() { extracting = true; progressFraction = nil; cancelDownload = nil; status("mac.verifying_update", working: true) }
+    func showExtractionReceivedProgress(_ progress: Double) { guard extracting, progress.isFinite else { return }; progressFraction = min(1, max(0, progress)); renderProgress() }
     func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        extracting = false; readyReply = reply
+        extracting = false; progressFraction = nil; readyReply = reply
         if !automatic && !manuallyApproved { readyReply = nil; reply(.skip); return }
         attemptInstall()
     }
@@ -232,7 +303,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                 let reply = self.readyReply; self.readyReply = nil; reply?(.skip)
                 self.restoreService()
             } else if result == "prepared" {
-                self.prepared = true
+                self.prepared = true; self.saveProgressHandoff()
                 self.status("mac.installing_update", working: true)
                 let reply = self.readyReply; self.readyReply = nil; reply?(.install)
             } else if result == "waiting" {
@@ -254,6 +325,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     private func restoreService() {
         guard !recovering else { return }
+        progressFraction = nil
         recovering = true; recoveryRequired = true
         status("mac.restoring_connection", working: true)
         recover { [weak self] success in
@@ -266,5 +338,5 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     }
     func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) { status("mac.installing_update", working: true) }
     func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) { acknowledgement() }
-    func dismissUpdateInstallation() { extracting = false; cancelDownload = nil; retry?.invalidate(); retry = nil; readyReply = nil; manualCheck = false; manuallyApproved = false; working = recovering; refreshCheckButton(); changed?() }
+    func dismissUpdateInstallation() { defer { if !prepared && !recovering && !preparing { progressWindow?.close(); progressActive = false } }; extracting = false; cancelDownload = nil; retry?.invalidate(); retry = nil; readyReply = nil; manualCheck = false; manuallyApproved = false; working = recovering; refreshCheckButton(); changed?() }
 }

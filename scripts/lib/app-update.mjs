@@ -28,7 +28,7 @@ export async function updateReadiness(directory,{now=Date.now()}={}){
 // A prepared, never-started installation has no activity heartbeat to wait for.
 // Missing service files alone are not proof: reject partial/previous service
 // state and check launchd too, so an orphaned running job cannot be overlooked.
-async function initialSetupReady(directory,{home,execute,app,uid=process.getuid()}){
+export async function initialSetupReady(directory,{home,execute,app,uid=process.getuid()}){
  if(directory!==join(home,'Library/Application Support/Dot Link'))return false;
  await regularPath(directory);
  const marker=JSON.parse(await readFile(join(directory,'.runtime/install.json'),'utf8'));
