@@ -92,7 +92,7 @@ Sharing starts off. Turning it off stops new sharing and clears the relay's curr
 
 Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. Starting a manual update interrupts the active conversation while the Mac app restarts. If the app says **Finish the current settings operation, then click Retry update**, finish that operation and choose **Retry update**.
 
-Updates preserve connection settings, pairing and history. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
+Updates preserve connection settings, pairing and history. After recovery succeeds, obsolete app backups are automatically removed, keeping one verified rollback generation; older accumulated backups are also cleaned up. No manual storage cleanup or extra setting is required. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
 
 When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your Dot Link connection → Update tools**. If your existing Dot still uses the previous tools, finish any active work and choose **Restart** from that Dot's action menu. In the conversation-ordering update, updating the registered tools alone did not refresh an already-running Dot; restarting it made the new question-reference inputs available. Keep the existing Dot and connection. This step concerns tool-definition changes, not every app update.
 

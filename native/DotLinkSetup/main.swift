@@ -126,10 +126,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let self, !self.busy else { reply("waiting"); return }
             self.notifications?.setRelaySuspended(true)
             self.updateHelper(interrupt ? "update-prepare-manual" : "update-prepare") { result in
-                if result["prepared"] as? Bool == true { reply("prepared"); return }
-                let recoveryRequired = result["kind"] == nil || ["UPDATE_RECOVERY_REQUIRED", "UPDATE_ALREADY_PREPARED"].contains(result["code"] as? String ?? "")
-                reply(recoveryRequired ? "recovery-required" : result["waiting"] as? Bool == true ? "waiting" : "failed")
-                if !recoveryRequired { self.inspect() }
+                let outcome = AppUpdater.preparationResult(result)
+                reply(outcome)
+                if outcome != "prepared" && outcome != "recovery-required" { self.inspect() }
             }
         }
         updater.recover = { [weak self] reply in

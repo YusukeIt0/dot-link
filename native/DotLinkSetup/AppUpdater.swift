@@ -2,6 +2,11 @@ import AppKit
 import Sparkle
 
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
+    static func preparationResult(_ result: [String: Any]) -> String {
+        if result["prepared"] as? Bool == true { return "prepared" }
+        if result["kind"] == nil || ["UPDATE_RECOVERY_REQUIRED", "UPDATE_ALREADY_PREPARED"].contains(result["code"] as? String ?? "") { return "recovery-required" }
+        return result["waiting"] as? Bool == true ? "waiting" : "failed"
+    }
     var updater: SPUUpdater!
     let automaticUpdatesEnabled: Bool
     private let savedAutomaticPreferenceKey = "DotLinkAutomaticChecksBeforePolicyPause"
