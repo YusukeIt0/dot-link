@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.25</title><sparkle:version>100</sparkle:version><sparkle:shortVersionString>0.4.25</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Prevent recordings with no detected speech from creating and automatically sending unintended messages.
-- Preserve short acknowledgements and quiet speech during voice transcription.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.25-100/Dot-Link-0.4.25-100-arm64.zip" sparkle:installationType="application" sparkle:edSignature="9w/6IfdoOpPf0BaaW0XKsto6ZiTesjNzK4gGaOgH9hkp2SAdTnMOXj+QgRNhXglMcJ8XoJ87o1CbavZ3FDl9Aw==" length="59567899" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: fFzA0B7GoyTBXi03P1ZbxtB03DyNXgI3vdMf0mdR3DzHPpd6kagJm1TrOXz+k3+71zapytKcLK8Uv6bAnRt7AQ==
-length: 1218
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.26</title><sparkle:version>102</sparkle:version><sparkle:shortVersionString>0.4.26</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Future manual updates show progress and reopen Dot Link automatically when finished.
+- Keep update storage from growing over time by automatically removing old app backups while retaining one verified recovery copy.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.26-102/Dot-Link-0.4.26-102-arm64.zip" sparkle:installationType="application" sparkle:edSignature="0cHwdJi46GbN8rr6jRLkMeKmFPXsAU9h14g1ERC5zQMXhcw+D2HGXM+UNeyee9mvMDI3BlD25NoY6sLCZ3FyDA==" length="59585674" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: KYq/c66iB/yUu5O97JoxxpZ0eepZEhw467EtiRvvZjRYEVpc0xMZi9+8JiCyAfnXpRIpDzwfAD3g12ulfGJzBQ==
+length: 1251
 -->
