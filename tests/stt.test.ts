@@ -30,7 +30,7 @@ async function session(options: {key?: string; timeoutMs?: number; signal?: Abor
 }
 test('selection sends only to the selected provider and never falls back on failure', async () => {
   let provider: STTProvider = 'whisper', local = 0, external = 0;
-  const run = selectableTranscriber({ selection: async () => provider,
+  const run = selectableTranscriber({ speech: async () => true, selection: async () => provider,
     whisper: async () => { local++; return 'local'; },
     soniox: async () => { external++; throw new Error('synthetic failure'); } });
   assert.equal(await run(recording()), 'local'); assert.equal(external, 0);
@@ -87,7 +87,7 @@ test('timeout and cancellation close the socket without retry', async () => {
 });
 test('concurrent recognition is rejected and selection can change after completion', async () => {
   let release!: (text: string) => void;
-  const run = selectableTranscriber({selection:async () => 'whisper', whisper:async () => await new Promise<string>(r=>release=r), soniox:async()=>assert.fail()});
+  const run = selectableTranscriber({ speech: async () => true,selection:async () => 'whisper', whisper:async () => await new Promise<string>(r=>release=r), soniox:async()=>assert.fail()});
   const first=run(recording()); await Promise.resolve();
   await assert.rejects(run(recording()), /STT_BUSY/); release('done'); assert.equal(await first,'done');
 });

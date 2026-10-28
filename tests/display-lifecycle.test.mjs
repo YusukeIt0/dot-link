@@ -1435,3 +1435,26 @@ test('a suppressed location answer completes its question without speech or wake
   assert.equal(vm.runInContext('conversation.selected.reply',app.context),'Synthetic location answer');
  }
 });
+
+for (const source of ['manual', 'wake', 'takeover']) for (const automatic of [false, true]) test(`no-speech ${source} result never sends text or attached photos, auto-send=${automatic}`, async t => {
+ let finish, wake;
+ const detector={listen(){},cancel(){},hold(){},finish(){wake({type:'clip',seconds:1,wav:new Uint8Array(3200)});},append(){},dispose(){}};
+ const app=await launch({loadWake:async emit=>{wake=emit;return detector;},selectPhoto:async()=>({mimeType:'image/jpeg',data:'test'}),request:(url)=>{
+  if(url.endsWith('/api/transcribe')) return new Promise(r=>{finish=r;});
+ }});t.after(app.close);
+ app.element('auto-send').checked=automatic;
+ app.element('photos').click();await flush();
+ if(source!=='manual') { app.element('wake-word').checked=true;app.element('wake-word').onchange();await flush();wake({type:'wake'});await flush(); }
+ else await app.element('record').click();
+ if(source==='takeover') { vm.runInContext('recorder.start()',app.context);await flush(); }
+ await app.emit({audioEvent:{audioPcm:new Uint8Array(3200)}});
+ await app.element('record').click();await flush();
+ assert.ok(finish,'recording must reach the shared transcription boundary');
+ finish({ok:true,status:200,json:async()=>({text:''})});await flush();
+ assert.equal(app.networkCalls.some(url=>url.endsWith('/api/utterances')),false);
+ assert.equal(app.element('transcript').value,'');
+ assert.equal(vm.runInContext('busy',app.context),false);
+ assert.equal(vm.runInContext('clip',app.context),undefined);
+ assert.equal(vm.runInContext('progress.phase',app.context),'idle');
+ assert.equal(vm.runInContext('photos.length',app.context),1);
+});

@@ -226,3 +226,33 @@ authorization and result-validation bounds remain separate.
 Use automated tests, simulation or a controlled test environment for races, narrow timing windows, delayed replies, expiry and fault timing. Do not ask the maintainer to race an incoming response or repeat timing-sensitive actions. Physical acceptance covers ordinary use and observations unavailable to automation, such as the actual glasses display and speech. Read machine-visible state directly and reuse applicable evidence when the tested runtime is unchanged. Record automated boundary coverage separately from physical observations; absence of a manual race reproduction alone is not a release blocker.
 
 The maintainer defines UX and reports the experience. The implementer owns implementation choices, dependency order, test design and issue/PR integration. Complete child work in order, integrate it into the parent and close the child PR before advancing the overall outcome. Preserve separate main-merge and distribution authorization boundaries without asking the maintainer to manage internal task sequencing.
+
+## Speech-presence check
+
+The Mac transcription boundary checks every completed recording with the bundled
+Silero VAD before selecting or contacting a provider. Manual, wake and manual
+takeover recordings use the same check. No language detection, transcript
+blacklist, interface locale or speaker profile influences this decision.
+
+A per-recording Node worker loads the existing local WASM and Silero assets from
+`dist/wake-assets` (or `public/wake-assets` in a source checkout). It keeps audio
+in memory, has a 15-second deadline, and is terminated after completion or
+cancellation. An unavailable detector fails the request without falling through
+to a provider. A no-speech result returns an empty transcript, which the existing
+Even flow treats as idle without sending text or draft photos.
+
+The detector receives a peak-normalized copy (target 0.9, amplification capped at 128×); STT receives the unmodified WAV. The cap prevents near-zero quantization noise from being amplified to full scale.
+Presence detection uses the same 0.5 probability threshold as wake detection but
+a 64 ms minimum speech interval to accommodate short acknowledgements. Wake
+endpointing retains its existing 300 ms minimum and 1.2-second silence interval.
+These serve different purposes: preserving a brief completed answer versus
+ending an automatically captured utterance. The old whole-recording RMS cutoff
+is removed because silence surrounding a quiet phrase can lower its average.
+
+Run `node --test tests/speech-presence.test.ts tests/display-lifecycle.test.mjs`
+and the HTTP suite. The offline regression corpus contains short and sentence
+samples from two synthetic voices in each of the seven interface languages at original, 10% and 1% amplitude;
+noise fixtures contain no microphone recordings. These checks do not establish
+accuracy across all voices, accents, background sounds or G2 microphone levels.
+Speech detection also cannot distinguish the wearer from another speaker or
+media. Keep that separate from speaker-role work.

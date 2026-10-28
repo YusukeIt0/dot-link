@@ -28,7 +28,7 @@ test('typed messages bypass STT, credentials and provider connections even with 
   inner.listen(0, '127.0.0.1'); await once(inner, 'listening');
   const innerAddress = inner.address(); assert(innerAddress && typeof innerAddress !== 'string');
   let selections = 0, whisperCalls = 0, keyReads = 0, connections = 0;
-  const transcribe = selectableTranscriber({
+  const transcribe = selectableTranscriber({ speech: async () => true,
     selection: async () => { selections++; return 'soniox'; },
     whisper: async () => { whisperCalls++; throw new Error('Unexpected Whisper call'); },
     soniox: sonioxTranscriber({

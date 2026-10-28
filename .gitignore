@@ -28,6 +28,8 @@ recordings/
 transcripts/
 *.pcm
 *.wav
+# Explicitly generated, non-microphone regression fixtures only.
+!tests/fixtures/speech/*.wav
 *.log
 
 # OS and editor state

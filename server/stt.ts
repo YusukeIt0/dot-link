@@ -1,3 +1,4 @@
+import { hasSpeech } from './speech-presence.ts';
 import { validateWav } from './asr.ts';
 
 import { STT_PROVIDERS, readSTTProvider, type STTProvider } from '../src/stt-providers.ts';
@@ -14,6 +15,7 @@ export class STTError extends Error {
 export type Transcriber = (wav: Buffer, signal?: AbortSignal) => Promise<string>;
 export function selectableTranscriber(options: {
   selection: () => Promise<STTProvider>;
+  speech?: (wav: Buffer, signal?: AbortSignal) => Promise<boolean>;
   whisper: Transcriber;
   soniox: Transcriber;
   providers?: Partial<Record<STTProvider, Transcriber>>;
@@ -25,6 +27,11 @@ export function selectableTranscriber(options: {
     if (busy) throw new STTError('STT_BUSY');
     busy = true;
     try {
+      let speech: boolean;
+      try { speech = await (options.speech ?? hasSpeech)(wav, signal); }
+      catch { throw new STTError(signal?.aborted ? 'STT_CANCELLED' : 'STT_UNAVAILABLE'); }
+      if (signal?.aborted) throw new STTError('STT_CANCELLED');
+      if (!speech) return '';
       const provider = await options.selection();
       if (signal?.aborted) throw new STTError('STT_CANCELLED');
       // Explicit selection only: an error must not silently send audio elsewhere.

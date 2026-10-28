@@ -62,7 +62,7 @@ Speech input requires Even 0.2.14 or later. Provider labels and detailed errors 
 
 **Speech input** on the Mac offers local Whisper small and external services: Soniox, ElevenLabs, Microsoft, OpenAI and AssemblyAI. Enter your own service key in the app. Microsoft also needs an Azure Speech resource endpoint; use **About the endpoint** for instructions.
 
-Local Whisper is free and runs on your Mac. External recordings go directly from the Mac to the selected service, under your account's charges and limits. Changes apply to the next recording; there is no automatic fallback. Saving a key does not test provider access—try a recording. Typed messages do not use speech recognition.
+Local Whisper is free and runs on your Mac. External recordings go directly from the Mac to the selected service, under your account's charges and limits. Changes apply to the next recording; there is no automatic fallback. Saving a key does not test provider access—try a recording. Typed messages do not use speech recognition. Your Mac checks recordings for speech before using any recognition service. A recording with no detected speech sends no message, even when automatic sending is enabled. The check uses the same policy for every language; it does not authenticate the speaker.
 
 Keys are stored separately in macOS Keychain. Choose **Always Allow** when prompted; an app update may require permission again. To replace a key, delete it and save the new one. Deleting the active service key switches speech input back to Whisper.
 

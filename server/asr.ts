@@ -15,9 +15,6 @@ export function validateWav(wav: Buffer): void {
       wav.readUInt16LE(32) !== 2 || wav.readUInt16LE(34) !== 16 ||
       wav.toString('ascii', 36, 40) !== 'data' || wav.readUInt32LE(40) !== wav.length - 44 || wav.length % 2)
     throw new Error('Invalid 16 kHz mono recording');
-  let energy = 0;
-  for (let offset = 44; offset < wav.length; offset += 2) energy += wav.readInt16LE(offset) ** 2;
-  if (Math.sqrt(energy / ((wav.length - 44) / 2)) < 40) throw new Error('Recording is silent');
 }
 
 export function localTranscriber() {
