@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.48
 
 - Skip voice activation when Even identifies the whole wake phrase as another speaker.
 
