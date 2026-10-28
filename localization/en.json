@@ -558,5 +558,8 @@
   "even.photos_expired_resend": "Photos expired. Please resend.",
   "even.photo_already_added": "This photo is already attached.",
   "even.photos_ready": "Photos attached.",
-  "even.link_on_phone": "[Link shown on phone]"
+  "even.link_on_phone": "[Link shown on phone]",
+  "mac.update_progress_title": "Updating Dot Link",
+  "mac.update_progress_complete": "Dot Link is up to date.",
+  "mac.update_progress_close": "Close"
 }

@@ -558,5 +558,8 @@
   "even.photos_expired_resend": "Fotos abgelaufen. Bitte erneut senden.",
   "even.photo_already_added": "Dieses Foto ist bereits angehängt.",
   "even.photos_ready": "Fotos angehängt.",
-  "even.link_on_phone": "[Link auf dem Smartphone]"
+  "even.link_on_phone": "[Link auf dem Smartphone]",
+  "mac.update_progress_title": "Dot Link wird aktualisiert",
+  "mac.update_progress_complete": "Dot Link ist auf dem neuesten Stand.",
+  "mac.update_progress_close": "Schließen"
 }

@@ -6,7 +6,7 @@ final class ActionButton: NSButton {
     convenience init(_ text: String, _ action: @escaping () -> Void) { self.init(title: text, target: nil, action: nil); handler = action; target = self; self.action = #selector(invoke) }
 }
 let app = NSApplication.shared
-let driver = AppUpdater(automaticUpdatesEnabled: true)
+let driver = AppUpdater(automaticUpdatesEnabled: true, presentProgress: false)
 driver.localize = { key, parameters in Localization.shared.text(key, language: "ja", parameters) }
 var blockedQuitAlerts = 0
 driver.runAlert = { alert in
@@ -63,7 +63,7 @@ automaticToggle.state = .on; app.sendAction(automaticToggle.action!, to: automat
 precondition(driver.automatic && driver.message == "自動更新はオンです")
 print("PASS: switching automatic updates updates the visible on/off state")
 
-let locked = AppUpdater(automaticUpdatesEnabled: false)
+let locked = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false)
 locked.localize = { key, parameters in Localization.shared.text(key, language: "ja", parameters) }
 locked.canCheck = { true }
 locked.updater.automaticallyChecksForUpdates = true
@@ -110,7 +110,7 @@ if CommandLine.arguments.contains("--preview") {
     withExtendedLifetime(window) { app.run() }
 }
 
-let manual = AppUpdater(automaticUpdatesEnabled: false)
+let manual = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false)
 manual.localize = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
 manual.canCheck = { true }
 manual.runAlert = { alert in
@@ -177,7 +177,7 @@ manual.check(); recoveryReply?(true)
 precondition(!manual.blocksActions && !manual.recoveryRequired)
 print("PASS: manual interruption consent, bounded settings wait, retained installer retry, recovery gate, installer failure recovery")
 
-let abandoned = AppUpdater(automaticUpdatesEnabled: false)
+let abandoned = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false)
 abandoned.runAlert = { _ in .alertSecondButtonReturn }
 abandoned.confirmManualUpdate(version: "1.0", notes: nil)
 abandoned.prepare = { _, reply in reply("failed") }
@@ -187,7 +187,7 @@ precondition(abandonedChoice == nil)
 precondition(abandoned.cancelForQuit() && abandonedChoice == .skip, "Explicit discard cancels install-on-exit")
 print("PASS: explicit quit explains and discards the pending installer")
 
-let failedRecovery = AppUpdater(automaticUpdatesEnabled: false)
+let failedRecovery = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false)
 failedRecovery.localize = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
 failedRecovery.runAlert = { _ in .alertSecondButtonReturn }
 failedRecovery.confirmManualUpdate(version: "1.0", notes: nil)
@@ -201,7 +201,7 @@ precondition(failedRecovery.recoveryRequired && failedRecovery.message.contains(
 precondition(failedRecovery.checkTitle == "Retry recovery")
 print("PASS: installer errors preserve the recovery guidance and use a fixed failure title")
 
-let uninstall = AppUpdater(automaticUpdatesEnabled: false)
+let uninstall = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false)
 uninstall.runAlert = { _ in .alertSecondButtonReturn }
 uninstall.confirmManualUpdate(version: "1.0", notes: nil)
 uninstall.prepare = { _, reply in reply("failed") }
@@ -211,7 +211,7 @@ uninstall.runAlert = { _ in preconditionFailure("Uninstall already confirmed dis
 precondition(uninstall.cancelForQuit(discardConfirmed: true) && uninstallChoice == .skip)
 print("PASS: confirmed uninstall cancels the retained installer without a quit dialog")
 
-let interruptedPreparation = AppUpdater(automaticUpdatesEnabled: false)
+let interruptedPreparation = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false)
 interruptedPreparation.runAlert = { _ in .alertSecondButtonReturn }
 interruptedPreparation.confirmManualUpdate(version: "1.0", notes: nil)
 var delayedPreparation: ((String) -> Void)?
@@ -225,3 +225,68 @@ precondition(interruptedPreparation.blocksActions, "Keep service operations bloc
 delayedPreparation?("prepared")
 precondition(restoredAfterError && !interruptedPreparation.prepared && !interruptedPreparation.blocksActions)
 print("PASS: installer error during preparation restores services after the helper returns")
+
+// Use isolated preferences: no real application handoff is created by this test.
+let progressSuite = "app.tripsurf.dotlink.progress-test.\(UUID().uuidString)"
+let progressDefaults = UserDefaults(suiteName: progressSuite)!
+defer { progressDefaults.removePersistentDomain(forName: progressSuite) }
+let progressDriver = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: progressDefaults)
+progressDriver.runAlert = { _ in .alertSecondButtonReturn }
+progressDriver.confirmManualUpdate(version: "0.4.26", notes: nil, build: "102")
+precondition(progressDriver.progressActive && progressDriver.working)
+progressDriver.showDownloadInitiated(cancellation: {})
+precondition(progressDriver.progressFraction == nil)
+progressDriver.showDownloadDidReceiveExpectedContentLength(100)
+progressDriver.showDownloadDidReceiveData(ofLength: 35)
+precondition(progressDriver.progressFraction == 0.35)
+progressDriver.showDownloadDidStartExtractingUpdate()
+precondition(progressDriver.progressFraction == nil)
+progressDriver.showExtractionReceivedProgress(0.6)
+precondition(progressDriver.progressFraction == 0.6)
+progressDriver.showExtractionReceivedProgress(.nan)
+precondition(progressDriver.progressFraction == 0.6)
+var progressPrepare: ((String) -> Void)?
+progressDriver.prepare = { _, reply in progressPrepare = reply }
+progressDriver.showReady(toInstallAndRelaunch: { precondition($0 == .install) })
+precondition(progressDriver.progressFraction == nil && progressDriver.preparing)
+precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") == nil)
+progressPrepare?("prepared")
+precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress")?["target"] as? String == "102")
+let relaunched = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: progressDefaults)
+relaunched.beginStartupRecovery()
+precondition(relaunched.progressActive && relaunched.working && relaunched.message == "Restoring connection…")
+relaunched.startupRecoveryFinished(success: false, currentBuild: "102")
+precondition(!relaunched.working && relaunched.message.contains("Retry recovery"))
+precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") != nil)
+relaunched.beginStartupRecovery()
+relaunched.startupRecoveryFinished(success: true, currentBuild: "102")
+precondition(relaunched.message == "Dot Link is up to date." && !relaunched.working)
+precondition(progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") == nil)
+progressDefaults.set(["target": "103", "at": Date().timeIntervalSince1970], forKey: "DotLinkManualUpdateProgress")
+relaunched.beginStartupRecovery(); relaunched.startupRecoveryFinished(success: true, currentBuild: "102")
+precondition(relaunched.message.contains("Update failed"), "An aborted replacement cannot claim update success")
+progressDefaults.set(["target": "102", "at": Date().timeIntervalSince1970 - 90000], forKey: "DotLinkManualUpdateProgress")
+let stale = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: progressDefaults)
+stale.beginStartupRecovery()
+precondition(!stale.progressActive && progressDefaults.dictionary(forKey: "DotLinkManualUpdateProgress") == nil)
+print("PASS: measured progress, indeterminate stages, prepared-only handoff, restart recovery, failure/retry, target match and stale handoff")
+
+let preview = UpdateProgressWindow()
+for language in Localization.shared.languages {
+    let tr: (String) -> String = { Localization.shared.text($0, language: language) }
+    for key in ["mac.downloading_update_p", "mac.verifying_update", "mac.preparing_update", "mac.installing_update", "mac.restoring_connection", "mac.update_progress_complete", "mac.update_preparation_failed_click_retry_update_the_download_is_kept", "mac.the_connection_could_not_be_restored_click_retry_recovery"] {
+        let text = Localization.shared.text(key, language: language, ["p": "35"])
+        preview.render(title: tr("mac.update_progress_title"), message: text, fraction: 0.35, working: true, actionTitle: tr("mac.retry_recovery"), action: {})
+        let content = preview.window!.contentView!
+        precondition(preview.stage.frame.minX >= 0 && preview.stage.frame.maxX <= content.bounds.width)
+        precondition(preview.stage.frame.height >= ceil((text as NSString).boundingRect(with: NSSize(width: preview.stage.frame.width, height: 1000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: preview.stage.font!]).height) - 1)
+        precondition(preview.indicator.frame.maxY < preview.stage.frame.minY, "Progress cannot overlap stage text")
+        precondition(preview.actionButton.frame.maxY < preview.indicator.frame.minY, "Action cannot overlap progress")
+        precondition(preview.actionButton.intrinsicContentSize.width <= 392)
+    }
+}
+print("PASS: all seven locales fit the real native progress window")
+if CommandLine.arguments.contains("--preview-progress") {
+    preview.render(title: "Dot Linkを更新中", message: "アップデートをダウンロード中… 35%", fraction: 0.35, working: true, actionTitle: nil, action: nil)
+    preview.present(); app.run()
+}

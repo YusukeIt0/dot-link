@@ -105,6 +105,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         automaticResumePending = !CommandLine.arguments.contains("--background")
         configureUpdater()
+        appUpdater?.beginStartupRecovery()
         perform("update-recover")
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateExpiry()
@@ -140,6 +141,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if succeeded { self.inspect() }
             }
         }
+        updater.retryStartupRecovery = { [weak self] in self?.appUpdater?.beginStartupRecovery(); self?.perform("update-recover") }
         updater.start()
     }
     func updateHelper(_ action: String, completion: @escaping ([String: Any]) -> Void) {
@@ -632,6 +634,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
+            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: yes("installed") && (yes("lifecycleStopped") || (yes("bridge") && yes("device") && yes("tunnel")))) }
             if currentAction == "revoke-pairings" {
                 pairingCode = nil; pairingExpiry = 0
                 switch value["pairingRemoval"] as? String {
@@ -663,6 +666,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
         case "error":
             busy = false; helper = nil; automaticResumePending = false
+            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: false) }
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFailed() }
             let code = value["code"] as? String ?? "SETUP_FAILED"
