@@ -14,7 +14,7 @@ import { TimingTracker } from './timing.ts';
 import { ConversationState, type ConversationMessage as Message } from './conversation-state.ts';
 import { conversationText, conversationHudText, receiptCaption, newReplyCaption } from './conversation-display.ts';
 import { wrapHudText } from './hud-text.ts';
-import { renderMessageLinks, withoutMessageUrls } from './message-links.ts';
+import { withoutMessageUrls } from './message-links.ts';
 import { LiveUpdates } from './live-updates.ts';
 import { Pairing } from './pairing.ts';
 import { InteractionStatus } from './interaction-status.ts';
@@ -658,7 +658,7 @@ function refreshStatus(sendToG2 = true): void {
   baseStatus = renderBaseStatus();
   const nextText = renderDisplayText();
   if (nextText !== lastDisplayText) {
-    lastDisplayText = nextText; renderMessageLinks(el('hud-content'), nextText);
+    lastDisplayText = nextText; el('hud-content').textContent = nextText;
     if (sendToG2) queueDisplayFrame();
   }
   const caption = hudCaption();
@@ -681,7 +681,7 @@ function display(state: string | (() => string), text: string | (() => string), 
   if (trace && !timing.report(trace)) trace = undefined;
   refreshStatus(false);
   lastDisplayText = renderDisplayText();
-  renderMessageLinks(el('hud-content'), lastDisplayText);
+  el('hud-content').textContent = lastDisplayText;
   queueDisplayFrame(trace);
 }
 
@@ -708,7 +708,7 @@ function applyLanguage(): void {
   if (!namedHost) hostName = t('even.relay');
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('even.dot_connected') : t('even.dot_disconnected')) : progress.connection === 'unpaired' ? t('even.pair_with_your_mac') : t('even.reconnecting')}`;
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
-  renderMessageLinks(el('hud-content'), lastDisplayText);
+  el('hud-content').textContent = lastDisplayText;
   g2Display.invalidate();
   refreshStatus(false); queueDisplayFrame();
 }

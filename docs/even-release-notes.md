@@ -2,6 +2,11 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.45
+
+- Web addresses remain visible as plain text on your phone, so tapping them no longer leaves the conversation.
+- Glasses show a localized placeholder where a web address appears. Read-aloud skips both web addresses and placeholders.
+
 ## 0.3.44
 
 - Improved web links: hidden on glasses, skipped in read-aloud, and available to open on your phone.

@@ -10,7 +10,6 @@ h1 { font-size: 44px; margin: 8px 0; font-weight: 500; }
 .glass { margin: 28px 0; padding: 20px; background: #070d09; border: 1px solid #344637; border-radius: 16px; color: #9de591; }
 #hud-state { font-size: 13px; border-bottom: 1px solid #344637; padding-bottom: 14px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; min-height: 132px; font-size: 18px; line-height: 1.65; }
-#hud-content a { color: inherit; text-decoration: underline; text-underline-offset: .15em; }
 small { color: #78a976; }
 button { border: 1px solid #435446; padding: 13px 18px; border-radius: 10px; background: #d1edc8; color: #152013; font: inherit; margin: 8px 8px 8px 0; cursor: pointer; }
 button:disabled { opacity: .4; cursor: default; }

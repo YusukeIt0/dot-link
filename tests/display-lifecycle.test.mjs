@@ -575,7 +575,7 @@ test('both read-aloud paths use the locale and preserve reply text', async t => 
   }
 });
 
-test('URLs stay linked on the phone but are absent from G2 and speech in every locale', async t => {
+test('URLs remain plain text on the phone and absent from G2 and speech in every locale', async t => {
   for (const language of Object.keys(localeMetadata)) {
     const app = await launch({language, speak: speech => speech.onend()});
     t.after(app.close);
@@ -583,9 +583,9 @@ test('URLs stay linked on the phone but are absent from G2 and speech in every l
     const reply = {...proactive('linked'), reply: 'Source [Guide](https://example.com/guide) https://example.org'};
     await app.deliver(app.snapshot([reply]));
     assert.equal(app.element('hud-content').textContent, reply.reply);
-    assert.deepEqual(app.element('hud-content').children.filter(node => node.href).map(node => node.href),
-      ['https://example.com/guide', 'https://example.org/']);
-    assert.equal(app.physical.get(2), 'Source Guide');
+    assert.deepEqual(app.element('hud-content').children.filter(node => node.href), []);
+    assert.equal(app.physical.get(2).replace(/\s/g, ''), `Source Guide ${catalogs[language]['even.link_on_phone']} ${catalogs[language]['even.link_on_phone']}`.replace(/\s/g, ''));
+    assert.doesNotMatch(app.physical.get(2), /https?:|example\./);
     assert.equal(app.calls.filter(call => call[0] === 'speech').at(-1)[1], 'Source Guide');
     const speechCount = app.calls.filter(call => call[0] === 'speech').length;
     await app.deliver(app.snapshot([reply, {...proactive('url-only'), reply: 'https://example.net'}]));
