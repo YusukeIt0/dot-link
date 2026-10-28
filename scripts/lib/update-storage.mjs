@@ -1,4 +1,4 @@
-import {open,readFile,writeFile,lstat,unlink,readdir,mkdir,rm} from 'node:fs/promises';
+import {open,readFile,writeFile,lstat,rename,readdir,mkdir,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
 import {regularPath} from './app-lifecycle.mjs';
@@ -7,6 +7,7 @@ import {run} from './setup.mjs';
 const bundleID='app.tripsurf.dotlink.mac';
 const generation=/^\d{13}$/;
 const receiptName='backup.json';
+const removing=/^\d{13}\.removing$/;
 async function exists(path){try{await lstat(path);return true;}catch(e){if(e.code==='ENOENT')return false;throw e;}}
 
 // Keep one inode permanently. OS advisory locks are released on process exit;
@@ -61,8 +62,9 @@ export async function pruneUpdateBackups(directory,{app,execute=run,remove=rm}={
  await verifyUpdateApp(app,execute);
  try{await regularPath(root);}catch(e){if(e.code==='ENOENT')return {removed:0};throw e;}
  const processes=(await execute('/bin/ps',['-axo','comm='])).split('\n').map(s=>s.trim());
- const entries=(await readdir(root)).filter(name=>generation.test(name)).sort().reverse();
- const candidates=[];let keep;
+ const all=await readdir(root);
+ const entries=all.filter(name=>generation.test(name)).sort().reverse();
+ const candidates=all.filter(name=>removing.test(name)).map(name=>join(root,name));let keep;
  for(const name of entries){
   const folder=join(root,name),app=join(folder,'Dot Link.app');
   try{
@@ -95,8 +97,12 @@ export async function pruneUpdateBackups(directory,{app,execute=run,remove=rm}={
   if(folder===keep||processes.some(p=>p.startsWith(folder+'/')))continue;
   try{
    if(await exists(journal))return {removed,failed,deferred:true};
-   await regularPath(root);await regularPath(folder);
-   await remove(folder,{recursive:true});removed++;
+   await regularPath(root);if(!(await regularPath(folder)).isDirectory())continue;
+   // Atomic rename records deletion intent outside the recursively removed
+   // contents, so even a partial app/receipt removal remains reclaimable.
+   const target=folder.endsWith('.removing')?folder:folder+'.removing';
+   if(target!==folder){if(await exists(target))throw new Error('UPDATE_CLEANUP_COLLISION');await rename(folder,target);}
+   await remove(target,{recursive:true});removed++;
   }catch{failed++;}
  }
  return {removed,failed};

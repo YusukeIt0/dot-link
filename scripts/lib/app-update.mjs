@@ -1,6 +1,8 @@
 import {readFile,writeFile,rename,unlink,cp,lstat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
+import {spawn} from 'node:child_process';
+import {fileURLToPath} from 'node:url';
 import {ownedJobs,lifecycleState,suspendServices,resumeServices,regularPath} from './app-lifecycle.mjs';
 import {run,launchAgent} from './setup.mjs';
 import {serviceNames} from './service-management.mjs';
@@ -42,7 +44,7 @@ async function initialSetupReady(directory,{home,execute,app,uid=process.getuid(
  return true;
 }
 export async function prepareUpdate(directory,options={}){
- return withUpdateStorage(directory,()=>prepareUpdateLocked(directory,options));
+ return withUpdateStorage(directory,()=>prepareUpdateLocked(directory,options),{timeout:60});
 }
 async function cleanup(directory,options){
  try{
@@ -88,19 +90,39 @@ async function prepareUpdateLocked(directory,{home=homedir(),execute=run,app=joi
   throw e;
  }
 }
+function launchCleanup(directory,app){
+ const child=spawn(process.execPath,[fileURLToPath(new URL('./update-cleanup-worker.mjs',import.meta.url)),directory,...(app?[app]:[])],{detached:true,stdio:'ignore'});
+ child.on('error',()=>{});child.unref();
+}
 export async function finishUpdate(directory,options={}){
  try{await regularPath(join(directory,'.runtime'));}catch(e){if(e.code==='ENOENT')return {recovered:false};throw e;}
- return withUpdateStorage(directory,()=>finishUpdateLocked(directory,options));
+ // A healthy launch with no recovery journal must not wait behind a previous
+ // background sweep. A concurrently created journal belongs to its preparer.
+ if(options.backgroundCleanup){
+  try{await lstat(journalPath(directory));}catch(e){
+   if(e.code!=='ENOENT')throw e;
+   (options.launchCleanup??launchCleanup)(directory,options.app);return {recovered:false};
+  }
+ }
+ const result=await withUpdateStorage(directory,()=>finishUpdateLocked(directory,options),{timeout:options.cleanupOnly?0:10});
+ if(options.backgroundCleanup){
+  // A one-shot child does not hold the GUI helper's stdout pipe open. Its own
+  // lock and health/journal checks make it safe to race a later user action.
+  (options.launchCleanup??launchCleanup)(directory,options.app);
+ }
+ return result;
 }
-async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),rollback=false,verify,...options}={}){
+async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),rollback=false,verify,backgroundCleanup=false,cleanupOnly=false,...options}={}){
  const check=verify??(async()=>{try{const h=JSON.parse(await execute(process.execPath,[join(app,'Contents/Resources/payload/scripts/setup-status.mjs'),directory],{timeout:15000}));return h.bridge===true&&h.device===true&&h.tunnel===true;}catch{return false;}});
  let journal;try{journal=JSON.parse(await readFile(journalPath(directory),'utf8'));}catch(e){
   if(e.code!=='ENOENT')throw e;
   // Startup and later update attempts retry cleanup, even if the last cleanup
   // was interrupted after its recovery journal had already been removed.
-  if((await lifecycleState(directory)).lifecycleStopped||await check())await cleanup(directory,{app,execute});
+  if(!backgroundCleanup&&((await lifecycleState(directory)).lifecycleStopped||await check()))await cleanup(directory,{app,execute});
   return {recovered:false};
  }
+ // A background sweep must never consume a journal created since it started.
+ if(cleanupOnly)return {recovered:false};
  // A live host has taken recovery back from Sparkle. Disarm the exit watcher
  // even if ownership/health checks fail, so a later explicit Quit is respected.
  if(rollback&&journal.schema===1){journal.exitRecoveryCancelled=true;await save(journalPath(directory),journal);}
@@ -110,7 +132,7 @@ async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join
  if(journal.initialSetup===true){
   if(journal.originals.length!==0||!await initialSetupReady(directory,{home,execute,app,...options}))throw new Error('UPDATE_SETUP_CHANGED');
   await unlink(journalPath(directory));
-  await cleanup(directory,{app,execute});
+  if(!backgroundCleanup)await cleanup(directory,{app,execute});
   return {recovered:true,stopped:journal.stopped};
  }
  if(rollback)for(const j of journal.originals)await writeFile(j.path,j.content,{mode:0o600});
@@ -122,6 +144,6 @@ async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join
  }
  else await save(join(directory,'.runtime/lifecycle.json'),{stopped:true,reason:journal.reason||'pause'});
  await unlink(journalPath(directory));
- await cleanup(directory,{app,execute});
+ if(!backgroundCleanup)await cleanup(directory,{app,execute});
  return {recovered:true,stopped:journal.stopped};
 }

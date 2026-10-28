@@ -68,7 +68,7 @@ test('failed or interrupted copies and interrupted removals are reclaimed on ret
  const f=await fixture(t),old=await f.backup(0);await f.backup(1);
  const partial=await createUpdateBackup(f.directory);await mkdir(partial);await writeFile(join(partial,'incomplete'),'partial');
  let failed=false;
- assert.deepEqual(await f.clean({remove:async(path,options)=>{if(path===old&&!failed){failed=true;throw new Error('EACCES');}return rm(path,options);}}),{removed:1,failed:1});
+ assert.deepEqual(await f.clean({remove:async(path,options)=>{if(path===old+'.removing'&&!failed){failed=true;throw new Error('EACCES');}return rm(path,options);}}),{removed:1,failed:1});
  assert.deepEqual(await f.clean(),{removed:1,failed:0});
  const interrupted=await f.backup(2,{managed:true});await rm(join(interrupted,'Dot Link.app'),{recursive:true});assert.deepEqual(await f.clean(),{removed:1,failed:0});
 });
@@ -130,4 +130,14 @@ test('OS releases a separate crashed owner and serializes simultaneous recovery 
   active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,10));active--;
  })));
  assert.equal(peak,1);
+});
+
+test('interrupted recursive deletion remains reclaimable after app and receipt damage',async t=>{
+ const f=await fixture(t),old=await f.backup(0);await f.backup(1);
+ assert.deepEqual(await f.clean({remove:async(path)=>{
+  assert.equal(path,old+'.removing');await rm(join(path,'Dot Link.app/Contents/Info.plist'));
+  throw new Error('INTERRUPTED');
+ }}),{removed:0,failed:1});
+ assert.deepEqual(await f.clean(),{removed:1,failed:0});
+ assert.deepEqual(await readdir(f.root),['1700000000001']);
 });

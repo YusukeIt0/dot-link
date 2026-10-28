@@ -4,6 +4,7 @@ import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,realpath} from 'node:fs/prom
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {run} from '../scripts/lib/setup.mjs';
+import {withUpdateStorage} from '../scripts/lib/update-storage.mjs';
 import {ownedService} from '../scripts/lib/service-management.mjs';
 import {prepareUpdate,finishUpdate,updateReadiness} from '../scripts/lib/app-update.mjs';
 async function fixture(t,{initialSetup=false}={}){
@@ -210,4 +211,27 @@ test('failed health preserves all recovery copies, then successful recovery prun
  const orphan=join(root,'1700000000000');await mkdir(orphan);
  await finishUpdate(f.directory,{...f,verify:async()=>false});assert.equal((await readdir(root)).length,2);
  assert.deepEqual(await finishUpdate(f.directory,f),{recovered:false});assert.equal((await readdir(root)).length,1);
+});
+
+test('GUI startup returns without cleanup health/signature work and schedules a separate sweep',async t=>{
+ const f=await fixture(t);let launched=0,checked=0;
+ await finishUpdate(f.directory,{...f,backgroundCleanup:true,verify:async()=>{checked++;return true;},launchCleanup:directory=>{assert.equal(directory,f.directory);launched++;}});
+ assert.equal(checked,0);assert.equal(launched,1);
+ assert.equal(f.calls.some(([cmd])=>cmd==='/usr/bin/codesign'),false);
+});
+
+test('background cleanup cannot recover an update that started before it acquired the lock',async t=>{
+ const f=await fixture(t);await prepareUpdate(f.directory,{...f,interrupt:true});
+ const path=join(f.runtime,'app-update.json'),before=await readFile(path,'utf8');
+ assert.deepEqual(await finishUpdate(f.directory,{...f,cleanupOnly:true}),{recovered:false});
+ assert.equal(await readFile(path,'utf8'),before);assert.equal(f.loaded.has('bridge'),false);
+ await finishUpdate(f.directory,f);
+});
+
+test('a normal GUI launch does not wait for an older background sweep lock',async t=>{
+ const f=await fixture(t);let launched=0;
+ await withUpdateStorage(f.directory,async()=>{
+  assert.deepEqual(await finishUpdate(f.directory,{...f,backgroundCleanup:true,launchCleanup:()=>{launched++;}}),{recovered:false});
+ });
+ assert.equal(launched,1);
 });
