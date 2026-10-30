@@ -69,5 +69,7 @@
   "analyticsClose": "Close",
   "analyticsInternal": "Exclude this browser from reports",
   "analyticsInternalNote": "Applies only to this browser. Clearing site data removes this setting. Other devices must be set separately.",
-  "analyticsStorageError": "Your choice could not be saved. Analytics is off. Allow site storage to remember your choice."
+  "analyticsStorageError": "Your choice could not be saved. Analytics is off. Allow site storage to remember your choice.",
+  "fixMap": "Fix the map",
+  "poweredBy": "Powered by"
 }
