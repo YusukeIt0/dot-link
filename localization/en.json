@@ -565,5 +565,5 @@
   "even.walking_terrain": "Walking and terrain information",
   "even.walking_terrain_disclosure": "When Dot needs it, your Mac sends route coordinates to FOSSGIS and terrain areas to AWS.",
   "even.walking_terrain_privacy": "Data sources and privacy",
-  "even.walking_terrain_update_mac": "Update Dot Link on your Mac to use this."
+  "even.walking_terrain_update_mac": "Requires Dot Link for Mac v0.4.27 or later."
 }
