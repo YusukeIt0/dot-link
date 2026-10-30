@@ -97,3 +97,9 @@ test('newer incomplete association holds instead of falling back; attempt churn 
     ? {...run(), run_attempt: 2, status: 'queued', conclusion: null} : {workflow_runs: [run()]},
     () => [{jobs: jobs()}]), /changed while collecting/);
 });
+
+test('explicit metadata-only runs do not replace canonical validation; arbitrary skips hold', () => {
+  const ignored = {...run(), id: 20, display_title: `CI ignored | pr=${target.number} | head=${head}`, conclusion: 'skipped'};
+  assert.equal(selectCI([ignored, run()], target).id, 12);
+  assert.equal(selectCI([{...ignored, display_title: 'Unknown skip'}, run()], target).id, 20);
+});

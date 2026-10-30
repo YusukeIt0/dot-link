@@ -182,13 +182,20 @@ export function gatherContext(snapshot, api, paginate) {
         reason: 'Runtime/device evidence does not cover the current code; verify applicability before reuse.'};
     }
   }
-  const evidence = collectCI(snapshot.pr, snapshot.data?.base ||
-    (snapshot.data?.main ? {ref: 'main', sha: snapshot.data.main} : snapshot.pr.base), api, paginate);
-  context.ci = evidence.run ? [{id: evidence.run.id, attempt: evidence.run.run_attempt,
-    head: evidence.target.head, base: evidence.target.base, base_ref: evidence.target.baseRef,
-    event: evidence.run.event, status: evidence.run.status, conclusion: evidence.run.conclusion,
-    url: `https://github.com/YusukeIt0/dot-link/actions/runs/${evidence.run.id}`}]: [];
-  context.ci_selection = {status: evidence.status, reason: evidence.reason};
+  try {
+    const evidence = collectCI(snapshot.pr, snapshot.data?.base ||
+      (snapshot.data?.main ? {ref: 'main', sha: snapshot.data.main} : snapshot.pr.base), api, paginate);
+    context.ci = evidence.run ? [{id: evidence.run.id, attempt: evidence.run.run_attempt,
+      head: evidence.target.head, base: evidence.target.base, base_ref: evidence.target.baseRef,
+      event: evidence.run.event, status: evidence.run.status, conclusion: evidence.run.conclusion,
+      url: `https://github.com/YusukeIt0/dot-link/actions/runs/${evidence.run.id}`}]: [];
+    context.ci_selection = {status: evidence.status, reason: evidence.reason};
+  } catch {
+    // Advisory review can continue; both merge gates independently collect strictly.
+    // Never include raw API/transport exceptions (which may contain credentials).
+    context.ci = [];
+    context.ci_selection = {status: 'held', reason: 'CI evidence is unavailable, incomplete or changed during collection; recheck before integration.'};
+  }
   return context;
 }
 

@@ -295,3 +295,11 @@ The selector checks both the fixed receipt and API association. A newer associat
 run with missing/malformed provenance holds integration rather than reviving an
 older success. Runs from before receipt adoption need a fresh PR-triggered run;
 a rerun of an old event cannot add a new receipt.
+
+Title/body-only edits create isolated ignored runs with distinct ignored job names;
+they neither cancel current validation nor replace required `test`. Draft-ready
+transitions do not repeat tests. Base edits still run Tests. The shared selector
+excludes only the explicit ignored receipt, not arbitrary skipped runs. Advisory
+review reports unstable/unavailable CI evidence as held and continues; merge gates
+still require complete evidence. Use a full workflow rerun for recovery because
+required jobs must all be present in the selected attempt.
