@@ -1,3 +1,4 @@
+import {collectCI, ciTarget, assertCI} from './ci-evidence.mjs';
 import {automaticSelection, selected, authenticateGrokComments, grokBlockers, closingIssuesQuery, closingIssues} from './grok-review.mjs';
 // Fail-closed coordinator. Default is read-only; never execute reviewed code.
 import {execFileSync} from 'node:child_process';
@@ -47,15 +48,7 @@ export function assertProtection(protection) {
 }
 
 export function assertProductCI(pr, main, run, jobs) {
-  const association = run?.event === 'push'
-    ? run.head_branch === pr.head.ref && pr.head.repo?.full_name === repository
-    : run?.event === 'pull_request' && run.pull_requests?.some(x => x.number === pr.number && x.base?.ref === 'main' && x.base?.sha === main);
-  if (!association || run?.path !== '.github/workflows/ci.yml' || run?.head_sha !== pr.head.sha ||
-      run?.repository?.full_name !== repository || run?.status !== 'completed' || run?.conclusion !== 'success' ||
-      !Array.isArray(jobs) || jobs.some(x => x.status !== 'completed' || x.conclusion !== 'success') ||
-      policy.requiredJobs.some(name => jobs.filter(x => x.name === name).length !== 1)) {
-    throw new Error('Exact-head product CI and every required job must complete successfully; skipped is not success.');
-  }
+  assertCI(ciTarget(pr, {ref: 'main', sha: main}), run, jobs);
 }
 
 export function evaluate(snapshot) {
@@ -123,13 +116,9 @@ export function collect(number, client) {
   }
   const scope = scopeRevision(comments, pr.head.sha, api, pages);
   const feedback = reviewDiscussion(pr.number, pages);
-  const context = gatherContext({pr, issue: {number: pr.number}, rows: comments, fingerprint: receipt.fingerprint}, api, pages);
-  const runs = api(`actions/workflows/ci.yml/runs?head_sha=${pr.head.sha}&per_page=100`).workflow_runs;
-  // Select the latest associated run, not an older successful attempt.
-  const ciRun = runs.filter(x => x.event === 'push' && x.head_branch === pr.head.ref && pr.head.repo?.full_name === repository ||
-    x.event === 'pull_request' && x.pull_requests?.some(p => p.number === pr.number && p.base?.ref === 'main' && p.base?.sha === main))
-    .sort((a, b) => b.id - a.id)[0];
-  const ciJobs = ciRun ? pages(`actions/runs/${ciRun.id}/jobs?filter=latest&per_page=100`).flatMap(x => x.jobs) : [];
+  const context = gatherContext({pr, data: {main}, issue: {number: pr.number}, rows: comments, fingerprint: receipt.fingerprint}, api, pages);
+  const evidence = collectCI(pr, {ref: 'main', sha: main}, api, pages);
+  const ciRun = evidence.run, ciJobs = evidence.jobs;
   return {pr, main, scope, feedback, comments, receipt, run, jobs, files, versionChanges, context, ciRun, ciJobs, grokSelection,
     checks: checks(number), protection: api('branches/main/protection'),
     reviews: pages(`pulls/${number}/reviews?per_page=100`),

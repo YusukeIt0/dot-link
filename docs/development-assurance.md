@@ -229,3 +229,31 @@ tokens. Grok uses the separate publication arrangement above.
 Protected workflow/script changes receive normal CI and independent review and
 remain excluded from automatic merging. No device acceptance is required for
 this control-plane change because it changes neither device runtime nor packaging.
+
+## Technical ownership across agent sessions
+
+The owner defines the desired experience and meaningful constraints. The implementing
+agent owns technology selection, dependency order, verification, diagnosis, review
+responses, integration and cleanup. Do not ask the owner to read code, choose test
+mechanisms, diagnose logs, or select the next internal task. Escalate meaningful
+changes to UX, cost, privacy or operational burden with concrete options, tradeoffs
+and a recommendation. Existing merge and publication authorization still applies.
+
+Before implementation, identify the intended experience, machine-verifiable criteria
+and the observations only a person can make. Use deterministic tests for timing and
+failure boundaries. Request physical observations only for ordinary-use behavior
+that automation cannot observe; reuse applicable evidence. CI-only changes need
+workflow observations, not device acceptance.
+
+Keep decisions, reasons, evidence, remaining limitations and the next dependent step
+in the existing issue/PR. At handoff, distinguish implemented, tested, integrated,
+merged and deployed. The next agent reads live Git/Actions state before continuing;
+old success or an earlier approval is not current evidence or new authorization.
+Reports identify confirmed results, unknowns, residual risks and the specific owner
+decision needed. Public records contain generalized requirements, not private context.
+
+Choose proportionate designs that can grow. Record meaningful alternatives and
+revisit conditions in the PR; measure test execution count, execution duration,
+runner queue time and recovery separately. Hosted capacity is not a product failure.
+Dedicated runners, sharding or more concurrency require measured need and explicit
+cost/operational tradeoffs, not a speculative orchestration platform.

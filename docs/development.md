@@ -18,7 +18,7 @@ npm run build
 sh scripts/test-notification-native.sh
 ```
 
-Pushes and pull requests run these checks in GitHub Actions. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
+Main pushes and pull requests run these checks in Tests. Work-branch pushes use Branch validation until an open PR owns validation for the same head. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
 
 MCP `serverInfo.version` reports the root `package.json` version, shared with the
 Even app. It is not the Mac app release/build number. For Mac update or support
@@ -195,7 +195,7 @@ For source-based diagnostics, run `node scripts/setup.mjs status --voice-only` f
 
 For a cohesive change split into substantial dependent steps, track the outcome in a parent issue and integration branch, with native sub-issues and child PRs targeting that branch. Define the ownership and dependency order first. Update each dependent child from the integrated parent before starting its work; small fixes do not need this hierarchy. Keep acceptance evidence in the issues/PRs, not a duplicate backlog.
 
-Automated review executes helpers from trusted main. A child review pins its target branch and commit and supplies the exact main-to-base delta as read-only context before the PR diff. No reviewed base/head code is checked out or executed by the review job. Large base deltas stop preparation with a Needs a smaller scope result rather than silently omitting context. Moving the base or retargeting the PR invalidates the receipt. The child gate also verifies that the exact tested head contains the current parent commit (ahead or identical, with that parent as merge base). If the parent has advanced or a new target is not contained in the child, update the child and rerun CI/review. PR CI must also record the current parent ref/SHA; otherwise use the exact-head push CI, whose tree already contains the current parent. A run against an unrelated old target cannot qualify.
+Automated review executes helpers from trusted main. A child review pins its target branch and commit and supplies the exact main-to-base delta as read-only context before the PR diff. No reviewed base/head code is checked out or executed by the review job. Large base deltas stop preparation with a Needs a smaller scope result rather than silently omitting context. Moving the base or retargeting the PR invalidates the receipt. The child gate also verifies that the exact tested head contains the current parent commit (ahead or identical, with that parent as merge base). If the parent has advanced or a new target is not contained in the child, update the child and rerun CI/review. PR CI must record the current parent ref/SHA. Branch push CI is pre-PR feedback and cannot certify integration. A run against an unrelated old target cannot qualify.
 
 The normal gate remains `node scripts/check-review-before-merge.mjs <PR>` for main. For child integration, explicitly name the intended parent:
 
@@ -262,3 +262,47 @@ noise fixtures contain no microphone recordings. These checks do not establish
 accuracy across all voices, accents, background sounds or G2 microphone levels.
 Speech detection also cannot distinguish the wearer from another speaker or
 media. Keep that separate from speaker-role work.
+
+### CI ownership and recovery
+
+`Tests` is canonical for main pushes and PRs (including drafts and child PRs).
+`Branch validation` checks non-main pushes without a matching open PR. Its distinct
+`branch-test` check cannot replace required `test`. Read failures retain branch
+validation. PR creation concurrent with a branch run may temporarily run both;
+branch-only and merge-context evidence are not interchangeable.
+
+Review evidence and both merge gates share `scripts/ci-evidence.mjs`: select the
+latest matching PR workflow and its latest attempt for the exact head/base, then
+require all jobs to succeed. Never search backward for a passing run. Cancelled,
+skipped, missing and stale evidence holds integration. Unknown fork association
+also holds it. Update a child after its parent advances and rerun CI/review.
+
+Tests and branch validation use separate cancellation groups by PR/ref. Manual
+retries are isolated from ordinary runs so an old retry cannot cancel current
+validation. GitHub does not guarantee dispatch order: inspect the latest head and
+run after cancellation. A supersession failure requires updating the PR head from
+the current base (or another fresh PR event); rerunning the old event cannot refresh
+its pinned base. Rerun current-context infrastructure failures only when needed.
+Do not repeatedly restart healthy queued runs or describe runner-capacity recovery
+as a permanent capacity fix. Preserve independent review queues and Pages deploy
+serialization. Record run/attempt, head/base, execution and queue durations,
+conclusions, selected evidence and any recovery in the existing PR.
+
+See [technical ownership](development-assurance.md#technical-ownership-across-agent-sessions)
+for the division between UX decisions and agent-owned implementation/verification.
+
+CI provenance is pinned in the `CI v1` run title at dispatch. GitHub's associated
+PR metadata can change when a PR is retargeted; it is not proof of the tested base.
+The selector checks both the fixed receipt and API association. A newer associated
+run with missing/malformed provenance holds integration rather than reviving an
+older success. Runs from before receipt adoption need a fresh PR-triggered run;
+a rerun of an old event cannot add a new receipt.
+
+Title/body-only edits create isolated ignored runs with distinct ignored job names;
+they neither cancel current validation nor replace required `test`. Draft-ready
+transitions do not repeat tests. Base edits still run Tests. The shared selector
+excludes only the explicit ignored receipt, not arbitrary skipped runs. Advisory
+review reports unstable/unavailable CI evidence as held and continues; merge gates
+still require complete evidence. For a current-context infrastructure failure, use
+a full workflow rerun because
+required jobs must all be present in the selected attempt.
