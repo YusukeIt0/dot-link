@@ -127,6 +127,9 @@ evidence. Ordinary conversation must continue without an error/setup workflow.
 
 ## Verification
 
+The [worldwide sample report](mobility-regional-coverage.md) records 26 public
+point pairs, source-specific results and limits. It is not a country coverage claim.
+
 `node --test tests/mobility*.test.ts` covers bounded decoding, streaming, concurrency,
 cancellation, cache/tile limits, missing/suspect terrain, dateline sampling, snapped
 endpoint gaps, route totals/modes, transit time consistency and out-of-region
