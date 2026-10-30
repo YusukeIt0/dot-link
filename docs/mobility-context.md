@@ -33,9 +33,8 @@ verified any additional transport service.
 FOSSGIS's [full policy](https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/)
 requires visible OSM/ODbL credits, a fix-map link, valid identification, low traffic,
 and a reachable email contact on the application website/store listing. The short
-routing guide does not include every condition. A public support email is still
-pending maintainer designation; do not activate or distribute this provider until
-that contact and the in-app/web credits are prepared. Existing GitHub Issues contact
+routing guide does not include every condition. The maintainer has designated a public support email; do not activate or distribute
+this provider until that contact and the in-app/web credits are actually published. Existing GitHub Issues contact
 alone is not treated as meeting the email requirement. Commercial/high-volume use
 must be reassessed against the policy rather than assumed unrestricted.
 
@@ -70,7 +69,9 @@ Route endpoints, mode and totals are checked. Stairs, surface access, ferry wait
 service schedules, live accessibility and exact road grades remain unknown.
 
 Transit preserves walking access, times, scheduled versus expected times, waiting,
-vehicle transfers and realtime flags. Realtime observation age, cancellation and
+vehicle transfers and realtime flags. The live Entur schema confirms the full mode
+enum and identifies ride legs by serviceJourney, so access lifts do not become
+invented scheduled rides or transfers. Booking/vehicle-access conditions remain unknown. Realtime observation age, cancellation and
 current service operation are unknown in this adapter. Requests for walking and
 transit are independent, but the transit source can itself omit slower alternatives.
 No returned candidate means only that this bounded source query produced no usable

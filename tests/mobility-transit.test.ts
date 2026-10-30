@@ -5,7 +5,7 @@ import {MobilityNetwork} from '../server/mobility/network.ts';
 const origin={latitude:59.9111,longitude:10.7503},destination={latitude:59.9205,longitude:10.6836};
 const departure='2026-10-30T12:00:00Z';
 function pattern() {return {duration:600,startTime:departure,endTime:'2026-10-30T12:10:00Z',legs:[{
-  mode:'rail',distance:1000,duration:600,aimedStartTime:departure,aimedEndTime:'2026-10-30T12:10:00Z',
+  mode:'rail',serviceJourney:{id:'TEST:ServiceJourney:1'} as {id:string}|null,distance:1000,duration:600,aimedStartTime:departure,aimedEndTime:'2026-10-30T12:10:00Z',
   expectedStartTime:departure,expectedEndTime:'2026-10-30T12:10:00Z',realtime:true,
   fromPlace:{name:'A',...origin},toPlace:{name:'B',...destination},line:{publicCode:'R1',name:'Local train'},
 }]};}
@@ -17,7 +17,15 @@ test('transit retains actual/scheduled times and unknown cancellation/realtime a
   const bad=pattern();bad.legs[0]!.expectedEndTime='2026-10-30T11:59:00Z';
   assert.throws(()=>normalizeEnturPattern(bad,departure),/legs/);
   bad.legs[0]!.mode='teleport';assert.throws(()=>normalizeEnturPattern(bad,departure),/mode/);
-  const walking=pattern();walking.legs[0]!.mode='foot';assert.throws(()=>normalizeEnturPattern(walking,departure),/transit/);
+  const walking=pattern();walking.legs[0]!.mode='foot';walking.legs[0]!.serviceJourney=null;assert.throws(()=>normalizeEnturPattern(walking,departure),/transit/);
+});
+test('official transport modes retain rides while access-only legs do not invent a transit journey',()=>{
+  for(const mode of ['trolleybus','monorail','lift','taxi','snowAndIce']) {
+    const p=pattern();p.legs[0]!.mode=mode;
+    assert.equal(normalizeEnturPattern(p,departure).legs[0]!.scheduled_ride,true);
+  }
+  const access=pattern();access.legs[0]!.mode='lift';access.legs[0]!.serviceJourney=null;
+  assert.throws(()=>normalizeEnturPattern(access,departure),/Incomplete transit/);
 });
 test('out of regional coverage sends nothing; supported request uses identified bounded POST',async()=>{
   let calls=0;
