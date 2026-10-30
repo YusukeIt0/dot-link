@@ -100,3 +100,16 @@ test('suspect raster jumps withhold route totals instead of publishing an appare
   assert.equal(result.ascent_m,null);assert.equal(result.maximum_sampled_grade_percent,null);
   assert.equal(result.origin_elevation_m,0);assert.match(result.limitations.at(-1)!,/does not establish an impassable/);
 });
+
+test('transit sources are rejected and provider cooldowns are shared without retries',async()=>{
+  let calls=0;
+  const first=new MobilityNetwork(async()=>{calls++;return new Response('',{status:429,headers:{'Retry-After':'7200'}});});
+  const second=new MobilityNetwork(async()=>{calls++;return response('ok');});
+  for(const endpoint of ['https://api.entur.io/journey-planner/v3/graphql','https://v6.vbb.transport.rest/journeys'])
+    await assert.rejects(first.bytes(new URL(endpoint),abort().signal,100),/Unsupported/);
+  assert.equal(calls,0);
+  const url=new URL('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/1/1.png');
+  await assert.rejects(first.bytes(url,abort().signal,100),/unavailable/);
+  await assert.rejects(second.bytes(url,abort().signal,100),/cooling down/);
+  assert.equal(calls,1);
+});

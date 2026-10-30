@@ -12,17 +12,13 @@ export class MobilityNetwork {
   private readonly request: typeof fetch;
   constructor(request: typeof fetch = fetch) { this.request = request; }
   stats() { return {requests: this.requests, received_bytes: this.receivedBytes}; }
-  async bytes(url: URL, signal: AbortSignal, maximum: number, jsonBody?: unknown): Promise<Buffer> {
+  async bytes(url: URL, signal: AbortSignal, maximum: number): Promise<Buffer> {
     if (url.protocol !== 'https:' || url.username || url.password || url.port ||
-        !['s3.amazonaws.com', 'routing.openstreetmap.de', 'api.entur.io', 'v6.vbb.transport.rest'].includes(url.hostname)) throw new Error('Unsupported mobility source');
+        !['s3.amazonaws.com', 'routing.openstreetmap.de'].includes(url.hostname)) throw new Error('Unsupported mobility source');
     signal.throwIfAborted();
     if (url.hash) throw new Error('Unsupported mobility fragment');
     if (url.hostname === 's3.amazonaws.com' && (url.search || !/^\/elevation-tiles-prod\/terrarium\/12\/\d{1,4}\/\d{1,4}\.png$/.test(url.pathname))) throw new Error('Unsupported terrain endpoint');
     if ((cooldowns.get(url.hostname) ?? 0) > performance.now()) throw new Error('Mobility source cooling down');
-    if (url.hostname === 'v6.vbb.transport.rest' && url.pathname !== '/journeys') throw new Error('Unsupported transit endpoint');
-    const entur = url.hostname === 'api.entur.io';
-    if (entur && (url.pathname !== '/journey-planner/v3/graphql' || url.search || jsonBody === undefined)) throw new Error('Unsupported transit endpoint');
-    if (!entur && jsonBody !== undefined) throw new Error('Unsupported request body');
     const walking = url.hostname === 'routing.openstreetmap.de';
     if (walking && !url.pathname.startsWith('/routed-foot/route/v1/foot/')) throw new Error('Unsupported walking endpoint');
     if (walking && (walkingActive || performance.now() < nextWalkingRequest)) throw new Error('Walking source busy');
@@ -36,8 +32,8 @@ export class MobilityNetwork {
     try {
       this.requests++;
       response = await this.request(url, {signal: combined, redirect: 'error', credentials: 'omit',
-        method: entur ? 'POST' : 'GET', body: entur ? JSON.stringify(jsonBody) : undefined,
-        headers: {...(entur ? {'Content-Type':'application/json', 'ET-Client-Name':'dotlink-mobility'} : {}), 'User-Agent': `Dot-Link/${version} (+https://github.com/YusukeIt0/dot-link)`}});
+        method: 'GET',
+        headers: {'User-Agent': `Dot-Link/${version} (+https://github.com/YusukeIt0/dot-link)`}});
       if (response.status === 429 || response.status === 503) {
         const retry = response.headers.get('retry-after');
         const seconds = retry && /^\d+$/.test(retry) ? Number(retry) : retry ? (Date.parse(retry) - Date.now()) / 1000 : 60;
