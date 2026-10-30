@@ -6,7 +6,7 @@ import {ciRepository, ciMetadataReceipt, ciTarget, collectCI} from './ci-evidenc
 import {currentCI} from './ci-current.mjs';
 
 export async function verifyMetadataCI({event, readCurrent, collect, now = Date.now,
-  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), timeoutMs = 18 * 60_000}) {
+  sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), timeoutMs = 38 * 60_000}) {
   if (event.action !== 'edited' || event.changes?.base != null || !event.pull_request) {
     throw new Error('Only a metadata-only PR edit can reuse validation.');
   }
@@ -30,7 +30,7 @@ export async function verifyMetadataCI({event, readCurrent, collect, now = Date.
       throw new Error('Full validation changed while verifying metadata.');
     }
     if (evidence.run?.status === 'completed') throw new Error(evidence.reason);
-    if (now() >= deadline) throw new Error('No complete current full Tests evidence within the bounded wait.');
+    if (now() >= deadline) throw new Error('No complete current full Tests evidence within the bounded wait. Once full Tests passes, rerun this metadata workflow (all jobs); do not rerun product tests or edit the PR just to recover this check.');
     await sleep(Math.min(15_000, deadline - now()));
   }
 }

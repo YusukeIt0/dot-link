@@ -34,7 +34,7 @@ jobs:
       contents: read
       pull-requests: read
       actions: read
-    timeout-minutes: 20
+    timeout-minutes: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 40 || 15 }}
     steps:
       - name: Require successful workflow checks
         env:

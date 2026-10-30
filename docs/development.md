@@ -302,8 +302,14 @@ Title/body-only edits use a lightweight Ubuntu `test` check that verifies the
 latest real full Tests result for exactly the same repository, PR, head and base.
 It uses the shared CI selector and checks both original required jobs; it never
 accepts another metadata check as test evidence. A pending full run is awaited
-for at most 18 minutes; failed, cancelled, skipped, missing or stale evidence
+for at most 38 minutes; failed, cancelled, skipped, missing or stale evidence
 cannot pass. Current refs and the selected attempt are rechecked before success.
+The metadata job has a 40-minute timeout, while full workflow lint and product
+jobs retain their 5- and 15-minute limits. Hosted queueing has no guaranteed
+completion time. If a metadata check times out or has an API failure, first check
+the full source run. Once that full run passes, rerun the failed metadata workflow
+with all jobs. This rechecks existing evidence without repeating product tests;
+do not edit the PR to manufacture recovery or count the failed check as success.
 No external result cache, write token or dispatch service is needed.
 
 Metadata checks have fixed job names so GitHub's latest suite still reports

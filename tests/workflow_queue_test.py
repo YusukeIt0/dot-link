@@ -62,6 +62,7 @@ class ProductCIValidation(unittest.TestCase):
         self.assertIn('CI metadata v1', ci['run-name'])
         self.assertIn("'metadata' || 'full'", ci['concurrency']['group'])
         self.assertEqual(ci['jobs']['test']['permissions']['actions'], 'read')
+        self.assertEqual(ci['jobs']['test']['timeout-minutes'], '${{ ' + metadata + ' && 40 || 15 }}')
         steps = ci['jobs']['test']['steps']
         proof = next(step for step in steps if step.get('run') == 'node scripts/ci-metadata-check.mjs')
         self.assertEqual(proof['if'], '${{ ' + metadata + ' }}')
