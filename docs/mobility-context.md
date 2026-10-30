@@ -1,10 +1,11 @@
 # Walking and terrain evidence
 
-Implemented on the #242 development branch through #247. The application exposes
+The application exposes
 `get_mobility_context` for explicit Dot requests after the user enables walking and
 terrain sharing. It supplies evidence for the existing Dot to interpret, without
 another assistant, navigation interface or background route polling. Actual Dot
-and affected-device acceptance and distribution remain separate gates. No
+and affected-device acceptance are recorded below; formal distribution remains
+a separate gate. No
 destination may be guessed. No paid API, billing fallback, end-user registration
 or API-key setup is introduced.
 
@@ -158,3 +159,20 @@ source changes and local rendering do not prove actual publication. No new packa
 dependency or OS permission is introduced. Actual Dot interpretation and affected
 Mac/Even acceptance remain #242 gates. Before distribution, verify the exact
 artifact's permissions and the live website/store contact and declarations.
+
+### Integrated acceptance, October 30, 2026
+
+Mac 0.4.27 (103) Beta and Even 0.3.50 Beta from `1217d46` were checked
+on the configured installation. The installed runtime sources matched that commit.
+The existing Dot returned walking/model-elevation evidence with uncertainty through
+the normal G2 response path. After the separate option was disabled, it declined
+fresh terrain acquisition while ordinary location sharing continued. The wearer
+confirmed both G2 responses displayed without problems. Consent was restored off.
+
+Initially the existing Dot retained stale tool definitions. Updating registered
+tools, restarting that Dot and explicitly rediscovering tools resolved the observed
+case; restart alone did not. See [update guidance](setup.md#updates). These are
+bounded attributed observations, not a host-wide refresh guarantee. Automated
+checks cover cancellation and timing boundaries; translation/render review is
+separate from the wearer observation. Main integration and formal delivery are
+tracked in #242 and are not implied by Beta acceptance.
