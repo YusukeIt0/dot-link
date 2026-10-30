@@ -3,8 +3,11 @@ const {version} = JSON.parse(readFileSync(new URL('../../package.json', import.m
 /** Fixed provider origins only. No redirects, retries, credentials or URL logging. */
 export class MobilityNetwork {
   private active = 0;
+  private requests = 0;
+  private receivedBytes = 0;
   private readonly request: typeof fetch;
   constructor(request: typeof fetch = fetch) { this.request = request; }
+  stats() { return {requests: this.requests, received_bytes: this.receivedBytes}; }
   async bytes(url: URL, signal: AbortSignal, maximum: number): Promise<Buffer> {
     if (url.protocol !== 'https:' || url.username || url.password || url.port ||
         !['api.transitous.org', 's3.amazonaws.com'].includes(url.hostname)) throw new Error('Unsupported mobility source');
@@ -16,6 +19,7 @@ export class MobilityNetwork {
     const combined = AbortSignal.any([signal, deadline]);
     let response: Response | undefined;
     try {
+      this.requests++;
       response = await this.request(url, {signal: combined, redirect: 'error', credentials: 'omit',
         headers: {'User-Agent': `Dot-Link/${version} (+https://github.com/YusukeIt0/dot-link)`}});
       if (!response.ok || !response.body) throw new Error('Mobility source unavailable');
@@ -29,6 +33,7 @@ export class MobilityNetwork {
           const {done, value} = await reader.read();
           combined.throwIfAborted();
           if (done) break;
+          this.receivedBytes += value.byteLength;
           length += value.byteLength;
           if (length > maximum) throw new Error('Oversized mobility response');
           chunks.push(Buffer.from(value));

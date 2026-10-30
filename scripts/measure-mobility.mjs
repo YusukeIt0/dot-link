@@ -18,4 +18,4 @@ const profile=path?.length>=2?await terrain.profile(path,signal):null;
 const elevations=profile?undefined:await terrain.elevations([origin,destination],signal);
 for(const group of [plan.walking,plan.transit])for(const candidate of group.candidates)for(const leg of candidate.legs)delete leg.path;
 console.log(JSON.stringify({example:name,route_ms:routeMs,total_ms:Math.round(performance.now()-started),cpu_usage_us:process.cpuUsage(cpu),
-  max_rss_kib:process.resourceUsage().maxRSS,plan,terrain:profile,endpoint_elevations_m:elevations},null,2));
+  max_rss_kib:process.resourceUsage().maxRSS,network:network.stats(),plan,terrain:profile,endpoint_elevations_m:elevations},null,2));

@@ -57,6 +57,7 @@ test('network rejects oversized streams, redirects policy and unapproved hosts; 
   const controller=abort();controller.abort();
   await assert.rejects(net.bytes(new URL('https://api.transitous.org/x'),controller.signal,6),{name:'AbortError'});
   assert.equal(calls,2);
+  assert.deepEqual(net.stats(),{requests:2,received_bytes:12});
 });
 test('network has global three-request cap and no hidden backlog',async()=>{
   let release!:()=>void;const wait=new Promise<void>(r=>release=r);
