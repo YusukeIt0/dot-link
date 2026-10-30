@@ -65,6 +65,10 @@ The separate opt-in defaults off for old preferences and control payloads. It is
 scoped to the chosen Mac. A consent change revokes the old sharing ID before a new
 session begins; delayed old enables cannot restore revoked consent. Location OFF
 stops all queries while retaining the chosen preference for that Mac.
+The Mac advertises `mobilitySupported`. Until support is confirmed for the current
+Mac, controls use the legacy location payload and the opt-in cannot be enabled.
+A restored opt-in waits for support; capability changes rotate the sharing session.
+An older Mac therefore keeps basic location sharing, with a concise update note.
 
 Dot first reads `get_location_context`, then supplies its fresh `context_id`.
 Walking requires destination coordinates plus `user_provided` or

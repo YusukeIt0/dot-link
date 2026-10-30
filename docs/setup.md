@@ -90,7 +90,9 @@ Sharing starts off. Turning it off stops new sharing and clears the relay's curr
 
 For walking and terrain evidence, also enable **Walking and terrain information**.
 This separately permits the external queries explained beside the switch. It is off
-by default and needs compatible updated Mac and Even versions. Ask Dot a normal
+by default and needs compatible updated Mac and Even versions. If the Mac does
+not support it, the option is unavailable with an update note; ordinary location
+sharing continues. Ask Dot a normal
 walking or hill question with a known destination; no route-mode or account setup
 is needed. Public-transport data is not included. Dot interprets the evidence and
 its limits; model time, slope and endpoints do not establish safe access. Turning

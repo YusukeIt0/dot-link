@@ -564,5 +564,6 @@
   "mac.update_progress_close": "Fermer",
   "even.walking_terrain": "Itinéraires à pied et terrain",
   "even.walking_terrain_disclosure": "Si Dot en a besoin, votre Mac envoie les coordonnées du trajet à FOSSGIS et la zone de terrain à AWS.",
-  "even.walking_terrain_privacy": "Sources et confidentialité (en anglais)"
+  "even.walking_terrain_privacy": "Sources et confidentialité (en anglais)",
+  "even.walking_terrain_update_mac": "Mettez à jour Dot Link sur votre Mac pour utiliser cette option."
 }

@@ -564,5 +564,6 @@
   "mac.update_progress_close": "閉じる",
   "even.walking_terrain": "徒歩経路・地形の情報",
   "even.walking_terrain_disclosure": "必要なとき、MacからFOSSGISへ経路の座標、AWSへ地形の対象範囲を送ります。",
-  "even.walking_terrain_privacy": "情報源とプライバシー （英語）"
+  "even.walking_terrain_privacy": "情報源とプライバシー （英語）",
+  "even.walking_terrain_update_mac": "利用するにはMacのDot Linkを更新してください。"
 }

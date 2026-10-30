@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocationContext } from '../server/location.ts';
+import { MobilityAcquisition } from '../server/mobility/context.ts';
 import { WebhookSender } from '../server/webhook.ts';
 import type { AppLocation } from '@evenrealities/even_hub_sdk';
 
@@ -30,7 +31,7 @@ function fixture(relay?: (path: string, body: unknown) => unknown) {
       requests.push({path, body}); if (failed) throw new Error('Offline');
       if (relay) return relay(path, body);
       const p = body as any;
-      return path.endsWith('/control') ? {enabled: p.enabled} : {locationSharing: true, locationSubscribed: true, locationFresh: !!p.fix, locationMeasuredAt: p.fix?.measured_at, locationAccuracy: p.fix?.accuracy, locationReceivedAt: new Date(now).toISOString()};
+      return path.endsWith('/control') ? {enabled: p.enabled} : {mobilitySupported:true, locationSharing: true, locationSubscribed: true, locationFresh: !!p.fix, locationMeasuredAt: p.fix?.measured_at, locationAccuracy: p.fix?.accuracy, locationReceivedAt: new Date(now).toISOString()};
     }});
   return {controller, native, local, nativeStore, requests, fix, emit: () => listener?.(fix()), starts: () => starts, stops: () => stops, reads: () => reads,
     now: () => now, advance: (ms: number) => {now += ms;}, setTarget: (value?: string) => {target = value;}, fail: (value: boolean) => {failed = value;}};
@@ -246,9 +247,9 @@ test('delayed old enable cannot restore walking consent after revocation',async 
     if(path.endsWith('/control')&&body.enabled&&hold){hold=false;await new Promise<void>(r=>{release=r;});}
     return path.endsWith('/control')?context.control(body,'owner'):context.update(body,'owner');
   });
-  context=new LocationContext(join(dir,'location.json'),new WebhookSender(async()=>({status:200,body:'{}'})),[],async()=>({}),f.now);
+  context=new LocationContext(join(dir,'location.json'),new WebhookSender(async()=>({status:200,body:'{}'})),[],async()=>({}),f.now,()=>true,undefined,()=>new MobilityAcquisition());
   t.after(async()=>{await f.controller.stop();context.close();rmSync(dir,{recursive:true,force:true});});
-  await f.controller.attach(f.native);f.controller.setEnabled(true);await flush();
+  await f.controller.attach(f.native);f.controller.receive({mobilitySupported:true});f.controller.setEnabled(true);await flush();
   const old=f.requests[0].body.sharing_id;
   f.controller.setMobilityEnabled(true);await flush();
   assert.equal(f.requests.at(-1)?.body.enabled,false);
@@ -265,7 +266,7 @@ for(const mobility of [undefined,true,false])test(`restored consent preserves on
   f.nativeStore.set('dot-location-sharing-v1',JSON.stringify({enabled:true,origin:'https://relay.example.test',stops:[],...(mobility===undefined?{}:{mobility})}));
   await f.controller.attach(f.native);await flush();await f.controller.pump();
   assert.equal(f.controller.status().mobility,mobility===true);
-  assert.equal(f.requests.find(r=>r.path.endsWith('/control')&&r.body.enabled)?.body.mobility_enabled,mobility===true?true:undefined);
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/control')&&r.body.enabled).at(-1)?.body.mobility_enabled,mobility===true?true:undefined);
 });
 
 
@@ -280,5 +281,34 @@ test('default walking opt-out remains compatible with legacy strict location con
   });
   t.after(()=>f.controller.stop());await f.controller.attach(f.native);
   f.controller.setEnabled(true);await flush();
+  assert.equal(f.controller.status().state,'sharing');
+});
+
+
+test('walking opt-in cannot break a legacy Mac and restored opt-in waits for support',async t=>{
+  let supported=false;
+  const f=fixture((path,raw)=>{
+    const body=raw as any;
+    if(path.endsWith('/control')){
+      if(!supported)assert.deepEqual(Object.keys(body).sort(),['enabled','sharing_id']);
+      return {enabled:body.enabled};
+    }
+    return {locationSharing:true,locationFresh:true,...(supported?{mobilitySupported:true}:{})};
+  });
+  t.after(()=>f.controller.stop());
+  f.nativeStore.set('dot-location-sharing-v1',JSON.stringify({enabled:true,mobility:true,origin:'https://relay.example.test',stops:[]}));
+  await f.controller.attach(f.native);await flush();
+  assert.equal(f.controller.status().state,'sharing');assert.equal(f.controller.status().mobilitySupported,false);
+  assert.ok(f.requests.every(r=>r.body.mobility_enabled!==true));
+  f.controller.setMobilityEnabled(false);await flush();
+  f.controller.setMobilityEnabled(true);await flush();
+  assert.equal(f.controller.status().mobility,false,'unsupported opt-in is ignored rather than breaking location');
+  assert.equal(f.controller.status().state,'sharing');
+  supported=true;f.controller.receive({locationSharing:true,locationFresh:true,mobilitySupported:true});
+  f.controller.setMobilityEnabled(true);await flush();
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/control')&&r.body.enabled).at(-1)?.body.mobility_enabled,true);
+  assert.equal(f.controller.status().state,'sharing');
+  supported=false;f.controller.receive({locationSharing:true,locationFresh:true});await flush();
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/control')&&r.body.enabled).at(-1)?.body.mobility_enabled,undefined);
   assert.equal(f.controller.status().state,'sharing');
 });

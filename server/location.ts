@@ -114,7 +114,7 @@ export class LocationContext {
   private usable() { this.checkOwner(); return !!this.sharingId && this.leaseUntil > this.now() && freshLocation(this.latest?.fix, this.now()); }
   status() {
     this.checkOwner();this.syncGeography();this.syncMobility();
-    return { mobilityEnabled:this.mobilityAllowed&&this.usable()&&!!this.mobility, locationSubscribed: !!this.active(), locationSharing: !!this.sharingId && this.leaseUntil > this.now(),
+    return { mobilitySupported:!!this.mobility, mobilityEnabled:this.mobilityAllowed&&this.usable()&&!!this.mobility, locationSubscribed: !!this.active(), locationSharing: !!this.sharingId && this.leaseUntil > this.now(),
       locationFresh: this.usable(), locationReceivedAt: this.latest ? new Date(this.latest.receivedAt).toISOString() : null,
       locationMeasuredAt: this.latest?.fix.measured_at ?? null, locationAccuracy: this.latest?.fix.accuracy ?? null,
       locationDotReadAt: this.lastReadAt ?? null, locationDecisionAt: this.lastDecisionAt ?? null,

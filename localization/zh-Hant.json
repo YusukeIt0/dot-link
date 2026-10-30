@@ -564,5 +564,6 @@
   "mac.update_progress_close": "關閉",
   "even.walking_terrain": "步行路線和地形資訊",
   "even.walking_terrain_disclosure": "Dot 需要時，Mac 會向 FOSSGIS 傳送路線座標，向 AWS 傳送地形查詢區域。",
-  "even.walking_terrain_privacy": "資料來源與隱私 （英文）"
+  "even.walking_terrain_privacy": "資料來源與隱私 （英文）",
+  "even.walking_terrain_update_mac": "請更新 Mac 上的 Dot Link 以使用此功能。"
 }

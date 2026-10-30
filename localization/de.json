@@ -564,5 +564,6 @@
   "mac.update_progress_close": "Schließen",
   "even.walking_terrain": "Fußwege und Gelände",
   "even.walking_terrain_disclosure": "Wenn Dot diese Informationen benötigt, sendet Ihr Mac Routenkoordinaten an FOSSGIS und die Geländeregion an AWS.",
-  "even.walking_terrain_privacy": "Datenquellen und Datenschutz (Englisch)"
+  "even.walking_terrain_privacy": "Datenquellen und Datenschutz (Englisch)",
+  "even.walking_terrain_update_mac": "Aktualisieren Sie Dot Link auf Ihrem Mac, um diese Funktion zu nutzen."
 }

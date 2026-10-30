@@ -211,7 +211,8 @@ function renderLocationStatus(): void {
   const s = locationSharing.status();
   el<HTMLInputElement>('location-share').checked = s.enabled;
   el<HTMLInputElement>('mobility-share').checked=s.mobility;
-  el<HTMLInputElement>('mobility-share').disabled=!s.enabled&&!s.mobility;
+  el<HTMLInputElement>('mobility-share').disabled=(!s.enabled||s.mobilitySupported!==true)&&!s.mobility;
+  el('mobility-status').textContent=s.mobilitySupported===false?t('even.walking_terrain_update_mac'):'';
   const labels = {
     off: 'even.not_sharing', starting: 'even.starting_location_sharing',
     waiting: 'even.waiting_for_a_current_location', sharing: 'even.sharing_your_current_location',
