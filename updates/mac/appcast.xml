@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.27</title><sparkle:version>104</sparkle:version><sparkle:shortVersionString>0.4.27</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added optional walking-route and terrain information for Dot, available with Even app 0.3.51 or later.
-- Improved delivery of nearby map references while the remaining map data is still loading.
-- Stop pending walking and terrain requests when sharing stops or location information expires.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.27-104/Dot-Link-0.4.27-104-arm64.zip" sparkle:installationType="application" sparkle:edSignature="0m7F7pedurUPpODUxActQw/Xo9vFTbMUZ7ZUlSZ/ErP2p1Xou/thQyyJSJLJovb5TFIgGBemG7lkDipVlhvFCw==" length="59608581" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: Z+aLLumVMbMNiKV1dIdRPAd976NDysDs6IYTtmjKciE2cLOwjlDgkVt1KF7/A9JijRac8qCnYmNIdndrh3G8CQ==
-length: 1326
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.28</title><sparkle:version>105</sparkle:version><sparkle:shortVersionString>0.4.28</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved guidance for Dot to request walking and terrain information together when slope or walking effort matters.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.28-105/Dot-Link-0.4.28-105-arm64.zip" sparkle:installationType="application" sparkle:edSignature="Yi4TiZYFs5JLR1gGHB/eK6V5z8eLeWG/yPYtVDY+vh6Wn1vXSXp/QBwqOgqkqZDXfbd5NZdm/g2iOy27FluCBg==" length="59608642" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: XzIS/xxFsWMJ3moxcR5V3/PTUuZZqN2DtpVaW11nrGPYijPAs6L0jJNlSnjmwdrjSBM2cbacwG4IVISPY9afDQ==
+length: 1151
 -->
