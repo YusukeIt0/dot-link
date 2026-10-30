@@ -231,7 +231,7 @@ export class LocationSharing {
         return;
       }
       if (!session.enabled) {
-        await this.api('/api/location/control', { sharing_id: session.id, enabled: true, mobility_enabled:this.preferences.mobility });
+        await this.api('/api/location/control', { sharing_id: session.id, enabled: true, ...(this.preferences.mobility ? {mobility_enabled:true} : {}) });
         if (this.session !== session || !this.preferences.enabled || this.disposed) return;
         session.enabled = true;
       }
