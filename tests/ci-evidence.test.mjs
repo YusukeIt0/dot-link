@@ -66,11 +66,11 @@ test('malformed ref metadata cannot suppress branch validation', async () => {
 import {currentCI} from '../scripts/ci-current.mjs';
 test('late starts and stale retries cannot execute expensive tests against a moved PR/ref', () => {
   const event = {pull_request: {...pr, state: 'open'}};
-  assert.equal(currentCI('pull_request', event, event.pull_request), true);
+  assert.equal(currentCI('pull_request', event, event.pull_request, base), true);
   for (const mutate of [p => p.state = 'closed', p => p.head.sha = base,
     p => p.base.sha = head, p => p.base.ref = 'other', p => p.head.repo.full_name = 'other/fork']) {
     const current = structuredClone(event.pull_request); mutate(current);
-    assert.equal(currentCI('pull_request', event, current), false);
+    assert.equal(currentCI('pull_request', event, current, current.base.sha), false);
   }
   assert.equal(currentCI('push', {after: head}, {object: {sha: head}}), true);
   assert.equal(currentCI('push', {after: head}, {object: {sha: base}}), false);
@@ -102,4 +102,11 @@ test('explicit metadata-only runs do not replace canonical validation; arbitrary
   const ignored = {...run(), id: 20, display_title: `CI ignored | pr=${target.number} | head=${head}`, conclusion: 'skipped'};
   assert.equal(selectCI([ignored, run()], target).id, 12);
   assert.equal(selectCI([{...ignored, display_title: 'Unknown skip'}, run()], target).id, 20);
+});
+
+
+test('fresh base ref overrides lagging PR metadata after parent advancement', () => {
+  const event = {pull_request: {...pr, state: 'open'}};
+  assert.equal(currentCI('pull_request', event, event.pull_request, 'c'.repeat(40)), false);
+  assert.equal(currentCI('pull_request', event, event.pull_request), false);
 });

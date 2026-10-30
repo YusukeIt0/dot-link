@@ -105,6 +105,7 @@ async function main() {
   if (JSON.stringify(receipt) !== JSON.stringify(latestReceipt(comments, botId))) throw new Error('Review ownership changed during this check.');
   const currentPR = api(`pulls/${number}`);
   if (currentPR.head.sha !== pr.head.sha || currentPR.base.ref !== pr.base.ref ||
+      api('commits/main').sha !== mainSha ||
       api(`commits/${encodeURIComponent(expectedBase)}`).sha !== (base?.sha || mainSha)) throw new Error('PR head/base changed during verification.');
   const head = assertReady({pr, main:mainSha, base, scope, feedback, expectedBase, comments, receipt, run, jobs, checks, ciRun, ciJobs, baseComparison});
   console.log(`READY: PR #${number} targeting ${expectedBase}, head ${head}, review run ${receipt.runId}.`);

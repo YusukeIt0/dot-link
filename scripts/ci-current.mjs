@@ -1,12 +1,12 @@
 // Fail closed before expensive work if the triggering PR/ref is no longer current.
 import {readFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
-export function currentCI(eventName, event, current) {
+export function currentCI(eventName, event, current, currentBase) {
   if (eventName === 'pull_request') {
     const expected = event.pull_request;
     return current.state === 'open' && current.number === expected?.number &&
       current.head?.sha === expected.head?.sha && current.head?.repo?.full_name === expected.head?.repo?.full_name &&
-      current.base?.ref === expected.base?.ref && current.base?.sha === expected.base?.sha;
+      current.base?.ref === expected.base?.ref && /^[a-f0-9]{40}$/.test(currentBase || '') && currentBase === expected.base?.sha;
   }
   return eventName === 'push' && /^[a-f0-9]{40}$/.test(event.after || '') && current.object?.sha === event.after;
 }
@@ -20,5 +20,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const response = await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/${path}`, {
     headers: {Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json'}, signal: AbortSignal.timeout(15_000)});
   if (!response.ok) throw new Error('Cannot verify current CI context.');
-  if (!currentCI(env.GITHUB_EVENT_NAME, event, await response.json())) throw new Error('CI context is superseded; validate the current head/base.');
+  const current = await response.json();
+  let currentBase;
+  if (env.GITHUB_EVENT_NAME === 'pull_request') {
+    // pulls/{n}.base.sha may lag a branch push. Resolve the current ref directly.
+    const baseResponse = await fetch(`https://api.github.com/repos/${env.GITHUB_REPOSITORY}/git/ref/heads/${encodeURIComponent(current.base?.ref || '')}`, {
+      headers: {Authorization: `Bearer ${env.GH_TOKEN}`, Accept: 'application/vnd.github+json'}, signal: AbortSignal.timeout(15_000)});
+    if (!baseResponse.ok) throw new Error('Cannot verify current base ref.');
+    currentBase = (await baseResponse.json()).object?.sha;
+  }
+  if (!currentCI(env.GITHUB_EVENT_NAME, event, current, currentBase)) throw new Error('CI context is superseded; validate the current head/base.');
 }
