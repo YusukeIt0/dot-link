@@ -306,3 +306,11 @@ review reports unstable/unavailable CI evidence as held and continues; merge gat
 still require complete evidence. For a current-context infrastructure failure, use
 a full workflow rerun because
 required jobs must all be present in the selected attempt.
+
+Action runtimes are separate from the Node version used by project commands.
+Keep project Node pinned unless a separate compatibility change is justified.
+Action upgrades use reviewed immutable SHAs and preserve credential handling and
+permissions. Disable implicit package-manager caching; test workflows explicitly
+retain `cache: npm`, while Pages has no package-manager cache. Check composite
+Actions' nested runtimes as well as direct uses, and inspect fresh logs for removed
+runtime warnings rather than treating a green result alone as proof.
