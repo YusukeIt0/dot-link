@@ -20,6 +20,10 @@ sh scripts/test-notification-native.sh
 
 Main pushes and pull requests run these checks in Tests. Work-branch pushes use Branch validation until an open PR owns validation for the same head. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
 
+Failed branch preflight already fails Branch validation and does not allocate a
+macOS job just to report the same failure. This differs from the required PR
+`test` check, which must explicitly fail after a lint failure rather than skip.
+
 MCP `serverInfo.version` reports the root `package.json` version, shared with the
 Even app. It is not the Mac app release/build number. For Mac update or support
 identification, use the Mac app's version and build; a Mac-only release can retain

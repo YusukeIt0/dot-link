@@ -27,14 +27,10 @@ jobs:
       - run: sh scripts/check-workflows.sh
   branch-test:
     needs: branch-preflight
-    if: ${{ !cancelled() && (needs.branch-preflight.result != 'success' || needs.branch-preflight.outputs.run == 'true') }}
+    if: ${{ !cancelled() && needs.branch-preflight.result == 'success' && needs.branch-preflight.outputs.run == 'true' }}
     runs-on: macos-15
     timeout-minutes: 15
     steps:
-      - name: Require successful preflight and workflow checks
-        env:
-          PREFLIGHT_RESULT: ${{ needs.branch-preflight.result }}
-        run: test "$PREFLIGHT_RESULT" = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

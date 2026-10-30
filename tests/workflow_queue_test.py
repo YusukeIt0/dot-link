@@ -69,6 +69,8 @@ class ProductCIValidation(unittest.TestCase):
         self.assertEqual(events['push']['branches-ignore'], ['main'])
         self.assertNotIn('test', branch['jobs'])
         self.assertEqual(branch['jobs']['branch-test']['runs-on'], 'macos-15')
+        self.assertEqual(branch['jobs']['branch-test']['if'],
+                         "${{ !cancelled() && needs.branch-preflight.result == 'success' && needs.branch-preflight.outputs.run == 'true' }}")
         self.assertNotEqual(ci['concurrency']['group'], branch['concurrency']['group'])
         for job in [ci['jobs']['test'], branch['jobs']['branch-test']]:
             self.assertEqual(job['steps'][-1]['run'], 'sh scripts/run-ci-tests.sh')
