@@ -14,6 +14,7 @@
 <p align="center">
   <sub><strong>2026-09-29</strong> · <a href="https://learn.chatgpt.com/docs/whats-new/devday-2026">ChatGPT dots officially announced</a></sub><br>
   <sub><strong>2026-10-09</strong> · <a href="https://github.com/YusukeIt0/dot-link/commit/493b753c948c4a6ed09993bd6ed89eff8345ac35">Dot Link first published on GitHub</a></sub><br>
+  <sub><strong>2026-10-10</strong> · <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Dot Link launched on Even Hub</a></sub><br>
   <sub><strong>2026-10-25</strong> · <a href="https://www.producthunt.com/products/dot-link">Dot Link launched on Product Hunt</a></sub>
   <br><sub><strong>2026-10-28</strong> · <a href="https://www.facebook.com/ninjaaitools/posts/3288243901376851/">Featured by Ninja AI Tools in “12 Crazy AI Tools You Never Heard Of”</a></sub>
 </p>
