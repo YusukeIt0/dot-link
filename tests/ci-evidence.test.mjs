@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ciTarget, ciReceipt, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
+import {ciTarget, ciReceipt, ciHeadReceipt, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
 import {branchAdmission} from '../scripts/branch-ci-admission.mjs';
 const repository = 'YusukeIt0/dot-link', head = 'b'.repeat(40), base = 'a'.repeat(40);
 const pr = {number: 7, head: {sha: head, ref: 'work', repo: {full_name: repository}}, base: {ref: 'main', sha: base}};
@@ -66,11 +66,11 @@ test('malformed ref metadata cannot suppress branch validation', async () => {
 import {currentCI} from '../scripts/ci-current.mjs';
 test('late starts and stale retries cannot execute expensive tests against a moved PR/ref', () => {
   const event = {pull_request: {...pr, state: 'open'}};
-  assert.equal(currentCI('pull_request', event, event.pull_request, base), true);
+  assert.equal(currentCI('pull_request', event, event.pull_request, base, {status: 'ahead', merge_base_commit: {sha: base}}), true);
   for (const mutate of [p => p.state = 'closed', p => p.head.sha = base,
-    p => p.base.sha = head, p => p.base.ref = 'other', p => p.head.repo.full_name = 'other/fork']) {
+    p => p.base.sha = head, p => p.head.repo.full_name = 'other/fork']) {
     const current = structuredClone(event.pull_request); mutate(current);
-    assert.equal(currentCI('pull_request', event, current, current.base.sha), false);
+    assert.equal(currentCI('pull_request', event, current, current.base.sha, {status: 'ahead', merge_base_commit: {sha: base}}), false);
   }
   assert.equal(currentCI('push', {after: head}, {object: {sha: head}}), true);
   assert.equal(currentCI('push', {after: head}, {object: {sha: base}}), false);
@@ -109,4 +109,64 @@ test('fresh base ref overrides lagging PR metadata after parent advancement', ()
   const event = {pull_request: {...pr, state: 'open'}};
   assert.equal(currentCI('pull_request', event, event.pull_request, 'c'.repeat(40)), false);
   assert.equal(currentCI('pull_request', event, event.pull_request), false);
+});
+
+const included = (baseSha = base) => ({status: 'ahead', merge_base_commit: {sha: baseSha}});
+const headRun = () => ({...run(), display_title: ciHeadReceipt(target)});
+test('v2 evidence follows the exact tested head only when the current base is included', () => {
+  const source = headRun();
+  source.display_title = ciHeadReceipt({...target, base: 'c'.repeat(40), baseRef: 'previous-parent'});
+  assert.equal(matchesCI(source, target), true);
+  assert.doesNotThrow(() => assertCI(target, source, jobs(), included()));
+  for (const proof of [undefined, {}, {status: 'diverged', merge_base_commit: {sha: base}},
+    {status: 'behind', merge_base_commit: {sha: base}}, included(head)]) {
+    assert.throws(() => assertCI(target, source, jobs(), proof));
+  }
+  const legacy = {...source, display_title: source.display_title.replace('CI v2', 'CI v1')};
+  assert.equal(matchesCI(legacy, target), false);
+  assert.throws(() => assertCI(target, legacy, jobs(), included()));
+});
+
+test('v2 newest full result cannot be bypassed by a different dispatch base', () => {
+  const older = headRun();
+  for (const conclusion of ['failure', 'cancelled', 'skipped', null]) {
+    const latest = {...headRun(), id: 13, conclusion,
+      display_title: ciHeadReceipt({...target, base: 'c'.repeat(40), baseRef: 'parent'})};
+    assert.equal(selectCI([latest, older], target).id, 13);
+    assert.throws(() => assertCI(target, latest, jobs(), included()));
+  }
+  for (const mutate of [r => r.event = 'push', r => r.head_sha = base,
+    r => r.head_repository.full_name = 'other/repo', r => r.pull_requests = [],
+    r => r.display_title = r.display_title.replace('pr=7', 'pr=8'),
+    r => r.display_title = r.display_title.replace(`head=${head}`, `head=${base}`)]) {
+    const r = headRun(); mutate(r); assert.throws(() => assertCI(target, r, jobs(), included()));
+  }
+});
+
+test('v2 collection obtains fresh ancestry and fails closed when comparison is unavailable', () => {
+  const source = headRun(), calls = [];
+  const api = path => {
+    calls.push(path);
+    if (path === 'actions/runs/12') return source;
+    if (path === `compare/${base}...${head}`) return included();
+    return {workflow_runs: [source]};
+  };
+  const result = collectCI(pr, pr.base, api, () => [{jobs: jobs()}]);
+  assert.equal(result.status, 'ready');
+  assert.deepEqual(result.comparison, included());
+  assert.ok(calls.includes(`compare/${base}...${head}`));
+  assert.throws(() => collectCI(pr, pr.base, path => {
+    if (path.startsWith('compare/')) throw Error('offline'); return api(path);
+  }, () => [{jobs: jobs()}]), /offline/);
+  assert.equal(collectCI(pr, pr.base, path => path.startsWith('compare/') ? included(head) : api(path),
+    () => [{jobs: jobs()}]).status, 'held');
+});
+
+test('retargeted v2 head can run only with the current target already included', () => {
+  const event = {pull_request: {...pr, state: 'open'}};
+  const current = structuredClone(event.pull_request);
+  current.base = {ref: 'new-parent', sha: 'c'.repeat(40)};
+  assert.equal(currentCI('pull_request', event, current, current.base.sha, included(current.base.sha)), true);
+  assert.equal(currentCI('pull_request', event, current, current.base.sha, included()), false);
+  assert.equal(currentCI('pull_request', event, current, current.base.sha), false);
 });

@@ -42,7 +42,7 @@ export function fingerprintPR(pr, main, comments, base, scope, feedback) {
   return createHash('sha256').update(JSON.stringify(data)).digest('hex');
 }
 
-export function assertReady({pr, main, base, scope, feedback, expectedBase = 'main', comments, receipt, run, jobs, checks, ciRun, ciJobs, baseComparison}) {
+export function assertReady({pr, main, base, scope, feedback, expectedBase = 'main', comments, receipt, run, jobs, checks, ciRun, ciJobs, ciComparison, baseComparison}) {
   if (pr.state !== 'open' || pr.draft || pr.base?.ref !== expectedBase) throw new Error('PR must be open, ready and target the expected base.');
   if (expectedBase !== 'main' && (!base || base.ref !== expectedBase || !/^[a-f0-9]{40}$/.test(base.sha) ||
       receipt.base?.ref !== base.ref || receipt.base?.sha !== base.sha)) throw new Error('PR base changed or lacks a pinned review receipt.');
@@ -64,7 +64,7 @@ export function assertReady({pr, main, base, scope, feedback, expectedBase = 'ma
     }
   }
   if ((expectedBase === 'main' && !checks.length) || checks.some(x => x.bucket !== 'pass')) throw new Error('Required checks are missing, pending, or unsuccessful.');
-  assertCI(ciTarget(pr, base || {ref: 'main', sha: main}), ciRun, ciJobs);
+  assertCI(ciTarget(pr, base || {ref: 'main', sha: main}), ciRun, ciJobs, ciComparison);
   return pr.head.sha;
 }
 
@@ -98,7 +98,7 @@ async function main() {
   const baseComparison = expectedBase !== 'main' ? api(`compare/${base.sha}...${pr.head.sha}`) : undefined;
   const evidence = collectCI(pr, base || {ref: 'main', sha: mainSha}, api,
     path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']));
-  const ciRun = evidence.run, ciJobs = evidence.jobs;
+  const ciRun = evidence.run, ciJobs = evidence.jobs, ciComparison = evidence.comparison;
   const comments = readComments();
   const scope = scopeRevision(comments, pr.head.sha, api, path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat());
   const feedback = reviewDiscussion(pr.number, path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat());
@@ -107,7 +107,7 @@ async function main() {
   if (currentPR.head.sha !== pr.head.sha || currentPR.base.ref !== pr.base.ref ||
       api('commits/main').sha !== mainSha ||
       api(`commits/${encodeURIComponent(expectedBase)}`).sha !== (base?.sha || mainSha)) throw new Error('PR head/base changed during verification.');
-  const head = assertReady({pr, main:mainSha, base, scope, feedback, expectedBase, comments, receipt, run, jobs, checks, ciRun, ciJobs, baseComparison});
+  const head = assertReady({pr, main:mainSha, base, scope, feedback, expectedBase, comments, receipt, run, jobs, checks, ciRun, ciJobs, ciComparison, baseComparison});
   console.log(`READY: PR #${number} targeting ${expectedBase}, head ${head}, review run ${receipt.runId}.`);
   console.log(`Read findings before deciding to merge. Use --match-head-commit ${head} when merging; repeat this check after any change.`);
 }

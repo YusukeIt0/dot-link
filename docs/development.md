@@ -195,7 +195,7 @@ For source-based diagnostics, run `node scripts/setup.mjs status --voice-only` f
 
 For a cohesive change split into substantial dependent steps, track the outcome in a parent issue and integration branch, with native sub-issues and child PRs targeting that branch. Define the ownership and dependency order first. Update each dependent child from the integrated parent before starting its work; small fixes do not need this hierarchy. Keep acceptance evidence in the issues/PRs, not a duplicate backlog.
 
-Automated review executes helpers from trusted main. A child review pins its target branch and commit and supplies the exact main-to-base delta as read-only context before the PR diff. No reviewed base/head code is checked out or executed by the review job. Large base deltas stop preparation with a Needs a smaller scope result rather than silently omitting context. Moving the base or retargeting the PR invalidates the receipt. The child gate also verifies that the exact tested head contains the current parent commit (ahead or identical, with that parent as merge base). If the parent has advanced or a new target is not contained in the child, update the child and rerun CI/review. PR CI must record the current parent ref/SHA. Branch push CI is pre-PR feedback and cannot certify integration. A run against an unrelated old target cannot qualify.
+Automated review executes helpers from trusted main. A child review pins its target branch and commit and supplies the exact main-to-base delta as read-only context before the PR diff. No reviewed base/head code is checked out or executed by the review job. Large base deltas stop preparation with a Needs a smaller scope result rather than silently omitting context. Moving the base or retargeting the PR invalidates the receipt. The child gate also verifies that the exact tested head contains the current parent commit (ahead or identical, with that parent as merge base). If the parent has advanced or a new target is not contained in the child, update the child and rerun CI/review. CI v2 must test the exact child head and freshly prove that it includes the current parent; its original dispatch base may differ. Legacy v1 CI must record the current parent ref/SHA. Branch push CI is pre-PR feedback and cannot certify integration. Neither version qualifies without its corresponding current-target proof.
 
 The normal gate remains `node scripts/check-review-before-merge.mjs <PR>` for main. For child integration, explicitly name the intended parent:
 
@@ -272,8 +272,9 @@ validation. PR creation concurrent with a branch run may temporarily run both;
 branch-only and merge-context evidence are not interchangeable.
 
 Review evidence and both merge gates share `scripts/ci-evidence.mjs`: select the
-latest matching PR workflow and its latest attempt for the exact head/base, then
-require all jobs to succeed. Never search backward for a passing run. Cancelled,
+latest matching full PR workflow and its latest attempt for the exact head,
+verify current-base inclusion for v2 (exact dispatch base for v1), and require all
+jobs to succeed. Never search backward for a passing run. Cancelled,
 skipped, missing and stale evidence holds integration. Unknown fork association
 also holds it. Update a child after its parent advances and rerun CI/review.
 
@@ -281,8 +282,8 @@ Tests and branch validation use separate cancellation groups by PR/ref. Manual
 retries are isolated from ordinary runs so an old retry cannot cancel current
 validation. GitHub does not guarantee dispatch order: inspect the latest head and
 run after cancellation. A supersession failure requires updating the PR head from
-the current base (or another fresh PR event); rerunning the old event cannot refresh
-its pinned base. Rerun current-context infrastructure failures only when needed.
+the current base when it is not already included. A retry cannot change the tested
+head; never use one to certify a different revision. Rerun current-context infrastructure failures only when needed.
 Do not repeatedly restart healthy queued runs or describe runner-capacity recovery
 as a permanent capacity fix. Preserve independent review queues and Pages deploy
 serialization. Record run/attempt, head/base, execution and queue durations,
@@ -291,21 +292,29 @@ conclusions, selected evidence and any recovery in the existing PR.
 See [technical ownership](development-assurance.md#technical-ownership-across-agent-sessions)
 for the division between UX decisions and agent-owned implementation/verification.
 
-CI provenance is pinned in the `CI v1` run title at dispatch. GitHub's associated
-PR metadata can change when a PR is retargeted; it is not proof of the tested base.
-The selector checks both the fixed receipt and API association. A newer associated
-run with missing/malformed provenance holds integration rather than reviving an
-older success. Runs from before receipt adoption need a fresh PR-triggered run;
-a rerun of an old event cannot add a new receipt.
+Tests v2 checks out the exact PR head for both workflow lint and the full macOS
+suite. Before testing and before merging, GitHub's comparison must prove the
+current target base is an ancestor of that head (`ahead` or `identical`, with the
+base as merge base). Therefore the tested tree is the tree that will be integrated.
+If the target advances with new code, update the PR branch first; that new head
+triggers fresh validation. Main already requires an up-to-date branch, and child
+integration enforces the same rule. The runtime guard also verifies local HEAD.
 
-Title/body-only edits create isolated ignored runs with distinct ignored job names;
-they neither cancel current validation nor replace required `test`. Draft-ready
-transitions do not repeat tests. Base edits still run Tests. The shared selector
-excludes only the explicit ignored receipt, not arbitrary skipped runs. Advisory
-review reports unstable/unavailable CI evidence as held and continues; merge gates
-still require complete evidence. For a current-context infrastructure failure, use
-a full workflow rerun because
-required jobs must all be present in the selected attempt.
+Title/body edits and retargeting do not start product CI. Retargeting to a base
+already included in the same tested head does not change the tested tree; the
+shared selector may reuse that full v2 run only after checking current ancestry.
+Retargeting to a base not included in the head holds integration until the branch
+is updated and tested. Independent review still pins the current target base,
+main, head, agreed scope and PR text; retargeting invalidates that review receipt.
+This separates code validation from review-context changes without a metadata
+workflow, result cache, polling loop or synthetic success check.
+
+The fixed `CI v2` title records dispatch provenance. Mutable associated PR base
+metadata is never used as proof of the tested tree. Historical `CI v1` runs retain
+the stricter exact-dispatch-base rule; they are not upgraded to v2 evidence.
+A newer unknown, failed, skipped, cancelled or incomplete source holds integration
+instead of reviving an older success. Use a full workflow rerun for a transient
+infrastructure failure; all required jobs must exist in the selected attempt.
 
 Action runtimes are separate from the Node version used by project commands.
 Keep project Node pinned unless a separate compatibility change is justified.

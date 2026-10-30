@@ -47,13 +47,13 @@ export function assertProtection(protection) {
   }
 }
 
-export function assertProductCI(pr, main, run, jobs) {
-  assertCI(ciTarget(pr, {ref: 'main', sha: main}), run, jobs);
+export function assertProductCI(pr, main, run, jobs, comparison) {
+  assertCI(ciTarget(pr, {ref: 'main', sha: main}), run, jobs, comparison);
 }
 
 export function evaluate(snapshot) {
   const reasons = [];
-  const {pr, main, protection, files, versionChanges, context, receipt, reviews = [], ciRun, ciJobs, ancestry} = snapshot;
+  const {pr, main, protection, files, versionChanges, context, receipt, reviews = [], ciRun, ciJobs, ciComparison, ancestry} = snapshot;
   if (!trustedUser(pr.user) || pr.head.repo?.full_name !== repository) reasons.push('PR author/head is not an explicitly trusted in-repository contributor.');
   if (pr.base?.ref !== 'main') reasons.push('Automatic merging only targets protected main; dependent PRs need their normal integration sequence.');
   if (snapshot.grokSelection?.automatic && !selected(pr)) reasons.push('Qualifying P0/P1 bug fix is awaiting the independent-review label.');
@@ -65,7 +65,7 @@ export function evaluate(snapshot) {
   const latestReviews = new Map();
   for (const review of reviews) if (['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(review.state)) latestReviews.set(review.user?.id, review);
   if ([...latestReviews.values()].some(x => x.state === 'CHANGES_REQUESTED')) reasons.push('A review requests changes; resolve and re-review it.');
-  for (const check of [() => assertProtection(protection), () => assertProductCI(pr, main, ciRun, ciJobs), () => assertReady(snapshot)]) {
+  for (const check of [() => assertProtection(protection), () => assertProductCI(pr, main, ciRun, ciJobs, ciComparison), () => assertReady(snapshot)]) {
     try { check(); } catch (error) { reasons.push(error.message); }
   }
   const quality = receipt?.quality;
@@ -118,8 +118,8 @@ export function collect(number, client) {
   const feedback = reviewDiscussion(pr.number, pages);
   const context = gatherContext({pr, data: {main}, issue: {number: pr.number}, rows: comments, fingerprint: receipt.fingerprint}, api, pages);
   const evidence = collectCI(pr, {ref: 'main', sha: main}, api, pages);
-  const ciRun = evidence.run, ciJobs = evidence.jobs;
-  return {pr, main, scope, feedback, comments, receipt, run, jobs, files, versionChanges, context, ciRun, ciJobs, grokSelection,
+  const ciRun = evidence.run, ciJobs = evidence.jobs, ciComparison = evidence.comparison;
+  return {pr, main, scope, feedback, comments, receipt, run, jobs, files, versionChanges, context, ciRun, ciJobs, ciComparison, grokSelection,
     checks: checks(number), protection: api('branches/main/protection'),
     reviews: pages(`pulls/${number}/reviews?per_page=100`),
     ancestry: api(`compare/${main}...${pr.head.sha}`)};
