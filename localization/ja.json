@@ -561,5 +561,8 @@
   "even.link_on_phone": "[リンクはスマホで表示]",
   "mac.update_progress_title": "Dot Linkを更新中",
   "mac.update_progress_complete": "Dot Linkの更新が完了しました。",
-  "mac.update_progress_close": "閉じる"
+  "mac.update_progress_close": "閉じる",
+  "even.walking_terrain": "徒歩経路・地形の情報",
+  "even.walking_terrain_disclosure": "必要なとき、MacからFOSSGISへ経路の座標、AWSへ地形の対象範囲を送ります。",
+  "even.walking_terrain_privacy": "情報源とプライバシー （英語）"
 }

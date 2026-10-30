@@ -561,5 +561,8 @@
   "even.link_on_phone": "[Lien affiché sur le téléphone]",
   "mac.update_progress_title": "Mise à jour de Dot Link",
   "mac.update_progress_complete": "Dot Link est à jour.",
-  "mac.update_progress_close": "Fermer"
+  "mac.update_progress_close": "Fermer",
+  "even.walking_terrain": "Itinéraires à pied et terrain",
+  "even.walking_terrain_disclosure": "Si Dot en a besoin, votre Mac envoie les coordonnées du trajet à FOSSGIS et la zone de terrain à AWS.",
+  "even.walking_terrain_privacy": "Sources et confidentialité (en anglais)"
 }

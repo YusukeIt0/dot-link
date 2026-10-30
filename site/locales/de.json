@@ -69,5 +69,6 @@
   "analyticsClose": "Schließen",
   "analyticsInternal": "Diesen Browser aus Berichten ausschließen",
   "analyticsInternalNote": "Gilt nur für diesen Browser. Beim Löschen der Websitedaten wird diese Einstellung entfernt. Andere Geräte müssen separat eingestellt werden.",
-  "analyticsStorageError": "Deine Auswahl konnte nicht gespeichert werden. Die Analyse ist deaktiviert. Erlaube das Speichern von Websitedaten, um deine Auswahl zu merken."
+  "analyticsStorageError": "Deine Auswahl konnte nicht gespeichert werden. Die Analyse ist deaktiviert. Erlaube das Speichern von Websitedaten, um deine Auswahl zu merken.",
+  "fixMap": "Karte korrigieren"
 }

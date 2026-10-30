@@ -69,5 +69,6 @@
   "analyticsClose": "关闭",
   "analyticsInternal": "将此浏览器排除在报告之外",
   "analyticsInternalNote": "仅适用于此浏览器。清除网站数据会移除此设置。其他设备需单独设置。",
-  "analyticsStorageError": "无法保存您的选择，分析功能已关闭。请允许网站存储数据，以记住您的选择。"
+  "analyticsStorageError": "无法保存您的选择，分析功能已关闭。请允许网站存储数据，以记住您的选择。",
+  "fixMap": "修正地图"
 }

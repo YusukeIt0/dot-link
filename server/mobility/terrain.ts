@@ -86,12 +86,14 @@ export class TerrainProvider {
   async profile(path: Point[], signal: AbortSignal) {
     const samples = samplePath(path), values = await this.elevations(samples.points, signal);
     let ascent = 0, descent = 0, covered = 0, maximumGrade = 0;
+    const steep:{from:Point;to:Point;start_distance_m:number;length_m:number;sampled_grade_percent:number}[]=[];
     for (let i = 1; i < values.length; i++) {
       const before = values[i - 1], after = values[i];
       if (before == null || after == null || samples.spacing === 0) continue;
       covered++; const delta = after - before;
       ascent += Math.max(0, delta); descent += Math.max(0, -delta);
       maximumGrade = Math.max(maximumGrade, Math.abs(delta) / samples.spacing * 100);
+      if(Math.abs(delta)/samples.spacing>=0.08)steep.push({from:samples.points[i-1]!,to:samples.points[i]!,start_distance_m:Math.round(samples.distances[i-1]!),length_m:Math.round(samples.spacing),sampled_grade_percent:Math.round(delta/samples.spacing*1000)/10});
     }
     const complete = values.every(v => v !== null), suspect = maximumGrade > 40, usable = complete && !suspect, round = (v: number) => Math.round(v);
     return {status: usable ? 'available' : covered ? 'partial' : 'unavailable',
@@ -103,6 +105,9 @@ export class TerrainProvider {
       covered_segments: covered, total_segments: values.length - 1,
       origin_elevation_m: values[0] == null ? null : round(values[0]),
       destination_elevation_m: values.at(-1) == null ? null : round(values.at(-1)!),
+      elevation_difference_m:values[0]==null||values.at(-1)==null?null:round(values.at(-1)!-values[0]),
+      steep_sections:usable?steep.slice(0,12):[],omitted_steep_sections:usable?Math.max(0,steep.length-12):null,
+      steep_section_threshold_percent:8,
       ascent_m: usable ? round(ascent) : null, descent_m: usable ? round(descent) : null,
       maximum_sampled_grade_percent: usable ? Math.round(maximumGrade * 10) / 10 : null,
       limitations: [...terrainLimitations, ...(suspect ? ['A model segment exceeds the conservative 40% screening threshold; route totals and grade are withheld. This can reflect genuine steep terrain or model artifacts and does not establish an impassable path.'] : []), ...(!complete ? ['Missing samples; complete-route ascent, descent and grade are unknown.'] : [])]};

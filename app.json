@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "Read your phone location to share it with Dot through your Mac when you enable sharing. Your Mac caches nearby map data, which can reveal past areas, until unused for 30 days. Turn sharing off to stop new location sharing."
+      "desc": "Read your phone location to share it with Dot through your Mac when you enable sharing. Your Mac caches nearby map data, which can reveal past areas, until unused for 30 days. With separate walking/terrain consent, your Mac sends route coordinates to FOSSGIS and terrain areas to the tile provider when Dot requests them. Turn sharing off to stop new requests."
     },
     {
       "name": "camera",

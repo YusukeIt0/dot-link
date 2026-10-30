@@ -561,5 +561,8 @@
   "even.link_on_phone": "[連結顯示於手機]",
   "mac.update_progress_title": "正在更新 Dot Link",
   "mac.update_progress_complete": "Dot Link 更新完成。",
-  "mac.update_progress_close": "關閉"
+  "mac.update_progress_close": "關閉",
+  "even.walking_terrain": "步行路線和地形資訊",
+  "even.walking_terrain_disclosure": "Dot 需要時，Mac 會向 FOSSGIS 傳送路線座標，向 AWS 傳送地形查詢區域。",
+  "even.walking_terrain_privacy": "資料來源與隱私 （英文）"
 }

@@ -220,3 +220,50 @@ test('handoff during a native location start cannot send a late stop or preferen
   assert.deepEqual([...f.nativeStore], saved);
   assert.equal(f.controller.status().enabled, true);
 });
+
+test('walking consent defaults off and changes revoke the previous sharing session before enabling another',async t=>{
+  const f=fixture();t.after(()=>f.controller.stop());await f.controller.attach(f.native);
+  f.controller.setEnabled(true);await flush();
+  assert.equal(f.controller.status().mobility,false);
+  const first=f.requests.find(r=>r.path.endsWith('/control')&&r.body.enabled)!;
+  assert.equal(first.body.mobility_enabled,false);
+  f.controller.setMobilityEnabled(true);await flush();await f.controller.pump();
+  const controls=f.requests.filter(r=>r.path.endsWith('/control'));
+  assert.equal(controls[1]!.body.enabled,false);assert.equal(controls[1]!.body.sharing_id,first.body.sharing_id);
+  assert.equal(controls[2]!.body.mobility_enabled,true);assert.notEqual(controls[2]!.body.sharing_id,first.body.sharing_id);
+  f.controller.setMobilityEnabled(false);await flush();await f.controller.pump();
+  assert.equal(f.requests.filter(r=>r.path.endsWith('/control')).at(-1)!.body.mobility_enabled,false);
+  f.controller.setMobilityEnabled(true);await flush();await f.controller.pump();
+  f.setTarget('https://another-relay.example.test');await f.controller.pump();
+  assert.equal(f.controller.status().enabled,false);assert.equal(f.controller.status().mobility,false);
+});
+
+test('delayed old enable cannot restore walking consent after revocation',async t=>{
+  const dir=mkdtempSync(join(tmpdir(),'dot-delayed-consent-'));
+  let context!:LocationContext,release!:()=>void,hold=true;
+  const f=fixture(async(path,raw)=>{
+    const body=raw as any;
+    if(path.endsWith('/control')&&body.enabled&&hold){hold=false;await new Promise<void>(r=>{release=r;});}
+    return path.endsWith('/control')?context.control(body,'owner'):context.update(body,'owner');
+  });
+  context=new LocationContext(join(dir,'location.json'),new WebhookSender(async()=>({status:200,body:'{}'})),[],async()=>({}),f.now);
+  t.after(async()=>{await f.controller.stop();context.close();rmSync(dir,{recursive:true,force:true});});
+  await f.controller.attach(f.native);f.controller.setEnabled(true);await flush();
+  const old=f.requests[0].body.sharing_id;
+  f.controller.setMobilityEnabled(true);await flush();
+  assert.equal(f.requests.at(-1)?.body.enabled,false);
+  release();await flush();await f.controller.pump();
+  const controls=f.requests.filter(r=>r.path.endsWith('/control'));
+  assert.notEqual(controls.at(-1)!.body.sharing_id,old);
+  assert.equal(controls.at(-1)!.body.mobility_enabled,true);
+  assert.throws(()=>context.control({sharing_id:old,enabled:true,mobility_enabled:false},'owner'),/revoked/);
+  assert.equal(f.controller.status().state,'sharing');
+});
+
+for(const mobility of [undefined,true,false])test(`restored consent preserves only explicit walking preference ${mobility}`,async t=>{
+  const f=fixture();t.after(()=>f.controller.stop());
+  f.nativeStore.set('dot-location-sharing-v1',JSON.stringify({enabled:true,origin:'https://relay.example.test',stops:[],...(mobility===undefined?{}:{mobility})}));
+  await f.controller.attach(f.native);await flush();await f.controller.pump();
+  assert.equal(f.controller.status().mobility,mobility===true);
+  assert.equal(f.requests.find(r=>r.path.endsWith('/control')&&r.body.enabled)?.body.mobility_enabled,mobility===true);
+});

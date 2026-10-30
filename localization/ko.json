@@ -561,5 +561,8 @@
   "even.link_on_phone": "[링크는 휴대폰에 표시]",
   "mac.update_progress_title": "Dot Link 업데이트 중",
   "mac.update_progress_complete": "Dot Link 업데이트가 완료되었습니다.",
-  "mac.update_progress_close": "닫기"
+  "mac.update_progress_close": "닫기",
+  "even.walking_terrain": "도보 경로 및 지형 정보",
+  "even.walking_terrain_disclosure": "Dot에 정보가 필요할 때 Mac에서 경로 좌표를 FOSSGIS로, 지형 조회 영역을 AWS로 보냅니다.",
+  "even.walking_terrain_privacy": "정보 출처 및 개인정보 보호 (영어)"
 }
