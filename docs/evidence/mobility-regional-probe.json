@@ -1,12 +1,10 @@
 {
-  "recorded_at": "2026-10-30T12:45:02.525732+00:00",
-  "runtime_commit": "ffdedff3799ebb324f408e986d11bf77a13d4b4a",
-  "method": "26 public point pairs, sequential with 1.5 second gaps, same process/provider cooldowns; each sample uses a new public terrain cache. Single observations, not region coverage guarantees.",
+  "recorded_at": "2026-10-30T12:56:32.413017+00:00",
+  "runtime_commit": "0c22185cf4c553d36290e650ab8e45b46e9d9c95",
+  "method": "26 public pairs, sequential with 1.5-second gaps and shared provider cooldowns. New terrain cache for each sample. Walking and terrain only; public transport excluded. Single observations, not regional coverage guarantees.",
   "sources": [
     "FOSSGIS OSRM / OpenStreetMap",
-    "Mapzen Terrain Tiles",
-    "Entur (Norway)",
-    "VBB via transport.rest (Berlin/Brandenburg)"
+    "Mapzen Terrain Tiles"
   ],
   "samples": [
     {
@@ -14,13 +12,13 @@
       "region": "East Asia",
       "area": "Tokyo, Japan",
       "kind": "urban",
-      "route_ms": 1154,
-      "total_ms": 2782,
+      "route_ms": 942,
+      "total_ms": 3479,
       "network": {
         "requests": 2,
         "received_bytes": 72765
       },
-      "max_rss_kib": 120960,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1577,
@@ -28,8 +26,6 @@
         1,
         2
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -43,13 +39,13 @@
       "region": "East Asia",
       "area": "Seoul, South Korea",
       "kind": "urban",
-      "route_ms": 270,
-      "total_ms": 2506,
+      "route_ms": 936,
+      "total_ms": 3726,
       "network": {
         "requests": 3,
         "received_bytes": 112853
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 1835,
@@ -57,8 +53,6 @@
         10,
         4
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -72,13 +66,13 @@
       "region": "Southeast Asia",
       "area": "Bangkok, Thailand",
       "kind": "urban",
-      "route_ms": 418,
-      "total_ms": 1288,
+      "route_ms": 1118,
+      "total_ms": 3222,
       "network": {
         "requests": 2,
         "received_bytes": 66616
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2342,
@@ -86,8 +80,6 @@
         4,
         36
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -101,13 +93,13 @@
       "region": "Southeast Asia",
       "area": "Singapore",
       "kind": "urban",
-      "route_ms": 276,
-      "total_ms": 1299,
+      "route_ms": 315,
+      "total_ms": 1467,
       "network": {
         "requests": 2,
         "received_bytes": 78850
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2237,
@@ -115,8 +107,6 @@
         8,
         1
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -130,13 +120,13 @@
       "region": "South Asia",
       "area": "Delhi, India",
       "kind": "urban",
-      "route_ms": 920,
-      "total_ms": 3362,
+      "route_ms": 1013,
+      "total_ms": 4101,
       "network": {
         "requests": 3,
         "received_bytes": 81693
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1695,
@@ -144,8 +134,6 @@
         20,
         72
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -159,13 +147,13 @@
       "region": "Middle East",
       "area": "Dubai, UAE",
       "kind": "urban",
-      "route_ms": 272,
-      "total_ms": 1605,
+      "route_ms": 947,
+      "total_ms": 2605,
       "network": {
         "requests": 2,
         "received_bytes": 73929
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2280,
@@ -173,8 +161,6 @@
         25,
         53
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -188,13 +174,13 @@
       "region": "Europe / West Asia",
       "area": "Istanbul, Turkey",
       "kind": "urban",
-      "route_ms": 279,
-      "total_ms": 4229,
+      "route_ms": 271,
+      "total_ms": 1907,
       "network": {
         "requests": 2,
         "received_bytes": 94493
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1344,
@@ -202,8 +188,6 @@
         46,
         1
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -217,13 +201,13 @@
       "region": "North Africa",
       "area": "Cairo, Egypt",
       "kind": "urban",
-      "route_ms": 1063,
-      "total_ms": 2753,
+      "route_ms": 363,
+      "total_ms": 1293,
       "network": {
         "requests": 2,
         "received_bytes": 51228
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 644,
@@ -231,8 +215,6 @@
         39,
         43
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -246,13 +228,13 @@
       "region": "East Africa",
       "area": "Nairobi, Kenya",
       "kind": "urban",
-      "route_ms": 809,
-      "total_ms": 2335,
+      "route_ms": 307,
+      "total_ms": 1470,
       "network": {
         "requests": 2,
         "received_bytes": 58273
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 2820,
@@ -260,8 +242,6 @@
         3,
         8
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -275,13 +255,13 @@
       "region": "Southern Africa",
       "area": "Cape Town, South Africa",
       "kind": "urban",
-      "route_ms": 292,
-      "total_ms": 1629,
+      "route_ms": 267,
+      "total_ms": 1277,
       "network": {
         "requests": 2,
         "received_bytes": 52278
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 939,
@@ -289,8 +269,6 @@
         12,
         3
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -304,13 +282,13 @@
       "region": "Europe",
       "area": "London, UK",
       "kind": "urban",
-      "route_ms": 305,
-      "total_ms": 5114,
+      "route_ms": 328,
+      "total_ms": 5002,
       "network": {
         "requests": 3,
         "received_bytes": 240811
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1400,
@@ -318,8 +296,6 @@
         2,
         79
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -333,13 +309,13 @@
       "region": "Europe",
       "area": "Berlin, Germany",
       "kind": "urban",
-      "route_ms": 3675,
-      "total_ms": 5303,
+      "route_ms": 2569,
+      "total_ms": 4950,
       "network": {
-        "requests": 3,
-        "received_bytes": 163093
+        "requests": 2,
+        "received_bytes": 141497
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2732,
@@ -347,8 +323,6 @@
         3,
         19
       ],
-      "transit_status": "partial",
-      "transit_candidates": 2,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -362,13 +336,13 @@
       "region": "Europe",
       "area": "Oslo, Norway",
       "kind": "urban",
-      "route_ms": 1841,
-      "total_ms": 4015,
+      "route_ms": 591,
+      "total_ms": 8288,
       "network": {
-        "requests": 4,
-        "received_bytes": 272947
+        "requests": 3,
+        "received_bytes": 268438
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 4217,
@@ -376,8 +350,6 @@
         5,
         17
       ],
-      "transit_status": "available",
-      "transit_candidates": 3,
       "terrain_status": "partial",
       "terrain_confidence": "suspect_surface_profile",
       "endpoint_elevations_m": [
@@ -391,13 +363,13 @@
       "region": "North America",
       "area": "New York, USA",
       "kind": "urban",
-      "route_ms": 845,
-      "total_ms": 3503,
+      "route_ms": 1257,
+      "total_ms": 3383,
       "network": {
         "requests": 2,
         "received_bytes": 113123
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1056,
@@ -405,8 +377,6 @@
         2,
         1
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -420,13 +390,13 @@
       "region": "North America",
       "area": "San Francisco, USA",
       "kind": "urban hill",
-      "route_ms": 1891,
-      "total_ms": 4368,
+      "route_ms": 298,
+      "total_ms": 6785,
       "network": {
         "requests": 2,
         "received_bytes": 126859
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1236,
@@ -434,8 +404,6 @@
         5,
         9
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -449,13 +417,13 @@
       "region": "North America",
       "area": "Mexico City, Mexico",
       "kind": "urban",
-      "route_ms": 377,
-      "total_ms": 2790,
+      "route_ms": 903,
+      "total_ms": 4525,
       "network": {
         "requests": 3,
         "received_bytes": 78661
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1046,
@@ -463,8 +431,6 @@
         56,
         30
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -478,13 +444,13 @@
       "region": "South America",
       "area": "Lima, Peru",
       "kind": "urban",
-      "route_ms": 896,
-      "total_ms": 2380,
+      "route_ms": 861,
+      "total_ms": 2520,
       "network": {
         "requests": 2,
         "received_bytes": 39669
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 835,
@@ -492,8 +458,6 @@
         28,
         2
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -507,13 +471,13 @@
       "region": "South America",
       "area": "Sao Paulo, Brazil",
       "kind": "urban",
-      "route_ms": 344,
-      "total_ms": 1436,
+      "route_ms": 283,
+      "total_ms": 766,
       "network": {
         "requests": 2,
         "received_bytes": 82865
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2852,
@@ -521,8 +485,6 @@
         9,
         11
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -536,13 +498,13 @@
       "region": "South America",
       "area": "Buenos Aires, Argentina",
       "kind": "urban",
-      "route_ms": 277,
-      "total_ms": 980,
+      "route_ms": 325,
+      "total_ms": 719,
       "network": {
         "requests": 2,
         "received_bytes": 57227
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1461,
@@ -550,8 +512,6 @@
         2,
         0
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -565,13 +525,13 @@
       "region": "Oceania",
       "area": "Sydney, Australia",
       "kind": "urban",
-      "route_ms": 419,
-      "total_ms": 6188,
+      "route_ms": 289,
+      "total_ms": 2942,
       "network": {
         "requests": 3,
         "received_bytes": 140840
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2348,
@@ -579,8 +539,6 @@
         45,
         1
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -594,13 +552,13 @@
       "region": "Oceania",
       "area": "Auckland, New Zealand",
       "kind": "urban",
-      "route_ms": 869,
-      "total_ms": 2810,
+      "route_ms": 802,
+      "total_ms": 3212,
       "network": {
         "requests": 2,
         "received_bytes": 134815
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1287,
@@ -608,8 +566,6 @@
         15,
         5
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -623,13 +579,13 @@
       "region": "East Asia",
       "area": "Mount Fuji, Japan",
       "kind": "mountain",
-      "route_ms": 699,
-      "total_ms": 1056,
+      "route_ms": 263,
+      "total_ms": 3064,
       "network": {
         "requests": 2,
         "received_bytes": 54949
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 891,
@@ -637,8 +593,6 @@
         6,
         65
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "partial",
       "terrain_confidence": "suspect_surface_profile",
       "endpoint_elevations_m": [
@@ -652,19 +606,17 @@
       "region": "South America",
       "area": "Amazon region, Brazil",
       "kind": "sparse",
-      "route_ms": 265,
-      "total_ms": 646,
+      "route_ms": 945,
+      "total_ms": 2155,
       "network": {
         "requests": 2,
         "received_bytes": 28669
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "unavailable",
       "walking_candidates": 0,
       "first_walk_m": null,
       "snap_distances_m": [],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "endpoints_only",
       "terrain_confidence": null,
       "endpoint_elevations_m": [
@@ -678,19 +630,17 @@
       "region": "Central / East Asia",
       "area": "Rural Mongolia",
       "kind": "sparse",
-      "route_ms": 264,
-      "total_ms": 2411,
+      "route_ms": 390,
+      "total_ms": 3166,
       "network": {
         "requests": 3,
         "received_bytes": 59723
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "unavailable",
       "walking_candidates": 0,
       "first_walk_m": null,
       "snap_distances_m": [],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "endpoints_only",
       "terrain_confidence": null,
       "endpoint_elevations_m": [
@@ -704,19 +654,17 @@
       "region": "Arctic / North America",
       "area": "Nuuk, Greenland",
       "kind": "small coastal city",
-      "route_ms": 256,
-      "total_ms": 2451,
+      "route_ms": 1428,
+      "total_ms": 3375,
       "network": {
         "requests": 2,
         "received_bytes": 114627
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "unavailable",
       "walking_candidates": 0,
       "first_walk_m": null,
       "snap_distances_m": [],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "endpoints_only",
       "terrain_confidence": null,
       "endpoint_elevations_m": [
@@ -731,12 +679,12 @@
       "area": "McMurdo area",
       "kind": "polar settlement",
       "route_ms": 259,
-      "total_ms": 633,
+      "total_ms": 754,
       "network": {
         "requests": 2,
         "received_bytes": 43347
       },
-      "max_rss_kib": 121024,
+      "max_rss_kib": 107840,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 419,
@@ -744,8 +692,6 @@
         12,
         23
       ],
-      "transit_status": "outside_source_coverage",
-      "transit_candidates": 0,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
