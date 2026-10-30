@@ -5,7 +5,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected, runCoordinator, candidates, AssessmentError, commandFailure} from '../scripts/auto-merge.mjs';
+import {assertProductCI, evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected, runCoordinator, candidates, AssessmentError, commandFailure} from '../scripts/auto-merge.mjs';
 import {policy, acceptanceMarker, scopeDigest, hash} from '../scripts/review-evidence.mjs';
 import {fingerprintPR, latestReceipt} from '../scripts/check-review-before-merge.mjs';
 
@@ -31,7 +31,8 @@ function fixture(number = 74) {
     `<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:456:1 -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=${head};main=${main};input=${fingerprint} -->\n\n<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`});
   const run = {id: 456, path: '.github/workflows/claude-review.yml', repository: {full_name: repository}, status: 'completed', conclusion: 'success', run_attempt: 1};
   const jobs = ['intake', 'review', 'report'].map(name => ({name, status: 'completed', conclusion: 'success'}));
-  const ciRun = {id: 789, event: 'push', head_branch: 'work', head_sha: head, path: '.github/workflows/ci.yml',
+  const ciRun = {display_title: `CI v1 | pr=${number} | head=${head} | base=${main} | ref=main`, id: 789, run_attempt: 1, event: 'pull_request', head_branch: 'work', head_repository: {full_name: repository},
+    pull_requests: [{number, head: {sha: head}, base: {ref: 'main', sha: main}}], head_sha: head, path: '.github/workflows/ci.yml',
     repository: {full_name: repository}, status: 'completed', conclusion: 'success'};
   const ciJobs = policy.requiredJobs.map(name => ({name, status: 'completed', conclusion: 'success'}));
   const protection = {required_status_checks: {strict: true, checks: [{context: 'test', app_id: 15368}]},
@@ -56,6 +57,7 @@ function clientFor(s, change) {
     if (path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED') return {value: policy.activationValue};
     if (path === 'actions/runs/456') return structuredClone(s.run);
     if (path.startsWith('actions/workflows/ci.yml/runs')) return {workflow_runs: structuredClone(s.ciRuns || [s.ciRun])};
+    if (/^actions\/runs\/\d+$/.test(path)) return structuredClone((s.ciRuns || [s.ciRun]).find(r => String(r.id) === path.split('/').at(-1)));
     if (path === 'branches/main/protection') return structuredClone(s.protection);
     if (path.startsWith('compare/')) return structuredClone(s.ancestry);
     throw new Error(`Unexpected API ${path}`);
@@ -63,7 +65,7 @@ function clientFor(s, change) {
     if (path.startsWith(`issues/${s.pr.number}/comments`)) return structuredClone(s.comments);
     if (path.startsWith('issues/73/comments')) return [];
     if (path.startsWith('actions/runs/456/jobs')) return [{jobs: structuredClone(s.jobs)}];
-    if (path.startsWith('actions/runs/789/jobs')) return [{jobs: structuredClone(s.ciJobs)}];
+    if (path.startsWith('actions/runs/789/attempts/1/jobs')) return [{jobs: structuredClone(s.ciJobs)}];
     if (path.startsWith(`pulls/${s.pr.number}/files`)) return structuredClone(s.files);
     if (path.startsWith(`pulls/${s.pr.number}/reviews`)) return structuredClone(s.reviews);
     if (path.startsWith(`pulls/${s.pr.number}/comments`)) return [];
@@ -101,7 +103,7 @@ test('trust, freshness, exact CI, findings, unknown evidence and sensitive chang
 test('latest associated CI wins even when a previous run succeeded', () => {
   const s = fixture(); s.ciRuns = [s.ciRun, {...s.ciRun, id: 790, conclusion: 'failure'}];
   const client = clientFor(s), original = client.pages;
-  client.pages = path => path.startsWith('actions/runs/790/jobs') ? [{jobs: [{name: 'test', status: 'completed', conclusion: 'failure'}]}] : original(path);
+  client.pages = path => path.startsWith('actions/runs/790/attempts/1/jobs') ? [{jobs: [{name: 'test', status: 'completed', conclusion: 'failure'}]}] : original(path);
   assert.equal(collect(74, client).ciRun.id, 790);
   assert.equal(evaluate(collect(74, client)).eligible, false);
 });
@@ -649,4 +651,15 @@ test('a head change during relationship reads is held but malformed or failed re
     assert.equal(rows[1].eligible, true);
     assert.equal(client.mutations.length, 0);
   }
+});
+
+
+test('automatic assessment enforces v2 current-base inclusion as well as fresh review', () => {
+  const s = fixture();
+  s.ciRun.display_title = s.ciRun.display_title.replace('CI v1', 'CI v2');
+  s.ciComparison = structuredClone(s.ancestry);
+  assert.doesNotThrow(() => assertProductCI(s.pr, s.main, s.ciRun, s.ciJobs, s.ciComparison));
+  assert.throws(() => assertProductCI(s.pr, s.main, s.ciRun, s.ciJobs));
+  const collected = collect(74, clientFor(s));
+  assert.deepEqual(collected.ciComparison, s.ciComparison);
 });

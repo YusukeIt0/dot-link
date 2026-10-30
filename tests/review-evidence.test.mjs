@@ -79,7 +79,7 @@ function contextFor(r, changes = {}) {
     if (path.startsWith('actions/')) return {workflow_runs: []};
     throw new Error(`Unexpected API: ${path}`);
   };
-  return gatherContext({pr: {head: {sha: head}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => changes.comments || []);
+  return gatherContext({pr: {number: 74, head: {sha: head, ref: 'work', repo: {full_name: 'YusukeIt0/dot-link'}}, base: {ref: 'main', sha: before}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => changes.comments || []);
 }
 test('evidence reuse requires ancestor code and a bounded non-runtime diff', () => {
   const r = record(); r.evidence.push({kind: 'device', result: 'pass', requirements: ['R1'],
@@ -141,4 +141,18 @@ test('unsupported advisory relationships are omitted while supported evidence st
   const checked = validateAssessment(a, {acceptance: acceptanceFromComments([row()], head), related: [{number: 9}]});
   assert.deepEqual(checked.related, [a.related[2]]);
   assert.deepEqual(checked.requirements, a.requirements);
+});
+
+test('advisory review survives CI transition and missing association without claiming success', () => {
+  const repository = 'YusukeIt0/dot-link';
+  const pr = {number: 74, head: {sha: head, ref: 'work', repo: {full_name: repository}}, base: {ref: 'main', sha: before}};
+  const run = {id: 12, run_attempt: 1, path: '.github/workflows/ci.yml', event: 'pull_request',
+    head_sha: head, head_branch: 'work', head_repository: {full_name: repository}, repository: {full_name: repository},
+    pull_requests: [{number: 74, head: {sha: head}, base: pr.base}], status: 'queued', conclusion: null,
+    display_title: `CI v1 | pr=74 | head=${head} | base=${before} | ref=main`};
+  const context = gatherContext({pr, rows: []}, path => path.startsWith('actions/workflows/')
+    ? {workflow_runs: [run]} : {...run, status: 'in_progress'}, () => [{jobs: []}]);
+  assert.equal(context.ci_selection.status, 'held'); assert.deepEqual(context.ci, []);
+  const missing = gatherContext({pr: {...pr, head: {...pr.head, repo: null}}, rows: []}, () => {throw Error('not reached');}, () => []);
+  assert.equal(missing.ci_selection.status, 'held');
 });
