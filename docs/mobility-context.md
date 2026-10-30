@@ -173,3 +173,7 @@ Before activation, update privacy/setup/credits and cumulative release notes wit
 the consent/tool integration. This adapter-only stage does not change active
 permissions, setup, dependencies or user-facing releases. Actual Dot interpretation,
 normal-conversation responsiveness and affected-device acceptance remain #242 gates.
+
+VBB journeys with any cancelled or reported-unreachable leg are excluded from usable candidates. A mixed response is partial; an entirely disrupted response is unavailable. The excluded count is retained, and `no_disruption_reported` never guarantees operation.
+
+Provider `Retry-After` remains a minimum wait, including valid values longer than an hour. Dot Link does not shorten that interval to recover sooner: doing so would disregard the source's explicit throttling instruction. Responses are accepted only from the fixed HTTPS providers without redirects. Unknown/unavailable source evidence is preferable to retrying before the permitted time; there is no automatic retry or paid fallback.

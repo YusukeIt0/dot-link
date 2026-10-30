@@ -14,6 +14,8 @@ test('VBB preserves missing vehicle distance, forecast uncertainty and cancelled
   assert.equal(result.legs[0]!.cancelled,null);assert.equal(result.transfers,0);
   const cancelled={...row,legs:[{...row.legs[0],departure:null,arrival:null,cancelled:true}]};
   assert.equal(normalizeVbbJourney(cancelled,departure).legs[0]!.cancelled,true);
+  assert.equal(normalizeVbbJourney(cancelled,departure).service_status,'cancelled');
+  assert.equal(result.service_status,'no_disruption_reported');
 });
 test('VBB rejects disconnected or overlapping legs and unknown walking distance is not zero',()=>{
   const row=journey();
@@ -34,4 +36,20 @@ test('regional selection queries only the matching keyless source and checks ret
   assert.equal(tokyo.status,'outside_source_coverage');assert.equal(urls.length,1);
   const wrong=new VbbProvider(new MobilityNetwork(async()=>Response.json({journeys:[journey()]})));
   const mismatch=await wrong.plan({latitude:52.53,longitude:13.3},to,departure,signal);assert.equal(mismatch.status,'unavailable');
+});
+
+test('VBB excludes cancelled and unreachable journeys from usable candidates',async()=>{
+  const row=journey();
+  const cancelled={legs:[{...row.legs[0],departure:null,arrival:null,cancelled:true}]};
+  const unreachable={legs:[{...row.legs[0],reachable:false}]};
+  assert.equal(normalizeVbbJourney(unreachable,departure).service_status,'unreachable');
+  const plan=(journeys:unknown[])=>new VbbProvider(new MobilityNetwork(async()=>Response.json({journeys})))
+    .plan(from,to,departure,new AbortController().signal);
+  const allDisrupted=await plan([cancelled,unreachable]);
+  assert.equal(allDisrupted.status,'unavailable');assert.equal(allDisrupted.candidates.length,0);
+  assert.equal(allDisrupted.excluded_disrupted_candidates,2);
+  const mixed=await plan([cancelled,row,unreachable]);
+  assert.equal(mixed.status,'partial');assert.equal(mixed.candidates.length,1);
+  assert.equal(mixed.candidates[0]!.service_status,'no_disruption_reported');
+  assert.equal(mixed.excluded_disrupted_candidates,2);
 });
