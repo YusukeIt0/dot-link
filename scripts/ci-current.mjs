@@ -29,5 +29,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (!baseResponse.ok) throw new Error('Cannot verify current base ref.');
     currentBase = (await baseResponse.json()).object?.sha;
   }
-  if (!currentCI(env.GITHUB_EVENT_NAME, event, current, currentBase)) throw new Error('CI context is superseded; validate the current head/base.');
+  if (!currentCI(env.GITHUB_EVENT_NAME, event, current, currentBase)) throw new Error('CI context is superseded; update the PR head from its current base to trigger fresh validation. Rerunning this old event cannot refresh its base.');
 }

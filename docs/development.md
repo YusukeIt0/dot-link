@@ -280,7 +280,9 @@ also holds it. Update a child after its parent advances and rerun CI/review.
 Tests and branch validation use separate cancellation groups by PR/ref. Manual
 retries are isolated from ordinary runs so an old retry cannot cancel current
 validation. GitHub does not guarantee dispatch order: inspect the latest head and
-run after cancellation; rerun only the current failed validation when needed.
+run after cancellation. A supersession failure requires updating the PR head from
+the current base (or another fresh PR event); rerunning the old event cannot refresh
+its pinned base. Rerun current-context infrastructure failures only when needed.
 Do not repeatedly restart healthy queued runs or describe runner-capacity recovery
 as a permanent capacity fix. Preserve independent review queues and Pages deploy
 serialization. Record run/attempt, head/base, execution and queue durations,
@@ -301,5 +303,6 @@ they neither cancel current validation nor replace required `test`. Draft-ready
 transitions do not repeat tests. Base edits still run Tests. The shared selector
 excludes only the explicit ignored receipt, not arbitrary skipped runs. Advisory
 review reports unstable/unavailable CI evidence as held and continues; merge gates
-still require complete evidence. Use a full workflow rerun for recovery because
+still require complete evidence. For a current-context infrastructure failure, use
+a full workflow rerun because
 required jobs must all be present in the selected attempt.

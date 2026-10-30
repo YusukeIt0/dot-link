@@ -1,7 +1,8 @@
+import {readFileSync} from 'node:fs';
 // Read-only CI policy shared by review and both merge gates. Never execute artifacts.
 export const ciRepository = 'YusukeIt0/dot-link';
 export const ciPath = '.github/workflows/ci.yml';
-export const requiredCIJobs = ['workflow-lint', 'test'];
+export const requiredCIJobs = JSON.parse(readFileSync(new URL('../config/development-policy.json', import.meta.url), 'utf8')).requiredJobs;
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 
 export function ciTarget(pr, base) {
