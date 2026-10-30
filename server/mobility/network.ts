@@ -14,11 +14,12 @@ export class MobilityNetwork {
   stats() { return {requests: this.requests, received_bytes: this.receivedBytes}; }
   async bytes(url: URL, signal: AbortSignal, maximum: number, jsonBody?: unknown): Promise<Buffer> {
     if (url.protocol !== 'https:' || url.username || url.password || url.port ||
-        !['s3.amazonaws.com', 'routing.openstreetmap.de', 'api.entur.io'].includes(url.hostname)) throw new Error('Unsupported mobility source');
+        !['s3.amazonaws.com', 'routing.openstreetmap.de', 'api.entur.io', 'v6.vbb.transport.rest'].includes(url.hostname)) throw new Error('Unsupported mobility source');
     signal.throwIfAborted();
     if (url.hash) throw new Error('Unsupported mobility fragment');
     if (url.hostname === 's3.amazonaws.com' && (url.search || !/^\/elevation-tiles-prod\/terrarium\/12\/\d{1,4}\/\d{1,4}\.png$/.test(url.pathname))) throw new Error('Unsupported terrain endpoint');
     if ((cooldowns.get(url.hostname) ?? 0) > performance.now()) throw new Error('Mobility source cooling down');
+    if (url.hostname === 'v6.vbb.transport.rest' && url.pathname !== '/journeys') throw new Error('Unsupported transit endpoint');
     const entur = url.hostname === 'api.entur.io';
     if (entur && (url.pathname !== '/journey-planner/v3/graphql' || url.search || jsonBody === undefined)) throw new Error('Unsupported transit endpoint');
     if (!entur && jsonBody !== undefined) throw new Error('Unsupported request body');

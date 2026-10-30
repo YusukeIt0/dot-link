@@ -15,6 +15,7 @@ registration or API-key setup is introduced.
 | [FOSSGIS OSRM](https://routing.openstreetmap.de/about.html) | Worldwide OSM walking graph; no key; one request/second, no heavy use | Walking candidate, subject to the contact/credit publication gate below |
 | [Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Public raster model; no key; mixed source resolution and age | Terrain estimates, with missing/suspect profiles withheld |
 | [Entur](https://developer.entur.no/docs/getting-started) | Official Norwegian transit planning; no account or partnership for open services; application identification required | Regional transit source, explicitly not worldwide coverage |
+| [VBB via transport.rest](https://v6.vbb.transport.rest/) | Keyless community gateway for Berlin/Brandenburg; upstream dependency and 100 requests/minute limit | Additional regional transit source |
 | [Transitous](https://transitous.org/api/) | Broad transit coverage, but noncommercial-only and coordination for automated/many-user use | Removed from the implementation; no contact or formal adoption |
 | [Transitland](https://www.transit.land/documentation/concepts/routing-graph-and-costing) | Registered free tier; transit routing currently US-focused | Not selected: account and regional constraints |
 | [openrouteservice](https://giscience.github.io/openrouteservice/frequently-asked-questions) | Free key, per-user registration or a maintained central proxy | Not selected for the no-registration client path |
@@ -22,8 +23,8 @@ registration or API-key setup is introduced.
 | Local BRouter / OTP / MOTIS with OSM and transit feeds | No hosted API charge, but graph downloads, feed licensing, storage and maintenance remain | Not selected as an implicit additional user/server operational burden |
 
 Regional sources can be combined; lack of a suitable regional source is unknown
-coverage, not absence of transport. This version has **Norwegian scheduled transit
-coverage only**. It does not promise timetables in other countries or replace
+coverage, not absence of transport. Configured scheduled transit sources cover **Norway and Berlin/Brandenburg**.
+The coarse search envelopes are not coverage guarantees. It does not promise timetables elsewhere or replace
 missing transit with a claim that walking is the only option. Dot can use its other
 available knowledge/tools, but this code does not assume those tools exist or have
 verified any additional transport service.
@@ -43,6 +44,21 @@ commercial use under NLOD, with attribution, a licence link and notice of change
 The client identifies itself as `dotlink-mobility`; no user identity or credential
 is submitted. [Rate limits](https://developer.entur.no/docs/open-services/journey-planner/rate-limiting)
 apply. No throttling workaround or automatic retry is implemented.
+
+[VBB transport.rest](https://v6.vbb.transport.rest/api.html) explicitly offers
+unauthenticated queries (100 requests/minute). It returns upstream VBB information
+and is a community gateway, not an operator availability guarantee. Requests send
+coordinates and departure time in the URL. The API documentation does not establish
+a log-retention period; do not promise provider-side deletion or anonymity. The
+integration must limit repeated queries, display VBB/transport.rest attribution
+and disclose this additional recipient.
+
+Other regional candidates were checked rather than presumed usable:
+[DB transport.rest](https://v6.db.transport.rest/) explicitly says it is no longer
+operational; the public Swiss [Transport API](https://transport.opendata.ch/) returned
+HTTP 503 on a bounded Zurich probe. Neither is an active dependency. The Swiss
+service publishes source/usage/privacy terms and could be reconsidered after
+verified recovery; a successful website fetch alone is not proof the API works.
 
 Terrain credits are recorded in [terrain attribution](terrain-attribution.md).
 They must be accessible from the eventual application's source/credit presentation.
@@ -90,7 +106,11 @@ evidence. Ordinary conversation must continue without an error/setup workflow.
 - Entur searches only when both points fall in a coarse Norway search envelope
   (57–72 N, 4–32 E). This is an admission envelope, not a country classifier or a
   coverage guarantee; boundary areas may return no usable result. Up to three
-  candidates and 40 legs are admitted. Whole journeys must fit a two-day window.
+  candidates and 40 legs are admitted. Whole journeys must fit a two-day window. VBB uses a separate Berlin/Brandenburg
+  search envelope (51.3–53.6 N, 11.2–14.8 E), at most three candidates/40 legs,
+  and the same two-day horizon. Reported cancellation is retained; missing walk
+  distances stay unknown. Both adapters check endpoint and leg continuity.
+  Outside these envelopes no transit request is made.
 - Terrain uses zoom 12, at most 12 tiles and 257 path samples per operation, with a
   20-second deadline. The memory cache retains at most 16 tiles for one hour;
   `clear()` discards it. A missing sample withholds complete-route totals.
@@ -113,8 +133,12 @@ endpoint gaps, route totals/modes, transit time consistency and out-of-region
 no-request behavior. These synthetic checks are distinct from live providers and
 installed-Dot observations.
 
-`node scripts/measure-mobility.mjs berlin|sf-hill|amazon|oslo` makes explicit public
+`node scripts/measure-mobility.mjs <fixture-id>` makes explicit public
 fixture requests only, never from the test suite or normal location updates.
+The public fixtures are in `scripts/fixtures/mobility-regions.json`.
+`node scripts/measure-mobility-regions.mjs --run` surveys all 26 sequentially,
+with 1.5-second gaps and shared provider cooldowns. An optional first fixture ID
+resumes a stopped survey without re-querying completed points.
 October 30, 2026 observations on the development Mac, not guarantees:
 
 - FOSSGIS public raw probes: Berlin 1.716 s, 44,008 bytes, first route 2,732 m;
@@ -130,7 +154,7 @@ October 30, 2026 observations on the development Mac, not guarantees:
   queries completed with terrain in 3.3–4.3 s. Those observations do not authorize
   that service's use and no Transitous calls remain in the implementation.
 
-Final provider-reselection runtime observations (same public fixtures):
+Initial provider-reselection runtime observations (before adding VBB) (same public fixtures):
 
 | Fixture | Routes available after | All requested evidence after | Walking | Transit | Terrain |
 | --- | ---: | ---: | --- | --- | --- |

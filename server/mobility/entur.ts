@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {distanceMeters} from '../../src/location-fix.ts';
 import { MobilityNetwork } from './network.ts';
 import { validPoint, type Point } from './terrain.ts';
 const time = z.string().datetime({offset:true});
@@ -16,8 +17,11 @@ export function normalizeEnturPattern(raw:unknown, departure:string) {
       Math.abs((end-start)/1000-p.duration)>120) throw new Error('Invalid transit time');
   let previous=start, walkingDistance=0, walkingSeconds=0, waitSeconds=Math.max(0,(start-request)/1000), vehicles=0;
   const clean=(s:string|undefined|null)=>s?.replace(/[\u0000-\u001f\u007f]/g,'').trim()||null;
+  let previousPoint:Point|undefined;
   const legs=p.legs.map(l=>{
     const mode=modes[l.mode];
+    if(previousPoint&&distanceMeters(previousPoint,l.fromPlace)>200)throw new Error('Disconnected transit legs');
+    previousPoint=l.toPlace;
     if(!mode) throw new Error('Unknown transport mode');
     const from=Date.parse(l.expectedStartTime),to=Date.parse(l.expectedEndTime);
     if(from<previous-1000||to<from||to>end+1000||Math.abs((to-from)/1000-l.duration)>120) throw new Error('Invalid transit legs');
@@ -56,7 +60,9 @@ export class EnturProvider {
         if(body.errors?.length) throw new Error('Incomplete transit response');
         let rejected=0;
         for(const row of body.data.trip.tripPatterns) {
-          try {const candidate=normalizeEnturPattern(row,departure);if(candidates.length<3)candidates.push(candidate);}catch{rejected++;}
+          try {const candidate=normalizeEnturPattern(row,departure);
+          if(distanceMeters(candidate.legs[0]!.from_position,origin)>100||distanceMeters(candidate.legs.at(-1)!.to_position,destination)>100)throw new Error('Wrong journey endpoints');
+          if(candidates.length<3)candidates.push(candidate);}catch{rejected++;}
         }
         if(candidates.length)status=rejected?'partial':'available';
       } catch {signal.throwIfAborted();}
