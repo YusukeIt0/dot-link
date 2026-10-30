@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
 import {ciTarget, ciReceipt, ciHeadReceipt, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
 import {branchAdmission} from '../scripts/branch-ci-admission.mjs';
 const repository = 'YusukeIt0/dot-link', head = 'b'.repeat(40), base = 'a'.repeat(40);
@@ -9,6 +10,23 @@ const run = () => ({display_title: ciReceipt(target), id: 12, run_attempt: 1, ev
   repository: {full_name: repository}, head_repository: {full_name: repository}, head_sha: head, head_branch: 'work',
   pull_requests: [{number: 7, head: {sha: head}, base: {ref: 'main', sha: base}}], status: 'completed', conclusion: 'success'});
 const jobs = () => ['workflow-lint', 'test'].map(name => ({name, status: 'completed', conclusion: 'success'}));
+test('actual workflow run-name and CI selector share the same receipt contract', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const expression = workflow.match(/^run-name: >-\n((?:[ \t]+.*\n)+)/m)?.[1].trim();
+  const format = ciHeadReceipt({number: '{0}', head: '{1}', base: '{2}', baseRef: '{3}'});
+  assert.equal(expression,
+    "${{ github.event_name == 'pull_request' && format('" + format + "', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || format('CI v1 | push={0}', github.sha) }}",
+    'run-name is machine-readable evidence: update the workflow and selector contract together');
+  const actualFormat = expression.match(/&& format\('([^']+)'/)?.[1];
+  for (const sample of [target, {...target, number: 12345, head: 'c'.repeat(40), base: 'd'.repeat(40), baseRef: 'feat/parent-branch'}]) {
+    const values = [sample.number, sample.head, sample.base, sample.baseRef];
+    const rendered = actualFormat.replace(/\{([0-3])\}/g, (_, index) => values[index]);
+    assert.equal(rendered, ciHeadReceipt(sample));
+    const source = {...run(), display_title: rendered, head_sha: sample.head,
+      pull_requests: [{number: sample.number, head: {sha: sample.head}}]};
+    assert.equal(matchesCI(source, sample), true);
+  }
+});
 test('PR identity includes repository, head and exact target; pushes never certify PRs', () => {
   assert.equal(matchesCI(run(), target), true);
   for (const mutate of [r => r.event = 'push', r => r.head_sha = base, r => r.head_branch = 'other',

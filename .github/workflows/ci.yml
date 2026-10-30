@@ -1,6 +1,7 @@
 name: Tests
 # v2 tests the immutable head. Gates prove the current target base is included.
 # The dispatch base remains diagnostic provenance, not proof of current target state.
+# run-name is a machine-readable receipt; its selector contract is tested in ci-evidence.test.mjs.
 run-name: >-
   ${{ github.event_name == 'pull_request' && format('CI v2 | pr={0} | head={1} | base={2} | ref={3}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || format('CI v1 | push={0}', github.sha) }}
 on:

@@ -312,6 +312,10 @@ workflow, result cache, polling loop or synthetic success check.
 The fixed `CI v2` title records dispatch provenance. Mutable associated PR base
 metadata is never used as proof of the tested tree. Historical `CI v1` runs retain
 the stricter exact-dispatch-base rule; they are not upgraded to v2 evidence.
+The run title is also a machine-readable receipt, not cosmetic display text.
+`tests/ci-evidence.test.mjs` checks the actual workflow expression, field ordering
+and rendered main/parent examples against the selector. Change the workflow and
+receipt contract together; a format mismatch fails tests before integration.
 A newer unknown, failed, skipped, cancelled or incomplete source holds integration
 instead of reviving an older success. Use a full workflow rerun for a transient
 infrastructure failure; all required jobs must exist in the selected attempt.
