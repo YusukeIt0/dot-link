@@ -1,6 +1,7 @@
 import { GeographicCache } from './cache.ts';
 
 const CHUNK = 256 * 1024;
+const REQUEST_CHUNKS = 8;
 const AGENT = 'DotLink/GeographicContext (+https://github.com/YusukeIt0/dot-link)';
 const HOSTS = new Set(['stac.overturemaps.org', 'overturemapswestus2.blob.core.windows.net']);
 export function validMapURL(value: string): URL {
@@ -68,26 +69,42 @@ export class MapDownload {
       if(start===end)return new ArrayBuffer(0);
       const alignedStart=Math.floor(start/CHUNK)*CHUNK,alignedEnd=Math.min(byteLength,Math.ceil(end/CHUNK)*CHUNK);
       const data = new Uint8Array(end-start);
-      // Bounded batches: never queue a whole planet file or unbounded requests.
-      for (let offset = alignedStart; offset < alignedEnd; offset += CHUNK * 3) {
+      // Keep the existing 256 KiB cache identities, but transfer adjacent misses
+      // together. Three windows cap temporary response data at 6 MiB per read.
+      for (let offset = alignedStart; offset < alignedEnd; offset += CHUNK * REQUEST_CHUNKS * 3) {
         this.signal.throwIfAborted();
-        const batch = [];
-        for (let i = offset; i < Math.min(alignedEnd,offset+CHUNK*3); i += CHUNK) {
-          const a = i, b = Math.min(alignedEnd,i+CHUNK);
+        const batch: Promise<void>[] = [];
+        for (let i = offset; i < Math.min(alignedEnd,offset+CHUNK*REQUEST_CHUNKS*3); i += CHUNK*REQUEST_CHUNKS) {
+          const windowStart = i, windowEnd = Math.min(alignedEnd,i+CHUNK*REQUEST_CHUNKS);
           batch.push((async () => {
-            const identity = `${url}#${byteLength}:${a}:${b}`;
-            const cached = await this.cache.get(identity);
-            this.signal.throwIfAborted();
-            if (cached && cached.bytes.byteLength === b-a) {this.stats.cacheBytes += cached.bytes.byteLength; return cached.bytes;}
-            const bytes = await this.fetchBounded(url,{Range:`bytes=${a}-${b-1}`},{start:a,end:b,length:byteLength});
-            await this.cache.put(identity,bytes,this.signal); return bytes;
+            const chunks: {start:number;end:number;identity:string;bytes?:Uint8Array}[] = [];
+            const copy = (position:number,bytes:Uint8Array) => {
+              const from=Math.max(start,position),to=Math.min(end,position+bytes.byteLength);
+              if(to>from)data.set(bytes.subarray(from-position,to-position),from-start);
+            };
+            for(let a=windowStart;a<windowEnd;a+=CHUNK) {
+              const b=Math.min(windowEnd,a+CHUNK), identity=`${url}#${byteLength}:${a}:${b}`;
+              const cached=await this.cache.get(identity);
+              this.signal.throwIfAborted();
+              const bytes=cached?.bytes.byteLength===b-a?cached.bytes:undefined;
+              if(bytes){this.stats.cacheBytes+=bytes.byteLength;copy(a,bytes);}
+              chunks.push({start:a,end:b,identity,bytes});
+            }
+            for(let first=0;first<chunks.length;) {
+              if(chunks[first].bytes){first++;continue;}
+              let last=first;
+              while(last+1<chunks.length&&!chunks[last+1].bytes)last++;
+              const a=chunks[first].start,b=chunks[last].end;
+              const bytes=await this.fetchBounded(url,{Range:`bytes=${a}-${b-1}`},{start:a,end:b,length:byteLength});
+              for(let index=first;index<=last;index++) {
+                const chunk=chunks[index],part=bytes.subarray(chunk.start-a,chunk.end-a);
+                await this.cache.put(chunk.identity,part,this.signal);copy(chunk.start,part);
+              }
+              first=last+1;
+            }
           })());
         }
-        const parts=await Promise.all(batch);
-        for(let index=0;index<parts.length;index++) {
-          const position=offset+index*CHUNK,from=Math.max(start,position),to=Math.min(end,position+parts[index].byteLength);
-          if(to>from)data.set(parts[index].subarray(from-position,to-position),from-start);
-        }
+        await Promise.all(batch);
       }
       return data.buffer;
     }};

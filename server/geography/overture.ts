@@ -60,7 +60,7 @@ export function overtureFeature(theme: Theme, raw: unknown): GeographicFeature |
 export async function acquireGeography(options: {
   region: GeographicRegion; cache: GeographicCache; signal: AbortSignal;
   progress?: (dataset: GeographicDataset) => void; request?: typeof fetch; now?: () => number;
-  diagnostic?: (event:{theme:Theme;reason:string})=>void;
+  diagnostic?: (event:{theme:Theme;reason:string;rows?:number;selectedRows?:number;spanRows?:number})=>void;
 }): Promise<{dataset: GeographicDataset; complete: boolean; stats:{downloadedBytes:number;cacheBytes:number}}> {
   const now = options.now ?? Date.now;
   const signal = AbortSignal.any([options.signal,AbortSignal.timeout(360_000)]);
@@ -94,7 +94,9 @@ export async function acquireGeography(options: {
     license_url:'https://docs.overturemaps.org/attribution/',features:[...features],limitations:[...limitations]});
   let failures=0, successes=0;
   for (const theme of THEMES) {
+    options.diagnostic?.({theme,reason:'theme_started'});
     let themeVertices=0, themeFeatures=0;
+    let lastPublication=-Infinity, publishedFeatures=features.length;
     signal.throwIfAborted();
     const selected=entries.filter(e=>e.type==='Feature'&&e.collection===theme&&box(e.bbox)&&options.region.boxes.some(b=>overlaps(box(e.bbox)!,b)));
     if (selected.length>12) limitations.add(`${theme}: file limit; coverage is partial.`);
@@ -107,6 +109,7 @@ export async function acquireGeography(options: {
         if (!url || !url.startsWith(`https://overturemapswestus2.blob.core.windows.net/release/${release}/theme=${directory}/type=${theme}/`) || !/\/part-[a-zA-Z0-9-]+\.zstd\.parquet$/.test(url)) throw new Error('Unexpected map asset');
         const file=await download.file(url,size);
         const metadata=await parquetMetadataAsync(file);
+        options.diagnostic?.({theme,reason:'metadata_loaded'});
         if (metadata.row_groups.length>1024 || metadata.schema.length>1024) throw new Error('Map metadata limit');
         const filter={$or:options.region.boxes.map(b=>({'bbox.xmin':{$lte:b.xmax},'bbox.xmax':{$gte:b.xmin},'bbox.ymin':{$lte:b.ymax},'bbox.ymax':{$gte:b.ymin}}))};
         const boundedCompressors=boundedMapCompressors();
@@ -140,7 +143,10 @@ export async function acquireGeography(options: {
           // Geometry is flat WKB: narrowing the row span skips unrelated pages before
           // decompression. Keep original indices for the smaller metadata columns.
           const first=relevant[0], last=relevant.at(-1)!;
+          options.diagnostic?.({theme,reason:'rows_selected',rows:range.rowEnd-range.rowStart,selectedRows:relevant.length,spanRows:last-first+1});
           const values=await Promise.all(columns.map(column=>column==='class'?classes:column==='subtype'?subtypes:scan.readColumn(column==='geometry'?{column,rowStart:range.rowStart+first,rowEnd:range.rowStart+last+1}:{...range,column})));
+          signal.throwIfAborted();
+          options.diagnostic?.({theme,reason:'columns_loaded'});
           for(const i of relevant) {
             const feature=overtureFeature(theme,Object.fromEntries(columns.map((c,j)=>[c,values[j][c==='geometry'?i-first:i]])));
             if(!feature)continue;
@@ -150,6 +156,15 @@ export async function acquireGeography(options: {
             if(themeFeatures >= (theme==='segment'?8000:4000) || themeVertices+vertices>200_000) {limitations.add(`${theme}: detail limit; coverage is partial.`); continue;}
             themeFeatures++; themeVertices+=vertices;
             features.push(feature);
+          }
+          // A first row group may contain no evidence near the current fix.
+          // Continue publishing growing snapshots, at most once per second,
+          // rather than letting that first group suppress later useful data.
+          if(features.length>publishedFeatures&&now()-lastPublication>=1000) {
+            lastPublication=now(); publishedFeatures=features.length;
+            const partial=dataset();
+            partial.limitations.push('Additional geographic data is still loading.');
+            options.progress?.(partial);
           }
         }
         successes++;

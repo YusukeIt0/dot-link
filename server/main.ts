@@ -6,6 +6,7 @@ import { safePost, WebhookSender } from './webhook.ts';
 import { NotificationInbox } from './notifications.ts';
 import { LatencyLog } from './latency.ts';
 import { LocationContext } from './location.ts';
+import { MobilityAcquisition } from './mobility/context.ts';
 import { LocalGeography } from './geography/loader.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 import { createHash } from 'node:crypto';
@@ -26,7 +27,7 @@ const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('h
 const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts,
   (input, guard, context) => bridge.sendMessage(input, guard, context), Date.now,
   owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
-  output=>new LocalGeography(resolve('.runtime/geography'),output));
+  output=>new LocalGeography(resolve('.runtime/geography'),output),()=>new MobilityAcquisition());
 const server = bridgeServer(bridge, tokens, notifications, locations);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;

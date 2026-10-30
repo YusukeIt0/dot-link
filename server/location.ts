@@ -6,6 +6,8 @@ import { ReadResponseError } from './read-response-error.ts';
 import { SubscriptionResponseError, subscriptionArguments, subscriptionDelivery } from './subscription-response-error.ts';
 import { ChangeSignal } from './changes.ts';
 import { LocationResponseError } from './location-response-error.ts';
+import { ToolRejection } from './tool-response.ts';
+import { MobilityAcquisition, mobilityArguments } from './mobility/context.ts';
 import { BridgeResponseError } from './bridge-response-error.ts';
 import type { GeographyLoader, GeographyState, GeographyUpdate } from './geography/loader.ts';
 import type { GeographicEvidence } from './geography/types.ts';
@@ -53,6 +55,8 @@ export class LocationContext {
   readonly changes = new ChangeSignal();
   private disk: z.infer<typeof diskSchema>;
   private sharingId?: string;
+  private mobilityAllowed=false;
+  private mobility?:MobilityAcquisition;
   private owner?: string;
   private leaseUntil = 0;
   private sequence = -1;
@@ -89,7 +93,8 @@ export class LocationContext {
   constructor(path: string, sender: WebhookSender, hosts: string[],
     announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}) => Promise<unknown>, now = Date.now,
     ownerAuthorized: (owner: string) => boolean = () => true,
-    geographyFactory?: (output:(update:GeographyUpdate)=>void)=>GeographyLoader) {
+    geographyFactory?: (output:(update:GeographyUpdate)=>void)=>GeographyLoader,
+    mobilityFactory?:()=>MobilityAcquisition) {
     this.path = path; this.sender = sender; this.hosts = hosts; this.announce = announce; this.now = now;
     this.ownerAuthorized = ownerAuthorized;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -99,6 +104,7 @@ export class LocationContext {
       this.disk = { version: 1, revoked: [] }; this.save();
     }
     this.geography=geographyFactory?.(update=>this.geographyUpdated(update));
+    this.mobility=mobilityFactory?.();
   }
   private save(next = this.disk) { writeFileSync(`${this.path}.tmp`, JSON.stringify(next), { mode: 0o600 }); renameSync(`${this.path}.tmp`, this.path); this.disk = next; }
   private active(): Subscription | undefined { const sub = this.disk.subscription; return sub && sub.expiresAt > this.now() ? sub : undefined; }
@@ -107,8 +113,8 @@ export class LocationContext {
   }
   private usable() { this.checkOwner(); return !!this.sharingId && this.leaseUntil > this.now() && freshLocation(this.latest?.fix, this.now()); }
   status() {
-    this.checkOwner();this.syncGeography();
-    return { locationSubscribed: !!this.active(), locationSharing: !!this.sharingId && this.leaseUntil > this.now(),
+    this.checkOwner();this.syncGeography();this.syncMobility();
+    return { mobilitySupported:!!this.mobility, mobilityEnabled:this.mobilityAllowed&&this.usable()&&!!this.mobility, locationSubscribed: !!this.active(), locationSharing: !!this.sharingId && this.leaseUntil > this.now(),
       locationFresh: this.usable(), locationReceivedAt: this.latest ? new Date(this.latest.receivedAt).toISOString() : null,
       locationMeasuredAt: this.latest?.fix.measured_at ?? null, locationAccuracy: this.latest?.fix.accuracy ?? null,
       locationDotReadAt: this.lastReadAt ?? null, locationDecisionAt: this.lastDecisionAt ?? null,
@@ -117,7 +123,7 @@ export class LocationContext {
   }
   control(raw: unknown, owner: string) {
     this.checkOwner();
-    const p = z.object({ sharing_id: z.string().uuid(), enabled: z.boolean() }).strict().parse(raw);
+    const p = z.object({ sharing_id: z.string().uuid(), enabled: z.boolean(), mobility_enabled:z.boolean().optional().default(false) }).strict().parse(raw);
     if (!p.enabled) {
       if (this.sharingId === p.sharing_id && this.owner !== owner) throw new Error('Sharing belongs to another device');
       // Revocation wins over a delayed enable/update using this same session.
@@ -128,10 +134,12 @@ export class LocationContext {
     if (!this.ownerAuthorized(owner)) throw new Error('Pairing revoked');
     if (this.disk.revoked.includes(p.sharing_id)) throw new Error('Sharing session revoked');
     if (this.sharingId && this.owner !== owner && this.leaseUntil > this.now()) throw new Error('Another device is sharing');
+    if(this.sharingId===p.sharing_id&&this.owner===owner&&this.mobilityAllowed!==p.mobility_enabled)throw new Error('Consent change requires a new sharing session');
     if (this.sharingId !== p.sharing_id || this.owner !== owner) {
       if (this.sharingId && !this.disk.revoked.includes(this.sharingId)) { this.disk.revoked.push(this.sharingId); this.disk.revoked = this.disk.revoked.slice(-100); this.save(); }
       this.clear(); this.sharingId = p.sharing_id; this.owner = owner;
     }
+    this.mobilityAllowed=p.mobility_enabled;
     this.leaseUntil = this.now() + LOCATION_LEASE_MS; this.syncGeography(true);this.changes.emit();
     return { enabled: true, lease_ms: LOCATION_LEASE_MS };
   }
@@ -165,6 +173,24 @@ export class LocationContext {
       source: 'phone_location', update_id: this.pending?.id ?? null, ...(current.geography?{geography:current.geography}:{}) },
       recent_announcements: [...this.outcomes.values()].filter(o => o.disposition === 'announce').slice(-5).map(o => o.text) };
   }
+  async readMobility(raw:unknown) {
+    const parsed=mobilityArguments.safeParse(raw);
+    if(!parsed.success||(!parsed.data.walking&&!parsed.data.terrain)||(parsed.data.walking&&!parsed.data.destination))
+      throw new ToolRejection('invalid_arguments','Use a fresh context_id and a known destination for walking, or walking:false and terrain:true for endpoint elevation.');
+    const input=parsed.data,read=this.reads.get(input.context_id),generation=this.generation;
+    const guard=()=>{
+      try {this.requireResponseContext(read,generation);}
+      catch(error){if(error instanceof LocationResponseError)throw new ToolRejection(error.reason,error.message);throw error;}
+      if(!this.mobilityAllowed||!this.mobility)throw new ToolRejection('mobility_disabled','External walking/terrain evidence is not enabled. Continue using available information; do not repeatedly prompt for settings.');
+    };
+    guard();
+    const validUntil=Math.min(this.leaseUntil,Date.parse(read!.fix.measured_at)+LOCATION_FRESH_MS,Date.parse(this.latest!.fix.measured_at)+LOCATION_FRESH_MS);
+    try {
+      const result=await this.mobility!.query(input,{...read!.fix},validUntil,guard);
+      guard();return result;
+    }catch(error){guard();throw error;}
+  }
+  private syncMobility(){this.mobility?.revalidate();}
   respond(raw: unknown) {
     const parsed = z.object({ context_id: z.string().uuid(), disposition: z.enum(['silent', 'announce']), utterance_id: z.string().uuid().optional(), text: z.string().trim().min(1).max(2000).optional() }).strict().safeParse(raw);
     if (!parsed.success) throw new LocationResponseError('invalid_arguments');
@@ -221,6 +247,7 @@ export class LocationContext {
     if (distanceMeters(read.fix, this.latest.fix) > 100) throw new LocationResponseError('moved_too_far');
   }
   private clear() {
+    this.mobility?.clear();this.mobilityAllowed=false;
     this.stopGeography();this.generation++; this.sharingId = undefined; this.owner = undefined; this.leaseUntil = 0; this.sequence = -1;
     this.latest = undefined; this.reads.clear(); this.outcomes.clear(); this.pending = undefined; this.lastAnchor = undefined; this.lastEventAt = -Infinity;
     if (this.retry) clearTimeout(this.retry); this.retry = undefined;

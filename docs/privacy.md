@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects the current development source, reviewed October 30, 2026; it is not a publication claim. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
@@ -74,6 +74,53 @@ Requests go to `stac.overturemaps.org` and Overture’s Azure distribution at `o
 Reusable public map bytes and normalized areas are stored in an owner-only cache on the Mac, limited to 256 MiB. Area cells are roughly two kilometres across with surrounding margins. Cache contents and last-use days can reveal approximate past areas even though filenames are hashed; hashes are not location anonymization. Use times are rounded to whole days. Entries unused for 30 days are removed, and older entries may be evicted sooner to meet capacity. Cleanup runs at relay startup and every six hours while it runs, including when sharing is off; if the relay is stopped, cleanup resumes on the next launch. Normalized areas refresh after seven days independently of their use age.
 
 Stopping sharing, losing a fresh measurement, ending Dot’s subscription, revoking pairing or stopping the relay cancels acquisition and clears live geographic context. Already cached map files remain until expiry or capacity eviction. Uninstalling Dot Link moves this cache to Trash with the other app data, including for supported development installations. Stopping sharing does not delete that cache, backups or information already read by Dot.
+
+## Walking and terrain
+
+**Walking and terrain information** is a separate opt-in under Location sharing,
+off by default, including after upgrading old settings. It is saved for the chosen
+Mac. Location sharing alone never starts these queries. Your existing Dot can
+request evidence when a conversation needs it, using a fresh location context and,
+for a route, a known destination with provenance. No public-transport service is
+queried and no user account, API key or paid fallback is required.
+
+Your Mac sends exact origin/destination coordinates to FOSSGIS OSRM over HTTPS.
+FOSSGIS states that route requests are logged; Dot Link does not control that log
+retention. Terrain requests go to AWS S3's public Mapzen Terrain Tiles dataset and
+reveal the requested area. Both hosts receive ordinary connection information,
+including the connecting IP address. No conversation text, destination label,
+pairing credential or Dot credential is sent to these providers.
+
+Dot receives the requested evidence and its uncertainty through the existing
+connection: route candidates, model times/distances, endpoint gaps, optional
+terrain heights, ascent/descent and sampled steep sections. These are not verified
+access, closures, building/bridge height, accessibility or personalized effort.
+Ferry segments can appear in the walking graph, but ferry operation and schedules
+are unknown. Missing data never proves there is no path or that terrain is flat.
+
+One request runs at a time, with no queue. Identical calls can share a request or a
+memory-only result for at most 30 seconds, bounded further by the original
+location's freshness. Requests have a 40-second overall limit and provider limits.
+Terrain rasters remain bounded in memory and are discarded at the end of the
+request. Dot Link writes no walking queries, destinations or returned route/terrain
+results to its logs or a disk history. An answer Dot sends may still enter ordinary
+conversation history, and Dot's own data handling is separate.
+
+Turning this option off rotates/revokes the location-sharing session and cancels
+pending work on the Mac when the stop arrives. Turning location sharing off,
+unpairing, app exit, loss of freshness, lease expiry or movement beyond 100 m also
+prevents old-context results from being used. If the Mac is unreachable, the stop
+is queued; already-received context can remain usable until the 90-second lease
+or measurement expires. No stop can retract requests already received by a provider
+or information already received by Dot. Preferences remain saved for the same Mac;
+connecting another Mac does not inherit the opt-in.
+
+Walking data: © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright),
+[ODbL](https://opendatacommons.org/licenses/odbl/), via
+[FOSSGIS OSRM](https://routing.openstreetmap.de/about.html).
+[Fix the map](https://www.openstreetmap.org/fixthemap).
+Terrain: Mapzen Terrain Tiles; [full source notices](terrain-attribution.md).
+Support: [yusuke.ito@tripsurf.app](mailto:yusuke.ito@tripsurf.app).
 
 ## Official website analytics
 

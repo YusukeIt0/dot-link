@@ -561,5 +561,9 @@
   "even.link_on_phone": "[Link auf dem Smartphone]",
   "mac.update_progress_title": "Dot Link wird aktualisiert",
   "mac.update_progress_complete": "Dot Link ist auf dem neuesten Stand.",
-  "mac.update_progress_close": "Schließen"
+  "mac.update_progress_close": "Schließen",
+  "even.walking_terrain": "Fußwege und Gelände",
+  "even.walking_terrain_disclosure": "Wenn Dot diese Informationen benötigt, sendet Ihr Mac Routenkoordinaten an FOSSGIS und die Geländeregion an AWS.",
+  "even.walking_terrain_privacy": "Datenquellen und Datenschutz (Englisch)",
+  "even.walking_terrain_update_mac": "Erfordert Dot Link for Mac ab v0.4.27."
 }

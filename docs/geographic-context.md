@@ -162,6 +162,56 @@ every six hours while the relay runs, including when sharing is off. It resumes
 on the next launch if the relay is not running. A stopped worker is aborted and
 terminated; no exact phone fix is persisted by this component.
 
+Adjacent missing 256 KiB source chunks are fetched together in ranges of at most
+2 MiB, then stored using the existing individual chunk identities. Cached holes
+are reused without downloading them again. The three-request concurrency limit,
+80 MiB transfer budget, exact range validation and acquisition deadline still apply.
+Validated row groups can publish growing partial snapshots, throttled to once per
+second within each theme; theme completion always publishes. A sparse first group
+does not suppress later evidence. Feature admission order and caps are unchanged.
+
+The public measurement script reports first non-empty spatial evidence separately
+from first named evidence, progress contents, CPU usage, peak process RSS and a
+SHA-256 of the entire normalized dataset. A progress callback with features but no
+nearby resolved evidence is not counted as useful. Source-cache runs still parse
+data; they are different from normalized-region reuse. CPU/RSS include the
+measurement process and are not measurements of the installed app.
+
+### Acquisition comparison, October 30, 2026
+
+Public Bangkok fixture, Overture `2026-10-21.0`, identical cell and limits:
+
+| Run | First non-empty spatial evidence | Total | Network bytes | Final features |
+| --- | ---: | ---: | ---: | ---: |
+| Original, empty source cache | 99.026 s | 298.342 s | 35,130,052 | 11,702 |
+| Combined ranges only, empty cache | 93.675 s | 260.436 s | 35,130,052 | 11,702 |
+| Combined ranges with first-group-only progress, empty cache | 113.775 s | 281.558 s | 35,130,052 | 11,702 |
+| Combined ranges with throttled growing progress, empty cache | 76.639 s | 259.079 s | 35,130,052 | 11,702 |
+| Original, complete source cache | 0.548 s | 0.982 s | 0 | 11,702 |
+| Growing progress, complete source cache | 0.585 s | 1.061 s | 0 | 11,702 |
+
+All runs completed acquisition; the existing dense-road detail limit remains
+explicit partial coverage. Cache-hit bytes within cold acquisition are overlapping
+reads from that same run, not a prewarmed source cache. Source-cache replay of the
+original and both progressive candidates produced identical whole-dataset SHA-256
+`a0125778d96314b59daa437eac3fb54ff878918231bbcbb8b9bd6e31e39bd471`.
+
+The first-group-only candidate was insufficient: its two features yielded no
+nearby evidence, suppressing a useful later row-group update until theme completion.
+Growing publication fixes that delay without changing admission order. In the
+final cold run, useful named roads arrived at 76.639 s, versus road-theme completion
+later; named park containment arrived at 190.217 s. The measurement process used
+6.225 s user CPU, 1.489 s system CPU and 235,184 KiB peak RSS. No comparable original
+CPU/RSS sample was collected, so these are absolute observations, not reductions.
+
+These are individual network runs, not a statistical latency guarantee. Warm
+parsing did not improve. Combined ranges reduce request overhead (a deterministic
+29-chunk fixture with one cached hole uses five network requests), but network
+variance prevents attributing the entire wall-time difference to that change.
+First acquisition still takes minutes; this stage does not claim instantaneous
+worldwide geography or route evidence. On-demand mobility sources are tracked in
+[#242](https://github.com/YusukeIt0/dot-link/issues/242).
+
 A Bangkok public example established named park containment and nearby internal
 paths. A preliminary 0.02-degree-cell run reused 21.5 MB of earlier source ranges
 and fetched another 19.0 MB in 163 seconds; this is **not** a cold-start result.

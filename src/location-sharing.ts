@@ -9,27 +9,30 @@ interface NativeLocation {
   getAppLocation(options?: AppLocationOptions): Promise<AppLocation | null>;
   onAppLocationChanged(callback: (fix: AppLocation) => void): () => void;
 }
-interface Preferences { enabled: boolean; origin?: string; stops: { sharing_id: string; origin: string }[]; }
+interface Preferences { enabled: boolean; mobility: boolean; origin?: string; stops: { sharing_id: string; origin: string }[]; }
 export interface LocationStatus {
   enabled: boolean;
+  mobility: boolean;
+  mobilitySupported?: boolean;
   state: 'off' | 'starting' | 'waiting' | 'sharing' | 'stale' | 'unavailable' | 'offline' | 'stopping';
   measuredAt?: string; receivedAt?: string; accuracy?: number; dotSubscribed?: boolean;
   receivedCount?: number; dotReadAt?: string; announcementCount?: number; saved: boolean;
 }
 export interface LocationRelayStatus {
+  mobilitySupported?: boolean;
   locationSubscribed?: boolean; locationSharing?: boolean; locationFresh?: boolean;
   locationReceivedAt?: string | null; locationMeasuredAt?: string | null; locationAccuracy?: number | null;
   locationReceivedCount?: number; locationDotReadAt?: string | null; locationAnnouncementCount?: number;
 }
 const KEY = 'dot-location-sharing-v1';
-const empty = (): Preferences => ({ enabled: false, stops: [] });
+const empty = (): Preferences => ({ enabled: false, mobility:false, stops: [] });
 function parse(raw: string | null): Preferences | undefined {
   if (!raw) return;
   try {
     const p = JSON.parse(raw);
     if (typeof p.enabled !== 'boolean' || (p.origin !== undefined && typeof p.origin !== 'string') || !Array.isArray(p.stops)) return;
     if (p.stops.length > 20 || p.stops.some((s: any) => typeof s.sharing_id !== 'string' || !/^[a-f0-9-]{36}$/.test(s.sharing_id) || typeof s.origin !== 'string')) return;
-    return { enabled: p.enabled, ...(p.origin ? {origin: p.origin} : {}), stops: p.stops };
+    return { enabled: p.enabled, mobility:p.mobility===true, ...(p.origin ? {origin: p.origin} : {}), stops: p.stops };
   } catch { return; }
 }
 
@@ -45,7 +48,8 @@ export class LocationSharing {
   private nativeChain = Promise.resolve();
   private nativeStarted = false;
   private nativeFailed = false;
-  private session?: { id: string; origin: string; enabled: boolean; sequence: number; uploadedAt?: string };
+  private capability?: {origin: string | undefined; supported: boolean};
+  private session?: { id: string; origin: string; mobility: boolean; enabled: boolean; sequence: number; uploadedAt?: string };
   private latest?: LocationFix;
   private working = false;
   private stopping?: Promise<void>;
@@ -70,7 +74,7 @@ export class LocationSharing {
     let state = this.state;
     if (!this.preferences.enabled && this.nativeStarted) state = 'stopping';
     if (this.preferences.enabled && state === 'sharing' && (!freshLocation(this.latest, this.now()) || this.relayStatus.locationFresh === false)) state = 'stale';
-    return { enabled: this.preferences.enabled, state, saved: this.saved,
+    return { enabled: this.preferences.enabled, mobility:this.preferences.mobility, mobilitySupported:this.capability?.origin===this.target()?this.capability?.supported:undefined, state, saved: this.saved,
       measuredAt: this.relayStatus.locationMeasuredAt ?? undefined, receivedAt: this.relayStatus.locationReceivedAt ?? undefined,
       accuracy: this.relayStatus.locationAccuracy ?? undefined, dotSubscribed: this.relayStatus.locationSubscribed,
       receivedCount: this.relayStatus.locationReceivedCount, dotReadAt: this.relayStatus.locationDotReadAt ?? undefined,
@@ -108,14 +112,29 @@ export class LocationSharing {
     if (enabled && !this.target()) { this.state = 'offline'; this.changed(); return; }
     if (this.preferences.enabled === enabled && enabled) return;
     this.preferences.enabled = enabled;
-    if (enabled) { this.preferences.origin = this.target(); this.nativeFailed = false; this.state = 'starting'; }
+    if (enabled) { if(this.preferences.origin!==this.target())this.preferences.mobility=false; this.preferences.origin = this.target(); this.nativeFailed = false; this.state = 'starting'; }
     else { this.stopCurrent(); this.state = this.preferences.stops.length ? 'stopping' : 'off'; }
     this.persist(); this.changed(); this.syncNative();
     if (!enabled) void this.flushStops();
     void this.pump();
   }
+  setMobilityEnabled(enabled:boolean):void {
+    if(this.disposed||this.preferences.mobility===enabled)return;
+    if(enabled&&(!this.preferences.enabled||this.preferences.origin!==this.target()||!this.supportsMobility()))return;
+    this.revision++;this.preferences.mobility=enabled;
+    // A new session makes old delayed enables unable to restore prior consent.
+    this.stopCurrent();this.persist();this.changed();
+    void this.flushStops().then(()=>this.pump());
+  }
+  private supportsMobility(){return this.capability?.origin===this.target()&&this.capability?.supported===true;}
   receive(status: LocationRelayStatus) {
     if (this.disposed) return;
+    this.capability={origin:this.target(),supported:status.mobilitySupported===true};
+    if(this.session&&this.session.mobility!==(this.preferences.mobility&&this.supportsMobility())){
+      this.revision++;this.stopCurrent();this.state=this.preferences.enabled?'starting':'off';
+      void this.flushStops().then(()=>this.pump());
+      this.changed();return;
+    }
     this.relayStatus = status;
     if (this.session?.enabled && status.locationSharing === false) this.session.enabled = false;
     this.changed();
@@ -187,11 +206,12 @@ export class LocationSharing {
   async pump(): Promise<void> {
     if (this.working || !this.ready || this.abandoned) return;
     this.working = true;
+    const revision=this.revision;
     try {
       const target = this.target();
       // Consent is scoped to the user's chosen Mac; connecting another Mac doesn't inherit it.
       if (this.preferences.enabled && target && this.preferences.origin !== target) {
-        this.preferences.enabled = false; this.stopCurrent(); this.persist();
+        this.preferences.enabled = false; this.preferences.mobility=false; this.stopCurrent(); this.persist();
       }
       this.syncNative();
       // Revocations do not wait behind a native permission prompt.
@@ -203,7 +223,7 @@ export class LocationSharing {
       await this.nativeChain;
       if (!this.preferences.enabled || this.disposed || this.target() !== target) return;
       if (this.nativeFailed || !this.nativeStarted) { this.state = 'unavailable'; return; }
-      const session = this.session ??= { id: crypto.randomUUID(), origin: target, enabled: false, sequence: 0 };
+      const session = this.session ??= { id: crypto.randomUUID(), origin: target, mobility:this.preferences.mobility&&this.supportsMobility(), enabled: false, sequence: 0 };
       if (!this.latest || this.now() - Date.parse(this.latest.measured_at) > 30_000) {
         // Stationary phones may suppress pushes. An occasional fresh fix keeps current/stale honest.
         const raw = await this.native!.getAppLocation({ accuracy: AppLocationAccuracy.High, timeoutMs: 8000 }).catch(() => null);
@@ -221,17 +241,18 @@ export class LocationSharing {
         return;
       }
       if (!session.enabled) {
-        await this.api('/api/location/control', { sharing_id: session.id, enabled: true });
+        await this.api('/api/location/control', { sharing_id: session.id, enabled: true, ...(session.mobility ? {mobility_enabled:true} : {}) });
         if (this.session !== session || !this.preferences.enabled || this.disposed) return;
         session.enabled = true;
       }
       const status = await this.api('/api/location/update', { sharing_id: session.id, sequence: ++session.sequence, fix });
       if (this.session !== session || !this.preferences.enabled || this.disposed) return;
       session.uploadedAt = fix.measured_at;
-      this.relayStatus = status as LocationRelayStatus;
+      this.receive(status as LocationRelayStatus);
+      if(this.session!==session)return;
       this.state = fix ? 'sharing' : this.latest ? 'stale' : 'waiting';
     } catch { if (this.preferences.enabled) { this.state = 'offline'; if (this.session) this.session.enabled = false; } }
-    finally { this.working = false; if (!this.abandoned) this.changed(); }
+    finally { this.working = false; if (!this.abandoned) {this.changed();if(revision!==this.revision&&!this.disposed)queueMicrotask(()=>{void this.pump();});} }
   }
   /** Ownership handoff cancels only local work, never shared consent/native state. */
   abandon(): void {

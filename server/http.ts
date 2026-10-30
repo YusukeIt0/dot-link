@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessageTool } from './bridge.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
+import { mobilityContextTool } from './mobility/context.ts';
 import { LocationResponseError } from './location-response-error.ts';
 import { PhotoStorageFullError } from './photo-attachments.ts';
 import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
@@ -41,14 +42,14 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, locationResponseTool] : [])] }; break;
+      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, mobilityContextTool, locationResponseTool] : [])] }; break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
         if (!parsedCall.success) throw new ToolRejection('invalid_arguments', 'Specify a tool name from tools/list.');
         const { name, arguments: args } = parsedCall.data;
         const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
-        const locationNames = ['get_location_context', 'respond_to_location'];
+        const locationNames = ['get_location_context', 'get_mobility_context', 'respond_to_location'];
         if (![...notificationNames, ...locationNames, 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
           throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
         }
@@ -70,6 +71,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
             }
             case 'get_pending_notifications': return notifications!.pending(args);
             case 'get_location_context': return locations!.read(args);
+            case 'get_mobility_context': return locations!.readMobility(args);
             case 'send_message_to_g2': return bridge.sendMessage(args);
             case 'reply_to_g2': return bridge.reply(args);
             case 'set_notification_disposition': return notifications!.decide(args);
