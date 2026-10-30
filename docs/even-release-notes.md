@@ -2,10 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.51
 
-- Let Dot request walking-route candidates and terrain estimates when needed, with a separate sharing choice.
-- Stop pending walking and terrain requests when sharing ends or the location is no longer current.
+- Added optional walking-route and terrain information for Dot, with a separate sharing choice.
+- Added automatic cancellation of walking and terrain requests when sharing stops or location information expires.
 
 ## 0.3.49
 
