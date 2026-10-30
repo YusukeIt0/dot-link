@@ -80,13 +80,25 @@ Sharing starts off. When enabled, readable new notifications—including sender 
 
 Requires Mac 0.4.0 or later and Even 0.2.23 or later.
 
-In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context` and `respond_to_location`, with the `location.updated` event.
+In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context`, `get_mobility_context` and `respond_to_location`, with the `location.updated` event.
 
 Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Then ask your existing Dot to monitor location changes and notify you on G2 only when useful information matches your preferences. Dot must create an event subscription; updating tools alone does not start announcements.
 
 With Mac 0.4.23 or later, nearby streets, paths, areas and terrain references are added automatically while Dot is subscribed. Coordinates remain available during map loading or failure; a first area can take several minutes, while cached areas are faster. No region-download step is needed. References are not navigation or evidence that you entered a venue.
 
 Sharing starts off. Turning it off stops new sharing and clears the relay's current location. If the Mac cannot receive the stop, sharing expires 90 seconds after the last relay update. The subscription stays available for later use but cannot read a location while sharing is off. Stopping does not delete locations already read by Dot, saved announcements or cached map data. The Mac removes map entries after 30 days without use; their contents and use days can reveal approximate past areas. Background updates and battery impact depend on the phone and OS. See [data handling](privacy.md#location-sharing).
+
+For walking and terrain evidence, also enable **Walking and terrain information**.
+This separately permits the external queries explained beside the switch. It is off
+by default and requires Dot Link for Mac v0.4.27 or later and Even v0.3.50 or later. If the Mac does
+not support it, the option is unavailable with an update note; ordinary location
+sharing continues. Ask Dot a normal
+walking or hill question with a known destination; no route-mode or account setup
+is needed. Public-transport data is not included. Dot interprets the evidence and
+its limits; model time, slope and endpoints do not establish safe access. Turning
+the option off stops pending queries when the Mac receives the stop. The saved
+choice belongs to the selected Mac. Open **Data sources and privacy** for the
+bundled English disclosure, support contact and full attribution.
 
 ## Updates
 

@@ -89,6 +89,32 @@ to a developer. Reasons and messages include no submitted text, coordinates,
 context/question IDs, callback URLs, secrets or raw exceptions. Acknowledged
 storage is not proof of physical display or speech.
 
+## Walking and terrain read contract
+
+`get_mobility_context` requires a previously read UUID `context_id`. Walking
+(default true) requires destination latitude/longitude plus `source` of
+`user_provided` or `verified_map_reference` and a trimmed 1–200 character reference.
+Terrain defaults false. `walking:false, terrain:true` permits no destination.
+At least one must be true. Unknown keys, nulls and invalid coordinates are rejected.
+
+Expected failures use `-32602` with a fixed reason; unexpected failures use `-32603`
+and `internal_error`, without raw provider errors or submitted values.
+
+| Reason | Meaning and next action |
+| --- | --- |
+| `invalid_arguments` | Correct the schema; never guess destination coordinates. |
+| `sharing_inactive`, `context_unknown`, `context_expired`, `moved_too_far` | The same location authority and limits described above apply. Use fresh context only when sharing is active. |
+| `mobility_disabled` | External-source consent or the acquisition service is unavailable. Continue with available information, without repeated settings prompts. |
+| `acquisition_cancelled` | The acquisition ended or reached its deadline. Continue with available information; do not automatically retry. A concurrent location invalidation may instead return its specific location reason. |
+| `internal_error` | Unexpected execution failure; no result is confirmed. |
+
+A busy admission returns a successful `status: busy` result with `retry_after_ms`
+and `not_queried` source states. A finished acquisition carries independent source
+states; unavailable walking never means no path exists. Terrain can be partial or
+endpoint-only, with unknown totals preserved. The bounded memory reuse and source
+queries are described in [walking and terrain evidence](mobility-context.md).
+This read has no display, speech or conversation-storage side effect.
+
 ## Ownership
 
 - `bridge-response-error.ts` owns conversation/proactive rejection vocabulary;

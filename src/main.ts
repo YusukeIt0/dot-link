@@ -210,6 +210,9 @@ function renderLocationStatus(): void {
   if (exited) return;
   const s = locationSharing.status();
   el<HTMLInputElement>('location-share').checked = s.enabled;
+  el<HTMLInputElement>('mobility-share').checked=s.mobility&&s.mobilitySupported===true;
+  el<HTMLInputElement>('mobility-share').disabled=s.mobilitySupported!==true||(!s.enabled&&!s.mobility);
+  el('mobility-status').textContent=s.mobilitySupported===false?t('even.walking_terrain_update_mac'):'';
   const labels = {
     off: 'even.not_sharing', starting: 'even.starting_location_sharing',
     waiting: 'even.waiting_for_a_current_location', sharing: 'even.sharing_your_current_location',
@@ -225,6 +228,7 @@ function renderLocationStatus(): void {
   el('location-diagnostic').textContent = `${t('even.location')}: ${s.state} · ${t('even.received')} ${s.receivedCount ?? 0} · ${t('even.announcements')} ${s.announcementCount ?? 0}${s.accuracy === undefined ? '' : ` · ±${Math.round(s.accuracy)}m`}${s.receivedAt ? ` · ${new Date(s.receivedAt).toLocaleTimeString()}` : ''}`;
 }
 el<HTMLInputElement>('location-share').onchange = () => locationSharing.setEnabled(el<HTMLInputElement>('location-share').checked);
+el<HTMLInputElement>('mobility-share').onchange = () => locationSharing.setMobilityEnabled(el<HTMLInputElement>('mobility-share').checked);
 const connectionTransitions = new ConnectionTransitions({
   session,
   stopUpdates: () => updates.stop(), cancelPlayback: () => playback.cancel(),

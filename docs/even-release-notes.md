@@ -2,6 +2,11 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Let Dot request walking-route candidates and terrain estimates when needed, with a separate sharing choice.
+- Stop pending walking and terrain requests when sharing ends or the location is no longer current.
+
 ## 0.3.49
 
 - Skip voice activation when Even identifies the whole wake phrase as another speaker.

@@ -10,12 +10,14 @@ export class MobilityNetwork {
   private requests = 0;
   private receivedBytes = 0;
   private readonly request: typeof fetch;
-  constructor(request: typeof fetch = fetch) { this.request = request; }
+  private readonly beforeRequest: () => void;
+  constructor(request: typeof fetch = fetch, beforeRequest: () => void = () => {}) { this.request = request; this.beforeRequest = beforeRequest; }
   stats() { return {requests: this.requests, received_bytes: this.receivedBytes}; }
   async bytes(url: URL, signal: AbortSignal, maximum: number): Promise<Buffer> {
     if (url.protocol !== 'https:' || url.username || url.password || url.port ||
         !['s3.amazonaws.com', 'routing.openstreetmap.de'].includes(url.hostname)) throw new Error('Unsupported mobility source');
     signal.throwIfAborted();
+    this.beforeRequest();
     if (url.hash) throw new Error('Unsupported mobility fragment');
     if (url.hostname === 's3.amazonaws.com' && (url.search || !/^\/elevation-tiles-prod\/terrarium\/12\/\d{1,4}\/\d{1,4}\.png$/.test(url.pathname))) throw new Error('Unsupported terrain endpoint');
     if ((cooldowns.get(url.hostname) ?? 0) > performance.now()) throw new Error('Mobility source cooling down');
