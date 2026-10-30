@@ -1,6 +1,6 @@
 # Regional mobility observations
 
-October 30, 2026 · runtime `341d475f89aab1d167a357a6dcc4e2f12d1e9219`.
+October 30, 2026 · runtime `ffdedff3799ebb324f408e986d11bf77a13d4b4a`.
 
 This is a broad **sample of public point pairs**, not a country-by-country support guarantee.
 No private/user position was used. A returned route is a provider candidate, not a
@@ -31,38 +31,38 @@ physical check of access, safety, permits, current closures or navigation suitab
 
 | Sample | Walking | Route terrain | Scheduled transit | All requested evidence |
 | --- | --- | --- | --- | ---: |
-| Tokyo, Japan (urban) | 2 candidate(s) | Model | Not queried | 2.77 s |
-| Seoul, South Korea (urban) | 1 candidate(s) | Model | Not queried | 2.15 s |
-| Bangkok, Thailand (urban) | 2 candidate(s) | Model | Not queried | 0.59 s |
-| Singapore (urban) | 2 candidate(s) | Model | Not queried | 2.72 s |
-| Delhi, India (urban) | 2 candidate(s) | Model | Not queried | 2.50 s |
-| Dubai, UAE (urban) | 2 candidate(s) | Model | Not queried | 0.56 s |
-| Istanbul, Turkey (urban) | 2 candidate(s) | Model | Not queried | 0.90 s |
-| Cairo, Egypt (urban) | 1 candidate(s) | Model | Not queried | 0.59 s |
-| Nairobi, Kenya (urban) | 1 candidate(s) | Model | Not queried | 0.52 s |
-| Cape Town, South Africa (urban) | 2 candidate(s) | Model | Not queried | 0.58 s |
-| London, UK (urban) | 2 candidate(s) | Model | Not queried | 3.26 s |
-| Berlin, Germany (urban) | 2 candidate(s) | Model | 3 candidate(s) | 4.03 s |
-| Oslo, Norway (urban) | 2 candidate(s) | Screened | 3 candidate(s) | 6.62 s |
+| Tokyo, Japan (urban) | 2 candidate(s) | Model | Not queried | 2.78 s |
+| Seoul, South Korea (urban) | 1 candidate(s) | Model | Not queried | 2.51 s |
+| Bangkok, Thailand (urban) | 2 candidate(s) | Model | Not queried | 1.29 s |
+| Singapore (urban) | 2 candidate(s) | Model | Not queried | 1.30 s |
+| Delhi, India (urban) | 2 candidate(s) | Model | Not queried | 3.36 s |
+| Dubai, UAE (urban) | 2 candidate(s) | Model | Not queried | 1.60 s |
+| Istanbul, Turkey (urban) | 2 candidate(s) | Model | Not queried | 4.23 s |
+| Cairo, Egypt (urban) | 1 candidate(s) | Model | Not queried | 2.75 s |
+| Nairobi, Kenya (urban) | 1 candidate(s) | Model | Not queried | 2.33 s |
+| Cape Town, South Africa (urban) | 2 candidate(s) | Model | Not queried | 1.63 s |
+| London, UK (urban) | 2 candidate(s) | Model | Not queried | 5.11 s |
+| Berlin, Germany (urban) | 2 candidate(s) | Model | 2 candidate(s) | 5.30 s |
+| Oslo, Norway (urban) | 2 candidate(s) | Screened | 3 candidate(s) | 4.01 s |
 | New York, USA (urban) | 2 candidate(s) | Model | Not queried | 3.50 s |
-| San Francisco, USA (urban hill) | 2 candidate(s) | Model | Not queried | 2.38 s |
-| Mexico City, Mexico (urban) | 2 candidate(s) | Model | Not queried | 2.13 s |
-| Lima, Peru (urban) | 1 candidate(s) | Model | Not queried | 1.64 s |
-| Sao Paulo, Brazil (urban) | 2 candidate(s) | Model | Not queried | 1.65 s |
-| Buenos Aires, Argentina (urban) | 2 candidate(s) | Model | Not queried | 0.92 s |
-| Sydney, Australia (urban) | 2 candidate(s) | Model | Not queried | 2.73 s |
-| Auckland, New Zealand (urban) | 2 candidate(s) | Model | Not queried | 2.07 s |
-| Mount Fuji, Japan (mountain) | 1 candidate(s) | Screened | Not queried | 1.16 s |
-| Amazon region, Brazil (sparse) | No segment within 100 m | Endpoints only | Not queried | 0.87 s |
-| Rural Mongolia (sparse) | No segment within 100 m | Endpoints only | Not queried | 2.11 s |
-| Nuuk, Greenland (small coastal city) | No segment within 100 m | Endpoints only | Not queried | 2.95 s |
-| McMurdo area (polar settlement) | 1 candidate(s) | Model | Not queried | 1.71 s |
+| San Francisco, USA (urban hill) | 2 candidate(s) | Model | Not queried | 4.37 s |
+| Mexico City, Mexico (urban) | 2 candidate(s) | Model | Not queried | 2.79 s |
+| Lima, Peru (urban) | 1 candidate(s) | Model | Not queried | 2.38 s |
+| Sao Paulo, Brazil (urban) | 2 candidate(s) | Model | Not queried | 1.44 s |
+| Buenos Aires, Argentina (urban) | 2 candidate(s) | Model | Not queried | 0.98 s |
+| Sydney, Australia (urban) | 2 candidate(s) | Model | Not queried | 6.19 s |
+| Auckland, New Zealand (urban) | 2 candidate(s) | Model | Not queried | 2.81 s |
+| Mount Fuji, Japan (mountain) | 1 candidate(s) | Screened | Not queried | 1.06 s |
+| Amazon region, Brazil (sparse) | No segment within 100 m | Endpoints only | Not queried | 0.65 s |
+| Rural Mongolia (sparse) | No segment within 100 m | Endpoints only | Not queried | 2.41 s |
+| Nuuk, Greenland (small coastal city) | No segment within 100 m | Endpoints only | Not queried | 2.45 s |
+| McMurdo area (polar settlement) | 1 candidate(s) | Model | Not queried | 0.63 s |
 
 ## Performance and limits
 
-Routes were returned or classified in 0.20–2.51 s; total requested evidence took 0.52–6.62 s (median 2.09 s). These are one-run observations from a development Mac,
+Routes were returned or classified in 0.26–3.67 s; total requested evidence took 0.63–6.19 s (median 2.48 s). These are one-run observations from a development Mac,
 not installed-Dot latency or worldwide availability guarantees.
-The survey received 2,490,909 bytes across 61 requests. Peak process RSS reached 119,680 KiB. Per-row RSS is the process high-water mark, not isolated per-region allocation.
+The survey received 2,495,203 bytes across 61 requests. Peak process RSS reached 121,024 KiB. Per-row RSS is the process high-water mark, not isolated per-region allocation.
 
 No global scheduled-transit provider meeting the chosen account/cost/coordination
 constraints was established. Transitous requires usage coordination for automated/

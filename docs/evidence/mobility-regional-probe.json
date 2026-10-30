@@ -1,6 +1,6 @@
 {
-  "recorded_at": "2026-10-30T12:34:02.774929+00:00",
-  "runtime_commit": "341d475f89aab1d167a357a6dcc4e2f12d1e9219",
+  "recorded_at": "2026-10-30T12:45:02.525732+00:00",
+  "runtime_commit": "ffdedff3799ebb324f408e986d11bf77a13d4b4a",
   "method": "26 public point pairs, sequential with 1.5 second gaps, same process/provider cooldowns; each sample uses a new public terrain cache. Single observations, not region coverage guarantees.",
   "sources": [
     "FOSSGIS OSRM / OpenStreetMap",
@@ -14,13 +14,13 @@
       "region": "East Asia",
       "area": "Tokyo, Japan",
       "kind": "urban",
-      "route_ms": 1415,
-      "total_ms": 2765,
+      "route_ms": 1154,
+      "total_ms": 2782,
       "network": {
         "requests": 2,
         "received_bytes": 72765
       },
-      "max_rss_kib": 119568,
+      "max_rss_kib": 120960,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1577,
@@ -43,13 +43,13 @@
       "region": "East Asia",
       "area": "Seoul, South Korea",
       "kind": "urban",
-      "route_ms": 228,
-      "total_ms": 2149,
+      "route_ms": 270,
+      "total_ms": 2506,
       "network": {
         "requests": 3,
         "received_bytes": 112853
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 1835,
@@ -72,13 +72,13 @@
       "region": "Southeast Asia",
       "area": "Bangkok, Thailand",
       "kind": "urban",
-      "route_ms": 252,
-      "total_ms": 591,
+      "route_ms": 418,
+      "total_ms": 1288,
       "network": {
         "requests": 2,
         "received_bytes": 66616
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2342,
@@ -101,13 +101,13 @@
       "region": "Southeast Asia",
       "area": "Singapore",
       "kind": "urban",
-      "route_ms": 255,
-      "total_ms": 2722,
+      "route_ms": 276,
+      "total_ms": 1299,
       "network": {
         "requests": 2,
         "received_bytes": 78850
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2237,
@@ -130,13 +130,13 @@
       "region": "South Asia",
       "area": "Delhi, India",
       "kind": "urban",
-      "route_ms": 223,
-      "total_ms": 2501,
+      "route_ms": 920,
+      "total_ms": 3362,
       "network": {
         "requests": 3,
         "received_bytes": 81693
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1695,
@@ -159,13 +159,13 @@
       "region": "Middle East",
       "area": "Dubai, UAE",
       "kind": "urban",
-      "route_ms": 231,
-      "total_ms": 559,
+      "route_ms": 272,
+      "total_ms": 1605,
       "network": {
         "requests": 2,
         "received_bytes": 73929
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2280,
@@ -188,13 +188,13 @@
       "region": "Europe / West Asia",
       "area": "Istanbul, Turkey",
       "kind": "urban",
-      "route_ms": 269,
-      "total_ms": 895,
+      "route_ms": 279,
+      "total_ms": 4229,
       "network": {
         "requests": 2,
         "received_bytes": 94493
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1344,
@@ -217,13 +217,13 @@
       "region": "North Africa",
       "area": "Cairo, Egypt",
       "kind": "urban",
-      "route_ms": 196,
-      "total_ms": 587,
+      "route_ms": 1063,
+      "total_ms": 2753,
       "network": {
         "requests": 2,
         "received_bytes": 51228
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 644,
@@ -246,13 +246,13 @@
       "region": "East Africa",
       "area": "Nairobi, Kenya",
       "kind": "urban",
-      "route_ms": 202,
-      "total_ms": 520,
+      "route_ms": 809,
+      "total_ms": 2335,
       "network": {
         "requests": 2,
         "received_bytes": 58273
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 2820,
@@ -275,13 +275,13 @@
       "region": "Southern Africa",
       "area": "Cape Town, South Africa",
       "kind": "urban",
-      "route_ms": 234,
-      "total_ms": 579,
+      "route_ms": 292,
+      "total_ms": 1629,
       "network": {
         "requests": 2,
         "received_bytes": 52278
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 939,
@@ -304,13 +304,13 @@
       "region": "Europe",
       "area": "London, UK",
       "kind": "urban",
-      "route_ms": 273,
-      "total_ms": 3257,
+      "route_ms": 305,
+      "total_ms": 5114,
       "network": {
         "requests": 3,
         "received_bytes": 240811
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1400,
@@ -333,13 +333,13 @@
       "region": "Europe",
       "area": "Berlin, Germany",
       "kind": "urban",
-      "route_ms": 2508,
-      "total_ms": 4034,
+      "route_ms": 3675,
+      "total_ms": 5303,
       "network": {
         "requests": 3,
-        "received_bytes": 158793
+        "received_bytes": 163093
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2732,
@@ -347,8 +347,8 @@
         3,
         19
       ],
-      "transit_status": "available",
-      "transit_candidates": 3,
+      "transit_status": "partial",
+      "transit_candidates": 2,
       "terrain_status": "available",
       "terrain_confidence": "unvalidated_model_estimate",
       "endpoint_elevations_m": [
@@ -362,13 +362,13 @@
       "region": "Europe",
       "area": "Oslo, Norway",
       "kind": "urban",
-      "route_ms": 1499,
-      "total_ms": 6615,
+      "route_ms": 1841,
+      "total_ms": 4015,
       "network": {
         "requests": 4,
-        "received_bytes": 272953
+        "received_bytes": 272947
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 4217,
@@ -391,13 +391,13 @@
       "region": "North America",
       "area": "New York, USA",
       "kind": "urban",
-      "route_ms": 2105,
-      "total_ms": 3505,
+      "route_ms": 845,
+      "total_ms": 3503,
       "network": {
         "requests": 2,
         "received_bytes": 113123
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1056,
@@ -420,13 +420,13 @@
       "region": "North America",
       "area": "San Francisco, USA",
       "kind": "urban hill",
-      "route_ms": 1024,
-      "total_ms": 2378,
+      "route_ms": 1891,
+      "total_ms": 4368,
       "network": {
         "requests": 2,
         "received_bytes": 126859
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1236,
@@ -449,13 +449,13 @@
       "region": "North America",
       "area": "Mexico City, Mexico",
       "kind": "urban",
-      "route_ms": 284,
-      "total_ms": 2129,
+      "route_ms": 377,
+      "total_ms": 2790,
       "network": {
         "requests": 3,
         "received_bytes": 78661
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1046,
@@ -478,13 +478,13 @@
       "region": "South America",
       "area": "Lima, Peru",
       "kind": "urban",
-      "route_ms": 930,
-      "total_ms": 1642,
+      "route_ms": 896,
+      "total_ms": 2380,
       "network": {
         "requests": 2,
         "received_bytes": 39669
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 835,
@@ -507,13 +507,13 @@
       "region": "South America",
       "area": "Sao Paulo, Brazil",
       "kind": "urban",
-      "route_ms": 935,
-      "total_ms": 1645,
+      "route_ms": 344,
+      "total_ms": 1436,
       "network": {
         "requests": 2,
         "received_bytes": 82865
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2852,
@@ -536,13 +536,13 @@
       "region": "South America",
       "area": "Buenos Aires, Argentina",
       "kind": "urban",
-      "route_ms": 331,
-      "total_ms": 920,
+      "route_ms": 277,
+      "total_ms": 980,
       "network": {
         "requests": 2,
         "received_bytes": 57227
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1461,
@@ -565,13 +565,13 @@
       "region": "Oceania",
       "area": "Sydney, Australia",
       "kind": "urban",
-      "route_ms": 294,
-      "total_ms": 2735,
+      "route_ms": 419,
+      "total_ms": 6188,
       "network": {
         "requests": 3,
         "received_bytes": 140840
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 2348,
@@ -594,13 +594,13 @@
       "region": "Oceania",
       "area": "Auckland, New Zealand",
       "kind": "urban",
-      "route_ms": 320,
-      "total_ms": 2072,
+      "route_ms": 869,
+      "total_ms": 2810,
       "network": {
         "requests": 2,
         "received_bytes": 134815
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 2,
       "first_walk_m": 1287,
@@ -623,13 +623,13 @@
       "region": "East Asia",
       "area": "Mount Fuji, Japan",
       "kind": "mountain",
-      "route_ms": 322,
-      "total_ms": 1157,
+      "route_ms": 699,
+      "total_ms": 1056,
       "network": {
         "requests": 2,
         "received_bytes": 54949
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 891,
@@ -652,13 +652,13 @@
       "region": "South America",
       "area": "Amazon region, Brazil",
       "kind": "sparse",
-      "route_ms": 279,
-      "total_ms": 867,
+      "route_ms": 265,
+      "total_ms": 646,
       "network": {
         "requests": 2,
         "received_bytes": 28669
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "unavailable",
       "walking_candidates": 0,
       "first_walk_m": null,
@@ -671,25 +671,20 @@
         19.656692091933746,
         29.46307802320646
       ],
-      "terrain_totals_withheld": true,
-      "walking_followup": {
-        "http_status": 400,
-        "provider_code": "NoSegment",
-        "snap_radius_m": 100
-      }
+      "terrain_totals_withheld": true
     },
     {
       "id": "mongolia-rural",
       "region": "Central / East Asia",
       "area": "Rural Mongolia",
       "kind": "sparse",
-      "route_ms": 261,
-      "total_ms": 2111,
+      "route_ms": 264,
+      "total_ms": 2411,
       "network": {
         "requests": 3,
         "received_bytes": 59723
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "unavailable",
       "walking_candidates": 0,
       "first_walk_m": null,
@@ -702,25 +697,20 @@
         1703.4333333332324,
         1697.659274547291
       ],
-      "terrain_totals_withheld": true,
-      "walking_followup": {
-        "http_status": 400,
-        "provider_code": "NoSegment",
-        "snap_radius_m": 100
-      }
+      "terrain_totals_withheld": true
     },
     {
       "id": "nuuk",
       "region": "Arctic / North America",
       "area": "Nuuk, Greenland",
       "kind": "small coastal city",
-      "route_ms": 319,
-      "total_ms": 2953,
+      "route_ms": 256,
+      "total_ms": 2451,
       "network": {
         "requests": 2,
         "received_bytes": 114627
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "unavailable",
       "walking_candidates": 0,
       "first_walk_m": null,
@@ -733,25 +723,20 @@
         50.700572899907655,
         90.69177839031363
       ],
-      "terrain_totals_withheld": true,
-      "walking_followup": {
-        "http_status": 400,
-        "provider_code": "NoSegment",
-        "snap_radius_m": 100
-      }
+      "terrain_totals_withheld": true
     },
     {
       "id": "mcmurdo",
       "region": "Antarctica",
       "area": "McMurdo area",
       "kind": "polar settlement",
-      "route_ms": 855,
-      "total_ms": 1707,
+      "route_ms": 259,
+      "total_ms": 633,
       "network": {
         "requests": 2,
         "received_bytes": 43347
       },
-      "max_rss_kib": 119680,
+      "max_rss_kib": 121024,
       "walking_status": "available",
       "walking_candidates": 1,
       "first_walk_m": 419,
