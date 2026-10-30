@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "Share phone location with Dot via your Mac when enabled. Cached maps may reveal past areas; unused maps expire after 30 days. With separate consent, Dot can request route coordinates from FOSSGIS and terrain areas from AWS. Turn sharing off to stop new requests."
+      "desc": "Share phone location with Dot via your Mac when enabled. Cached maps may reveal past areas; unused maps expire after 30 days. With separate consent, the Mac sends route coordinates to FOSSGIS and terrain areas to AWS when Dot asks. Turn sharing off to stop new requests."
     },
     {
       "name": "camera",
