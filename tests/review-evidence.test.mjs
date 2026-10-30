@@ -79,7 +79,7 @@ function contextFor(r, changes = {}) {
     if (path.startsWith('actions/')) return {workflow_runs: []};
     throw new Error(`Unexpected API: ${path}`);
   };
-  return gatherContext({pr: {head: {sha: head}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => changes.comments || []);
+  return gatherContext({pr: {number: 74, head: {sha: head, ref: 'work', repo: {full_name: 'YusukeIt0/dot-link'}}, base: {ref: 'main', sha: before}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => changes.comments || []);
 }
 test('evidence reuse requires ancestor code and a bounded non-runtime diff', () => {
   const r = record(); r.evidence.push({kind: 'device', result: 'pass', requirements: ['R1'],

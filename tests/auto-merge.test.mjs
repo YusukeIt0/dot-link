@@ -31,7 +31,8 @@ function fixture(number = 74) {
     `<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:456:1 -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=${head};main=${main};input=${fingerprint} -->\n\n<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`});
   const run = {id: 456, path: '.github/workflows/claude-review.yml', repository: {full_name: repository}, status: 'completed', conclusion: 'success', run_attempt: 1};
   const jobs = ['intake', 'review', 'report'].map(name => ({name, status: 'completed', conclusion: 'success'}));
-  const ciRun = {id: 789, event: 'push', head_branch: 'work', head_sha: head, path: '.github/workflows/ci.yml',
+  const ciRun = {id: 789, run_attempt: 1, event: 'pull_request', head_branch: 'work', head_repository: {full_name: repository},
+    pull_requests: [{number, head: {sha: head}, base: {ref: 'main', sha: main}}], head_sha: head, path: '.github/workflows/ci.yml',
     repository: {full_name: repository}, status: 'completed', conclusion: 'success'};
   const ciJobs = policy.requiredJobs.map(name => ({name, status: 'completed', conclusion: 'success'}));
   const protection = {required_status_checks: {strict: true, checks: [{context: 'test', app_id: 15368}]},
@@ -63,7 +64,7 @@ function clientFor(s, change) {
     if (path.startsWith(`issues/${s.pr.number}/comments`)) return structuredClone(s.comments);
     if (path.startsWith('issues/73/comments')) return [];
     if (path.startsWith('actions/runs/456/jobs')) return [{jobs: structuredClone(s.jobs)}];
-    if (path.startsWith('actions/runs/789/jobs')) return [{jobs: structuredClone(s.ciJobs)}];
+    if (path.startsWith('actions/runs/789/attempts/1/jobs')) return [{jobs: structuredClone(s.ciJobs)}];
     if (path.startsWith(`pulls/${s.pr.number}/files`)) return structuredClone(s.files);
     if (path.startsWith(`pulls/${s.pr.number}/reviews`)) return structuredClone(s.reviews);
     if (path.startsWith(`pulls/${s.pr.number}/comments`)) return [];
@@ -101,7 +102,7 @@ test('trust, freshness, exact CI, findings, unknown evidence and sensitive chang
 test('latest associated CI wins even when a previous run succeeded', () => {
   const s = fixture(); s.ciRuns = [s.ciRun, {...s.ciRun, id: 790, conclusion: 'failure'}];
   const client = clientFor(s), original = client.pages;
-  client.pages = path => path.startsWith('actions/runs/790/jobs') ? [{jobs: [{name: 'test', status: 'completed', conclusion: 'failure'}]}] : original(path);
+  client.pages = path => path.startsWith('actions/runs/790/attempts/1/jobs') ? [{jobs: [{name: 'test', status: 'completed', conclusion: 'failure'}]}] : original(path);
   assert.equal(collect(74, client).ciRun.id, 790);
   assert.equal(evaluate(collect(74, client)).eligible, false);
 });

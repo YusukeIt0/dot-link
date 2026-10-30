@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {latestReceipt, assertReady, fingerprintPR} from '../scripts/check-review-before-merge.mjs';
 
 const head = 'b'.repeat(40), main = 'a'.repeat(40);
-const prData = {number:18,title:'A change',body:'Details',user:{login:'author'},state:'open',draft:false,base:{ref:'main'},head:{sha:head},mergeable:true,mergeable_state:'clean'};
+const prData = {number:18,title:'A change',body:'Details',user:{login:'author'},state:'open',draft:false,base:{ref:'main'},head:{sha:head,ref:'work',repo:{full_name:'YusukeIt0/dot-link'}},mergeable:true,mergeable_state:'clean'};
 const fingerprint = fingerprintPR(prData, main, []);
 const comment = {id:10,revision_verified:true,revision_author:{id:123,login:'dotsweeper[bot]',type:'Bot'},user:{id:123,login:'dotsweeper[bot]',type:'Bot'},body:
   `<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:456:1 -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=${head};main=${main};input=${fingerprint} -->\n\nNo findings.`};
@@ -13,6 +13,10 @@ const ready = () => ({
   run:{id:456,path:'.github/workflows/claude-review.yml',repository:{full_name:'YusukeIt0/dot-link'},status:'completed',conclusion:'success',run_attempt:1},
   jobs:['intake','review','report'].map(name=>({name,status:'completed',conclusion:'success'})),
   checks:[{name:'test',bucket:'pass'}],
+  ciRun:{id:789,run_attempt:1,event:'pull_request',head_branch:'work',head_sha:head,
+    head_repository:{full_name:'YusukeIt0/dot-link'},repository:{full_name:'YusukeIt0/dot-link'},
+    path:'.github/workflows/ci.yml',pull_requests:[{number:18,head:{sha:head},base:{ref:'main',sha:main}}],status:'completed',conclusion:'success'},
+  ciJobs:['workflow-lint','test'].map(name=>({name,status:'completed',conclusion:'success'})),
 });
 test('published result and complete owning workflow authorize only the reviewed head',()=>{
   assert.equal(assertReady(ready()),head);
@@ -51,8 +55,8 @@ function childReady() {
  const x=ready();x.expectedBase='refactor/parent';x.base={ref:x.expectedBase,sha:'c'.repeat(40)};
  x.baseComparison={status:'ahead',merge_base_commit:{sha:x.base.sha}};
  x.pr.head={...x.pr.head,ref:'child',repo:{full_name:'YusukeIt0/dot-link'}};
- x.ciRun={event:'push',head_branch:'child',path:'.github/workflows/ci.yml',head_sha:head,repository:{full_name:'YusukeIt0/dot-link'},status:'completed',conclusion:'success'};
- x.ciJobs=[{name:'test',status:'completed',conclusion:'success'}];
+ x.ciRun.head_branch='child';
+ x.ciRun.pull_requests[0].base={...x.base};
  x.pr.base={...x.base};x.receipt={...x.receipt,base:x.base,
   fingerprint:fingerprintPR(x.pr,x.main,x.comments,x.base)};
  return x;
@@ -92,9 +96,9 @@ test('retargeting or parent advancement requires child ancestry as well as a fre
  const identical=childReady();identical.baseComparison.status='identical';assert.equal(assertReady(identical),head);
 });
 
-test('PR CI association must match the pinned parent; push CI tests the contained parent directly',()=>{
+test('PR CI association must match the pinned parent',()=>{
  const x=childReady();x.ciRun.event='pull_request';
- x.ciRun.pull_requests=[{number:x.pr.number,base:{ref:x.expectedBase,sha:x.base.sha}}];
+ x.ciRun.pull_requests=[{number:x.pr.number,head:{sha:head},base:{ref:x.expectedBase,sha:x.base.sha}}];
  assert.equal(assertReady(x),head);
  x.ciRun.pull_requests[0].base.ref='old-parent';assert.throws(()=>assertReady(x));
  x.ciRun.pull_requests[0].base.ref=x.expectedBase;

@@ -1,3 +1,4 @@
+import {collectCI} from './ci-evidence.mjs';
 // Public evidence is data. This module never executes reviewed code or mutates GitHub.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -181,10 +182,13 @@ export function gatherContext(snapshot, api, paginate) {
         reason: 'Runtime/device evidence does not cover the current code; verify applicability before reuse.'};
     }
   }
-  const runs = api(`actions/workflows/ci.yml/runs?head_sha=${snapshot.pr.head.sha}&per_page=20`).workflow_runs;
-  if (!Array.isArray(runs)) throw new Error('Invalid CI response.');
-  context.ci = runs.slice(0, 5).map(x => ({id: x.id, head: x.head_sha, event: x.event,
-    status: x.status, conclusion: x.conclusion, url: `https://github.com/YusukeIt0/dot-link/actions/runs/${x.id}`}));
+  const evidence = collectCI(snapshot.pr, snapshot.data?.base ||
+    (snapshot.data?.main ? {ref: 'main', sha: snapshot.data.main} : snapshot.pr.base), api, paginate);
+  context.ci = evidence.run ? [{id: evidence.run.id, attempt: evidence.run.run_attempt,
+    head: evidence.target.head, base: evidence.target.base, base_ref: evidence.target.baseRef,
+    event: evidence.run.event, status: evidence.run.status, conclusion: evidence.run.conclusion,
+    url: `https://github.com/YusukeIt0/dot-link/actions/runs/${evidence.run.id}`}]: [];
+  context.ci_selection = {status: evidence.status, reason: evidence.reason};
   return context;
 }
 

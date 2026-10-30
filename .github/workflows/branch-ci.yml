@@ -1,0 +1,45 @@
+name: Branch validation
+on:
+  push:
+    branches-ignore: [main]
+permissions:
+  contents: read
+concurrency:
+  group: branch-validation-${{ github.ref }}-${{ github.run_attempt > 1 && github.run_id || 'current' }}
+  cancel-in-progress: true
+jobs:
+  branch-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.admission.outputs.run }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: admission
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/branch-ci-admission.mjs
+      - run: sh scripts/check-workflows.sh
+  branch-test:
+    needs: branch-preflight
+    if: ${{ !cancelled() && (needs.branch-preflight.result != 'success' || needs.branch-preflight.outputs.run == 'true') }}
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - name: Require successful preflight and workflow checks
+        env:
+          PREFLIGHT_RESULT: ${{ needs.branch-preflight.result }}
+        run: test "$PREFLIGHT_RESULT" = success
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22.23.4'
+          cache: npm
+      - run: sh scripts/run-ci-tests.sh

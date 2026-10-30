@@ -1,3 +1,4 @@
+import {collectCI, ciTarget, assertCI} from './ci-evidence.mjs';
 // Read-only maintainer gate. Does not approve, merge, rerun, or change branch rules.
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
@@ -63,15 +64,7 @@ export function assertReady({pr, main, base, scope, feedback, expectedBase = 'ma
     }
   }
   if ((expectedBase === 'main' && !checks.length) || checks.some(x => x.bucket !== 'pass')) throw new Error('Required checks are missing, pending, or unsuccessful.');
-  const matchingCIContext = ciRun?.event === 'push'
-    ? ciRun.head_branch === pr.head.ref && pr.head.repo?.full_name === repository
-    : ciRun?.event === 'pull_request' && ciRun.pull_requests?.some(p => p.number === pr.number &&
-      p.base?.ref === expectedBase && p.base?.sha === base?.sha);
-  if (expectedBase !== 'main' && (!matchingCIContext || ciRun?.path !== '.github/workflows/ci.yml' || ciRun?.head_sha !== pr.head.sha ||
-      ciRun?.repository?.full_name !== repository || ciRun?.status !== 'completed' || ciRun?.conclusion !== 'success' ||
-      !ciJobs?.some(x => x.name === 'test') || ciJobs.some(x => x.status !== 'completed' || x.conclusion !== 'success'))) {
-    throw new Error('Child PR requires the completed product CI workflow for its exact head.');
-  }
+  assertCI(ciTarget(pr, base || {ref: 'main', sha: main}), ciRun, ciJobs);
   return pr.head.sha;
 }
 
@@ -102,18 +95,17 @@ async function main() {
   const pr = api(`pulls/${number}`);
   const mainSha = api('commits/main').sha;
   const base = expectedBase === 'main' ? undefined : {ref: expectedBase, sha: api(`commits/${encodeURIComponent(expectedBase)}`).sha};
-  let ciRun, ciJobs, baseComparison;
-  if (expectedBase !== 'main') {
-    baseComparison = api(`compare/${base.sha}...${pr.head.sha}`);
-    const runs = api(`actions/workflows/ci.yml/runs?head_sha=${pr.head.sha}&per_page=100`).workflow_runs;
-    ciRun = runs.find(x => x.event === 'pull_request' && x.pull_requests?.some(p => p.number === pr.number && p.base?.ref === expectedBase && p.base?.sha === base.sha)) ||
-      runs.find(x => x.event === 'push' && x.head_branch === pr.head.ref && pr.head.repo?.full_name === repository);
-    if (ciRun) ciJobs = gh(['api', `repos/${repository}/actions/runs/${ciRun.id}/jobs?filter=latest&per_page=100`, '--paginate', '--slurp']).flatMap(x => x.jobs);
-  }
+  const baseComparison = expectedBase !== 'main' ? api(`compare/${base.sha}...${pr.head.sha}`) : undefined;
+  const evidence = collectCI(pr, base || {ref: 'main', sha: mainSha}, api,
+    path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']));
+  const ciRun = evidence.run, ciJobs = evidence.jobs;
   const comments = readComments();
   const scope = scopeRevision(comments, pr.head.sha, api, path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat());
   const feedback = reviewDiscussion(pr.number, path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat());
   if (JSON.stringify(receipt) !== JSON.stringify(latestReceipt(comments, botId))) throw new Error('Review ownership changed during this check.');
+  const currentPR = api(`pulls/${number}`);
+  if (currentPR.head.sha !== pr.head.sha || currentPR.base.ref !== pr.base.ref ||
+      api(`commits/${encodeURIComponent(expectedBase)}`).sha !== (base?.sha || mainSha)) throw new Error('PR head/base changed during verification.');
   const head = assertReady({pr, main:mainSha, base, scope, feedback, expectedBase, comments, receipt, run, jobs, checks, ciRun, ciJobs, baseComparison});
   console.log(`READY: PR #${number} targeting ${expectedBase}, head ${head}, review run ${receipt.runId}.`);
   console.log(`Read findings before deciding to merge. Use --match-head-commit ${head} when merging; repeat this check after any change.`);

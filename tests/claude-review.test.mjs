@@ -15,7 +15,7 @@ const prepareEnvKeys = new Set([...prepareStep.matchAll(/^          ([A-Z_]+):/g
 const user = {id: 123, login: 'contributor', type: 'User'};
 const issue = {number: 12, title: 'History disappears', body: 'After reopening the app', state: 'open', locked: false, user};
 const pr = {number: 12, state: 'open', draft: false, changed_files: 1,
-  base: {ref: 'main', sha: main, repo: {full_name:'YusukeIt0/dot-link'}}, head: {sha: head, repo: {full_name: 'external/fork'}}};
+  base: {ref: 'main', sha: main, repo: {full_name:'YusukeIt0/dot-link'}}, head: {sha: head, ref: 'work', repo: {full_name: 'external/fork'}}};
 const result = {summary: 'Review complete', findings: [{severity: 'medium', file: 'src/main.ts', line: 7,
   title: 'State lost', reason: 'Saved state is overwritten'}], next_steps: 'Verify persistence', limitations: 'Static review only', triage: {priority: 'P1', priority_reason: 'Core state loss', labels: [{name: 'bug', reason: 'State disappears'}]}};
 function fixture(options = {}) {

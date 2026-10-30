@@ -1,0 +1,63 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {ciTarget, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
+import {branchAdmission} from '../scripts/branch-ci-admission.mjs';
+const repository = 'YusukeIt0/dot-link', head = 'b'.repeat(40), base = 'a'.repeat(40);
+const pr = {number: 7, head: {sha: head, ref: 'work', repo: {full_name: repository}}, base: {ref: 'main', sha: base}};
+const target = ciTarget(pr);
+const run = () => ({id: 12, run_attempt: 1, event: 'pull_request', path: '.github/workflows/ci.yml',
+  repository: {full_name: repository}, head_repository: {full_name: repository}, head_sha: head, head_branch: 'work',
+  pull_requests: [{number: 7, head: {sha: head}, base: {ref: 'main', sha: base}}], status: 'completed', conclusion: 'success'});
+const jobs = () => ['workflow-lint', 'test'].map(name => ({name, status: 'completed', conclusion: 'success'}));
+test('PR identity includes repository, head and exact target; pushes never certify PRs', () => {
+  assert.equal(matchesCI(run(), target), true);
+  for (const mutate of [r => r.event = 'push', r => r.head_sha = base, r => r.head_branch = 'other',
+    r => r.repository.full_name = 'other/repo', r => r.head_repository.full_name = 'other/fork',
+    r => r.path = 'other.yml', r => r.pull_requests = [], r => r.pull_requests[0].number++,
+    r => r.pull_requests[0].head.sha = base, r => r.pull_requests[0].base.sha = head,
+    r => r.pull_requests[0].base.ref = 'parent']) {
+    const r = run(); mutate(r); assert.equal(matchesCI(r, target), false, mutate.toString());
+  }
+  assert.throws(() => ciTarget({...pr, head: {sha: head}}));
+});
+test('newest canonical result wins regardless of success or response order', () => {
+  for (const conclusion of ['failure', 'cancelled', 'skipped', null]) {
+    const latest = {...run(), id: 13, conclusion};
+    for (const rows of [[run(), latest], [latest, run()]]) {
+      assert.equal(selectCI(rows, target).id, 13);
+      assert.throws(() => assertCI(target, selectCI(rows, target), jobs()));
+    }
+  }
+  assert.equal(selectCI([{...run(), id: 99, event: 'push', conclusion: 'cancelled'}, run()], target).id, 12);
+  assert.equal(selectCI([{...run(), run_attempt: 2, conclusion: 'cancelled'}, run()], target).run_attempt, 2);
+});
+test('every required job must exist exactly once and actually succeed', () => {
+  assert.doesNotThrow(() => assertCI(target, run(), jobs()));
+  for (const rows of [[], jobs().slice(1), [...jobs(), jobs()[0]], jobs().map(j => ({...j, conclusion: 'skipped'})),
+    jobs().map(j => ({...j, status: 'in_progress'}))]) assert.throws(() => assertCI(target, run(), rows));
+});
+test('enumeration reaches later pages and pins jobs to the selected attempt', () => {
+  const calls = [];
+  const result = collectCI(pr, pr.base, path => {
+    calls.push(path);
+    return {total_count: 101, workflow_runs: path.endsWith('page=1') ? Array.from({length: 100}, (_, i) => ({...run(), id: i + 20, event: 'push'})) : [run()]};
+  }, path => {assert.match(path, /\/12\/attempts\/1\/jobs/); return [{jobs: jobs()}];});
+  assert.equal(calls.length, 2); assert.equal(result.status, 'ready');
+  assert.throws(() => collectCI(pr, pr.base, () => ({total_count: 1001, workflow_runs: []}), () => []));
+  assert.throws(() => collectCI(pr, pr.base, () => {throw new Error('API unavailable');}, () => []));
+});
+test('branch admission omits only obsolete heads or matching open PRs; errors retain tests', async () => {
+  const context = {repository, ref: 'work', head};
+  const get = rows => async path => path.startsWith('git/') ? {object: {sha: head}} : rows;
+  assert.equal((await branchAdmission(context, get([{...pr, state: 'open'}]))).run, false);
+  for (const rows of [[], [{...pr, state: 'closed'}], [{...pr, state: 'open', head: {...pr.head, sha: base}}],
+    [{...pr, state: 'open', head: {...pr.head, repo: {full_name: 'external/fork'}}}]]) {
+    assert.equal((await branchAdmission(context, get(rows))).run, true);
+  }
+  assert.equal((await branchAdmission(context, async () => {throw Error('offline');})).run, true);
+  assert.equal((await branchAdmission(context, async () => ({object: {sha: base}}))).run, false);
+});
+
+test('malformed ref metadata cannot suppress branch validation', async () => {
+  assert.equal((await branchAdmission({repository, ref: 'work', head}, async () => ({}))).run, true);
+});

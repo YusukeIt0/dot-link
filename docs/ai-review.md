@@ -68,7 +68,7 @@ node scripts/check-review-before-merge.mjs <PR-number>
 
 The check requires a completed comment from the configured bot for the current
 head and `main`, successful intake/review/report jobs from its owning workflow,
-passing required checks, and GitHub-confirmed mergeability. It returns the exact
+passing required checks, current exact-head/base PR CI selected by the shared CI policy, and GitHub-confirmed mergeability. It returns the exact
 head SHA; use that SHA with `gh pr merge --match-head-commit` to reject a concurrent
 head update. Repeat the check after any head/base/discussion change. Older comments
 without a revision receipt require a fresh review. The check never merges or
