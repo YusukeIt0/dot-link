@@ -69,5 +69,7 @@
   "analyticsClose": "關閉",
   "analyticsInternal": "將此瀏覽器排除於報表之外",
   "analyticsInternalNote": "僅適用於此瀏覽器。清除網站資料會移除此設定。其他裝置需個別設定。",
-  "analyticsStorageError": "無法儲存您的選擇，分析功能已關閉。請允許網站儲存資料，以記住您的選擇。"
+  "analyticsStorageError": "無法儲存您的選擇，分析功能已關閉。請允許網站儲存資料，以記住您的選擇。",
+  "fixMap": "修正地圖",
+  "poweredBy": "資料支援："
 }

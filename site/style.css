@@ -63,6 +63,7 @@ figcaption { color: var(--muted); font-size: 11px; line-height: 1.6; margin-top:
 .setup-steps li { padding-inline-start: 8px; font-size: 16px; }
 .setup-steps li::marker { color: var(--muted); }
 .site-footer { border-top: 1px solid var(--line); padding-block: 30px 36px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 16px 30px; color: var(--muted); font-size: 12px; }
+.footer-credits { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 24px; }
 .footer-links { display: flex; flex-wrap: wrap; gap: 24px; }
 .independent { flex-basis: 100%; font-size: 11px; }
 .footer-secondary { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 30px; }
