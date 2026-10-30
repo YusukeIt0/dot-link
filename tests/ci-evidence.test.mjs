@@ -61,3 +61,17 @@ test('branch admission omits only obsolete heads or matching open PRs; errors re
 test('malformed ref metadata cannot suppress branch validation', async () => {
   assert.equal((await branchAdmission({repository, ref: 'work', head}, async () => ({}))).run, true);
 });
+
+import {currentCI} from '../scripts/ci-current.mjs';
+test('late starts and stale retries cannot execute expensive tests against a moved PR/ref', () => {
+  const event = {pull_request: {...pr, state: 'open'}};
+  assert.equal(currentCI('pull_request', event, event.pull_request), true);
+  for (const mutate of [p => p.state = 'closed', p => p.head.sha = base,
+    p => p.base.sha = head, p => p.base.ref = 'other', p => p.head.repo.full_name = 'other/fork']) {
+    const current = structuredClone(event.pull_request); mutate(current);
+    assert.equal(currentCI('pull_request', event, current), false);
+  }
+  assert.equal(currentCI('push', {after: head}, {object: {sha: head}}), true);
+  assert.equal(currentCI('push', {after: head}, {object: {sha: base}}), false);
+  assert.equal(currentCI('push', {}, {}), false);
+});
