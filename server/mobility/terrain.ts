@@ -93,9 +93,9 @@ export class TerrainProvider {
       ascent += Math.max(0, delta); descent += Math.max(0, -delta);
       maximumGrade = Math.max(maximumGrade, Math.abs(delta) / samples.spacing * 100);
     }
-    const complete = values.every(v => v !== null), round = (v: number) => Math.round(v);
-    return {status: complete ? 'available' : covered ? 'partial' : 'unavailable',
-      source: 'Mapzen Terrain Tiles', model: 'Terrarium', confidence: 'unvalidated_model_estimate', zoom: 12,
+    const complete = values.every(v => v !== null), suspect = maximumGrade > 40, usable = complete && !suspect, round = (v: number) => Math.round(v);
+    return {status: usable ? 'available' : covered ? 'partial' : 'unavailable',
+      source: 'Mapzen Terrain Tiles', model: 'Terrarium', confidence: suspect ? 'suspect_surface_profile' : 'unvalidated_model_estimate', zoom: 12,
       attribution_url: 'https://github.com/tilezen/joerd/blob/master/docs/attribution.md',
       sampled_at: new Date(this.now()).toISOString(), sample_count: values.length,
       sample_spacing_m: Math.round(samples.spacing * 10) / 10,
@@ -103,8 +103,8 @@ export class TerrainProvider {
       covered_segments: covered, total_segments: values.length - 1,
       origin_elevation_m: values[0] == null ? null : round(values[0]),
       destination_elevation_m: values.at(-1) == null ? null : round(values.at(-1)!),
-      ascent_m: complete ? round(ascent) : null, descent_m: complete ? round(descent) : null,
-      maximum_sampled_grade_percent: complete ? Math.round(maximumGrade * 10) / 10 : null,
-      limitations: [...terrainLimitations, ...(!complete ? ['Missing samples; complete-route ascent, descent and grade are unknown.'] : [])]};
+      ascent_m: usable ? round(ascent) : null, descent_m: usable ? round(descent) : null,
+      maximum_sampled_grade_percent: usable ? Math.round(maximumGrade * 10) / 10 : null,
+      limitations: [...terrainLimitations, ...(suspect ? ['A model segment exceeds the conservative 40% screening threshold; route totals and grade are withheld. This can reflect genuine steep terrain or model artifacts and does not establish an impassable path.'] : []), ...(!complete ? ['Missing samples; complete-route ascent, descent and grade are unknown.'] : [])]};
   }
 }

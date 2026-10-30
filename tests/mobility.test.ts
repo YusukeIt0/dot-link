@@ -4,7 +4,6 @@ import {deflateSync} from 'node:zlib';
 import {MobilityNetwork} from '../server/mobility/network.ts';
 import {crc32, decodeTerrarium} from '../server/mobility/terrarium.ts';
 import {TerrainProvider, samplePath} from '../server/mobility/terrain.ts';
-import {decodePolyline, normalizeItinerary, TransitousProvider} from '../server/mobility/transitous.ts';
 
 function chunk(type: string, data: Buffer) {
   const result = Buffer.alloc(data.length + 12); result.writeUInt32BE(data.length);
@@ -52,17 +51,17 @@ test('network rejects oversized streams, redirects policy and unapproved hosts; 
   });
   await assert.rejects(net.bytes(new URL('https://example.com'),abort().signal,10),/Unsupported/);
   assert.equal(calls,0);
-  await assert.rejects(net.bytes(new URL('https://api.transitous.org/x'),abort().signal,5),/Oversized/);
-  assert.equal((await net.bytes(new URL('https://api.transitous.org/x'),abort().signal,6)).length,6);
+  await assert.rejects(net.bytes(new URL('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/1/1.png'),abort().signal,5),/Oversized/);
+  assert.equal((await net.bytes(new URL('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/1/1.png'),abort().signal,6)).length,6);
   const controller=abort();controller.abort();
-  await assert.rejects(net.bytes(new URL('https://api.transitous.org/x'),controller.signal,6),{name:'AbortError'});
+  await assert.rejects(net.bytes(new URL('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/1/1.png'),controller.signal,6),{name:'AbortError'});
   assert.equal(calls,2);
   assert.deepEqual(net.stats(),{requests:2,received_bytes:12});
 });
 test('network has global three-request cap and no hidden backlog',async()=>{
   let release!:()=>void;const wait=new Promise<void>(r=>release=r);
   const net=new MobilityNetwork(async()=>{await wait;return response('ok');});
-  const url=new URL('https://api.transitous.org/x');const running=[1,2,3].map(()=>net.bytes(url,abort().signal,10));
+  const url=new URL('https://s3.amazonaws.com/elevation-tiles-prod/terrarium/12/1/1.png');const running=[1,2,3].map(()=>net.bytes(url,abort().signal,10));
   await assert.rejects(net.bytes(url,abort().signal,10),/busy/);release();await Promise.all(running);
   assert.equal((await net.bytes(url,abort().signal,10)).toString(),'ok');
 });
@@ -89,33 +88,15 @@ test('sampled path follows geometry and crosses the dateline by the short direct
   assert.ok(sampled.points.every(p=>Math.abs(p.longitude)>179.99));assert.ok(sampled.spacing<=50);
   assert.throws(()=>samplePath([{latitude:0,longitude:0},{latitude:0,longitude:100}]),/bounds/);
 });
-function journey(mode='WALK') {
-  const startTime='2026-10-30T10:00:00Z',endTime='2026-10-30T10:10:00Z';
-  return {duration:600,startTime,endTime,transfers:0,legs:[{mode,from:{name:'Origin',lat:0,lon:0},to:{name:'Destination',lat:0,lon:.01},
-    duration:600,distance:1000,startTime,endTime,realTime:false,
-    steps:[{relativeDirection:'STAIRS',distance:25},{relativeDirection:'CONTINUE',distance:975}]}]};
-}
-test('walking and transit preserve waits, missing vehicle distance and stairs without invented elevation/realtime age',()=>{
-  const row=journey();const result=normalizeItinerary(row,'2026-10-30T09:55:00Z','walking');
-  assert.equal(result.waiting_seconds,300);assert.equal(result.elapsed_from_requested_departure_seconds,900);
-  assert.equal(result.legs[0]!.stairs_sections,1);assert.equal(result.legs[0]!.realtime_observed_at,null);
-  const transit=journey('BUS');delete (transit.legs[0] as {distance?:number}).distance;
-  assert.equal(normalizeItinerary(transit,row.startTime,'transit').legs[0]!.distance_m,null);
-  assert.throws(()=>normalizeItinerary({...row,endTime:'2026-10-30T09:00:00Z'},row.startTime,'walking'),/time/);
-  assert.throws(()=>normalizeItinerary(row,row.startTime,'transit'),/Not a transit/);
-  assert.throws(()=>decodePolyline('_',6),/encoding/);
-});
-test('separate mode queries retain slower transit and no-candidate results remain unknown',async()=>{
-  const queries:URL[]=[];
-  const provider=new TransitousProvider(new MobilityNetwork(async(url)=>{
-    const parsed=new URL(String(url));queries.push(parsed);
-    return response(JSON.stringify({direct:parsed.searchParams.get('directModes')==='WALK'?[journey()]:[],
-      itineraries:parsed.searchParams.get('transitModes')==='TRANSIT'?[journey('BUS')]:[]}));
-  }));
-  const result=await provider.plan({latitude:0,longitude:0},{latitude:0,longitude:.01},journey().startTime,abort().signal);
-  assert.equal(queries.length,2);assert.equal(result.walking.status,'available');assert.equal(result.transit.status,'available');
-  assert.ok(queries.every(q=>!(q.searchParams.get('directModes')&&q.searchParams.get('transitModes'))));
-  const sparse=new TransitousProvider(new MobilityNetwork(async()=>response('{"direct":[],"itineraries":[]}')));
-  const missing=await sparse.plan({latitude:0,longitude:0},{latitude:0,longitude:.01},journey().startTime,abort().signal);
-  assert.equal(missing.transit.status,'unavailable');assert.match(missing.transit.limitation,/does not establish absence/);
+test('suspect raster jumps withhold route totals instead of publishing an apparent extreme slope',async()=>{
+  class SpikyTerrain extends TerrainProvider {
+    override async elevations(points: {latitude:number;longitude:number}[],_signal:AbortSignal) {
+      return points.map((_,i)=>i===1?100:0);
+    }
+  }
+  const terrain=new SpikyTerrain(new MobilityNetwork(async()=>{throw new Error('No network expected');}));
+  const result=await terrain.profile([{latitude:0,longitude:0},{latitude:0,longitude:.001}],abort().signal);
+  assert.equal(result.confidence,'suspect_surface_profile');assert.equal(result.status,'partial');
+  assert.equal(result.ascent_m,null);assert.equal(result.maximum_sampled_grade_percent,null);
+  assert.equal(result.origin_elevation_m,0);assert.match(result.limitations.at(-1)!,/does not establish an impassable/);
 });

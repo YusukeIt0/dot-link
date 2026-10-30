@@ -1,97 +1,147 @@
 # Mobility evidence
 
-This work is staged under #242. The adapters in `server/mobility/` are not yet
-called by the application. They provide evidence for the existing Dot to interpret;
-they do not introduce another assistant, a navigation interface or route polling.
-The next integration stage must bind every request to current location consent,
-freshness, owner/session identity and a known destination, with explicit consent
-for external queries and cancellation on stop. No destination may be guessed.
+Staged under #242. The adapters in `server/mobility/` are not yet called by the
+application. They supply evidence for Dot to interpret, without another assistant,
+navigation interface or background route polling. The integration stage must bind
+each request to current location consent, freshness, owner/session identity and a
+known destination, with explicit consent for external queries and cancellation on
+stop. No destination may be guessed. No paid API, billing fallback, end-user
+registration or API-key setup is introduced.
 
-## Sources and adoption boundary
+## Source selection
 
-[Transitous](https://transitous.org/api/) is a **conditional** candidate, not an
-approved production dependency. Its policy requires noncommercial open-source
-usage and coordination for automated, high-volume or many-user applications.
-Formal adoption must resolve that fit before enabling distributed builds. No paid
-API, billing account or billable fallback is introduced. Do not infer permission
-from successful public probes. [Provider privacy](https://transitous.org/privacy/)
-covers URL/IP logs: routing URLs disclose origin, destination and departure time.
-Visible credits must link [Transitous sources](https://transitous.org/sources/)
-and [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
-The adapter returns these references and sends the actual package version and
-project contact URL in User-Agent. The integration must present credits in-app.
+| Source | Use and limits | Decision |
+| --- | --- | --- |
+| [FOSSGIS OSRM](https://routing.openstreetmap.de/about.html) | Worldwide OSM walking graph; no key; one request/second, no heavy use | Walking candidate, subject to the contact/credit publication gate below |
+| [Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) | Public raster model; no key; mixed source resolution and age | Terrain estimates, with missing/suspect profiles withheld |
+| [Entur](https://developer.entur.no/docs/getting-started) | Official Norwegian transit planning; no account or partnership for open services; application identification required | Regional transit source, explicitly not worldwide coverage |
+| [Transitous](https://transitous.org/api/) | Broad transit coverage, but noncommercial-only and coordination for automated/many-user use | Removed from the implementation; no contact or formal adoption |
+| [Transitland](https://www.transit.land/documentation/concepts/routing-graph-and-costing) | Registered free tier; transit routing currently US-focused | Not selected: account and regional constraints |
+| [openrouteservice](https://giscience.github.io/openrouteservice/frequently-asked-questions) | Free key, per-user registration or a maintained central proxy | Not selected for the no-registration client path |
+| [Apple MapKit](https://developer.apple.com/support/terms/apple-developer-program-license-agreement/) | Fast native routing, but Attachment 6 requires corresponding Apple map presentation when displaying map data | Poor fit for conversation-only presentation |
+| Local BRouter / OTP / MOTIS with OSM and transit feeds | No hosted API charge, but graph downloads, feed licensing, storage and maintenance remain | Not selected as an implicit additional user/server operational burden |
 
-[Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) supply public
-Terrarium rasters. Tile requests disclose an area and client IP. The provider has
-no account or billing key in this implementation. These rasters are models with
-mixed sources, resolution and age, not exact road, bridge, tunnel or building
-heights. Buildings' height is not established by terrain elevation. See
-[terrain attribution](terrain-attribution.md), included for redistribution and
-required in the eventual application's source/credit presentation.
+Regional sources can be combined; lack of a suitable regional source is unknown
+coverage, not absence of transport. This version has **Norwegian scheduled transit
+coverage only**. It does not promise timetables in other countries or replace
+missing transit with a claim that walking is the only option. Dot can use its other
+available knowledge/tools, but this code does not assume those tools exist or have
+verified any additional transport service.
 
-## Evidence contracts and bounds
+### Publication and usage gates
 
-- Walking and transit use separate requests, so a quick walk does not hide transit.
-  Direct walking is bounded to four hours; the transit departure search window is
-  one hour. At most three candidates per mode are returned. These are source and
-  query limits, not an exhaustive account of transport in a region.
-- Candidates preserve access/egress walking, leg times, waiting, transfers, route
-  labels, cancellation flags and reported stairs. Vehicle-leg distance may be
-  absent. Missing step information is unknown; zero reported stairs is not proof
-  of accessibility. Provider realtime flags are retained, but their measurement
-  age is unknown; retrieval time is not a realtime observation timestamp.
-- Empty, malformed or failed results stay unknown/unavailable. They do not prove
-  that no path or transport exists. Dot decides whether a limitation matters to
-  the conversation; ordinary responses must not become an error/setup workflow.
-- Source names/labels are untrusted data, never instructions. No route is certified
-  safe, open, accessible or physically traversable by these responses.
-- Fixed HTTPS origins, no redirects/retries/credentials; three global requests,
-  15-second request deadlines, 2 MiB maximum route responses and 512 KiB tiles.
-  Body streaming enforces limits regardless of Content-Length. No source URL or
-  response is logged by adapters.
-- Terrain uses zoom 12, at most 12 tiles and 257 path samples per operation, with
-  a 20-second terrain deadline. A public-raster memory cache retains at most 16
-  tiles for up to one hour; `clear()` discards it. No disk writes or movement trail.
-  Walking geometry is capped at 10,000 vertices and 100 km for terrain sampling.
-- The PNG decoder checks chunk CRC/order, dimensions, color depth, compression,
-  filters and bounded inflate output; only 256px non-interlaced RGB/RGBA is accepted.
-  Transparent/extreme values stay missing. Bilinear sampling uses pixel centers,
-  clamps tile-edge pixels and records approximate raster/sample spacing.
-- Ascent/descent and maximum sampled grade are unvalidated raster estimates.
-  They can include surface/noise artifacts and miss small steep sections. Missing
-  samples make complete-route totals unknown. Never turn a maximum into a claim
-  of a verified steep road. No clinical exertion or personalized effort model.
+FOSSGIS's [full policy](https://www.fossgis.de/arbeitsgruppen/osm-server/nutzungsbedingungen/)
+requires visible OSM/ODbL credits, a fix-map link, valid identification, low traffic,
+and a reachable email contact on the application website/store listing. The short
+routing guide does not include every condition. A public support email is still
+pending maintainer designation; do not activate or distribute this provider until
+that contact and the in-app/web credits are prepared. Existing GitHub Issues contact
+alone is not treated as meeting the email requirement. Commercial/high-volume use
+must be reassessed against the policy rather than assumed unrestricted.
+
+Entur's [terms](https://developer.entur.no/terms-of-service) permit reuse including
+commercial use under NLOD, with attribution, a licence link and notice of changes.
+The client identifies itself as `dotlink-mobility`; no user identity or credential
+is submitted. [Rate limits](https://developer.entur.no/docs/open-services/journey-planner/rate-limiting)
+apply. No throttling workaround or automatic retry is implemented.
+
+Terrain credits are recorded in [terrain attribution](terrain-attribution.md).
+They must be accessible from the eventual application's source/credit presentation.
+No service offers an availability, completeness or navigation-safety guarantee.
+
+## Privacy and data contracts
+
+Walking sends exact origin/destination coordinates to FOSSGIS; the provider states
+that route requests are logged. Entur receives origin/destination and departure
+time in a POST body. Its terms describe standard metadata/IP/path/client-name
+logging retained for 14 months; do not claim that query bodies are logged when the
+policy only establishes metadata. Terrain tile requests reveal the requested area
+and client IP to the tile host. These are new exposures compared with approximate
+Overture regions and must be disclosed with the opt-in before application activation.
+
+All outputs are transient. No adapter writes locations, destinations, query URLs or
+responses to disk/logs. A bounded memory cache stores public terrain rasters only.
+Provider names and labels are untrusted data, not instructions.
+
+Walking candidates retain graph geometry, segment names, modeled distance/time and
+ferry segments. The graph snaps each endpoint within 100 m; the exact gap and
+**unknown connector access** are retained. No straight-line connector is invented.
+Route endpoints, mode and totals are checked. Stairs, surface access, ferry waits,
+service schedules, live accessibility and exact road grades remain unknown.
+
+Transit preserves walking access, times, scheduled versus expected times, waiting,
+vehicle transfers and realtime flags. Realtime observation age, cancellation and
+current service operation are unknown in this adapter. Requests for walking and
+transit are independent, but the transit source can itself omit slower alternatives.
+No returned candidate means only that this bounded source query produced no usable
+evidence. Ordinary conversation must continue without an error/setup workflow.
+
+## Resource and quality bounds
+
+- Fixed HTTPS provider hosts/paths, no redirects, credentials or automatic retries.
+  Three requests globally; no hidden queue. Each request has a 15-second deadline,
+  streamed response enforcement, 2 MiB route limit or 512 KiB tile limit.
+- Walking uses one connection and at least 1.1 seconds between starts across network
+  instances. A busy source fails immediately. HTTP 429/503 impose at least a
+  60-second cooldown and honor a longer valid Retry-After. Cooldowns are in memory.
+- Walking output has at most three routes, 10,000 vertices/100 km per route and
+  2,000 steps per route. No more than 48 hours of modeled travel is admitted.
+- Entur searches only when both points fall in a coarse Norway search envelope
+  (57–72 N, 4–32 E). This is an admission envelope, not a country classifier or a
+  coverage guarantee; boundary areas may return no usable result. Up to three
+  candidates and 40 legs are admitted. Whole journeys must fit a two-day window.
+- Terrain uses zoom 12, at most 12 tiles and 257 path samples per operation, with a
+  20-second deadline. The memory cache retains at most 16 tiles for one hour;
+  `clear()` discards it. A missing sample withholds complete-route totals.
+- The PNG decoder checks CRC, chunk order, dimensions, color depth, filters and
+  bounded inflate output; only 256px non-interlaced RGB/RGBA is accepted. Missing,
+  transparent or extreme samples are not interpreted as flat ground.
+- Raster ascent/descent and maximum sampled grade are unvalidated estimates,
+  not road/bridge/tunnel/building heights or personalized exertion predictions.
+  A sampled segment over 40% marks a **suspect surface profile** and withholds
+  route totals/grade. This conservative screening heuristic is not a terrain
+  truth test: it can reject genuinely steep terrain and cannot detect all artifacts.
+  It does not establish an impassable route. Remaining estimates still carry the
+  resolution/noise/unknown-age limitations. Short steep sections can be missed.
 
 ## Verification
 
-`node --test tests/mobility.test.ts` covers decoding/filter/CRC/dimension failures,
-network limits and concurrency, cancellation, tile bounds, missing coverage,
-dateline sampling, time validation, waiting, optional vehicle distance, separate
-mode queries and sparse results. These synthetic checks are distinct from real
-provider and installed-Dot observations.
+`node --test tests/mobility*.test.ts` covers bounded decoding, streaming, concurrency,
+cancellation, cache/tile limits, missing/suspect terrain, dateline sampling, snapped
+endpoint gaps, route totals/modes, transit time consistency and out-of-region
+no-request behavior. These synthetic checks are distinct from live providers and
+installed-Dot observations.
 
-`node scripts/measure-mobility.mjs berlin|sf-hill|amazon` makes explicit network
-requests using public fixtures only. It is never run by the application or test
-suite. October 30, 2026 single-run observations on the development Mac:
+`node scripts/measure-mobility.mjs berlin|sf-hill|amazon|oslo` makes explicit public
+fixture requests only, never from the test suite or normal location updates.
+October 30, 2026 observations on the development Mac, not guarantees:
 
-| Public fixture | Route query | Total with terrain | Walking | Transit |
-| --- | ---: | ---: | --- | --- |
-| Berlin | 2.237 s | 3.666 s | 2,722 m / 2,275 s | Three candidates; first journey 780 s |
-| SF hill | 1.158 s | 3.272 s | 1,233 m / 1,035 s; seven reported stair sections | Three candidates, including a slower alternative |
-| Sparse Amazon | 1.529 s | 4.217 s | 7,067 m / 7,504 s | No candidate in this query window |
+- FOSSGIS public raw probes: Berlin 1.716 s, 44,008 bytes, first route 2,732 m;
+  SF hill 0.934 s, 28,237 bytes, 1,236 m; Bangkok 1.169 s, 27,380 bytes, 2,342 m.
+  Endpoint gaps ranged from 3 to 36 m. The sparse Amazon probe returned an HTTP
+  error; it was not classified as evidence that no path exists.
+- Entur public Oslo probe: 1.278 s, 4,552 bytes, three transit candidates.
+- Combined Oslo adapters: routes in 1.090 s; terrain completion 4.758 s; four
+  requests/272,600 bytes; peak process RSS 125,872 KiB. Walking and transit both
+  returned candidates. The initial raster yielded a suspect 94.6% segment, which
+  motivated the screening guard; that value is not accepted as a road gradient.
+- Previous Transitous probes are historical comparison only: Berlin/SF/sparse
+  queries completed with terrain in 3.3–4.3 s. Those observations do not authorize
+  that service's use and no Transitous calls remain in the implementation.
 
-Peak process RSS was 118–121 MB. After correcting pixel-center interpolation,
-replay of SF's captured route/tile estimated approximately 81 m ascent and 56 m
-descent, with endpoint heights 66 m and 90 m. Berlin's raster still yields about
-38 m ascent and a 15% sampled maximum: these are **not verified street gradients**,
-and illustrate why raw terrain cannot certify a steep street or precise effort.
+Final provider-reselection runtime observations (same public fixtures):
 
-The sparse fixture's original short-default query returned no routes; explicit
-four-hour walking bounds found a long detour. This demonstrates why query absence
-must never become a claim that a path does not exist. These are changing provider
-results, not coverage/performance guarantees. Physical behavior, consent UI,
-ordinary-conversation responsiveness and Dot interpretation remain parent gates.
+| Fixture | Routes available after | All requested evidence after | Walking | Transit | Terrain |
+| --- | ---: | ---: | --- | --- | --- |
+| Berlin | 924 ms | 2,467 ms | Two candidates | Outside this transit source | Model estimate |
+| SF hill | 614 ms | 2,053 ms | Two candidates | Outside this transit source | Model estimate |
+| Sparse Amazon | 823 ms | 2,139 ms | Unavailable in this query | Outside this transit source | Endpoint models only; no route profile |
+| Oslo | 1,996 ms | 5,170 ms | Two candidates | Three candidates | Suspect profile; totals/grade withheld |
 
-This adapter-only stage changes no active permission, setup, dependency, privacy
-flow or user-facing release note. Before activation, update privacy/setup/credits
-and cumulative release notes together with the consent and tool integration.
+Network totals were 28,669–272,587 bytes and peak RSS 113,504–125,488 KiB.
+These are individual observations, not performance or coverage guarantees.
+
+Before activation, update privacy/setup/credits and cumulative release notes with
+the consent/tool integration. This adapter-only stage does not change active
+permissions, setup, dependencies or user-facing releases. Actual Dot interpretation,
+normal-conversation responsiveness and affected-device acceptance remain #242 gates.
