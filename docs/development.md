@@ -298,11 +298,14 @@ run with missing/malformed provenance holds integration rather than reviving an
 older success. Runs from before receipt adoption need a fresh PR-triggered run;
 a rerun of an old event cannot add a new receipt.
 
-Title/body-only edits create isolated ignored runs with distinct ignored job names;
-they neither cancel current validation nor replace required `test`. Draft-ready
-transitions do not repeat tests. Base edits still run Tests. The shared selector
-excludes only the explicit ignored receipt, not arbitrary skipped runs. Advisory
-review reports unstable/unavailable CI evidence as held and continues; merge gates
+All PR edits, including title/body updates, run normal Tests with fixed job names.
+GitHub can replace an earlier required-check result with a newer skipped workflow
+suite; emitting ignored job names can strand required `test` as Expected. Accept
+this extra validation cost instead of weakening branch protection or introducing
+a separate dispatch layer. Draft-ready transitions do not repeat tests. The
+selector retains support for historical explicitly ignored receipts, but new runs
+do not emit them. Advisory review reports unstable/unavailable CI evidence as
+held and continues; merge gates
 still require complete evidence. For a current-context infrastructure failure, use
 a full workflow rerun because
 required jobs must all be present in the selected attempt.

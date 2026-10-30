@@ -1,7 +1,7 @@
 name: Tests
 # Run title is fixed at dispatch; run.pull_requests base metadata changes on retarget.
 run-name: >-
-  ${{ github.event.action == 'edited' && github.event.changes.base == null && format('CI ignored | pr={0} | head={1}', github.event.pull_request.number, github.event.pull_request.head.sha) || github.event_name == 'pull_request' && format('CI v1 | pr={0} | head={1} | base={2} | ref={3}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || format('CI v1 | push={0}', github.sha) }}
+  ${{ github.event_name == 'pull_request' && format('CI v1 | pr={0} | head={1} | base={2} | ref={3}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || format('CI v1 | push={0}', github.sha) }}
 on:
   push:
     branches: [main]
@@ -9,15 +9,13 @@ on:
     types: [opened, synchronize, reopened, edited]
 concurrency:
   # Manual retries cannot cancel the latest ordinary validation.
-  group: tests-${{ github.event.action == 'edited' && github.event.changes.base == null && format('ignored-{0}', github.run_id) || github.event.pull_request.number || github.ref }}-${{ github.run_attempt > 1 && github.run_id || 'current' }}
+  group: tests-${{ github.event.pull_request.number || github.ref }}-${{ github.run_attempt > 1 && github.run_id || 'current' }}
   cancel-in-progress: true
 permissions:
   contents: read
   pull-requests: read
 jobs:
   workflow-lint:
-    name: ${{ github.event.action == 'edited' && github.event.changes.base == null && 'ignored-workflow-lint' || 'workflow-lint' }}
-    if: ${{ github.event.action != 'edited' || github.event.changes.base != null }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -26,9 +24,8 @@ jobs:
           persist-credentials: false
       - run: sh scripts/check-workflows.sh
   test:
-    name: ${{ github.event.action == 'edited' && github.event.changes.base == null && 'ignored-test' || 'test' }}
     needs: workflow-lint
-    if: ${{ !cancelled() && (github.event.action != 'edited' || github.event.changes.base != null) }}
+    if: ${{ !cancelled() }}
     runs-on: macos-15
     timeout-minutes: 15
     steps:

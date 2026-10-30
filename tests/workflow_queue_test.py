@@ -54,11 +54,14 @@ class ProductCIValidation(unittest.TestCase):
         self.assertTrue({'opened', 'synchronize', 'reopened', 'edited'}.issubset(events['pull_request']['types']))
         self.assertEqual(ci['jobs']['test']['runs-on'], 'macos-15')
         self.assertEqual(ci['jobs']['test']['needs'], 'workflow-lint')
-        self.assertEqual(ci['jobs']['test']['if'], "${{ !cancelled() && (github.event.action != 'edited' || github.event.changes.base != null) }}")
+        self.assertEqual(ci['jobs']['test']['if'], "${{ !cancelled() }}")
         self.assertNotIn('ready_for_review', events['pull_request']['types'])
-        self.assertIn('ignored-{0}', ci['concurrency']['group'])
-        self.assertIn('CI ignored', ci['run-name'])
-        self.assertIn('ignored-test', ci['jobs']['test']['name'])
+        # Every admitted event must report the same branch-required check.
+        self.assertNotIn('if', ci['jobs']['workflow-lint'])
+        for name in ['workflow-lint', 'test']:
+            self.assertEqual(ci['jobs'][name].get('name', name), name)
+        self.assertNotIn('CI ignored', ci['run-name'])
+        self.assertNotIn('ignored-', ci['concurrency']['group'])
         self.assertTrue(ci['concurrency']['cancel-in-progress'])
         self.assertIn('github.run_attempt > 1', ci['concurrency']['group'])
         branch = yaml.safe_load(Path('.github/workflows/branch-ci.yml').read_text())
