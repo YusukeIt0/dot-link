@@ -111,7 +111,9 @@ export class TransitousProvider {
     // Separate queries preserve transit candidates even when the direct walk is faster.
     const [walking, transit] = await Promise.all([query('walking'), query('transit')]);
     signal.throwIfAborted();
-    return {source: 'Transitous / MOTIS', requested_departure: departure, retrieved_at: new Date().toISOString(),
+    return {source: 'Transitous / MOTIS', attribution: 'OpenStreetMap contributors and Transitous data providers',
+      attribution_url: 'https://transitous.org/sources/', map_license_url: 'https://www.openstreetmap.org/copyright',
+      requested_departure: departure, retrieved_at: new Date().toISOString(),
       query_bounds: {walking_max_seconds: 14400, transit_search_window_seconds: 3600, candidates_per_mode: 3},
       walking, transit,
       limitations: ['Coverage and realtime availability vary by feed and region. Realtime flags do not provide an observation timestamp.',

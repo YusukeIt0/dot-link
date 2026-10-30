@@ -1,3 +1,5 @@
+import {readFileSync} from 'node:fs';
+const {version} = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {version: string};
 /** Fixed provider origins only. No redirects, retries, credentials or URL logging. */
 export class MobilityNetwork {
   private active = 0;
@@ -15,7 +17,7 @@ export class MobilityNetwork {
     let response: Response | undefined;
     try {
       response = await this.request(url, {signal: combined, redirect: 'error', credentials: 'omit',
-        headers: {'User-Agent': 'Dot-Link/1 (+https://github.com/YusukeIt0/dot-link)'}});
+        headers: {'User-Agent': `Dot-Link/${version} (+https://github.com/YusukeIt0/dot-link)`}});
       if (!response.ok || !response.body) throw new Error('Mobility source unavailable');
       const declared = response.headers.get('content-length');
       if (declared !== null && (!/^\d+$/.test(declared) || Number(declared) > maximum)) throw new Error('Oversized mobility response');

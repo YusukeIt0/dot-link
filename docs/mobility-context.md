@@ -16,6 +16,10 @@ Formal adoption must resolve that fit before enabling distributed builds. No pai
 API, billing account or billable fallback is introduced. Do not infer permission
 from successful public probes. [Provider privacy](https://transitous.org/privacy/)
 covers URL/IP logs: routing URLs disclose origin, destination and departure time.
+Visible credits must link [Transitous sources](https://transitous.org/sources/)
+and [OpenStreetMap contributors](https://www.openstreetmap.org/copyright).
+The adapter returns these references and sends the actual package version and
+project contact URL in User-Agent. The integration must present credits in-app.
 
 [Mapzen Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) supply public
 Terrarium rasters. Tile requests disclose an area and client IP. The provider has
