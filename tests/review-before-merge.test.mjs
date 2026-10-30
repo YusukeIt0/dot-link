@@ -105,3 +105,19 @@ test('PR CI association must match the pinned parent',()=>{
  x.ciRun.pull_requests[0].base.ref=x.expectedBase;
  x.ciRun.pull_requests[0].base.sha='d'.repeat(40);assert.throws(()=>assertReady(x));
 });
+
+
+test('v2 main and child gates require current-base ancestry without relaxing review freshness', () => {
+  for (const make of [ready, childReady]) {
+    const x = make();
+    x.ciRun.display_title = x.ciRun.display_title.replace('CI v1', 'CI v2');
+    x.ciComparison = {status: 'ahead', merge_base_commit: {sha: x.base?.sha || x.main}};
+    assert.equal(assertReady(x), head);
+    const bad = structuredClone(x); delete bad.ciComparison;
+    assert.throws(() => assertReady(bad));
+    const moved = structuredClone(x); moved.ciComparison.merge_base_commit.sha = head;
+    assert.throws(() => assertReady(moved));
+    const edited = structuredClone(x); edited.pr.body += ' scope edit';
+    assert.throws(() => assertReady(edited), /description/);
+  }
+});

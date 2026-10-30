@@ -5,7 +5,7 @@ import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected, runCoordinator, candidates, AssessmentError, commandFailure} from '../scripts/auto-merge.mjs';
+import {assertProductCI, evaluate, collect, mergeEligible, mergeWithReassessment, snapshotHash, assertActivation, protectedChanges, deviceAffected, runCoordinator, candidates, AssessmentError, commandFailure} from '../scripts/auto-merge.mjs';
 import {policy, acceptanceMarker, scopeDigest, hash} from '../scripts/review-evidence.mjs';
 import {fingerprintPR, latestReceipt} from '../scripts/check-review-before-merge.mjs';
 
@@ -651,4 +651,15 @@ test('a head change during relationship reads is held but malformed or failed re
     assert.equal(rows[1].eligible, true);
     assert.equal(client.mutations.length, 0);
   }
+});
+
+
+test('automatic assessment enforces v2 current-base inclusion as well as fresh review', () => {
+  const s = fixture();
+  s.ciRun.display_title = s.ciRun.display_title.replace('CI v1', 'CI v2');
+  s.ciComparison = structuredClone(s.ancestry);
+  assert.doesNotThrow(() => assertProductCI(s.pr, s.main, s.ciRun, s.ciJobs, s.ciComparison));
+  assert.throws(() => assertProductCI(s.pr, s.main, s.ciRun, s.ciJobs));
+  const collected = collect(74, clientFor(s));
+  assert.deepEqual(collected.ciComparison, s.ciComparison);
 });

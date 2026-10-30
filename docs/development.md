@@ -272,8 +272,9 @@ validation. PR creation concurrent with a branch run may temporarily run both;
 branch-only and merge-context evidence are not interchangeable.
 
 Review evidence and both merge gates share `scripts/ci-evidence.mjs`: select the
-latest matching PR workflow and its latest attempt for the exact head/base, then
-require all jobs to succeed. Never search backward for a passing run. Cancelled,
+latest matching full PR workflow and its latest attempt for the exact head,
+verify current-base inclusion for v2 (exact dispatch base for v1), and require all
+jobs to succeed. Never search backward for a passing run. Cancelled,
 skipped, missing and stale evidence holds integration. Unknown fork association
 also holds it. Update a child after its parent advances and rerun CI/review.
 
@@ -281,8 +282,8 @@ Tests and branch validation use separate cancellation groups by PR/ref. Manual
 retries are isolated from ordinary runs so an old retry cannot cancel current
 validation. GitHub does not guarantee dispatch order: inspect the latest head and
 run after cancellation. A supersession failure requires updating the PR head from
-the current base (or another fresh PR event); rerunning the old event cannot refresh
-its pinned base. Rerun current-context infrastructure failures only when needed.
+the current base when it is not already included. A retry cannot change the tested
+head; never use one to certify a different revision. Rerun current-context infrastructure failures only when needed.
 Do not repeatedly restart healthy queued runs or describe runner-capacity recovery
 as a permanent capacity fix. Preserve independent review queues and Pages deploy
 serialization. Record run/attempt, head/base, execution and queue durations,
@@ -291,36 +292,29 @@ conclusions, selected evidence and any recovery in the existing PR.
 See [technical ownership](development-assurance.md#technical-ownership-across-agent-sessions)
 for the division between UX decisions and agent-owned implementation/verification.
 
-CI provenance is pinned in the `CI v1` run title at dispatch. GitHub's associated
-PR metadata can change when a PR is retargeted; it is not proof of the tested base.
-The selector checks both the fixed receipt and API association. A newer associated
-run with missing/malformed provenance holds integration rather than reviving an
-older success. Runs from before receipt adoption need a fresh PR-triggered run;
-a rerun of an old event cannot add a new receipt.
+Tests v2 checks out the exact PR head for both workflow lint and the full macOS
+suite. Before testing and before merging, GitHub's comparison must prove the
+current target base is an ancestor of that head (`ahead` or `identical`, with the
+base as merge base). Therefore the tested tree is the tree that will be integrated.
+If the target advances with new code, update the PR branch first; that new head
+triggers fresh validation. Main already requires an up-to-date branch, and child
+integration enforces the same rule. The runtime guard also verifies local HEAD.
 
-Title/body-only edits use a lightweight Ubuntu `test` check that verifies the
-latest real full Tests result for exactly the same repository, PR, head and base.
-It uses the shared CI selector and checks both original required jobs; it never
-accepts another metadata check as test evidence. A pending full run is awaited
-for at most 38 minutes; failed, cancelled, skipped, missing or stale evidence
-cannot pass. Current refs and the selected attempt are rechecked before success.
-The metadata job has a 40-minute timeout, while full workflow lint and product
-jobs retain their 5- and 15-minute limits. Hosted queueing has no guaranteed
-completion time. If a metadata check times out or has an API failure, first check
-the full source run. Once that full run passes, rerun the failed metadata workflow
-with all jobs. This rechecks existing evidence without repeating product tests;
-do not edit the PR to manufacture recovery or count the failed check as success.
-No external result cache, write token or dispatch service is needed.
+Title/body edits and retargeting do not start product CI. Retargeting to a base
+already included in the same tested head does not change the tested tree; the
+shared selector may reuse that full v2 run only after checking current ancestry.
+Retargeting to a base not included in the head holds integration until the branch
+is updated and tested. Independent review still pins the current target base,
+main, head, agreed scope and PR text; retargeting invalidates that review receipt.
+This separates code validation from review-context changes without a metadata
+workflow, result cache, polling loop or synthetic success check.
 
-Metadata checks have fixed job names so GitHub's latest suite still reports
-required `test`. Their concurrency group is separate from full validation: an
-edit cannot cancel a real test run. Code changes and base edits always run the
-full macOS suite. Draft-ready transitions do not repeat tests. Metadata receipt
-runs (and historical ignored receipts) are excluded by the shared selector;
-review and merge gates continue to require actual full validation. Advisory
-review reports unstable/unavailable CI evidence as held and continues. Use a
-full workflow rerun for current-context infrastructure recovery so all required
-jobs are present in the selected attempt.
+The fixed `CI v2` title records dispatch provenance. Mutable associated PR base
+metadata is never used as proof of the tested tree. Historical `CI v1` runs retain
+the stricter exact-dispatch-base rule; they are not upgraded to v2 evidence.
+A newer unknown, failed, skipped, cancelled or incomplete source holds integration
+instead of reviving an older success. Use a full workflow rerun for a transient
+infrastructure failure; all required jobs must exist in the selected attempt.
 
 Action runtimes are separate from the Node version used by project commands.
 Keep project Node pinned unless a separate compatibility change is justified.
