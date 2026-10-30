@@ -31,7 +31,7 @@ function fixture(number = 74) {
     `<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:456:1 -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=${head};main=${main};input=${fingerprint} -->\n\n<!-- dot-link-review-quality:${Buffer.from(JSON.stringify(quality)).toString('base64url')} -->`});
   const run = {id: 456, path: '.github/workflows/claude-review.yml', repository: {full_name: repository}, status: 'completed', conclusion: 'success', run_attempt: 1};
   const jobs = ['intake', 'review', 'report'].map(name => ({name, status: 'completed', conclusion: 'success'}));
-  const ciRun = {id: 789, run_attempt: 1, event: 'pull_request', head_branch: 'work', head_repository: {full_name: repository},
+  const ciRun = {display_title: `CI v1 | pr=${number} | head=${head} | base=${main} | ref=main`, id: 789, run_attempt: 1, event: 'pull_request', head_branch: 'work', head_repository: {full_name: repository},
     pull_requests: [{number, head: {sha: head}, base: {ref: 'main', sha: main}}], head_sha: head, path: '.github/workflows/ci.yml',
     repository: {full_name: repository}, status: 'completed', conclusion: 'success'};
   const ciJobs = policy.requiredJobs.map(name => ({name, status: 'completed', conclusion: 'success'}));
@@ -57,6 +57,7 @@ function clientFor(s, change) {
     if (path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED') return {value: policy.activationValue};
     if (path === 'actions/runs/456') return structuredClone(s.run);
     if (path.startsWith('actions/workflows/ci.yml/runs')) return {workflow_runs: structuredClone(s.ciRuns || [s.ciRun])};
+    if (/^actions\/runs\/\d+$/.test(path)) return structuredClone((s.ciRuns || [s.ciRun]).find(r => String(r.id) === path.split('/').at(-1)));
     if (path === 'branches/main/protection') return structuredClone(s.protection);
     if (path.startsWith('compare/')) return structuredClone(s.ancestry);
     throw new Error(`Unexpected API ${path}`);

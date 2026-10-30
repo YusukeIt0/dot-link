@@ -13,7 +13,7 @@ const ready = () => ({
   run:{id:456,path:'.github/workflows/claude-review.yml',repository:{full_name:'YusukeIt0/dot-link'},status:'completed',conclusion:'success',run_attempt:1},
   jobs:['intake','review','report'].map(name=>({name,status:'completed',conclusion:'success'})),
   checks:[{name:'test',bucket:'pass'}],
-  ciRun:{id:789,run_attempt:1,event:'pull_request',head_branch:'work',head_sha:head,
+  ciRun:{display_title:`CI v1 | pr=18 | head=${head} | base=${main} | ref=main`,id:789,run_attempt:1,event:'pull_request',head_branch:'work',head_sha:head,
     head_repository:{full_name:'YusukeIt0/dot-link'},repository:{full_name:'YusukeIt0/dot-link'},
     path:'.github/workflows/ci.yml',pull_requests:[{number:18,head:{sha:head},base:{ref:'main',sha:main}}],status:'completed',conclusion:'success'},
   ciJobs:['workflow-lint','test'].map(name=>({name,status:'completed',conclusion:'success'})),
@@ -55,6 +55,7 @@ function childReady() {
  const x=ready();x.expectedBase='refactor/parent';x.base={ref:x.expectedBase,sha:'c'.repeat(40)};
  x.baseComparison={status:'ahead',merge_base_commit:{sha:x.base.sha}};
  x.pr.head={...x.pr.head,ref:'child',repo:{full_name:'YusukeIt0/dot-link'}};
+ x.ciRun.display_title=`CI v1 | pr=18 | head=${head} | base=${x.base.sha} | ref=${x.base.ref}`;
  x.ciRun.head_branch='child';
  x.ciRun.pull_requests[0].base={...x.base};
  x.pr.base={...x.base};x.receipt={...x.receipt,base:x.base,

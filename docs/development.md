@@ -288,3 +288,10 @@ conclusions, selected evidence and any recovery in the existing PR.
 
 See [technical ownership](development-assurance.md#technical-ownership-across-agent-sessions)
 for the division between UX decisions and agent-owned implementation/verification.
+
+CI provenance is pinned in the `CI v1` run title at dispatch. GitHub's associated
+PR metadata can change when a PR is retargeted; it is not proof of the tested base.
+The selector checks both the fixed receipt and API association. A newer associated
+run with missing/malformed provenance holds integration rather than reviving an
+older success. Runs from before receipt adoption need a fresh PR-triggered run;
+a rerun of an old event cannot add a new receipt.

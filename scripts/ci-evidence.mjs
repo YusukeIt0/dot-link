@@ -13,18 +13,29 @@ export function ciTarget(pr, base) {
   return target;
 }
 
-export function matchesCI(run, target) {
+export const ciReceipt = target => `CI v1 | pr=${target.number} | head=${target.head} | base=${target.base} | ref=${target.baseRef}`;
+const hasReceipt = run => /^CI v1 \| pr=[1-9]\d* \| head=[a-f0-9]{40} \| base=[a-f0-9]{40} \| ref=\S+$/.test(run.display_title || '');
+function associatedCI(run, target) {
   return run?.path === ciPath && run.repository?.full_name === ciRepository &&
     run.event === 'pull_request' && run.head_sha === target.head && run.head_branch === target.headRef &&
     run.head_repository?.full_name === target.headRepository &&
-    run.pull_requests?.some(p => p.number === target.number && p.head?.sha === target.head &&
-      p.base?.ref === target.baseRef && p.base?.sha === target.base);
+    run.pull_requests?.some(p => p.number === target.number && p.head?.sha === target.head);
+}
+export function matchesCI(run, target) {
+  return associatedCI(run, target) && run.display_title === ciReceipt(target) &&
+    run.pull_requests.some(p => p.number === target.number && p.base?.ref === target.baseRef && p.base?.sha === target.base);
 }
 
 export function selectCI(runs, target) {
   if (!Array.isArray(runs)) throw new Error('Invalid CI response.');
-  // Select before considering success. Never fall back to an older green run.
-  return runs.filter(run => matchesCI(run, target))
+  // A known different base is irrelevant. Missing provenance on a newer associated
+  // run must HOLD, not silently resurrect an older green receipt.
+  return runs.filter(run => run?.path === ciPath && run.repository?.full_name === ciRepository &&
+    run.event === 'pull_request' && run.head_sha === target.head &&
+    (!run.head_branch || run.head_branch === target.headRef) &&
+    (!run.head_repository?.full_name || run.head_repository.full_name === target.headRepository) &&
+    (!run.pull_requests?.length || run.pull_requests.some(p => p.number === target.number)) &&
+    (!hasReceipt(run) || run.display_title === ciReceipt(target)))
     .sort((a, b) => b.id - a.id || b.run_attempt - a.run_attempt)[0];
 }
 
@@ -52,6 +63,13 @@ export function collectCI(pr, base, api, pages) {
     if (!Array.isArray(p.jobs)) throw new Error('Invalid CI jobs response.');
     return p.jobs;
   }) : [];
+  if (run) {
+    const fresh = api(`actions/runs/${run.id}`);
+    const identity = r => [r.id, r.run_attempt, r.status, r.conclusion, r.head_sha,
+      r.head_branch, r.display_title, r.path, r.repository?.full_name, r.head_repository?.full_name,
+      matchesCI(r, target)];
+    if (JSON.stringify(identity(run)) !== JSON.stringify(identity(fresh))) throw new Error('CI changed while collecting jobs.');
+  }
   let status = 'ready', reason = 'Current PR validation succeeded.';
   try { assertCI(target, run, jobs); }
   catch (error) { status = 'held'; reason = run ? error.message : 'No PR CI matches the current head and base.'; }
