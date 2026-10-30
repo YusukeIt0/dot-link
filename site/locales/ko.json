@@ -70,5 +70,6 @@
   "analyticsInternal": "이 브라우저를 보고서에서 제외",
   "analyticsInternalNote": "이 브라우저에만 적용됩니다. 사이트 데이터를 삭제하면 설정도 지워집니다. 다른 기기에서는 별도로 설정해야 합니다.",
   "analyticsStorageError": "선택을 저장하지 못해 분석이 꺼졌습니다. 선택을 기억하려면 사이트 데이터 저장을 허용해 주세요.",
-  "fixMap": "지도 수정"
+  "fixMap": "지도 수정",
+  "poweredBy": "Powered by"
 }

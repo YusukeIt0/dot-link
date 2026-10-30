@@ -70,5 +70,6 @@
   "analyticsInternal": "このブラウザを集計から除外する",
   "analyticsInternalNote": "このブラウザだけに適用されます。サイトデータを消去すると設定も消えます。他の端末では個別に設定してください。",
   "analyticsStorageError": "選択を保存できないため、解析はオフです。選択を記憶するにはサイトのデータ保存を許可してください。",
-  "fixMap": "地図を修正"
+  "fixMap": "地図を修正",
+  "poweredBy": "Powered by"
 }

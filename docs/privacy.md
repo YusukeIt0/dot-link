@@ -140,4 +140,4 @@ Google signals, advertising personalization and user-provided-data collection ar
 
 ## Contact
 
-Contact [yusuke.ito@tripsurf.app](mailto:yusuke.ito@tripsurf.app) for support. Use [GitHub Issues](https://github.com/YusukeIt0/dot-link/issues) for non-sensitive reports. Do not attach credentials, pairing codes, recordings, conversations or unreviewed diagnostic files.
+For non-sensitive reports, use [GitHub Issues](https://github.com/YusukeIt0/dot-link/issues) or [email support](mailto:yusuke.ito@tripsurf.app). Do not attach credentials, pairing codes, recordings, conversations or unreviewed diagnostic files.

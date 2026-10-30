@@ -70,5 +70,6 @@
   "analyticsInternal": "Exclure ce navigateur des rapports",
   "analyticsInternalNote": "Ce réglage concerne uniquement ce navigateur. Effacer les données du site le supprime. Les autres appareils doivent être configurés séparément.",
   "analyticsStorageError": "Votre choix n’a pas pu être enregistré. Les statistiques sont désactivées. Autorisez le stockage du site pour mémoriser votre choix.",
-  "fixMap": "Corriger la carte"
+  "fixMap": "Corriger la carte",
+  "poweredBy": "Propulsé par"
 }
