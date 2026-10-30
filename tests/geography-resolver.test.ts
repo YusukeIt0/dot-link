@@ -138,7 +138,10 @@ test('partial evidence survives repeated failed retries and retry delay increase
 test('a continuously used stationary region still refreshes when its map ages',async()=>{
  const s=await setup();try {
   s.resolver.update(first);await until(()=>s.calls.length===1);s.calls[0].resolve(dataset(first,'Initial map'));
-  await until(()=>s.updates.at(-1)?.state==='ready');await new Promise(resolve=>setTimeout(resolve,10));
+  await until(()=>s.updates.at(-1)?.state==='ready');
+  // ready is emitted before the asynchronous cache write settles. Advancing the
+  // fake clock after a fixed delay races that write on a loaded CI host.
+  assert.ok(await s.cache.get(`normalized-${geographicRegion(first)!.key}`));
   s.advance(8*86_400_000);s.resolver.update(first);await until(()=>s.calls.length===2);
   assert.equal(s.updates.at(-1)?.state,'stale');assert.equal(s.updates.at(-1)?.evidence?.landmarks[0].name,'Initial map');
   s.calls[1].resolve(dataset(first,'Refreshed map'));await until(()=>s.updates.at(-1)?.state==='ready');
