@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ciTarget, ciReceipt, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
+import {ciTarget, ciReceipt, ciMetadataReceipt, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
 import {branchAdmission} from '../scripts/branch-ci-admission.mjs';
 const repository = 'YusukeIt0/dot-link', head = 'b'.repeat(40), base = 'a'.repeat(40);
 const pr = {number: 7, head: {sha: head, ref: 'work', repo: {full_name: repository}}, base: {ref: 'main', sha: base}};
@@ -109,4 +109,71 @@ test('fresh base ref overrides lagging PR metadata after parent advancement', ()
   const event = {pull_request: {...pr, state: 'open'}};
   assert.equal(currentCI('pull_request', event, event.pull_request, 'c'.repeat(40)), false);
   assert.equal(currentCI('pull_request', event, event.pull_request), false);
+});
+
+import {verifyMetadataCI} from '../scripts/ci-metadata-check.mjs';
+const metadataEvent = () => ({action: 'edited', changes: {title: {from: 'old'}}, pull_request: structuredClone(pr)});
+const readCurrent = () => ({pr: {...pr, state: 'open'}, base: pr.base});
+const ready = () => ({status: 'ready', run: run(), jobs: jobs()});
+
+test('metadata receipts never replace actual full test evidence or certify themselves', () => {
+  const metadata = {...run(), id: 50, display_title: ciMetadataReceipt(target)};
+  assert.equal(selectCI([metadata], target), undefined);
+  assert.equal(matchesCI(metadata, target), false);
+  assert.throws(() => assertCI(target, metadata, jobs()));
+  for (const conclusion of ['success', 'failure', 'cancelled', 'skipped']) {
+    assert.equal(selectCI([metadata, {...run(), conclusion}], target).id, 12);
+  }
+  const otherBase = {...metadata, display_title: ciMetadataReceipt({...target, base: head})};
+  assert.equal(selectCI([run(), otherBase], target).id, 12);
+});
+
+test('metadata verification rechecks current refs and exact full run attempt', async () => {
+  let reads = 0, collects = 0;
+  const result = await verifyMetadataCI({event: metadataEvent(), readCurrent: () => {reads++; return readCurrent();},
+    collect: () => {collects++; return ready();}});
+  assert.deepEqual(result, {id: 12, attempt: 1});
+  assert.equal(reads, 3); assert.equal(collects, 2);
+  for (const change of [r => r.run.run_attempt++, r => r.run.id++, r => r.status = 'held']) {
+    let calls = 0;
+    await assert.rejects(verifyMetadataCI({event: metadataEvent(), readCurrent,
+      collect: () => {const value = ready(); if (++calls === 2) change(value); return value;}}), /changed/);
+  }
+});
+
+test('metadata edits wait for an existing pending full run without rerunning tests', async () => {
+  let clock = 0;
+  const result = await verifyMetadataCI({event: metadataEvent(), readCurrent, now: () => clock,
+    sleep: async ms => {clock += ms;}, timeoutMs: 30_000,
+    collect: () => clock ? ready() : {status: 'held', run: {...run(), status: 'in_progress', conclusion: null}}});
+  assert.equal(result.id, 12); assert.equal(clock, 15_000);
+});
+
+test('failed, cancelled, skipped, missing and unavailable source evidence cannot pass metadata checks', async () => {
+  for (const conclusion of ['failure', 'cancelled', 'skipped']) {
+    await assert.rejects(verifyMetadataCI({event: metadataEvent(), readCurrent,
+      collect: () => ({status: 'held', run: {...run(), conclusion}, reason: 'source failed'})}), /source failed/);
+  }
+  let clock = 0;
+  await assert.rejects(verifyMetadataCI({event: metadataEvent(), readCurrent, now: () => clock,
+    sleep: async ms => {clock += ms;}, timeoutMs: 20_000,
+    collect: () => ({status: 'held'})}), /bounded wait/);
+  assert.equal(clock, 20_000);
+  await assert.rejects(verifyMetadataCI({event: metadataEvent(), readCurrent,
+    collect: () => {throw Error('API offline');}}), /API offline/);
+});
+
+test('base edits, code updates and moved or closed PRs cannot reuse metadata evidence', async () => {
+  for (const event of [{...metadataEvent(), action: 'synchronize'},
+    {...metadataEvent(), changes: {base: {ref: {from: 'other'}}}}]) {
+    await assert.rejects(verifyMetadataCI({event, readCurrent, collect: ready}), /Only a metadata/);
+  }
+  for (const mutate of [x => x.pr.state = 'closed', x => x.pr.head.sha = base,
+    x => x.base.sha = head, x => x.pr.base.ref = 'other', x => x.pr.head.repo.full_name = 'other/fork']) {
+    await assert.rejects(verifyMetadataCI({event: metadataEvent(),
+      readCurrent: () => {const x = structuredClone(readCurrent()); mutate(x); return x;}, collect: ready}), /stale/);
+  }
+  let reads = 0;
+  await assert.rejects(verifyMetadataCI({event: metadataEvent(), collect: ready,
+    readCurrent: () => {const x = structuredClone(readCurrent()); if (++reads === 3) x.base.sha = head; return x;}}), /stale/);
 });

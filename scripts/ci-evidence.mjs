@@ -15,7 +15,8 @@ export function ciTarget(pr, base) {
 }
 
 export const ciReceipt = target => `CI v1 | pr=${target.number} | head=${target.head} | base=${target.base} | ref=${target.baseRef}`;
-const hasReceipt = run => /^CI v1 \| pr=[1-9]\d* \| head=[a-f0-9]{40} \| base=[a-f0-9]{40} \| ref=\S+$/.test(run.display_title || '');
+export const ciMetadataReceipt = target => ciReceipt(target).replace('CI v1', 'CI metadata v1');
+const hasReceipt = run => /^CI (?:metadata )?v1 \| pr=[1-9]\d* \| head=[a-f0-9]{40} \| base=[a-f0-9]{40} \| ref=\S+$/.test(run.display_title || '');
 function associatedCI(run, target) {
   return run?.path === ciPath && run.repository?.full_name === ciRepository &&
     run.event === 'pull_request' && run.head_sha === target.head && run.head_branch === target.headRef &&
@@ -33,6 +34,7 @@ export function selectCI(runs, target) {
   // run must HOLD, not silently resurrect an older green receipt.
   return runs.filter(run => run?.path === ciPath && run.repository?.full_name === ciRepository &&
     run.event === 'pull_request' && run.head_sha === target.head &&
+    run.display_title !== ciMetadataReceipt(target) &&
     run.display_title !== `CI ignored | pr=${target.number} | head=${target.head}` &&
     (!run.head_branch || run.head_branch === target.headRef) &&
     (!run.head_repository?.full_name || run.head_repository.full_name === target.headRepository) &&

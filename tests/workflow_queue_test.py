@@ -52,12 +52,22 @@ class ProductCIValidation(unittest.TestCase):
         events = ci.get('on', ci.get(True))
         self.assertEqual(events['push']['branches'], ['main'])
         self.assertTrue({'opened', 'synchronize', 'reopened', 'edited'}.issubset(events['pull_request']['types']))
-        self.assertEqual(ci['jobs']['test']['runs-on'], 'macos-15')
+        metadata = "github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null"
+        self.assertEqual(ci['jobs']['test']['runs-on'], "${{ " + metadata + " && 'ubuntu-latest' || 'macos-15' }}")
         self.assertEqual(ci['jobs']['test']['needs'], 'workflow-lint')
         self.assertEqual(ci['jobs']['test']['if'], "${{ !cancelled() }}")
         self.assertNotIn('ready_for_review', events['pull_request']['types'])
         # Every admitted event must report the same branch-required check.
         self.assertNotIn('if', ci['jobs']['workflow-lint'])
+        self.assertIn('CI metadata v1', ci['run-name'])
+        self.assertIn("'metadata' || 'full'", ci['concurrency']['group'])
+        self.assertEqual(ci['jobs']['test']['permissions']['actions'], 'read')
+        steps = ci['jobs']['test']['steps']
+        proof = next(step for step in steps if step.get('run') == 'node scripts/ci-metadata-check.mjs')
+        self.assertEqual(proof['if'], '${{ ' + metadata + ' }}')
+        self.assertEqual(steps[-1]['if'], '${{ !(' + metadata + ') }}')
+        lint = next(step for step in ci['jobs']['workflow-lint']['steps'] if step.get('run') == 'sh scripts/check-workflows.sh')
+        self.assertEqual(lint['if'], steps[-1]['if'])
         for name in ['workflow-lint', 'test']:
             self.assertEqual(ci['jobs'][name].get('name', name), name)
         self.assertNotIn('CI ignored', ci['run-name'])

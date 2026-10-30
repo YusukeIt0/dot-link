@@ -1,7 +1,7 @@
 name: Tests
 # Run title is fixed at dispatch; run.pull_requests base metadata changes on retarget.
 run-name: >-
-  ${{ github.event_name == 'pull_request' && format('CI v1 | pr={0} | head={1} | base={2} | ref={3}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || format('CI v1 | push={0}', github.sha) }}
+  ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && format('CI metadata v1 | pr={0} | head={1} | base={2} | ref={3}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || github.event_name == 'pull_request' && format('CI v1 | pr={0} | head={1} | base={2} | ref={3}', github.event.pull_request.number, github.event.pull_request.head.sha, github.event.pull_request.base.sha, github.event.pull_request.base.ref) || format('CI v1 | push={0}', github.sha) }}
 on:
   push:
     branches: [main]
@@ -9,7 +9,7 @@ on:
     types: [opened, synchronize, reopened, edited]
 concurrency:
   # Manual retries cannot cancel the latest ordinary validation.
-  group: tests-${{ github.event.pull_request.number || github.ref }}-${{ github.run_attempt > 1 && github.run_id || 'current' }}
+  group: tests-${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'metadata' || 'full' }}-${{ github.event.pull_request.number || github.ref }}-${{ github.run_attempt > 1 && github.run_id || 'current' }}
   cancel-in-progress: true
 permissions:
   contents: read
@@ -22,12 +22,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: sh scripts/check-workflows.sh
+      - if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null) }}
+        run: sh scripts/check-workflows.sh
+      - if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null }}
+        run: echo 'Metadata-only edit; the test job verifies both original required jobs.'
   test:
     needs: workflow-lint
     if: ${{ !cancelled() }}
-    runs-on: macos-15
-    timeout-minutes: 15
+    runs-on: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null && 'ubuntu-latest' || 'macos-15' }}
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    timeout-minutes: 20
     steps:
       - name: Require successful workflow checks
         env:
@@ -40,9 +47,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-current.mjs
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Verify existing full validation for metadata-only edit
+        if: ${{ github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-metadata-check.mjs
+      - if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null) }}
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22.23.4'
           package-manager-cache: false
           cache: npm
-      - run: sh scripts/run-ci-tests.sh
+      - if: ${{ !(github.event_name == 'pull_request' && github.event.action == 'edited' && github.event.changes.base == null) }}
+        run: sh scripts/run-ci-tests.sh
