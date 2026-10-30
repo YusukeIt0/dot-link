@@ -44,7 +44,6 @@ export function selectCI(runs, target) {
   // Missing provenance on a newer associated run must HOLD, not revive old green.
   return runs.filter(run => run?.path === ciPath && run.repository?.full_name === ciRepository &&
     run.event === 'pull_request' && run.head_sha === target.head &&
-    run.display_title !== `CI ignored | pr=${target.number} | head=${target.head}` &&
     (!run.head_branch || run.head_branch === target.headRef) &&
     (!run.head_repository?.full_name || run.head_repository.full_name === target.headRepository) &&
     (!run.pull_requests?.length || run.pull_requests.some(p => p.number === target.number)) &&

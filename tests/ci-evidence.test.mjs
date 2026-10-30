@@ -98,10 +98,13 @@ test('newer incomplete association holds instead of falling back; attempt churn 
     () => [{jobs: jobs()}]), /changed while collecting/);
 });
 
-test('explicit metadata-only runs do not replace canonical validation; arbitrary skips hold', () => {
-  const ignored = {...run(), id: 20, display_title: `CI ignored | pr=${target.number} | head=${head}`, conclusion: 'skipped'};
-  assert.equal(selectCI([ignored, run()], target).id, 12);
-  assert.equal(selectCI([{...ignored, display_title: 'Unknown skip'}, run()], target).id, 20);
+test('obsolete metadata titles and unknown skips cannot revive older successful validation', () => {
+  for (const display_title of [`CI ignored | pr=${target.number} | head=${head}`, 'Unknown skip']) {
+    const skipped = {...run(), id: 20, display_title, conclusion: 'skipped'};
+    const selected = selectCI([skipped, run()], target);
+    assert.equal(selected.id, 20);
+    assert.throws(() => assertCI(target, selected, jobs()), /Full PR CI/);
+  }
 });
 
 
