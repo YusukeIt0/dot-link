@@ -50,6 +50,21 @@ test('identical calls deduplicate, short cache reuses evidence, and unrelated re
   f.release();assert.deepEqual(await a,await b);await f.context.readMobility(p);assert.equal(f.calls(),1);
   f.advance(30_001);f.update();await f.context.readMobility(f.input());assert.equal(f.calls(),2);
 });
+test('completed walking retains the agreed admission interval for different follow-up evidence',async t=>{
+  const f=fixture(t);f.enable(true);f.update();const input=f.input();
+  const walking=await f.context.readMobility(input) as any;
+  assert.equal(walking.status,'finished');assert.equal(f.calls(),1);
+  const followup=await f.context.readMobility({...input,terrain:true}) as any;
+  assert.equal(followup.status,'busy');assert.equal(followup.retry_after_ms,30_000);
+  assert.equal(followup.terrain.status,'not_queried');assert.equal(f.calls(),1);
+  // Cached evidence and ordinary tools remain available; no automatic retry is queued.
+  assert.deepEqual(await f.context.readMobility(input),walking);
+  const status=await rpc(f.bridge,{jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'get_status',arguments:{}}},undefined,f.context) as any;
+  assert.ok(status.result.structuredContent);assert.equal(f.calls(),1);
+  f.advance(30_001);f.update();
+  const requested=await f.context.readMobility({...f.input(),terrain:true}) as any;
+  assert.equal(requested.status,'finished');assert.equal(requested.terrain.status,'available');assert.equal(f.calls(),2);
+});
 for(const action of ['stop','revoke','move','expiry','close'] as const)test(`${action} aborts acquisition before publishing evidence`,async t=>{
   const f=fixture(t);f.enable(true);f.update();f.hold();const result=f.context.readMobility(f.input());
   const rejected=assert.rejects(result);

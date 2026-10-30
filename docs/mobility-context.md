@@ -86,8 +86,14 @@ invalidates work and cached evidence. New fixes alone do not request routes.
 
 There is one acquisition and no queue, with identical-request deduplication, a
 30-second admission interval and a 40-second overall deadline (or earlier context
-expiry). Busy results do not trigger automatic retries. Other conversation tools
-remain usable while sources are pending. Tool results never send a G2 response;
+expiry). The admission interval also applies after a request finishes: a different request
+within 30 seconds returns `busy`, with `not_queried` evidence and a retry delay.
+Request walking and terrain together when slope or effort matters to the current
+question; omit terrain for a distance-only question. This is a low-traffic bound,
+not a queued follow-up or a promise of immediate second acquisition. Identical
+fresh requests may reuse the result. Busy results do not trigger automatic retries;
+Dot can answer using available evidence and state uncertainty. Other conversation
+tools remain usable while sources are pending. Tool results never send a G2 response;
 Dot uses the existing `respond_to_location` contract, retaining a question's
 `utterance_id` when applicable. See [tool response reasons](tool-response-errors.md#walking-and-terrain-read-contract).
 
