@@ -163,8 +163,8 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
         if (request.url === '/api/location/revoke') { z.object({}).strict().parse(input); histories?.revokeOwner(owner); send(200, locations.revokeOwner(owner)); return; }
         if (request.url === '/api/location/control') { send(200, locations.control(input, owner)); return; }
         const envelope = input as Record<string, unknown>;
-        const hasHistory = histories && envelope && Object.hasOwn(envelope, 'history');
-        const parsedHistory = hasHistory ? historyUploadSchema.safeParse(envelope.history) : undefined;
+        const hasHistory = envelope && Object.hasOwn(envelope, 'history');
+        const parsedHistory = histories && hasHistory ? historyUploadSchema.safeParse(envelope.history) : undefined;
         const metadata = parsedHistory?.success ? parsedHistory.data : undefined;
         const live = hasHistory ? Object.fromEntries(Object.entries(envelope).filter(([key]) => key !== 'history')) : input;
         const result = locations.update(live, owner);

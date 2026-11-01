@@ -62,6 +62,16 @@ test('device gateway negotiates history, shares existing ingestion, isolates old
     const result = await response.json();
     assert.equal(result.accepted, true); assert.equal(result.historyCount, 1);
   }
+  const withoutHistory = bridgeServer(bridge, tokens, undefined, locations);
+  withoutHistory.listen(0, '127.0.0.1'); await once(withoutHistory, 'listening');
+  try {
+    time += 15_000;
+    const response = await fetch(`http://127.0.0.1:${(withoutHistory.address() as any).port}/api/location/update`, {
+      method: 'POST', headers: {Authorization: `Bearer ${tokens.device}`, 'Content-Type': 'application/json', 'x-g2-location-owner': owner},
+      body: JSON.stringify({sharing_id, sequence: ++sequence, fix: fix(), history}),
+    });
+    assert.equal(response.status, 200); assert.equal((await response.json()).accepted, true);
+  } finally { withoutHistory.closeAllConnections(); await new Promise<void>(resolve => withoutHistory.close(() => resolve())); }
   await device('/api/location/control', {sharing_id, enabled: false});
   assert.equal((await mcp('get_location_history')).result.structuredContent.status, 'available', 'recording stop leaves separately permitted past history readable');
   await control('simulate', 'walk'); read = (await mcp('get_location_history')).result.structuredContent;
