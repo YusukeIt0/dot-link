@@ -2,30 +2,30 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.3.52",
+  "version": "0.3.53",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
     {
       "name": "network",
-      "desc": "Connect and pair with your Mac relay to send voice recordings, messages, selected photos and location you choose to share, and receive Dot replies and connection status. Network access also supports reconnecting and revoking this phone's connection.",
+      "desc": "Connect to your Mac to send messages, voice recordings, selected photos and optional location, and receive Dot replies. Also used for pairing and connection management.",
       "whitelist": []
     },
     {
       "name": "g2-microphone",
-      "desc": "Record your voice with the G2 microphones for messages to Dot. Hold-to-record captures up to 30 seconds. Voice activation keeps the G2 microphone open while active to detect the cue on your phone; only speech after the cue is sent for transcription."
+      "desc": "Record messages with G2 microphones (up to 30 seconds). Optional voice activation keeps the microphone on to detect the cue on your phone; only speech after the cue is sent to your Mac for transcription."
     },
     {
       "name": "location",
-      "desc": "Opt-in location sharing sends phone fixes to your Mac and Dot. Separate history consent saves up to 7 days on your Mac; Delete and stop erases it. Maps expire after 30 unused days. Separate walking consent sends route coordinates to FOSSGIS and terrain areas to AWS."
+      "desc": "Share phone location with Dot through your Mac only when enabled. Optional history stays on your Mac for up to 7 days and can be deleted. Optional walking/terrain requests send route coordinates to FOSSGIS and terrain areas to AWS."
     },
     {
       "name": "camera",
-      "desc": "Use your phone camera to take a photo for a message to Dot when you tap the camera button. The photo stays in your draft until you tap Send or complete voice input with automatic sending enabled."
+      "desc": "Take a photo when you tap Camera. It is sent to Dot only when you send the draft, including automatic sending after voice input."
     },
     {
       "name": "album",
-      "desc": "Use your phone photo picker to select a photo for a message to Dot. The photo stays in your draft until you tap Send or complete voice input with automatic sending enabled."
+      "desc": "Select a photo with your phone photo picker. It is sent to Dot only when you send the draft, including automatic sending after voice input."
     }
   ],
   "supported_languages": [

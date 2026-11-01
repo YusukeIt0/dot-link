@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { assertBetaBuild, assertReleaseBuild, sourceIdentity } from './lib/even-build.mjs';
 import { verifyWakeAssets, wakeManifest } from './lib/wake-assets.mjs';
+import { assertProductionHistoryAsset } from './lib/production-history.mjs';
 
 const release = process.argv.includes('--release');
 const root = resolve('dist');
@@ -26,6 +27,7 @@ async function inspect(directory) {
     const wakeAsset = relative(root, file).startsWith('wake-assets/') && Object.hasOwn(wakeManifest.files, name);
     if (!wakeAsset && (!/\.(?:html|js|css|svg|txt|png)$/.test(name) || info.size > 2000000)) throw new Error('Unexpected release asset');
     const data = await readFile(file); const text = data.toString('utf8');
+    if (!wakeAsset) assertProductionHistoryAsset(relative(root, file), text);
     if (/\/Users\/|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|Bearer [A-Za-z0-9_-]{32,}|https:\/\/[a-z0-9-]+\.[a-z0-9-]+\.ts\.net\b/.test(text) || secrets.some(value => text.includes(value))) throw new Error('Private configuration found in release assets');
     files.push({path:relative(root,file),bytes:data.length,sha256:createHash('sha256').update(data).digest('hex')});
   }

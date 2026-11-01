@@ -32,6 +32,7 @@ test('failed disable is visible and is never reported as remotely revoked; simul
   assert.equal(history.status().failed, true); assert.equal(history.status().historyEnabled, true);
   assert.equal(history.upload(), undefined);
   history.receive({historyProtocol: 1, historyEpoch: 'first', historyEnabled: true, historySimulation: 'walk'});
+  assert.equal(history.status().supported, false, 'old Beta simulation is not presented as production history');
   assert.equal(history.upload(), undefined);
 });
 

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { DatabaseSync } from 'node:sqlite';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,14 +9,14 @@ import { LocationHistoryStore } from '../server/history/store.ts';
 import { HISTORY_RETENTION_MS } from '../server/history/replay.ts';
 import { Bridge } from '../server/bridge.ts';
 import { WebhookSender } from '../server/webhook.ts';
-import { historyGeography } from '../server/history/fixtures.ts';
+import { historyGeography, historyFixture } from './fixtures/location-history.ts';
 import { geographicEvidence } from '../server/geography/geometry.ts';
 const owner = 'a'.repeat(64), other = 'b'.repeat(64);
-function setup(t: test.TestContext, beta = true) {
+function setup(t: test.TestContext) {
   const directory = mkdtempSync(join(tmpdir(), 'history-store-test-'));
   let clock = Date.parse('2026-11-02T12:00:00Z'), authorized = true, revoked = false;
   const bridge = new Bridge(join(directory, 'bridge.json'), new WebhookSender(async (_url, raw) => { const e = JSON.parse(raw); return {status: 200, body: JSON.stringify(e.type === 'verification' ? {challenge: e.challenge} : {})}; }), ['callback.example.test']);
-  const options = {now: () => clock, beta, ownerAuthorized: (id: string) => authorized && id === owner, ownerRevoked: (id: string) => revoked && id === owner,
+  const options = {now: () => clock, ownerAuthorized: (id: string) => authorized && [owner, other].includes(id), ownerRevoked: (id: string) => revoked && id === owner,
     announce: (input: any, guard: () => boolean) => bridge.sendMessage(input, guard)};
   let store = new LocationHistoryStore(join(directory, 'history'), options);
   t.after(() => { store.close(); bridge.close(); rmSync(directory, {recursive: true, force: true}); });
@@ -24,7 +25,7 @@ function setup(t: test.TestContext, beta = true) {
   const ingest = (sharing = 'session-a', metadata = {protocol: 1, epoch: store.status(owner).historyEpoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}) => store.ingest(fix(), sharing, metadata, owner);
   return {get store() {return store;}, bridge, directory, control, fix, ingest,
     advance(ms: number) {clock += ms;}, revoke() {authorized = false; revoked = true;}, setAuthorization(value: boolean) {authorized = value;},
-    restart(beta?: boolean) {store.close(); if (beta !== undefined) options.beta = beta; store = new LocationHistoryStore(join(directory, 'history'), options);}};
+    restart() {store.close(); store = new LocationHistoryStore(join(directory, 'history'), options);}};
 }
 test('history defaults off, has separate consent, persists only opted-in measurements and survives restart', t => {
   const h = setup(t);
@@ -61,22 +62,13 @@ test('expiry and session boundaries survive restart and cannot be extended by la
   h.advance(HISTORY_RETENTION_MS); h.restart(); assert.equal(h.store.status(owner).historyCount, 0);
   assert.equal(h.store.read().status, 'empty');
 });
-test('synthetic cases use durable storage/query while real observations remain isolated', t => {
-  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
-  h.control('simulate', 'walk'); const result = h.store.read({detail: 'observations', limit: 50}) as any;
-  assert.equal(result.source, 'synthetic_fixture'); assert.ok(result.entries.length > 1);
-  assert.ok(result.entries.every((p: any) => p.source === 'synthetic_fixture'));
-  h.advance(1000); assert.equal(h.ingest(), false); h.restart(); assert.equal((h.store.read() as any).source, 'synthetic_fixture');
-  h.control('finish_simulation'); assert.equal(h.store.status(owner).historyCount, 1); assert.equal((h.store.read() as any).source, 'phone_location');
-  h.control('simulate', 'empty'); assert.equal(h.store.read().status, 'empty');
-  h.control('simulate', 'revoked'); assert.equal(h.store.read().status, 'unavailable');
-  h.control('disable'); assert.equal(h.store.status(owner).historySimulation, null);
-});
-test('release runtime refuses synthetic control', t => {
-  const h = setup(t, false); h.control('enable'); assert.throws(() => h.control('simulate', 'walk'));
+test('production runtime rejects all former test controls', t => {
+  const h = setup(t); h.control('enable');
+  for (const action of ['simulate', 'finish_simulation']) assert.throws(() => h.control(action, 'walk'));
+  assert.equal('historyBeta' in h.store.status(owner), false);
 });
 test('historical answer uses ordinary linked conversation with access recheck', async t => {
-  const h = setup(t); h.control('enable'); h.control('simulate', 'walk');
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
   await h.bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   const question = await h.bridge.submit({id: randomUUID(), text: 'Which fictional road?'});
   const read = h.store.read() as any;
@@ -84,7 +76,7 @@ test('historical answer uses ordinary linked conversation with access recheck', 
   await h.store.respond(answer); await h.store.respond(answer);
   assert.equal(h.bridge.history().find(x => x.id === question.id)?.reply, answer.text);
   assert.equal(h.bridge.outboundHistory().length, 0);
-  h.control('finish_simulation'); assert.throws(() => h.store.respond(answer));
+  h.control('disable'); assert.throws(() => h.store.respond(answer));
 });
 test('existing geographic evidence is attached without acquiring another map', t => {
   const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
@@ -95,7 +87,7 @@ test('existing geographic evidence is attached without acquiring another map', t
 });
 
 test('a queued historical reply rechecks deletion before the normal reply commit', async t => {
-  const h = setup(t); h.control('enable'); h.control('simulate', 'walk');
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
   await h.bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   const question = await h.bridge.submit({id: randomUUID(), text: 'Which fictional road?'});
   const read = h.store.read() as any;
@@ -125,7 +117,7 @@ test('retention pruning preserves negotiated uploads and recent replies while ex
 });
 
 test('one history context supports different linked follow-ups with idempotent retries', async t => {
-  const h = setup(t); h.control('enable'); h.control('simulate', 'walk');
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
   await h.bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   const question = await h.bridge.submit({id: randomUUID(), text: 'Explain the fictional walk.'});
   const context = (h.store.read() as any).history_context_id;
@@ -159,13 +151,46 @@ test('transient authorization failure blocks access without deleting history or 
 });
 
 
-test('switching from Beta to release removes simulation and preserves only opted-in real history', t => {
+test('upgrade removes legacy simulation state while preserving real observations and explicit consent', t => {
   const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
-  h.control('simulate', 'walk');
-  h.restart(false);
-  assert.equal(h.store.status(owner).historyBeta, false);
-  assert.equal(h.store.status(owner).historySimulation, null);
-  assert.equal(h.store.status(owner).historyCount, 1);
+  h.store.close();
+  const db = new DatabaseSync(join(h.directory, 'history/history.sqlite'));
+  const state = JSON.parse((db.prepare('SELECT data FROM state WHERE id=1').get() as {data: string}).data);
+  state.scenario = 'walk'; state.reference = Date.parse(h.fix().measured_at);
+  db.prepare('UPDATE state SET data=? WHERE id=1').run(JSON.stringify(state));
+  db.exec('CREATE TABLE simulation(id TEXT PRIMARY KEY, measured INTEGER NOT NULL, data TEXT NOT NULL)');
+  const fixture = historyFixture('walk', state.reference);
+  for (const row of fixture.history.snapshot()) db.prepare('INSERT INTO simulation VALUES(?,?,?)').run(row.id, Date.parse(row.measured_at), JSON.stringify(row));
+  db.close(); h.restart();
+  assert.equal(h.store.status(owner).historyCount, 1); assert.equal(h.store.status(owner).historyEnabled, true);
   assert.equal((h.store.read() as any).source, 'phone_location');
-  assert.throws(() => h.control('simulate', 'walk'));
+  const check = new DatabaseSync(join(h.directory, 'history/history.sqlite'), {readOnly: true});
+  assert.equal(check.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='simulation'").get(), undefined);
+  const saved = JSON.parse((check.prepare('SELECT data FROM state WHERE id=1').get() as {data: string}).data);
+  assert.equal(saved.scenario, null); assert.equal(saved.reference, null); check.close();
+});
+
+test('full deletion lets another authorized pairing opt in without inheriting consent or data', t => {
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
+  const oldEpoch = h.store.status(owner).historyEpoch;
+  h.control('disable'); assert.equal(h.store.status(other).historyEpoch, null);
+  h.control('delete'); h.restart();
+  const state = h.store.status(other); assert.equal(state.historyEnabled, false); assert.equal(state.historyCount, 0); assert.ok(state.historyEpoch);
+  assert.throws(() => h.store.control({protocol: 1, epoch: oldEpoch, action: 'enable'}, owner));
+  h.store.control({protocol: 1, epoch: state.historyEpoch, action: 'enable'}, other);
+  assert.equal(h.store.status(other).historyEnabled, true); assert.equal(h.store.status(owner).historyEpoch, null);
+  h.advance(1000); assert.equal(h.ingest('old-owner', {protocol: 1, epoch: oldEpoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}), false);
+});
+
+test('bounded pages survive later live fixes and map attachment but not changes inside their interval', t => {
+  const h = setup(t); h.control('enable');
+  for (let n = 0; n < 4; n++) { h.advance(1000); h.ingest(); }
+  const first = h.store.read({detail: 'observations', limit: 1}) as any; assert.ok(first.next_cursor);
+  h.advance(1000); h.ingest(); h.store.attachGeography(h.fix(), geographicEvidence(h.fix(), historyGeography), owner);
+  const second = h.store.read({cursor: first.next_cursor}) as any;
+  assert.equal(second.coverage.observation_count, 4); assert.notEqual(second.entries[0].id, first.entries[0].id);
+  assert.equal((h.store.read({detail: 'observations'}) as any).coverage.observation_count, 5);
+  const future = h.store.read({start_at: new Date(Date.parse(h.fix().measured_at) - 60_000).toISOString(), end_at: new Date(Date.parse(h.fix().measured_at) + 60_000).toISOString(), detail: 'observations', limit: 1}) as any;
+  h.advance(1000); h.ingest(); assert.throws(() => h.store.read({cursor: future.next_cursor}), /page is no longer available/);
+  h.control('delete'); assert.equal(h.store.read({cursor: second.next_cursor}).status, 'unavailable');
 });

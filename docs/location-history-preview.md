@@ -1,22 +1,14 @@
-# Location history Beta and isolated preview
+# Isolated location-history preview
 
-The usable Beta continuation is tracked under [#267](https://github.com/YusukeIt0/dot-link/issues/267)
-and parent [#264](https://github.com/YusukeIt0/dot-link/issues/264). The normal relay
-now constructs an opt-in SQLite history owner. See [setup](setup.md#remember-recent-places-beta)
-and [data handling](privacy.md#recent-places-beta) for consent, retention and deletion.
+The application provides opt-in recent-place history through the normal relay.
+See [setup](setup.md#remember-recent-places) and [data handling](privacy.md#recent-places).
 `get_location_history` reads evidence; `respond_to_history` returns a question-linked
 G2 answer after rechecking access. No proactive history event is introduced.
 
-Use the installed Beta's **Test history** scenarios for an actual existing-Dot/G2
-session. Real collection pauses during simulation; synthetic rows cannot become
-phone history. Cover walk, partial, stopped, empty, revoked and no-map cases, an
-unrelated ordinary question, restart, and delete/stop. Record actual Dot tool use,
-reply association and wearer observations separately from automatic tests. A local
-RPC pass is not actual-Dot or physical acceptance.
-
-The independent runner below remains useful for isolated fixtures. Its listener
-has no G2 send endpoint and does not read installed credentials. Statements below
-about fixture storage apply to that runner, not the opt-in installed Beta.
+Fictional movement controls and fixtures are excluded from the installed application.
+The accepted Beta session is recorded in [PR #268](https://github.com/YusukeIt0/dot-link/pull/268).
+The runner below is separate test tooling, not a feature or setting in the product.
+It has no G2 send endpoint and reads no installed credentials.
 
 ## What is ready to test
 

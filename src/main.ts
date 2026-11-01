@@ -207,16 +207,10 @@ function renderHistoryStatus() {
   toggle.disabled = !s.supported || s.pending;
   el<HTMLButtonElement>('history-delete').disabled = !s.supported || s.pending;
   el('history-status').textContent = s.failed ? t('even.history_failed') : !s.supported ? t('even.history_unavailable') :
-    s.historySimulation ? t('even.history_test_active', {count: s.historyCount ?? 0}) :
     s.historyEnabled ? t('even.history_count', {count: s.historyCount ?? 0}) : t('even.history_off');
-  el('history-test').hidden = !(import.meta.env.VITE_APP_VERSION.endsWith(' Beta') && s.historyBeta && s.supported);
-  el<HTMLButtonElement>('history-simulate').disabled = !s.historyEnabled || s.pending;
-  el<HTMLButtonElement>('history-finish-test').disabled = !s.historySimulation || s.pending;
 }
 el<HTMLInputElement>('history-share').onchange = () => { void historySharing.control(el<HTMLInputElement>('history-share').checked ? 'enable' : 'disable'); };
 el<HTMLButtonElement>('history-delete').onclick = () => { if (confirm(t('even.history_delete_confirm'))) void historySharing.control('delete'); };
-el<HTMLButtonElement>('history-simulate').onclick = () => { void historySharing.control('simulate', el<HTMLSelectElement>('history-scenario').value); };
-el<HTMLButtonElement>('history-finish-test').onclick = () => { void historySharing.control('finish_simulation'); };
 const locationSharing = new LocationSharing({
   historyUpload: () => historySharing.upload(),
   storage: () => localStorage,

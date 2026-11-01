@@ -37,7 +37,9 @@ export function historyPreviewServer(bridge: Bridge, token: string, history: His
         if (!call.success) { reject(); return; }
       } else if (!['server/discover', 'initialize', 'ping', 'tools/list'].includes(input.method)) { reject(); return; }
       const result = await rpc(bridge, input, undefined, undefined, history) as { result?: Record<string, any> };
-      if (input.method === 'tools/list' && result.result) result.result.tools = result.result.tools.filter((tool: { name: string }) => tool.name === 'get_location_history');
+      if (input.method === 'tools/list' && result.result) result.result.tools = result.result.tools
+        .filter((tool: { name: string }) => tool.name === 'get_location_history')
+        .map((tool: {description: string}) => ({...tool, description: 'Isolated fictional test data, never the owner’s actual experiences. This connection has no reply tool; answer in the ordinary conversation. ' + tool.description}));
       if (result.result?.serverInfo) result.result.serverInfo = { ...result.result.serverInfo, name: 'dot-link-synthetic-history-preview' };
       send(200, result);
     } catch { send(400, { error: 'Invalid preview request' }); }

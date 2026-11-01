@@ -100,9 +100,9 @@ the option off stops pending queries when the Mac receives the stop. The saved
 choice belongs to the selected Mac. Open **Data sources and privacy** for the
 bundled English disclosure, support contact and full attribution.
 
-### Remember recent places (Beta)
+### Remember recent places
 
-With compatible Beta versions on both devices, open **Location sharing** and turn
+With Mac 0.4.30 or later and Even 0.3.53 or later, open **Location sharing** and turn
 on **Remember recent places** separately from **Share my location**. This lets Dot
 refer to up to seven days of recorded places and movement. Collection needs both
 options; old companions keep ordinary location sharing and do not upload history.
@@ -112,13 +112,8 @@ a separate Dot or a new event subscription for historical questions.
 
 Turning current-location sharing off leaves existing history readable. Turn
 **Remember recent places** off to stop collection and historical access, or choose
-**Delete and stop** to erase the local history too. A failed control must be retried
-when the Mac is reachable. See [retention and deletion](privacy.md#recent-places-beta).
-
-For stationary Beta testing, **Test history** offers fictional movement scenarios.
-They temporarily replace the evidence Dot reads and pause real history collection.
-Tell Dot once that the scenario is fictional; select **End test** when finished.
-Ordinary conversation continues with empty or partial history.
+**Delete history** to erase the local history too. A failed control must be retried
+when the Mac is reachable. See [retention and deletion](privacy.md#recent-places).
 
 ## Updates
 

@@ -38,9 +38,9 @@ Complete integrated automated checks, exact-head review and Beta acceptance
 before proposing main merge. The current goal ends with Beta/actual-Dot/physical
 acceptance; main merge and formal delivery need later maintainer instructions.
 
-## Optional history integration (November 2026 Beta)
+## Optional history integration (November 2026)
 
-The separate [recent-place history](privacy.md#recent-places-beta) owner may retain
+The separate [recent-place history](privacy.md#recent-places) owner may retain
 opted-in phone observations and a bounded copy of already-acquired geographic
 references for seven days. The geographic cache itself still does not store exact
 fixes or visit timestamps. History starts no additional acquisition, and cache
