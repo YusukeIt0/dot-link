@@ -38,6 +38,10 @@
       <summary data-i18n="even.location_sharing">Location sharing</summary>
       <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-i18n="even.share_my_location">Share my location</span></label>
       <p class="note" data-i18n="even.share_your_phone_s_current_location_with_your_existing_dot">Share your phone's location with your Dot through your Mac. Stop sharing anytime. Nearby map data stays on your Mac until unused for 30 days and can reveal past areas.</p>
+      <label class="display-checkbox"><input id="history-share" type="checkbox"> <span data-i18n="even.history_enable">Remember recent places</span></label>
+      <p class="note" data-i18n="even.history_consent">Save locations on this Mac for up to 7 days and let Dot read relevant history. Recording follows location sharing. Turn this off to block historical access.</p>
+      <p id="history-status" class="note" role="status"></p>
+      <button id="history-delete" type="button" data-i18n="even.history_delete">Delete history</button>
       <label class="display-checkbox"><input id="mobility-share" type="checkbox"> <span data-i18n="even.walking_terrain">Walking and terrain information</span></label>
       <p class="note"><span data-i18n="even.walking_terrain_disclosure">When Dot needs it, your Mac sends route coordinates to FOSSGIS and terrain areas to AWS.</span> <a href="./mobility-sources.html" target="_blank" rel="noopener noreferrer" data-i18n="even.walking_terrain_privacy">Data sources and privacy</a></p>
       <p id="mobility-status" class="note" role="status"></p>

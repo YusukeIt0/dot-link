@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -166,4 +166,49 @@ test('a stale data token cannot falsely acknowledge revocation of a newer sessio
   assert.equal(authority.authorized(current.token, origin), true);
   assert.equal(authority.revokeRecovery(old.resumeToken!, origin), true);
   assert.equal(authority.authorized(current.token, origin), false);
+});
+
+
+test('durable subject status distinguishes transient corrupt state from confirmed revocation', t => {
+  const root = mkdtempSync(join(tmpdir(), 'g2-pairing-status-')); t.after(() => rmSync(root, {recursive:true,force:true}));
+  const authority = new PairingAuthority(root), origin = 'https://package.example';
+  const invite = authority.issue('https://mac.tailtest.ts.net', origin);
+  const session = authority.exchange(invite.code, origin)!;
+  const subject = authority.subject(session.token, origin)!;
+  const path = join(root, 'sessions', createHash('sha256').update(session.token).digest('hex') + '.json');
+  const saved = readFileSync(path);
+  assert.equal(authority.subjectStatus(subject), 'authorized');
+  writeFileSync(path, '{');
+  assert.equal(authority.subjectStatus(subject), 'unavailable');
+  assert.equal(authority.authorizedSubject(subject), false);
+  writeFileSync(path, saved);
+  assert.equal(authority.subjectStatus(subject), 'authorized');
+  authority.revokeAll();
+  assert.equal(authority.subjectStatus(subject), 'revoked');
+});
+
+test('a session rotation between recovery and session reads cannot revoke a durable owner', t => {
+  const root = mkdtempSync(join(tmpdir(), 'g2-pairing-rotate-')); t.after(() => rmSync(root, {recursive:true,force:true}));
+  const now = Date.now(), origin = 'http://127.0.0.1:55101';
+  const device = new PairingAuthority(root, () => now);
+  const paired = device.exchange(device.issue('https://mac.tailtest.ts.net').code, origin)!;
+  const subject = device.subject(paired.token, origin)!;
+  let rotate = true;
+  const bridge = new PairingAuthority(root, () => {
+    if (rotate) {
+      rotate = false;
+      assert.ok(device.resume(paired.resumeToken!, origin));
+    }
+    return now;
+  });
+  // The expiry check calls this clock after the recovery read and before the
+  // session read, deterministically interleaving the other process's resume.
+  assert.equal(bridge.subjectStatus(subject), 'unavailable');
+  assert.equal(bridge.subjectStatus(subject), 'authorized');
+  const recoveryPath = join(root, 'recoveries', `${subject}.json`);
+  const current = JSON.parse(readFileSync(recoveryPath, 'utf8'));
+  rmSync(join(root, 'sessions', `${current.currentSession}.json`));
+  assert.equal(bridge.subjectStatus(subject), 'unavailable');
+  assert.equal(device.revokeRecovery(paired.resumeToken!, origin), true);
+  assert.equal(bridge.subjectStatus(subject), 'revoked');
 });

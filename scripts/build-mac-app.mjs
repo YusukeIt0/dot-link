@@ -1,8 +1,13 @@
 import { cp, mkdir, readFile, writeFile, rm, readdir, lstat } from 'node:fs/promises';
-import { resolve, join, dirname } from 'node:path';
+import { resolve, join, dirname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { assertBetaBuild, assertReleaseBuild, sourceIdentity } from './lib/even-build.mjs';
+import { assertProductionHistoryAsset } from './lib/production-history.mjs';
 const root=resolve('.'), output=resolve(process.argv[2] ?? '.runtime/mac-app/Dot Link.app'), contents=join(output,'Contents'), payload=join(contents,'Resources/payload');
 if (!output.startsWith(join(root,'.runtime')+'/') || !output.endsWith('/Dot Link.app')) throw new Error('Build output must be a Dot Link.app below .runtime');
+const build=JSON.parse(await readFile(join(root,'dist/build-info.txt'),'utf8')), source=sourceIdentity();
+const sourceVersion=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
+(source.branch==='main'?assertReleaseBuild:assertBetaBuild)(build,sourceVersion,source);
 const run=(cmd,args)=>{const r=spawnSync(cmd,args,{stdio:'inherit'});if(r.status!==0)throw new Error('Build step failed: '+cmd);};
 run(process.execPath,['scripts/localization.mjs']);
 run(process.execPath,['scripts/prepare-sparkle.mjs']);
@@ -13,6 +18,14 @@ try {
 }catch(e){if(e.code!=='ENOENT')throw e;}
 await mkdir(join(contents,'MacOS'),{recursive:true});await mkdir(payload,{recursive:true});
 for(const name of ['package.json','package-lock.json','server','src','dist','localization'])await cp(join(root,name),join(payload,name),{recursive:true});
+async function inspectHistoryAssets(directory) {
+ for(const entry of await readdir(directory,{withFileTypes:true})) {
+  const path=join(directory,entry.name);
+  if(entry.isDirectory())await inspectHistoryAssets(path);
+  else if(/\.(?:ts|js|json|html|css)$/.test(entry.name))assertProductionHistoryAsset(relative(payload,path),await readFile(path,'utf8'));
+ }
+}
+for(const name of ['server','src','dist','localization'])await inspectHistoryAssets(join(payload,name));
 await mkdir(join(payload,'scripts/lib'),{recursive:true});
 for(const name of ['mac-setup.mjs','setup-status.mjs','manage.mjs','setup.mjs','prepare-tunnel.mjs','beta-pair.mjs','mac-runtime-manifest.json'])await cp(join(root,'scripts',name),join(payload,'scripts',name));
 for(const name of ['setup.mjs','setup-failure.mjs','setup-errors.json','service-management.mjs','mac-install.mjs','menu-install.mjs','notification-migration.mjs','pairing-status.mjs','pairing-removal.mjs','app-lifecycle.mjs','app-uninstall.mjs','app-update.mjs','update-storage.mjs','update-cleanup-worker.mjs','update-exit-recovery.mjs','update-host-restart.mjs'])await cp(join(root,'scripts/lib',name),join(payload,'scripts/lib',name));
@@ -44,6 +57,7 @@ await cp(join(sdk,'Sparkle.framework'),join(contents,'Frameworks/Sparkle.framewo
 await cp(join(sdk,'LICENSE'),join(contents,'Resources/licenses/Sparkle.txt'));
 const info=join(contents,'Info.plist');
 await cp('native/DotLinkSetup/Info.plist',info);
+run('/usr/libexec/PlistBuddy',['-c',`Set :DotLinkBeta ${build.channel==='beta'?'true':'false'}`,info]);
 for(const [key,type,value] of [
  ['SUFeedURL','string',`https://raw.githubusercontent.com/${update.repository}/${update.branch}/${update.feedPath}`],
  ['SUPublicEDKey','string',update.publicKey],['SURequireSignedFeed','bool','YES'],['SUVerifyUpdateBeforeExtraction','bool','YES'],

@@ -232,23 +232,40 @@ export class PairingAuthority {
   /** The bridge can validate a sharing owner without possessing a phone token.
    * Older sessions use their session hash; recovery-capable sessions keep their
    * owner through port rotation. Never expose either hash in a status response. */
-  authorizedSubject(subject: string): boolean {
-    if (!fileName.test(`${subject}.json`)) return false;
+  authorizedSubject(subject: string): boolean { return this.subjectStatus(subject) === 'authorized'; }
+  /** Distinguish confirmed removal/expiry from unreadable state for durable owners. */
+  subjectStatus(subject: string): 'authorized' | 'revoked' | 'unavailable' {
+    if (!fileName.test(`${subject}.json`)) return 'unavailable';
+    const validRecord = (value: any) => value && typeof value === 'object' && Number.isFinite(value.expiresAt)
+      && (value.revoked === undefined || typeof value.revoked === 'boolean')
+      && (value.generation === undefined || value.generation === 'initial' || (typeof value.generation === 'string' && /^[a-f0-9]{64}$/.test(value.generation)));
     try {
       const generation = pairingGeneration(this.directory);
       let sessionHash = subject;
       let recovery: { revoked?: boolean; currentSession: string; expiresAt: number; generation?: string } | undefined;
       try {
         recovery = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${subject}.json`), 'utf8'));
-      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false; }
+        if (!validRecord(recovery)) return 'unavailable';
+      } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return 'unavailable'; }
       if (recovery) {
-        if (recovery.revoked || !currentPairingGeneration(recovery, generation) || !fileName.test(`${recovery.currentSession}.json`)) return false;
+        if (!validRecord(recovery) || !fileName.test(`${recovery.currentSession}.json`)) return 'unavailable';
+        if (recovery.revoked || !currentPairingGeneration(recovery, generation) || recovery.expiresAt <= this.clock()) return 'revoked';
         sessionHash = recovery.currentSession;
       }
-      const session = JSON.parse(readFileSync(join(this.directory, 'sessions', `${sessionHash}.json`), 'utf8'));
-      return !session.revoked && currentPairingGeneration(session, generation) && Number.isFinite(session.expiresAt) && session.expiresAt > this.clock()
-        && (recovery ? session.recoveryHash === subject && session.expiresAt === recovery.expiresAt : !session.recoveryHash);
-    } catch { return false; }
+      let session;
+      try { session = JSON.parse(readFileSync(join(this.directory, 'sessions', `${sessionHash}.json`), 'utf8')); }
+      catch (error) {
+        // A separate device process can rotate the recovery pointer and remove
+        // this session after our recovery read. Missing session data alone is
+        // not revocation of an existing recovery owner. The next lookup checks
+        // the current recovery receipt, including explicit revoke/expiry.
+        if (recovery) return 'unavailable';
+        throw error;
+      }
+      if (!validRecord(session)) return 'unavailable';
+      if (session.revoked || !currentPairingGeneration(session, generation) || session.expiresAt <= this.clock()) return 'revoked';
+      return (recovery ? session.recoveryHash === subject && session.expiresAt === recovery.expiresAt : !session.recoveryHash) ? 'authorized' : 'unavailable';
+    } catch (error) { return (error as NodeJS.ErrnoException).code === 'ENOENT' ? 'revoked' : 'unavailable'; }
   }
   /** Recovery is a distinct 256-bit capability, not an existing data token.
    * Retrying after a lost response issues a fresh session and revokes the prior

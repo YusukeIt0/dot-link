@@ -565,5 +565,13 @@
   "even.walking_terrain": "Itinéraires à pied et terrain",
   "even.walking_terrain_disclosure": "Si Dot en a besoin, votre Mac envoie les coordonnées du trajet à FOSSGIS et la zone de terrain à AWS.",
   "even.walking_terrain_privacy": "Sources et confidentialité (en anglais)",
-  "even.walking_terrain_update_mac": "Nécessite Dot Link for Mac v0.4.27 ou ultérieur."
+  "even.walking_terrain_update_mac": "Nécessite Dot Link for Mac v0.4.27 ou ultérieur.",
+  "even.history_enable": "Mémoriser les lieux récents",
+  "even.history_consent": "Conservez les positions sur ce Mac jusqu’à 7 jours et autorisez Dot à consulter l’historique utile. L’enregistrement suit le partage de position. Désactivez cette option pour bloquer l’accès à l’historique.",
+  "even.history_delete": "Supprimer l’historique",
+  "even.history_delete_confirm": "Supprimer l’historique des positions sur ce Mac et désactiver la fonction ? Les informations déjà reçues par Dot ne seront pas supprimées.",
+  "even.history_off": "L’accès à l’historique est désactivé.",
+  "even.history_count": "{count} mesures enregistrées. L’enregistrement suit le partage de position.",
+  "even.history_failed": "Impossible de modifier les réglages. Reconnectez-vous et réessayez.",
+  "even.history_unavailable": "Connectez-vous à un Mac compatible pour gérer l’historique."
 }

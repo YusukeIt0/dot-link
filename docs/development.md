@@ -78,15 +78,23 @@ For translation resources, locale selection and adding a language, see
 ## Build the Mac app
 
 Apple Silicon macOS, Xcode Command Line Tools, Python 3 and CMake are required.
+Commit the intended source first: the builder requires a clean checkout and a
+matching web build. On a work branch, build the web app in Beta mode:
 
 ```sh
 python3 scripts/prepare-mac-runtime.py
 node scripts/prepare-sparkle.mjs
 node scripts/test-mac-update-driver.mjs
+npm run build
 node scripts/build-mac-app.mjs
 ```
 
 Output: `.runtime/mac-app/Dot Link.app`. Runtime downloads and Sparkle are pinned by version and SHA-256. No speech model, account credential, pairing, or conversation data is included. The speech model downloads during initial setup.
+
+On clean merged `main`, use `npm run build:release` in place of `npm run build`.
+The native Beta label follows that validated build channel. Rebuild after any
+source change; stale or dirty web artifacts are rejected. Both app packagers
+reject fictional-history test controls and fixture assets.
 
 ### Validation builds and conversation-state rollback
 

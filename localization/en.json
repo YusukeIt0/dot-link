@@ -565,5 +565,13 @@
   "even.walking_terrain": "Walking and terrain information",
   "even.walking_terrain_disclosure": "When Dot needs it, your Mac sends route coordinates to FOSSGIS and terrain areas to AWS.",
   "even.walking_terrain_privacy": "Data sources and privacy",
-  "even.walking_terrain_update_mac": "Requires Dot Link for Mac v0.4.27 or later."
+  "even.walking_terrain_update_mac": "Requires Dot Link for Mac v0.4.27 or later.",
+  "even.history_enable": "Remember recent places",
+  "even.history_consent": "Save locations on this Mac for up to 7 days and let Dot read relevant history. Recording follows location sharing. Turn this off to block historical access.",
+  "even.history_delete": "Delete history",
+  "even.history_delete_confirm": "Delete saved location history on this Mac and turn off history? Information already received by Dot is not deleted.",
+  "even.history_off": "History access is off.",
+  "even.history_count": "{count} observations saved. Recording follows location sharing.",
+  "even.history_failed": "Could not update history settings. Reconnect and try again.",
+  "even.history_unavailable": "Connect to a compatible Mac to manage history."
 }

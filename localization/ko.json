@@ -565,5 +565,13 @@
   "even.walking_terrain": "도보 경로 및 지형 정보",
   "even.walking_terrain_disclosure": "Dot에 정보가 필요할 때 Mac에서 경로 좌표를 FOSSGIS로, 지형 조회 영역을 AWS로 보냅니다.",
   "even.walking_terrain_privacy": "정보 출처 및 개인정보 보호 (영어)",
-  "even.walking_terrain_update_mac": "Dot Link for Mac v0.4.27 이상 필요"
+  "even.walking_terrain_update_mac": "Dot Link for Mac v0.4.27 이상 필요",
+  "even.history_enable": "최근 장소 기록",
+  "even.history_consent": "위치를 이 Mac에 최대 7일간 저장하고 Dot이 필요한 기록을 참조하도록 합니다. 위치 공유 중에 기록합니다. 끄면 기록 접근도 중지됩니다.",
+  "even.history_delete": "기록 삭제",
+  "even.history_delete_confirm": "이 Mac의 위치 기록을 삭제하고 기록 기능을 끌까요? Dot이 이미 받은 정보는 삭제되지 않습니다.",
+  "even.history_off": "기록 접근이 꺼져 있습니다.",
+  "even.history_count": "{count}개의 측정값 저장됨. 위치 공유 중에 기록합니다.",
+  "even.history_failed": "기록 설정을 업데이트하지 못했습니다. 다시 연결한 후 시도하세요.",
+  "even.history_unavailable": "호환되는 Mac에 연결하여 기록을 관리하세요."
 }

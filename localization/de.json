@@ -565,5 +565,13 @@
   "even.walking_terrain": "Fußwege und Gelände",
   "even.walking_terrain_disclosure": "Wenn Dot diese Informationen benötigt, sendet Ihr Mac Routenkoordinaten an FOSSGIS und die Geländeregion an AWS.",
   "even.walking_terrain_privacy": "Datenquellen und Datenschutz (Englisch)",
-  "even.walking_terrain_update_mac": "Erfordert Dot Link for Mac ab v0.4.27."
+  "even.walking_terrain_update_mac": "Erfordert Dot Link for Mac ab v0.4.27.",
+  "even.history_enable": "Letzte Orte speichern",
+  "even.history_consent": "Speichere Standorte bis zu 7 Tage auf diesem Mac und erlaube Dot, relevante Einträge abzurufen. Aufgezeichnet wird während der Standortfreigabe. Ausschalten sperrt auch den Zugriff auf den Verlauf.",
+  "even.history_delete": "Verlauf löschen",
+  "even.history_delete_confirm": "Standortverlauf auf diesem Mac löschen und die Funktion ausschalten? Bereits von Dot empfangene Informationen werden nicht gelöscht.",
+  "even.history_off": "Der Zugriff auf den Verlauf ist aus.",
+  "even.history_count": "{count} Messungen gespeichert. Aufzeichnung während der Standortfreigabe.",
+  "even.history_failed": "Verlaufseinstellungen konnten nicht geändert werden. Erneut verbinden und versuchen.",
+  "even.history_unavailable": "Zum Verwalten des Verlaufs mit einem kompatiblen Mac verbinden."
 }
