@@ -78,7 +78,11 @@ a documentation or version commit. The agent still verifies its assumptions.
 Review context exposes `evidence_comparisons` for earlier runtime/device sources:
 source/target commits, verified ancestry, comparison completeness, changed paths
 and eligibility under that policy. One comparison is shared by observations from
-the same source. No paths are reported for an incomplete comparison. Eligibility
+the same source. No paths are reported for an incomplete comparison. Presentation
+is limited to 20 paths per source and an 8,000-byte path-entry budget across sources;
+`compared_file_count` and `paths_complete` distinguish a partial display from a
+complete list. Eligibility still uses every returned file. Omitted paths are not
+evidence that the observed behavior is unchanged. Eligibility
 is not semantic proof: a website or translation change can invalidate a recorded
 page rendering even though it does not affect the device app. Conversely, a
 contact-only documentation edit does not require repeating unchanged page renders.

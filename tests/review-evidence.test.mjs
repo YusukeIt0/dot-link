@@ -75,7 +75,7 @@ test('review cannot invent requirements; concrete architecture advice is non-blo
 function contextFor(r, changes = {}) {
   const api = path => {
     if (path === 'issues/73') return changes.issue || issue;
-    if (path.startsWith('compare/')) { changes.onCompare?.(path); return changes.comparison; }
+    if (path.startsWith('compare/')) { changes.onCompare?.(path); return changes.comparisons?.[path] || changes.comparison; }
     if (path.startsWith('actions/')) return {workflow_runs: []};
     throw new Error(`Unexpected API: ${path}`);
   };
@@ -109,6 +109,7 @@ test('docs-only follow-up exposes verified reuse context without repeating uncha
   assert.equal(context.acceptance.record.evidence[0].commit, before);
   assert.deepEqual(context.evidence_comparisons[0], {
     source: before, target: head, ancestor: true, complete: true, eligible: true,
+    compared_file_count: 1, paths_complete: true,
     changed_files: [{path: 'docs/privacy.md', status: 'modified'}],
     reason: 'Changes are within the existing reuse policy; assess their effect on the recorded observation.',
   });
@@ -163,6 +164,37 @@ test('unsafe reuse comparisons explain the hold without implying missing paths a
     }
     assert.ok(acceptanceBlockers(context.acceptance, assessment()).length);
   }
+});
+
+test('comparison presentation is bounded across sources without weakening full-list eligibility', () => {
+  const r = record();
+  const sources = ['a', 'c', 'd', 'e'].map(c => c.repeat(40));
+  r.evidence = sources.map(commit => ({kind: 'runtime', result: 'pass', requirements: ['R1'],
+    reference: 'Earlier observation', details: 'Attributed result', commit, steps: 'Inspect', observed: 'Expected'}));
+  const comparisons = Object.fromEntries(sources.map(source => [`compare/${source}...${head}`, {
+    status: 'ahead', merge_base_commit: {sha: source}, files: Array.from({length: 25}, (_, i) => ({
+      filename: `docs/${'long-name-'.repeat(20)}${i}.md`, status: 'modified',
+    })),
+  }]));
+  // The unsafe change is beyond the displayed prefix and must still hold reuse.
+  comparisons[`compare/${sources[3]}...${head}`].files[24].filename = 'server/main.ts';
+  const context = contextFor(r, {comparisons});
+  assert.equal(context.acceptance.status, 'stale');
+  assert.equal(context.evidence_comparisons.length, 4);
+  assert.ok(context.evidence_comparisons.every(c => c.complete && !c.paths_complete && c.compared_file_count === 25));
+  assert.ok(context.evidence_comparisons.every(c => c.changed_files.length <= 20));
+  const paths = context.evidence_comparisons.flatMap(c => c.changed_files);
+  assert.ok(paths.reduce((n, f) => n + Buffer.byteLength(JSON.stringify(f)) + 1, 0) <= 8_000);
+  assert.ok(context.evidence_comparisons.slice(0, 3).every(c => c.eligible));
+  assert.equal(context.evidence_comparisons[3].eligible, false);
+  // A single very long UTF-8 path must not exceed the shared budget either.
+  const long = contextFor({...r, evidence: [r.evidence[0]]}, {comparison: {
+    status: 'ahead', merge_base_commit: {sha: before},
+    files: [{filename: `docs/${'語'.repeat(3000)}.md`, status: 'modified'}],
+  }}).evidence_comparisons[0];
+  assert.equal(long.eligible, true);
+  assert.equal(long.paths_complete, false);
+  assert.deepEqual(long.changed_files, []);
 });
 
 test('scope constraints in human comments reach the reviewer instead of only changing a digest', () => {

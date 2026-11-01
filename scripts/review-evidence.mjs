@@ -174,6 +174,7 @@ export function gatherContext(snapshot, api, paginate) {
     // check whether these paths affect the particular observed behavior.
     const comparedSources = new Set();
     context.evidence_comparisons = [];
+    let remainingPathBytes = 8_000;
     for (const evidence of record.evidence.filter(x => ['runtime', 'device'].includes(x.kind))) {
       if (evidence.commit === record.head) continue;
       if (comparedSources.has(evidence.commit)) continue;
@@ -185,10 +186,21 @@ export function gatherContext(snapshot, api, paginate) {
           (['docs/', 'tests/', 'site/'].some(p => f.filename.startsWith(p)) || websiteOnlyAsset(f.filename) || f.filename === 'README.md' ||
           f.status === 'modified' && versionFiles.has(f.filename) && versionOnly(f.filename,
             readMetadata(api, f.filename, evidence.commit), readMetadata(api, f.filename, record.head))));
+      // Bound presentation separately from eligibility, which used the full list.
+      const changedFiles = [];
+      for (const f of complete ? comparison.files.slice(0, 20) : []) {
+        const path = {path: f.filename, status: f.status,
+          ...(f.previous_filename ? {previous_path: f.previous_filename} : {})};
+        const bytes = Buffer.byteLength(JSON.stringify(path)) + 1;
+        if (bytes > remainingPathBytes) break;
+        changedFiles.push(path);
+        remainingPathBytes -= bytes;
+      }
       const result = {source: evidence.commit, target: record.head, ancestor,
         complete, eligible: reusable,
-        changed_files: complete ? comparison.files.map(f => ({path: f.filename, status: f.status,
-          ...(f.previous_filename ? {previous_path: f.previous_filename} : {})})) : [],
+        compared_file_count: Array.isArray(comparison.files) ? comparison.files.length : null,
+        paths_complete: complete && changedFiles.length === comparison.files.length,
+        changed_files: changedFiles,
         reason: !ancestor ? 'Observation source is not a verified ancestor of the current head.' :
           !complete ? 'Changed-file comparison is missing or potentially truncated; no paths are reported.' :
           !reusable ? 'Changes exceed the existing evidence-reuse policy.' :

@@ -188,6 +188,9 @@ jobs:
             affect the recorded behavior (site/locales changes can affect a site
             rendering observation). Use the supplied comparison rather than
             requiring inaccessible git history or an identical observation SHA.
+            If paths_complete is false, the displayed list is partial; never infer
+            unaffected behavior from omitted paths. Eligibility still uses the full
+            bounded comparison. Identify any specific applicability proof still needed.
             When behavior and assumptions remain applicable, carry the evidence
             forward. A repeat check needs a concrete affected requirement and
             changed behavior, new defect or changed assumption. Do not ask for
