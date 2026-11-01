@@ -102,7 +102,9 @@ and historical access; saved observations remain until expiry. **Delete and stop
 removes the stored observations and disables history. A failed or offline control
 shows an error rather than claiming the Mac has stopped. Reconnecting another Mac
 does not inherit consent. Revoking the owning phone's pairing invalidates access
-immediately and removes this history during the next maintenance/access pass.
+immediately and removes this history during the next maintenance/access pass
+after confirmed revocation, pairing removal or expiry. A temporary authorization
+lookup failure blocks access without deleting retained history.
 
 History-based G2 replies use a short-lived history context and recheck access,
 deletion and expiry before being saved as ordinary question-linked replies.

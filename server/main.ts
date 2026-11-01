@@ -30,6 +30,7 @@ try {
   const build = JSON.parse(readFileSync(new URL('../dist/build-info.txt', import.meta.url), 'utf8'));
   history = new LocationHistoryStore(resolve('.runtime/location-history'), {
     beta: build.channel === 'beta', ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
+    ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
     announce: (input, guard) => bridge.sendMessage(input, guard),
   });
 } catch { console.error('Location history unavailable; ordinary conversation remains available'); }

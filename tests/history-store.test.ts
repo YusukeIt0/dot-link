@@ -13,9 +13,9 @@ import { geographicEvidence } from '../server/geography/geometry.ts';
 const owner = 'a'.repeat(64), other = 'b'.repeat(64);
 function setup(t: test.TestContext, beta = true) {
   const directory = mkdtempSync(join(tmpdir(), 'history-store-test-'));
-  let clock = Date.parse('2026-11-02T12:00:00Z'), authorized = true;
+  let clock = Date.parse('2026-11-02T12:00:00Z'), authorized = true, revoked = false;
   const bridge = new Bridge(join(directory, 'bridge.json'), new WebhookSender(async (_url, raw) => { const e = JSON.parse(raw); return {status: 200, body: JSON.stringify(e.type === 'verification' ? {challenge: e.challenge} : {})}; }), ['callback.example.test']);
-  const options = {now: () => clock, beta, ownerAuthorized: (id: string) => authorized && id === owner,
+  const options = {now: () => clock, beta, ownerAuthorized: (id: string) => authorized && id === owner, ownerRevoked: (id: string) => revoked && id === owner,
     announce: (input: any, guard: () => boolean) => bridge.sendMessage(input, guard)};
   let store = new LocationHistoryStore(join(directory, 'history'), options);
   t.after(() => { store.close(); bridge.close(); rmSync(directory, {recursive: true, force: true}); });
@@ -23,8 +23,8 @@ function setup(t: test.TestContext, beta = true) {
   const fix = () => ({latitude: 10.0005, longitude: 10.0005, accuracy: 8, measured_at: new Date(clock).toISOString()});
   const ingest = (sharing = 'session-a', metadata = {protocol: 1, epoch: store.status(owner).historyEpoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}) => store.ingest(fix(), sharing, metadata, owner);
   return {get store() {return store;}, bridge, directory, control, fix, ingest,
-    advance(ms: number) {clock += ms;}, revoke() {authorized = false;},
-    restart() {store.close(); store = new LocationHistoryStore(join(directory, 'history'), options);}};
+    advance(ms: number) {clock += ms;}, revoke() {authorized = false; revoked = true;}, setAuthorization(value: boolean) {authorized = value;},
+    restart(beta?: boolean) {store.close(); if (beta !== undefined) options.beta = beta; store = new LocationHistoryStore(join(directory, 'history'), options);}};
 }
 test('history defaults off, has separate consent, persists only opted-in measurements and survives restart', t => {
   const h = setup(t);
@@ -137,4 +137,35 @@ test('one history context supports different linked follow-ups with idempotent r
   assert.equal(h.bridge.history().find(x => x.id === question.id)?.reply, 'The fictional east road.');
   assert.equal(h.bridge.outboundHistory().length, 1);
   assert.equal(h.bridge.outboundHistory()[0].reply, 'Then the fictional north road.');
+});
+
+
+test('transient authorization failure blocks access without deleting history or consent', async t => {
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
+  const epoch = h.store.status(owner).historyEpoch;
+  h.setAuthorization(false);
+  assert.equal(h.store.read().status, 'unavailable');
+  assert.equal(h.ingest('session-a', {protocol: 1, epoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}), false);
+  h.store.maintain(); h.restart();
+  assert.equal(h.store.read().status, 'unavailable');
+  h.setAuthorization(true);
+  assert.equal(h.store.status(owner).historyEnabled, true);
+  assert.equal(h.store.status(owner).historyCount, 1);
+  assert.equal((h.store.read() as any).entries.length, 1);
+  // Confirmed revocation remains a different, destructive signal.
+  h.revoke(); h.store.maintain(); h.setAuthorization(true);
+  assert.equal(h.store.status(owner).historyEnabled, false);
+  assert.equal(h.store.status(owner).historyCount, 0);
+});
+
+
+test('switching from Beta to release removes simulation and preserves only opted-in real history', t => {
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
+  h.control('simulate', 'walk');
+  h.restart(false);
+  assert.equal(h.store.status(owner).historyBeta, false);
+  assert.equal(h.store.status(owner).historySimulation, null);
+  assert.equal(h.store.status(owner).historyCount, 1);
+  assert.equal((h.store.read() as any).source, 'phone_location');
+  assert.throws(() => h.control('simulate', 'walk'));
 });

@@ -38,12 +38,13 @@ export class LocationHistoryStore {
   private dirty = false;
   private now: () => number;
   private ownerAuthorized: (owner: string) => boolean;
+  private ownerRevoked: (owner: string) => boolean;
   private beta: boolean;
   private announce: (input: {message_id: string; text: string; utterance_id: string}, guard: () => boolean) => Promise<unknown>;
-  constructor(directory: string, options: {now?: () => number; beta?: boolean; ownerAuthorized: (owner: string) => boolean;
+  constructor(directory: string, options: {now?: () => number; beta?: boolean; ownerAuthorized: (owner: string) => boolean; ownerRevoked?: (owner: string) => boolean;
     announce: (input: {message_id: string; text: string; utterance_id: string}, guard: () => boolean) => Promise<unknown>}) {
     this.now = options.now ?? Date.now; this.beta = options.beta === true;
-    this.ownerAuthorized = options.ownerAuthorized; this.announce = options.announce;
+    this.ownerAuthorized = options.ownerAuthorized; this.ownerRevoked = options.ownerRevoked ?? (() => false); this.announce = options.announce;
     mkdirSync(directory, {recursive: true, mode: 0o700});
     const directoryInfo = lstatSync(directory);
     if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw new Error('Invalid history directory');
@@ -84,7 +85,7 @@ export class LocationHistoryStore {
   private fail() { this.healthy = false; this.reads.clear(); this.index?.setReadable(false); this.changes.emit(); }
   private authorized() { return !this.closed && this.healthy && this.consent.enabled && !!this.consent.owner && this.ownerAuthorized(this.consent.owner); }
   private checkOwner() {
-    if (this.consent.owner && !this.ownerAuthorized(this.consent.owner)) {
+    if (this.consent.owner && this.ownerRevoked(this.consent.owner)) {
       this.db.exec('DELETE FROM observations; DELETE FROM simulation'); this.save(emptyConsent()); this.reload(); this.changed();
     }
   }

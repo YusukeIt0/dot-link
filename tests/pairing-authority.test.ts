@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -166,4 +166,23 @@ test('a stale data token cannot falsely acknowledge revocation of a newer sessio
   assert.equal(authority.authorized(current.token, origin), true);
   assert.equal(authority.revokeRecovery(old.resumeToken!, origin), true);
   assert.equal(authority.authorized(current.token, origin), false);
+});
+
+
+test('durable subject status distinguishes transient corrupt state from confirmed revocation', t => {
+  const root = mkdtempSync(join(tmpdir(), 'g2-pairing-status-')); t.after(() => rmSync(root, {recursive:true,force:true}));
+  const authority = new PairingAuthority(root), origin = 'https://package.example';
+  const invite = authority.issue('https://mac.tailtest.ts.net', origin);
+  const session = authority.exchange(invite.code, origin)!;
+  const subject = authority.subject(session.token, origin)!;
+  const path = join(root, 'sessions', createHash('sha256').update(session.token).digest('hex') + '.json');
+  const saved = readFileSync(path);
+  assert.equal(authority.subjectStatus(subject), 'authorized');
+  writeFileSync(path, '{');
+  assert.equal(authority.subjectStatus(subject), 'unavailable');
+  assert.equal(authority.authorizedSubject(subject), false);
+  writeFileSync(path, saved);
+  assert.equal(authority.subjectStatus(subject), 'authorized');
+  authority.revokeAll();
+  assert.equal(authority.subjectStatus(subject), 'revoked');
 });
