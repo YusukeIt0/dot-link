@@ -320,3 +320,44 @@ print("PASS: a verified recovery is not overwritten by a later transient health 
 precondition(AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetupReady": true]]))
 precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetupReady": false]]))
 print("PASS: strict initial-setup proof also supports retry after a lost recovery result")
+
+let restartSuite = "DotLinkHostRestartTest-" + UUID().uuidString
+let restartDefaults = UserDefaults(suiteName: restartSuite)!
+defer { restartDefaults.removePersistentDomain(forName: restartSuite) }
+let restartDriver = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+var restartedToken: String?
+var restartCompletion: ((Bool) -> Void)?
+restartDriver.restartHost = { token, reply in restartedToken = token; restartCompletion = reply }
+var scheduledRestart: (() -> Void)?
+restartDriver.scheduleHostRestart = { scheduledRestart = $0 }
+var restartChoice: SPUUserUpdateChoice?
+precondition(restartDriver.restartBeforeDownload(build: "999", url: release, reply: { restartChoice = $0 }))
+precondition(restartChoice == .skip && restartDriver.blocksActions, "Cancel old Sparkle session before relaunch")
+restartDriver.dismissUpdateInstallation()
+precondition(restartDriver.blocksActions, "Sparkle dismissal must not reopen settings during the handoff")
+precondition(restartedToken == nil)
+scheduledRestart?()
+precondition(restartedToken != nil && restartDriver.progressActive)
+let resumedDriver = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+resumedDriver.consumeHostRestart(arguments: ["test", "--resume-update", restartedToken!])
+precondition(resumedDriver.takeResumedApproval(build: "999", url: release))
+precondition(!resumedDriver.takeResumedApproval(build: "999", url: release), "Approval is consumed once")
+restartCompletion?(false)
+precondition(!restartDriver.blocksActions && !restartDriver.working)
+precondition(restartDefaults.dictionary(forKey: "DotLinkUpdateHostRestart") == nil)
+for scenario in ["token", "expired", "future", "target", "url", "normal-start", "recovery-failed"] {
+    restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970 + (scenario == "expired" ? -121 : scenario == "future" ? 60 : 0), "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+    let d = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+    d.consumeHostRestart(arguments: scenario == "normal-start" ? ["test"] : ["test", "--resume-update", scenario == "token" ? "wrong" : "token"])
+    if scenario == "recovery-failed" { d.resumeAfterHostRestart(ready: false) }
+    precondition(!d.takeResumedApproval(build: scenario == "target" ? "1000" : "999", url: scenario == "url" ? release + "2" : release), scenario)
+    precondition(restartDefaults.dictionary(forKey: "DotLinkUpdateHostRestart") == nil)
+}
+print("PASS: cancel-before-restart, blocked actions, exact-target single-use approval, expired/incorrect tokens, failed arming/recovery")
+restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970, "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+let alreadyInstalled = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+alreadyInstalled.consumeHostRestart(arguments: ["test", "--resume-update", "token"])
+precondition(alreadyInstalled.resumeAfterHostRestart(ready: true, currentBuild: "999"))
+precondition(!alreadyInstalled.progressActive && !alreadyInstalled.working)
+precondition(!alreadyInstalled.takeResumedApproval(build: "999", url: release))
+print("PASS: an already-installed approved target completes after fresh startup without another click")

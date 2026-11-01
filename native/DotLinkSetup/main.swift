@@ -55,6 +55,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var speechMetadataLabel: NSTextField?
     var allowTermination = false
     var quitting = false
+    var restartingUpdateHost = false
     var automaticResumePending = false
     var currentAction = ""
     var lastChecked: Date?
@@ -105,6 +106,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         automaticResumePending = !CommandLine.arguments.contains("--background")
         configureUpdater()
+        appUpdater?.consumeHostRestart()
         appUpdater?.beginStartupRecovery()
         perform("update-recover")
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -144,6 +146,26 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         updater.retryStartupRecovery = { [weak self] in
             guard let self, !self.busy, self.appUpdater?.blocksActions != true else { return }
             self.appUpdater?.beginStartupRecovery(); self.perform("update-recover")
+        }
+        updater.restartHost = { [weak self] token, reply in
+            guard let self, !self.busy, self.helper == nil else { reply(false); return }
+            let p = Process(); p.executableURL = self.payload.appendingPathComponent(".runtime/bin/node")
+            let options: [String: Any] = ["app": Bundle.main.bundleURL.path,
+                "hostPID": ProcessInfo.processInfo.processIdentifier, "token": token]
+            guard let data = try? JSONSerialization.data(withJSONObject: options),
+                  let json = String(data: data, encoding: .utf8) else { reply(false); return }
+            p.arguments = [self.payload.appendingPathComponent("scripts/lib/update-host-restart.mjs").path, "--arm", json]
+            let output = Pipe(); p.standardOutput = output; p.standardError = FileHandle.nullDevice
+            p.standardInput = FileHandle.nullDevice
+            p.terminationHandler = { process in
+                let data = output.fileHandleForReading.readDataToEndOfFile()
+                let result = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                DispatchQueue.main.async {
+                    guard process.terminationStatus == 0, result?["ready"] as? Bool == true else { reply(false); return }
+                    self.restartingUpdateHost = true; reply(true); NSApp.terminate(nil)
+                }
+            }
+            do { try p.run() } catch { reply(false) }
         }
         updater.start()
     }
@@ -237,6 +259,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusItem.menu = menu
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if restartingUpdateHost { notifications?.shutdown(); return .terminateNow }
         if appUpdater?.prepared == true {
             if appUpdater?.silentRelaunch == true { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateBackgroundRelaunchAt") }
             notifications?.shutdown(); return .terminateNow
@@ -667,13 +690,16 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if let code = value["pairingCode"] as? String { pairingCode = code; pairingExpiry = value["expiresAt"] as? Double ?? 0 }
             render()
             if showAfterUpdate { showWindow() }
+            if currentAction == "update-recover" {
+                if appUpdater?.resumeAfterHostRestart(ready: AppUpdater.recoveredStateIsReady(value)) == true { showWindow() }
+            }
             if automaticResumePending {
                 automaticResumePending = false
                 if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
             }
         case "error":
             busy = false; helper = nil; automaticResumePending = false
-            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: false) }
+            if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: false); appUpdater?.resumeAfterHostRestart(ready: false) }
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFailed() }
             let code = value["code"] as? String ?? "SETUP_FAILED"
