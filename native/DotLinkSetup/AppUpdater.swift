@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Sparkle
 
 final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
@@ -8,6 +9,13 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         // Do not replace that evidence with a single later network probe.
         return state["installed"] as? Bool == true && (recovery["recovered"] as? Bool == true || recovery["initialSetupReady"] as? Bool == true || state["lifecycleStopped"] as? Bool == true ||
             ["bridge", "device", "tunnel"].allSatisfy { state[$0] as? Bool == true })
+    }
+    static func refreshedHostCanContinue(_ state: [String: Any]) -> Bool {
+        if recoveredStateIsReady(state) { return true }
+        let recovery = state["updateRecovery"] as? [String: Any] ?? [:]
+        // A successful helper result with recovered=false means no journal needed
+        // recovery. A temporarily offline relay must still be allowed to update.
+        return state["installed"] as? Bool == true && state["servicesConfigured"] as? Bool == true && recovery["recovered"] as? Bool == false
     }
     static func preparationResult(_ result: [String: Any]) -> String {
         if result["prepared"] as? Bool == true { return "prepared" }
@@ -30,6 +38,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
     var localize: (String, [String: String]) -> String = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
     func tr(_ key: String, _ parameters: [String: String] = [:]) -> String { localize(key, parameters) }
     var canCheck: () -> Bool = { false }
+    var requestUpdateCheck: () -> Void = {}
     var prepare: (Bool, @escaping (String) -> Void) -> Void = { _, reply in reply("failed") }
     var recover: (@escaping (Bool) -> Void) -> Void = { $0(false) }
     var runAlert: (NSAlert) -> NSApplication.ModalResponse = { $0.runModal() }
@@ -67,6 +76,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         self.automaticUpdatesEnabled = automaticUpdatesEnabled ?? (Bundle.main.object(forInfoDictionaryKey: "DotLinkAutomaticUpdatesEnabled") as? Bool ?? false)
         super.init()
         updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: self, delegate: self)
+        requestUpdateCheck = { [weak self] in self?.updater.checkForUpdates() }
     }
     private func renderProgress() {
         guard progressActive, presentProgress else { return }
@@ -177,26 +187,35 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
             status("mac.automatic_updates_are_off")
         }
     }
-    // A token passed only by the armed helper makes this consent single-use.
-    func consumeHostRestart(arguments: [String] = CommandLine.arguments, now: Date = Date()) {
+    // The helper normally supplies the token. launchd may reopen a killed host
+    // first; that instance can consume the same approval only after the old PID
+    // has disappeared. Removal on read keeps both launch paths single-use.
+    func consumeHostRestart(arguments: [String] = CommandLine.arguments, now: Date = Date(), hasExited: (Int32) -> Bool = { pid in kill(pid, 0) == -1 && errno == ESRCH }) {
         let marker = progressDefaults.dictionary(forKey: restartMarkerKey)
         progressDefaults.removeObject(forKey: restartMarkerKey)
-        guard let index = arguments.firstIndex(of: "--resume-update"), index + 1 < arguments.count,
-              let marker, marker["token"] as? String == arguments[index + 1],
-              let at = marker["at"] as? Double, (0..<120).contains(now.timeIntervalSince1970 - at),
+        guard let marker, let at = marker["at"] as? Double,
+              (0..<120).contains(now.timeIntervalSince1970 - at),
               let build = marker["build"] as? String, let url = marker["url"] as? String else { return }
+        if let index = arguments.firstIndex(of: "--resume-update") {
+            guard index + 1 < arguments.count, marker["token"] as? String == arguments[index + 1] else { return }
+        } else {
+            guard let rawPID = marker["hostPID"] as? Int, let pid = Int32(exactly: rawPID),
+                  pid > 1, pid != ProcessInfo.processInfo.processIdentifier, hasExited(pid) else { return }
+        }
         resumedUpdate = ["build": build, "url": url]
     }
-    @discardableResult func resumeAfterHostRestart(ready: Bool, currentBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "") -> Bool {
+    @discardableResult func resumeAfterHostRestart(ready: Bool, currentBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "", targetReady: Bool = true) -> Bool {
         guard let resumed = resumedUpdate else { return false }
         guard ready else { resumedUpdate = nil; status("mac.update_failed_click_check_for_updates_to_retry"); beginProgress(); return false }
         // A stale host may have offered the version already installed on disk.
         if resumed["build"] == currentBuild {
-            resumedUpdate = nil; status("mac.update_progress_complete")
+            resumedUpdate = nil
+            guard targetReady else { status("mac.update_failed_click_check_for_updates_to_retry"); beginProgress(); return false }
+            status("mac.update_progress_complete")
             progressWindow?.close(); progressActive = false; return true
         }
         progressFraction = nil; status("mac.checking_for_updates", working: true); beginProgress()
-        manualCheck = true; updater.checkForUpdates(); return false
+        manualCheck = true; requestUpdateCheck(); return false
     }
     func takeResumedApproval(build: String, url: String?) -> Bool {
         let resumed = resumedUpdate; resumedUpdate = nil
@@ -206,7 +225,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         guard let restartHost, let url else { return false }
         let token = UUID().uuidString
         progressDefaults.set(["token": token, "at": Date().timeIntervalSince1970,
-                              "build": build, "url": url], forKey: restartMarkerKey)
+                              "hostPID": Int(ProcessInfo.processInfo.processIdentifier), "build": build, "url": url], forKey: restartMarkerKey)
         progressDefaults.synchronize()
         restartingHost = true
         // Called only before the installing stage. Dismiss aborts this session
@@ -234,7 +253,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
         guard !blocksActions && !extracting else { return }
         if recoveryRequired { restoreService(); return }
         if readyReply != nil { attemptInstall(); return }
-        manualCheck = true; updater.checkForUpdates()
+        manualCheck = true; requestUpdateCheck()
     }
     @discardableResult func cancelForQuit(discardConfirmed: Bool = false) -> Bool {
         if extracting || preparing || recovering {

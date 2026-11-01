@@ -25,6 +25,13 @@ export async function restartUpdateHost({app,hostPID,token},{execute=run,wait=sl
   if(current!==original){
    // A reused PID is not the old host. Revalidate disk before LaunchServices.
    await regularPath(app);await verifyUpdateApp(app,execute);
+   // The existing launchd job can relaunch after a signal before we get here.
+   // That fresh UI consumes the same approval after verifying the old PID exited.
+   const processes=await execute('/bin/ps',['-axo','uid=,pid=,comm=']);
+   if(processes.split('\n').some(line=>{
+    const match=line.trim().match(/^(\d+)\s+(\d+)\s+(.+)$/);
+    return match&&Number(match[1])===uid&&Number(match[2])!==hostPID&&match[3]===executable;
+   }))return 'already-running';
    await execute('/usr/bin/open',['-g',app,'--args','--background','--resume-update',token]);
    return 'reopened';
   }

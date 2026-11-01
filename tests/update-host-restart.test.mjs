@@ -78,3 +78,8 @@ test('exit racing a fallback signal is verified on the next observation',async t
  options.signal=()=>{state.identity='';throw Object.assign(new Error('already exited'),{code:'ESRCH'});};
  assert.equal(await restartUpdateHost(args,options),'reopened');assert.equal(state.opens.length,1);
 });
+test('a launchd-restarted UI is not opened a second time',async t=>{
+ const {args,options,state}=await fixture(t);const execute=options.execute;
+ options.execute=async(cmd,a)=>cmd==='/bin/ps'&&a[0]==='-axo'?`501 99 ${args.app}/Contents/MacOS/DotLink`:execute(cmd,a);
+ assert.equal(await restartUpdateHost(args,options),'already-running');assert.equal(state.opens.length,0);
+});

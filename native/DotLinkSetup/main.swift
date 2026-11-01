@@ -691,7 +691,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             render()
             if showAfterUpdate { showWindow() }
             if currentAction == "update-recover" {
-                if appUpdater?.resumeAfterHostRestart(ready: AppUpdater.recoveredStateIsReady(value)) == true { showWindow() }
+                if appUpdater?.resumeAfterHostRestart(ready: AppUpdater.refreshedHostCanContinue(value), targetReady: AppUpdater.recoveredStateIsReady(value)) == true { showWindow() }
             }
             if automaticResumePending {
                 automaticResumePending = false
