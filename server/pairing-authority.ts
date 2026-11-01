@@ -252,7 +252,16 @@ export class PairingAuthority {
         if (recovery.revoked || !currentPairingGeneration(recovery, generation) || recovery.expiresAt <= this.clock()) return 'revoked';
         sessionHash = recovery.currentSession;
       }
-      const session = JSON.parse(readFileSync(join(this.directory, 'sessions', `${sessionHash}.json`), 'utf8'));
+      let session;
+      try { session = JSON.parse(readFileSync(join(this.directory, 'sessions', `${sessionHash}.json`), 'utf8')); }
+      catch (error) {
+        // A separate device process can rotate the recovery pointer and remove
+        // this session after our recovery read. Missing session data alone is
+        // not revocation of an existing recovery owner. The next lookup checks
+        // the current recovery receipt, including explicit revoke/expiry.
+        if (recovery) return 'unavailable';
+        throw error;
+      }
       if (!validRecord(session)) return 'unavailable';
       if (session.revoked || !currentPairingGeneration(session, generation) || session.expiresAt <= this.clock()) return 'revoked';
       return (recovery ? session.recoveryHash === subject && session.expiresAt === recovery.expiresAt : !session.recoveryHash) ? 'authorized' : 'unavailable';
