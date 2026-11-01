@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## 0.3.53
+## 0.3.54
 
 - Added optional recent-place history so Dot can refer to places you visited.
 - Added separate history consent and a Delete history control, with up to 7 days of storage on your Mac.
