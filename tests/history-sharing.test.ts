@@ -10,7 +10,7 @@ test('new companion on old or unknown Mac sends no unsupported history fields or
   }
   assert.equal(calls, 0);
 });
-test('history opt-in is authoritative on the selected Mac and never reused after target change or stale status', async () => {
+test('history opt-in remains scoped to its Mac across sparse uploads while stale controls stay unavailable', async () => {
   let target = 'mac-a', clock = Date.now();
   const history = new HistorySharing({target: () => target, now: () => clock, changed() {}, api: async input => ({historyProtocol: 1, historyEpoch: 'next', historyEnabled: (input as any).action === 'enable'})});
   history.receive({historyProtocol: 1, historyEpoch: 'first', historyEnabled: false});
@@ -18,7 +18,12 @@ test('history opt-in is authoritative on the selected Mac and never reused after
   target = 'mac-b'; assert.equal(history.upload(), undefined);
   history.receive({historyProtocol: 1, historyEpoch: 'second', historyEnabled: false}); assert.equal(history.upload(), undefined);
   history.receive({historyProtocol: 1, historyEpoch: 'second', historyEnabled: true}); clock += 45_001;
-  assert.equal(history.upload(), undefined);
+  assert.equal(history.upload()?.epoch, 'second');
+  assert.equal(history.status().supported, false);
+  await history.control('disable');
+  assert.equal(history.upload()?.epoch, 'second');
+  clock += 300_000; assert.equal(history.upload()?.epoch, 'second');
+  history.reset(); assert.equal(history.upload(), undefined);
 });
 test('failed disable is visible and is never reported as remotely revoked; simulation suspends uploads', async () => {
   const history = new HistorySharing({target: () => 'mac-a', changed() {}, api: async () => {throw new Error('offline');}});
@@ -42,7 +47,8 @@ test('successful live uploads refresh history when update polling stalls, withou
   const history = new HistorySharing({target: () => target, now: () => clock, changed() {}, api: async () => ({})});
   const status = {historyProtocol: 1, historyEpoch: 'first', historyEnabled: true};
   history.receive(status);
-  clock += 45_001; assert.equal(history.upload(), undefined);
+  clock += 45_001; assert.equal(history.upload()?.epoch, 'first');
+  assert.equal(history.status().connected, false);
   history.receiveUpload(status, 'mac-a'); assert.equal(history.upload()?.epoch, 'first');
   clock += 30_000; history.receiveUpload(status, 'mac-a');
   clock += 30_000; assert.equal(history.upload()?.epoch, 'first');

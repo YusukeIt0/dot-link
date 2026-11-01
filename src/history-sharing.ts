@@ -29,8 +29,11 @@ export class HistorySharing {
     return {...(connected ? this.value : {}), connected, supported, pending: this.pending, failed: this.failed};
   }
   upload() {
-    const state = this.status();
-    if (!state.supported || !state.historyEnabled || state.historySimulation || this.pending) return undefined;
+    // Sparse/background fixes can outlive the UI freshness window. The Mac
+    // validates the remembered epoch and consent before saving each fix.
+    const state = this.value;
+    if (!this.origin || this.origin !== this.options.target() || state.historyProtocol !== 1 || typeof state.historyEpoch !== 'string'
+      || !state.historyEnabled || state.historySimulation || this.pending) return undefined;
     let timezone: string | undefined;
     try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
     return {protocol: 1, epoch: state.historyEpoch, ...(timezone ? {timezone} : {}), utc_offset_minutes: -new Date(this.now()).getTimezoneOffset()};
