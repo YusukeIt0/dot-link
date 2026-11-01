@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.29</title><sparkle:version>106</sparkle:version><sparkle:shortVersionString>0.4.29</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved Mac update reliability by automatically refreshing the running app before installation, without asking you to quit or reopen it.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.29-106/Dot-Link-0.4.29-106-arm64.zip" sparkle:installationType="application" sparkle:edSignature="LUmuWIySiG73pL6me3ELFq5I1qHKHXCJh79Lk688H0d1u0eU9BI0cBawzGjwNGZFfxsY1V7wS8RXMgtbazJ3Cw==" length="59618773" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: LpkQHgW+mTI3maqQMdlulinT5IrsRGr23X8ssZLb5Z/cv4qBb64CCFvm0KZjPUUM5903IWyclCjvRE9aHm5uDQ==
-length: 1173
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.30</title><sparkle:version>109</sparkle:version><sparkle:shortVersionString>0.4.30</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added optional recent-place history for Dot, stored on your Mac for up to 7 days.
+- Added separate history consent and deletion controls on your phone.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.30-109/Dot-Link-0.4.30-109-arm64.zip" sparkle:installationType="application" sparkle:edSignature="edcrynS3XTt8XSKVX8AYS8DA/ROTDC8kfPwajN8JpJOv7g/ElPIrcveUIiFHdF9G53v+pPy3I0iKJiKdsPu8DA==" length="59639369" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: v3hsxaXu8a6xpEMQtvj3petsuENpwfsGyFL0fRgIbT1CafhH0kWizaYHmTXzvaxlMhFetJMLqQdtHw6yPSsKBg==
+length: 1187
 -->
