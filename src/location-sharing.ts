@@ -63,8 +63,10 @@ export class LocationSharing {
   private api: (path: string, body: unknown) => Promise<unknown>;
   private changed: () => void;
   private now: () => number;
+  private historyUpload?: () => unknown;
   constructor(options: { storage: () => Pick<Storage, 'getItem' | 'setItem'>; target: () => string | undefined;
-    api: (path: string, body: unknown) => Promise<unknown>; changed: () => void; now?: () => number; automatic?: boolean }) {
+    api: (path: string, body: unknown) => Promise<unknown>; changed: () => void; now?: () => number; automatic?: boolean; historyUpload?: () => unknown }) {
+    this.historyUpload = options.historyUpload;
     this.storage = options.storage; this.target = options.target; this.api = options.api; this.changed = options.changed; this.now = options.now ?? Date.now;
     try { this.preferences = parse(this.storage().getItem(KEY)) ?? empty(); } catch { this.preferences = empty(); }
     // Wait for native storage before automatically restoring consent on a new WebView origin.
@@ -245,7 +247,8 @@ export class LocationSharing {
         if (this.session !== session || !this.preferences.enabled || this.disposed) return;
         session.enabled = true;
       }
-      const status = await this.api('/api/location/update', { sharing_id: session.id, sequence: ++session.sequence, fix });
+      const history = this.historyUpload?.();
+      const status = await this.api('/api/location/update', { sharing_id: session.id, sequence: ++session.sequence, fix, ...(history ? {history} : {}) });
       if (this.session !== session || !this.preferences.enabled || this.disposed) return;
       session.uploadedAt = fix.measured_at;
       this.receive(status as LocationRelayStatus);

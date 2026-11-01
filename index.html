@@ -38,6 +38,24 @@
       <summary data-i18n="even.location_sharing">Location sharing</summary>
       <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-i18n="even.share_my_location">Share my location</span></label>
       <p class="note" data-i18n="even.share_your_phone_s_current_location_with_your_existing_dot">Share your phone's location with your Dot through your Mac. Stop sharing anytime. Nearby map data stays on your Mac until unused for 30 days and can reveal past areas.</p>
+      <label class="display-checkbox"><input id="history-share" type="checkbox"> <span data-i18n="even.history_enable">Remember recent places</span></label>
+      <p class="note" data-i18n="even.history_consent">Save locations on this Mac for up to 7 days and let Dot read relevant history. Recording follows location sharing. Turn this off to block historical access.</p>
+      <p id="history-status" class="note" role="status"></p>
+      <button id="history-delete" type="button" data-i18n="even.history_delete">Delete history and stop</button>
+      <details id="history-test" hidden>
+        <summary data-i18n="even.history_test">Simulated movement · Beta</summary>
+        <p class="note" data-i18n="even.history_test_notice">Fictional history replaces history reads during this test. Real history stays separate and recording pauses.</p>
+        <select id="history-scenario" data-i18n-aria-label="even.history_test">
+          <option value="walk" data-i18n="even.history_walk">Walk and revisit</option>
+          <option value="partial" data-i18n="even.history_partial">Missing points</option>
+          <option value="stopped" data-i18n="even.history_stopped">Recording stopped</option>
+          <option value="empty" data-i18n="even.history_empty">No history</option>
+          <option value="revoked" data-i18n="even.history_revoked">Access disabled</option>
+          <option value="no-map" data-i18n="even.history_no_map">No map references</option>
+        </select>
+        <button id="history-simulate" type="button" data-i18n="even.history_start_test">Start test</button>
+        <button id="history-finish-test" type="button" data-i18n="even.history_finish_test">End test and delete test data</button>
+      </details>
       <label class="display-checkbox"><input id="mobility-share" type="checkbox"> <span data-i18n="even.walking_terrain">Walking and terrain information</span></label>
       <p class="note"><span data-i18n="even.walking_terrain_disclosure">When Dot needs it, your Mac sends route coordinates to FOSSGIS and terrain areas to AWS.</span> <a href="./mobility-sources.html" target="_blank" rel="noopener noreferrer" data-i18n="even.walking_terrain_privacy">Data sources and privacy</a></p>
       <p id="mobility-status" class="note" role="status"></p>

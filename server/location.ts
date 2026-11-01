@@ -81,6 +81,7 @@ export class LocationContext {
   private geographySignature?:string;
   private geographyDirty?:string;
   private closed=false;
+  private historyGeography?: (fix: LocationFix, evidence: GeographicEvidence, owner: string) => void;
   private received = 0;
   private delivered = 0;
   private sent = 0;
@@ -94,7 +95,9 @@ export class LocationContext {
     announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}) => Promise<unknown>, now = Date.now,
     ownerAuthorized: (owner: string) => boolean = () => true,
     geographyFactory?: (output:(update:GeographyUpdate)=>void)=>GeographyLoader,
-    mobilityFactory?:()=>MobilityAcquisition) {
+    mobilityFactory?:()=>MobilityAcquisition,
+    privateHistory?: {attachGeography: (fix: LocationFix, evidence: GeographicEvidence, owner: string) => void}) {
+    this.historyGeography = privateHistory?.attachGeography;
     this.path = path; this.sender = sender; this.hosts = hosts; this.announce = announce; this.now = now;
     this.ownerAuthorized = ownerAuthorized;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -329,6 +332,7 @@ export class LocationContext {
     if(!this.geographyActive||!this.usable()||!this.active()||!this.latest)return;
     const fix=this.latest.fix;
     if(update.fix?(update.fix.latitude!==fix.latitude||update.fix.longitude!==fix.longitude||update.fix.accuracy!==fix.accuracy):update.state!=='unavailable'||!!update.evidence)return;
+    if (update.evidence && this.owner) { try { this.historyGeography?.(fix, update.evidence, this.owner); } catch {} }
     const previous=this.latest.geography;
     const geography:GeographicContext=update.evidence?{status:update.state,...update.evidence}:
       previous?.source?{...previous,status:'partial'}:{status:update.state};

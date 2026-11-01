@@ -12,17 +12,20 @@ const instant = z.string().datetime({ offset: true }).refine(value => Number.isF
 const timezone = z.string().max(80).refine(value => {
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 });
-const observationSchema = z.object({
+export const historyObservationSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/),
-  source: z.literal('synthetic_fixture'),
+  source: z.enum(['synthetic_fixture', 'phone_location']),
+  received_at: instant.optional(),
   measured_at: instant,
   latitude: z.number().finite().min(-90).max(90), longitude: z.number().finite().min(-180).max(180),
   accuracy: z.number().finite().min(0).max(200),
   speed: z.number().finite().min(0).max(400).optional(), heading: z.number().finite().min(0).lt(360).optional(),
   timezone: timezone.optional(), utc_offset_minutes: z.number().int().min(-840).max(840).optional(),
 }).strict();
-type Observation = z.infer<typeof observationSchema>;
-type Entry = Observation & { recording_epoch: number };
+export type HistoryObservation = z.infer<typeof historyObservationSchema>;
+type Observation = HistoryObservation;
+export type HistoryEntry = Observation & { recording_epoch: number };
+type Entry = HistoryEntry;
 const querySchema = z.object({
   start_at: instant.optional(), end_at: instant.optional(), detail: z.enum(['summary', 'observations']).optional(),
   limit: z.number().int().min(1).max(50).optional(), cursor: z.string().uuid().optional(),
@@ -35,11 +38,12 @@ const point = ({ latitude, longitude, accuracy }: Entry) => ({ latitude, longitu
 const invalid = () => new ToolRejection('invalid_arguments', 'Use a bounded time interval with UTC offsets and valid history detail/limit, or only a returned cursor.');
 
 /**
- * In-memory synthetic observation owner for the first conversation experiment.
- * Not connected to phone ingestion, production consent, disk or network. The
- * provider contract and geographic calculation are shared with the real relay.
+ * Bounded query index shared by durable phone history and isolated fixtures.
+ * Consent, persistence and ingestion authorization belong to the outer owner.
  */
-export class LocationHistoryReplay implements HistoryReader {
+export class LocationHistoryIndex implements HistoryReader {
+  private readonly source: HistoryObservation['source'];
+  private readonly maximum: number;
   private readonly now: () => number;
   private readonly geography?: (fix: LocationFix) => GeographicEvidence | undefined;
   private readonly gapMs: number;
@@ -55,7 +59,8 @@ export class LocationHistoryReplay implements HistoryReader {
   private nextExpiry = Infinity;
 
   constructor(options: { now: () => number; geography?: (fix: LocationFix) => GeographicEvidence | undefined;
-    gapMs?: number; stayMs?: number; stayRadiusM?: number }) {
+    gapMs?: number; stayMs?: number; stayRadiusM?: number; source?: HistoryObservation['source']; maximum?: number }) {
+    this.source = options.source ?? 'synthetic_fixture'; this.maximum = options.maximum ?? HISTORY_REPLAY_LIMIT;
     this.now = options.now; this.geography = options.geography;
     this.gapMs = options.gapMs ?? 120_000; this.stayMs = options.stayMs ?? 180_000;
     this.stayRadiusM = options.stayRadiusM ?? 35;
@@ -88,8 +93,8 @@ export class LocationHistoryReplay implements HistoryReader {
 
   observe(raw: unknown): { accepted: boolean; reason?: 'recording_stopped' | 'expired' | 'duplicate' } {
     if (!this.recording) return { accepted: false, reason: 'recording_stopped' };
-    const parsed = observationSchema.safeParse(raw);
-    if (!parsed.success || Date.parse(parsed.data.measured_at) > this.now()) throw invalid();
+    const parsed = historyObservationSchema.safeParse(raw);
+    if (!parsed.success || parsed.data.source !== this.source || Date.parse(parsed.data.measured_at) > this.now()) throw invalid();
     this.prune();
     const value = parsed.data;
     value.measured_at = new Date(Date.parse(value.measured_at)).toISOString();
@@ -102,12 +107,30 @@ export class LocationHistoryReplay implements HistoryReader {
     }
     this.records.set(value.id, { ...value, recording_epoch: this.epoch });
     this.nextExpiry = Math.min(this.nextExpiry, Date.parse(value.measured_at) + HISTORY_RETENTION_MS);
-    if (this.records.size > HISTORY_REPLAY_LIMIT) {
+    if (this.records.size > this.maximum) {
       const oldest = this.sorted()[0]; this.records.delete(oldest.id); this.capacityOmitted = true;
     }
     this.changed();
     return { accepted: true };
   }
+
+  /** Durable owner restores only validated, bounded rows; no consent is inferred. */
+  restore(entries: HistoryEntry[], epoch: number, capacityOmitted = false) {
+    if (entries.length > this.maximum || !Number.isSafeInteger(epoch) || epoch < 0) throw new Error('Invalid history snapshot');
+    this.clear(); this.epoch = epoch; this.capacityOmitted = capacityOmitted;
+    for (const entry of entries) {
+      const { recording_epoch, ...raw } = entry;
+      const value = historyObservationSchema.parse(raw);
+      if (value.source !== this.source || !Number.isSafeInteger(recording_epoch) || recording_epoch < 0 || recording_epoch > epoch) throw new Error('Invalid history snapshot');
+      const time = Date.parse(value.measured_at);
+      if (time <= this.now() - HISTORY_RETENTION_MS || time > this.now()) continue;
+      this.records.set(value.id, { ...value, recording_epoch });
+      this.nextExpiry = Math.min(this.nextExpiry, time + HISTORY_RETENTION_MS);
+    }
+  }
+  snapshot() { this.prune(); return this.sorted(); }
+  recordingEpoch() { return this.epoch; }
+  invalidate() { this.changed(); }
 
   private sorted() { return [...this.records.values()].sort((a, b) => stamp(a) - stamp(b) || a.id.localeCompare(b.id)); }
   private disconnected(a: Entry, b: Entry) { return b.recording_epoch !== a.recording_epoch || stamp(b) - stamp(a) > this.gapMs; }
@@ -184,9 +207,9 @@ export class LocationHistoryReplay implements HistoryReader {
     this.prune();
     const now = this.now();
     const base = {
-      source: 'synthetic_fixture' as const, reference_time: new Date(now).toISOString(),
+      source: this.source, reference_time: new Date(now).toISOString(),
       retention_start_at: new Date(now - HISTORY_RETENTION_MS).toISOString(),
-      interpretation: 'Test data only, not the owner’s actual movements. Optional reference: absent information does not prevent ordinary conversation. A gap does not require a disclaimer or question. Stays/roads are candidates, not visits or continuous routes.',
+      interpretation: (this.source === 'synthetic_fixture' ? 'Test data only, not the owner’s actual movements. ' : '') + 'Optional reference: absent information does not prevent ordinary conversation. A gap does not require a disclaimer or question. Stays/roads are candidates, not visits or continuous routes.',
     };
     if (!this.readable) return { ...base, status: 'unavailable' as const, entries: [], next_cursor: null };
     let query: Query, offset = 0;
@@ -214,7 +237,7 @@ export class LocationHistoryReplay implements HistoryReader {
       coverage: { kind: 'partial_observations', observation_count: points.length,
         first_observed_at: points[0]?.measured_at ?? null, last_observed_at: points.at(-1)?.measured_at ?? null,
         gaps, omitted_gap_count: gapCount - gaps.length, capacity_omissions: this.capacityOmitted },
-      entries: [] as ReturnType<LocationHistoryReplay['present']>[], next_cursor: null as string | null,
+      entries: [] as ReturnType<LocationHistoryIndex['present']>[], next_cursor: null as string | null,
     };
     let next = offset;
     while (next < sections.length && result.entries.length < query.limit) {
@@ -232,3 +255,6 @@ export class LocationHistoryReplay implements HistoryReader {
     return result;
   }
 }
+
+/** Compatibility fixture owner: production ingestion uses the durable store. */
+export class LocationHistoryReplay extends LocationHistoryIndex {}

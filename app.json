@@ -2,7 +2,7 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.3.51",
+  "version": "0.3.52",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "Share phone location with Dot via your Mac when enabled. Cached maps may reveal past areas; unused maps expire after 30 days. With separate consent, the Mac sends route coordinates to FOSSGIS and terrain areas to AWS when Dot asks. Turn sharing off to stop new requests."
+      "desc": "Share phone location with Dot via your Mac when enabled. Cached maps may reveal past areas; unused maps expire after 30 days. With separate consent, the Mac sends route coordinates to FOSSGIS and terrain areas to AWS when Dot asks. Separate recent-place consent saves up to 7 days on your Mac. Turn sharing off to stop uploads; Delete and stop erases local history."
     },
     {
       "name": "camera",

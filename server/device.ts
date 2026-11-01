@@ -66,7 +66,7 @@ export function deviceServer(options: { token: string; origin: string; directory
     }
     try {
       if (path.startsWith('/api/')) {
-        const routes = ['/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', '/api/transcribe', '/api/pair', '/api/pair/resume', '/api/pair/revoke', '/api/location/control', '/api/location/update'];
+        const routes = ['/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', '/api/transcribe', '/api/pair', '/api/pair/resume', '/api/pair/revoke', '/api/location/control', '/api/location/update', '/api/location/history'];
         if (request.method === 'OPTIONS' && crossOrigin) {
           const method = request.headers['access-control-request-method'];
           const headers = String(request.headers['access-control-request-headers'] ?? '').toLowerCase().split(',').map(item => item.trim()).filter(Boolean);
@@ -181,7 +181,7 @@ export function deviceServer(options: { token: string; origin: string; directory
           } finally { response.removeListener('close', cancel); }
         }
         const allowed = (request.method === 'GET' && ['/api/status', '/api/messages', '/api/updates'].includes(path)) ||
-          (request.method === 'POST' && ['/api/utterances', '/api/timings', '/api/location/control', '/api/location/update'].includes(path));
+          (request.method === 'POST' && ['/api/utterances', '/api/timings', '/api/location/control', '/api/location/update', '/api/location/history'].includes(path));
         if (!allowed) { json(404, { error: 'Not found' }); return; }
         if (request.method === 'POST' && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
         const body = request.method === 'POST' ? await boundedBody(request, path === '/api/utterances' ? PHOTO_REQUEST_BYTES : 32768) : undefined;
@@ -190,7 +190,7 @@ export function deviceServer(options: { token: string; origin: string; directory
         const disconnected = () => controller.abort();
         response.once('close', disconnected);
         try {
-          const locationOwner = path.startsWith('/api/location/') ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
+          const locationOwner = (path.startsWith('/api/location/') || ['/api/status', '/api/updates'].includes(path)) ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
           if (path.startsWith('/api/location/') && !locationOwner) { json(401, {error: 'Pairing required'}); return; }
           const result = await fetch(`${bridgeURL}${path}`, { method: request.method,
             headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json',
