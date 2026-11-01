@@ -35,3 +35,18 @@ test('a delayed consent response cannot alter a different selected Mac', async (
   finish({historyProtocol: 1, historyEpoch: 'late', historyEnabled: true}); await request;
   assert.equal(history.upload(), undefined);
 });
+
+
+test('successful live uploads refresh history when update polling stalls, without inheriting another Mac', () => {
+  let target = 'mac-a', clock = Date.now();
+  const history = new HistorySharing({target: () => target, now: () => clock, changed() {}, api: async () => ({})});
+  const status = {historyProtocol: 1, historyEpoch: 'first', historyEnabled: true};
+  history.receive(status);
+  clock += 45_001; assert.equal(history.upload(), undefined);
+  history.receiveUpload(status, 'mac-a'); assert.equal(history.upload()?.epoch, 'first');
+  clock += 30_000; history.receiveUpload(status, 'mac-a');
+  clock += 30_000; assert.equal(history.upload()?.epoch, 'first');
+  history.receiveUpload({...status, historyEnabled:false}, 'mac-a'); assert.equal(history.upload(), undefined);
+  target = 'mac-b'; history.receiveUpload(status, 'mac-a'); assert.equal(history.upload(), undefined);
+  history.receiveUpload({}, 'mac-b'); assert.equal(history.upload(), undefined);
+});

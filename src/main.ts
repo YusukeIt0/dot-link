@@ -224,7 +224,12 @@ const locationSharing = new LocationSharing({
   api: async (path, body) => {
     const input = body as {enabled?: boolean; fix?: unknown};
     exitDiagnostics.record(path === '/api/location/control' ? (input.enabled ? 'share-enable' : 'share-disable') : (input.fix ? 'share-fix' : 'share-heartbeat'));
-    try { const result = await session.location(path, body); exitDiagnostics.record('share-ok'); return result; }
+    const target = session.token ? session.credentials?.origin ?? location.origin : undefined;
+    try {
+      const result = await session.location(path, body);
+      if (path === '/api/location/update') historySharing.receiveUpload(result, target);
+      exitDiagnostics.record('share-ok'); return result;
+    }
     catch (error) { exitDiagnostics.record('share-failed'); throw error; }
   },
   changed: () => renderLocationStatus(),

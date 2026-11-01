@@ -18,6 +18,10 @@ export class HistorySharing {
   receive(value: HistoryStatus) {
     this.value = value; this.origin = this.options.target(); this.received = this.now(); this.options.changed();
   }
+  receiveUpload(value: unknown, origin: string | undefined) {
+    if (!origin || origin !== this.options.target() || !value || typeof value !== 'object' || !('historyProtocol' in value)) return;
+    this.receive(value as HistoryStatus);
+  }
   reset() { this.value = {}; this.origin = undefined; this.received = -Infinity; this.options.changed(); }
   status() {
     const connected = !!this.origin && this.origin === this.options.target() && this.now() - this.received < 45_000;
