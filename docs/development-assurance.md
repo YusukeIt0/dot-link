@@ -11,6 +11,13 @@ or authorizing main merges, distribution or publication. See the
 
 ## Requirements and evidence
 
+Plan verification around the agreed outcome before implementation: identify the
+current stage's completion conditions, applicable existing evidence, the changed
+behavior that needs new verification, and any later delivery checks. Keep this in
+the existing issue/PR; do not add a separate management checklist. Once those
+conditions are met, finish that stage. Reopen verification only for a concrete new
+defect, changed behavior or changed assumption, and only in the affected scope.
+
 Issue reviews investigate reports and ideas; they do not assess PR acceptance or
 require an acceptance record. The publisher omits PR acceptance fields for issues,
 including any such gaps returned by the model. Concrete investigation unknowns,
@@ -67,6 +74,29 @@ docs/tests/site/website assets or strictly version-only JSON metadata. Runtime
 changes invalidate applicability. Renames or truncated comparisons fail closed.
 Unchanged device evidence does not need to be physically repeated merely to update
 a documentation or version commit. The agent still verifies its assumptions.
+
+Review context exposes `evidence_comparisons` for earlier runtime/device sources:
+source/target commits, verified ancestry, comparison completeness, changed paths
+and eligibility under that policy. One comparison is shared by observations from
+the same source. No paths are reported for an incomplete comparison. Presentation
+is limited to 20 paths per source and an 8,000-byte path-entry budget across sources;
+`compared_file_count` and `paths_complete` distinguish a partial display from a
+complete list. Eligibility still uses every returned file. Omitted paths are not
+evidence that the observed behavior is unchanged. Eligibility
+is not semantic proof: a website or translation change can invalidate a recorded
+page rendering even though it does not affect the device app. Conversely, a
+contact-only documentation edit does not require repeating unchanged page renders.
+Use the comparison to establish applicability; a different observation commit
+alone is not an evidence gap. Preserve the original source/build attribution.
+
+Review gaps describe unmet current-stage requirements or concrete safety or
+correctness evidence needs, with the affected behavior and reason. Checks that
+explicitly require a later merge/deployment belong in next steps for that stage,
+not in the preceding stage's gaps. This does not permit deferring a required
+pre-merge check. CI readiness has its own deterministic gate; waiting for CI does
+not itself require another model review. Optional improvements remain advice.
+Do not replace valid static/runtime evidence with another test form solely for
+uniformity, or add completion conditions after the agreed outcome is established.
 
 Any human scope-issue edit/comment changes the scope digest; any PR description,
 human discussion, formal review or inline feedback change invalidates the review
