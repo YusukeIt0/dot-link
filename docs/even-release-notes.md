@@ -9,12 +9,6 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
 
-## 0.3.52 Beta
-
-- Added optional recent-place history on your Mac so Dot can refer to earlier places and movement.
-- Added separate history consent, a seven-day retention limit, and Delete and stop.
-- Added fictional movement scenarios for trying history without travelling.
-
 ## 0.3.51
 
 - Added optional walking-route and terrain information for Dot, with a separate sharing choice.
