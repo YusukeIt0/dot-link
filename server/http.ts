@@ -12,12 +12,13 @@ import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 import { toolResponse, rpcResponse, ToolRejection } from './tool-response.ts';
 import { ReadResponseError } from './read-response-error.ts';
 import { subscriptionResponse } from './subscription-response-error.ts';
+import { locationHistoryTool, type HistoryReader } from './history/tool.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
 
-export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext): Promise<unknown> {
+export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader): Promise<unknown> {
   const parsed = rpcSchema.safeParse(raw);
   if (!parsed.success) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid request' } };
   const { id, method, params } = parsed.data;
@@ -42,7 +43,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, mobilityContextTool, locationResponseTool] : [])] }; break;
+      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, mobilityContextTool, locationResponseTool] : []), ...(history ? [locationHistoryTool] : [])] }; break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
@@ -50,10 +51,10 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         const { name, arguments: args } = parsedCall.data;
         const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
         const locationNames = ['get_location_context', 'get_mobility_context', 'respond_to_location'];
-        if (![...notificationNames, ...locationNames, 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
+        if (![...notificationNames, ...locationNames, 'get_location_history', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
           throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
         }
-        if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name))) {
+        if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (!history && name === 'get_location_history')) {
           throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
         }
         if (name === 'respond_to_location') {
@@ -71,6 +72,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
             }
             case 'get_pending_notifications': return notifications!.pending(args);
             case 'get_location_context': return locations!.read(args);
+            case 'get_location_history': return history!.read(args);
             case 'get_mobility_context': return locations!.readMobility(args);
             case 'send_message_to_g2': return bridge.sendMessage(args);
             case 'reply_to_g2': return bridge.reply(args);
