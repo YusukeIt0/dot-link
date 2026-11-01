@@ -332,7 +332,7 @@ var scheduledRestart: (() -> Void)?
 restartDriver.scheduleHostRestart = { scheduledRestart = $0 }
 var restartChoice: SPUUserUpdateChoice?
 precondition(restartDriver.restartBeforeDownload(build: "999", url: release, reply: { restartChoice = $0 }))
-precondition(restartChoice == .skip && restartDriver.blocksActions, "Cancel old Sparkle session before relaunch")
+precondition(restartChoice == .dismiss && restartDriver.blocksActions, "Cancel old Sparkle session before relaunch")
 restartDriver.dismissUpdateInstallation()
 precondition(restartDriver.blocksActions, "Sparkle dismissal must not reopen settings during the handoff")
 precondition(restartedToken == nil)

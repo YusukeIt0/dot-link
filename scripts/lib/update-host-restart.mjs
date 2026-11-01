@@ -28,8 +28,10 @@ export async function restartUpdateHost({app,hostPID,token},{execute=run,wait=sl
    await execute('/usr/bin/open',['-g',app,'--args','--background','--resume-update',token]);
    return 'reopened';
   }
-  if(attempt===40)signal(hostPID,'SIGTERM');
-  if(attempt===60)signal(hostPID,'SIGKILL');
+  if(attempt===40||attempt===60){
+   try{signal(hostPID,attempt===40?'SIGTERM':'SIGKILL');}
+   catch(error){if(error.code!=='ESRCH')throw error;} // Exit raced the signal; recheck before reopening.
+  }
   await wait(250);
  }
  throw new Error('UPDATE_HOST_STILL_RUNNING');

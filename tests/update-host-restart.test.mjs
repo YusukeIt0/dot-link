@@ -73,3 +73,8 @@ test('LaunchServices failure is surfaced and never retried in a loop',async t=>{
  options.execute=async(cmd,a)=>{await execute(cmd,a);if(cmd==='/usr/bin/open')throw Error('open failed');return cmd==='/usr/bin/plutil'?'app.tripsurf.dotlink.mac':cmd==='/bin/ps'?state.identity:'';};
  await assert.rejects(restartUpdateHost(args,options),/open failed/);assert.equal(state.opens.length,1);
 });
+test('exit racing a fallback signal is verified on the next observation',async t=>{
+ const {args,options,state}=await fixture(t);options.wait=async()=>{};
+ options.signal=()=>{state.identity='';throw Object.assign(new Error('already exited'),{code:'ESRCH'});};
+ assert.equal(await restartUpdateHost(args,options),'reopened');assert.equal(state.opens.length,1);
+});

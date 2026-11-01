@@ -209,8 +209,9 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUUserDriver {
                               "build": build, "url": url], forKey: restartMarkerKey)
         progressDefaults.synchronize()
         restartingHost = true
-        // Cancel this Sparkle session before exiting; never leave install-on-exit armed.
-        reply(.skip)
+        // Called only before the installing stage. Dismiss aborts this session
+        // without marking the approved release skipped (Sparkle 2.10.0).
+        reply(.dismiss)
         scheduleHostRestart { [weak self] in
             guard let self else { return }
             self.status("mac.preparing_update", working: true); self.beginProgress()
