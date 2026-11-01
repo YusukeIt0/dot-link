@@ -20,7 +20,7 @@ test('device gateway negotiates history, shares existing ingestion, isolates old
   let time = Date.now();
   const sender = new WebhookSender(async (_url, raw) => {const e = JSON.parse(raw); return {status: 200, body: JSON.stringify(e.type === 'verification' ? {challenge: e.challenge} : {})};});
   const bridge = new Bridge(join(directory, 'bridge.json'), sender, ['callback.example.test']);
-  const store = new LocationHistoryStore(join(directory, 'history'), {now: () => time, beta: true, ownerAuthorized: id => id === owner, announce: (input, guard) => bridge.sendMessage(input, guard)});
+  const store = new LocationHistoryStore(join(directory, 'history'), {now: () => time, ownerAuthorized: id => id === owner, announce: (input, guard) => bridge.sendMessage(input, guard)});
   const locations = new LocationContext(join(directory, 'location.json'), sender, [], (input, guard, context) => bridge.sendMessage(input, guard, context), () => time);
   const server = bridgeServer(bridge, tokens, undefined, locations, store);
   server.listen(0, '127.0.0.1'); await once(server, 'listening'); const port = (server.address() as any).port;
@@ -74,8 +74,9 @@ test('device gateway negotiates history, shares existing ingestion, isolates old
   } finally { withoutHistory.closeAllConnections(); await new Promise<void>(resolve => withoutHistory.close(() => resolve())); }
   await device('/api/location/control', {sharing_id, enabled: false});
   assert.equal((await mcp('get_location_history')).result.structuredContent.status, 'available', 'recording stop leaves separately permitted past history readable');
-  await control('simulate', 'walk'); read = (await mcp('get_location_history')).result.structuredContent;
-  assert.equal(read.source, 'synthetic_fixture'); assert.ok(read.entries.some((x: any) => x.kind === 'movement_observations'));
+  assert.equal((await device('/api/location/history', {protocol: 1, epoch: state.historyEpoch, action: 'simulate', scenario: 'walk'})).status, 400);
+  read = (await mcp('get_location_history')).result.structuredContent;
+  assert.equal(read.source, 'phone_location');
   await bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   const utterance_id = randomUUID(); await device('/api/utterances', {id: utterance_id, text: 'Which fictional road?'});
   assert.equal((await mcp('respond_to_history', {history_context_id: read.history_context_id, utterance_id, text: 'The fictional east road.'})).result.structuredContent.stored_for_g2, true);

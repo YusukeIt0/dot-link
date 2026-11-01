@@ -27,9 +27,8 @@ const pairing = new PairingAuthority(resolve('.runtime/pairing'));
 const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
 let history: LocationHistoryStore | undefined;
 try {
-  const build = JSON.parse(readFileSync(new URL('../dist/build-info.txt', import.meta.url), 'utf8'));
   history = new LocationHistoryStore(resolve('.runtime/location-history'), {
-    beta: build.channel === 'beta', ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
+    ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
     ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
     announce: (input, guard) => bridge.sendMessage(input, guard),
   });

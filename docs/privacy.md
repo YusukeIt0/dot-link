@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects the November 1, 2026 Beta implementation. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects Mac 0.4.30 and Even 0.3.53 source, reviewed November 2, 2026. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
@@ -75,7 +75,7 @@ Reusable public map bytes and normalized areas are stored in an owner-only cache
 
 Stopping sharing, losing a fresh measurement, ending Dot’s subscription, revoking pairing or stopping the relay cancels acquisition and clears live geographic context. Already cached map files remain until expiry or capacity eviction. Uninstalling Dot Link moves this cache to Trash with the other app data, including for supported development installations. Stopping sharing does not delete that cache, backups or information already read by Dot.
 
-## Recent places (Beta)
+## Recent places
 
 **Remember recent places** is a separate choice under Location sharing, off by
 default. It requires compatible Mac and Even versions. Enabling current-location
@@ -98,8 +98,10 @@ connection when history is enabled. Candidate stays and nearby road references
 are uncertain evidence, not proof of visits or a continuous route. Turning
 **Share my location** off stops new collection but leaves separately enabled
 historical reads available. Turning **Remember recent places** off stops collection
-and historical access; saved observations remain until expiry. **Delete and stop**
-removes the stored observations and disables history. A failed or offline control
+and historical access; saved observations remain until expiry. **Delete history**
+removes the stored observations and disables history. After deletion, another
+paired phone can enable history with new consent; it inherits no observations.
+A failed or offline control
 shows an error rather than claiming the Mac has stopped. Reconnecting another Mac
 does not inherit consent. Revoking the owning phone's pairing invalidates access
 immediately and removes this history during the next maintenance/access pass
@@ -112,13 +114,9 @@ Deleting local history cannot retract information or conversations already sent
 to Dot/OpenAI. Those services' retention and memory controls remain separate.
 Uninstalling moves the runtime, including this database, to Trash.
 
-Beta **Test history** scenarios use explicitly fictional coordinates and names in
-a separate table. During a scenario, real history collection is paused and reads
-are marked synthetic. Ending the scenario deletes its rows and returns to personal
-history; it does not erase retained personal observations. A Beta restart preserves
-the scenario; a non-Beta relay clears it. Test answers can still enter ordinary
-conversation history and the provider's conversation, so they must be understood
-as fictional test data.
+Fictional movement controls are not included in the application. Upgrading from
+the earlier Beta removes its separate test data while preserving real history
+and the existing history consent.
 
 ## Walking and terrain
 

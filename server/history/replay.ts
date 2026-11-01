@@ -132,6 +132,27 @@ export class LocationHistoryIndex implements HistoryReader {
   recordingEpoch() { return this.epoch; }
   invalidate() { this.changed(); }
 
+  /** Append a committed phone fix without invalidating unrelated bounded reads. */
+  append(entry: HistoryEntry) {
+    const {recording_epoch, ...raw} = entry;
+    const value = historyObservationSchema.parse(raw), time = stamp(entry);
+    if (value.source !== this.source || !Number.isSafeInteger(recording_epoch) || recording_epoch < 0 || time > this.now()) throw invalid();
+    this.prune();
+    if (time <= this.now() - HISTORY_RETENTION_MS || this.records.has(value.id)) return;
+    this.records.set(value.id, {...value, recording_epoch});
+    this.epoch = Math.max(this.epoch, recording_epoch);
+    this.nextExpiry = Math.min(this.nextExpiry, time + HISTORY_RETENTION_MS);
+    let evicted: Entry | undefined;
+    if (this.records.size > this.maximum) {
+      evicted = this.sorted()[0]; this.records.delete(evicted.id); this.capacityOmitted = true;
+    }
+    for (const [cursor, page] of this.cursors) {
+      const contains = (at: number) => at >= page.query.start && at < page.query.end;
+      if (contains(time) || (evicted && contains(stamp(evicted)))) this.cursors.delete(cursor);
+    }
+    return evicted;
+  }
+
   private sorted() { return [...this.records.values()].sort((a, b) => stamp(a) - stamp(b) || a.id.localeCompare(b.id)); }
   private disconnected(a: Entry, b: Entry) { return b.recording_epoch !== a.recording_epoch || stamp(b) - stamp(a) > this.gapMs; }
 

@@ -197,3 +197,19 @@ test('replay capacity evicts old observations honestly; a fresh instance has no 
   assert.equal(result.entries[0].id, 'cap-1');
   assert.equal(read(owner().history).status, 'empty');
 });
+
+
+test('incremental appends invalidate affected pages on capacity eviction and keep unaffected bounded pages', () => {
+  const history = new LocationHistoryReplay({now: () => NOW, maximum: 3}); history.setReadable(true);
+  const append = (id: string, time: number) => history.append({...fix(id, time), source: 'synthetic_fixture' as const, recording_epoch: 1});
+  append('a', NOW - 4000); append('b', NOW - 3000); append('c', NOW - 2000);
+  const full = read(history, {detail: 'observations', limit: 1});
+  const recent = read(history, {start_at: new Date(NOW - 3000).toISOString(), end_at: new Date(NOW - 1000).toISOString(), detail: 'observations', limit: 1});
+  assert.equal(append('d', NOW)?.id, 'a');
+  assert.throws(() => read(history, {cursor: full.next_cursor}), /page is no longer available/);
+  const last = read(history, {cursor: recent.next_cursor});
+  assert.equal(last.entries[0].id, 'c'); assert.equal(last.next_cursor, null);
+  assert.equal(read(history).coverage.observation_count, 3);
+  history.setReadable(false); history.setReadable(true);
+  assert.throws(() => read(history, {cursor: recent.next_cursor}), /page is no longer available/);
+});

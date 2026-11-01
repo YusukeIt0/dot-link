@@ -1,6 +1,6 @@
 export interface HistoryStatus {
   historyProtocol?: number; historyEpoch?: string | null; historyEnabled?: boolean; historyCount?: number;
-  historySimulation?: string | null; historyReference?: string | null; historyBeta?: boolean;
+  historySimulation?: string | null; // Compatibility guard for an older Beta Mac.
 }
 
 /** Consent is authoritative on the selected Mac; never migrate the live-location preference. */
@@ -26,7 +26,7 @@ export class HistorySharing {
   reset() { this.value = {}; this.origin = undefined; this.received = -Infinity; this.options.changed(); }
   status() {
     const connected = !!this.origin && this.origin === this.options.target() && this.now() - this.received < 45_000;
-    const supported = connected && this.value.historyProtocol === 1 && typeof this.value.historyEpoch === 'string';
+    const supported = connected && !this.value.historySimulation && this.value.historyProtocol === 1 && typeof this.value.historyEpoch === 'string';
     return {...(connected ? this.value : {}), connected, supported, pending: this.pending, failed: this.failed};
   }
   upload() {
@@ -39,7 +39,7 @@ export class HistorySharing {
     try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch {}
     return {protocol: 1, epoch: state.historyEpoch, ...(timezone ? {timezone} : {}), utc_offset_minutes: -new Date(this.now()).getTimezoneOffset()};
   }
-  async control(action: 'enable' | 'disable' | 'delete' | 'simulate' | 'finish_simulation', scenario?: string) {
+  async control(action: 'enable' | 'disable' | 'delete') {
     const state = this.status(), target = this.options.target();
     if (this.pending) { this.options.changed(); return; }
     const stopping = action === 'disable' || action === 'delete';
@@ -52,7 +52,7 @@ export class HistorySharing {
     }
     this.pending = true; this.failed = false; this.options.changed();
     try {
-      const response = await this.options.api({protocol: 1, epoch: this.value.historyEpoch, action, ...(scenario ? {scenario} : {})});
+      const response = await this.options.api({protocol: 1, epoch: this.value.historyEpoch, action});
       if (target !== this.options.target()) return;
       this.receive(response as HistoryStatus);
       if (action === 'enable' && this.value.historyEnabled === true) this.pausedOrigin = undefined;
