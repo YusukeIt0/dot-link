@@ -320,3 +320,71 @@ print("PASS: a verified recovery is not overwritten by a later transient health 
 precondition(AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetupReady": true]]))
 precondition(!AppUpdater.recoveredStateIsReady(["installed": true, "updateRecovery": ["recovered": false, "initialSetupReady": false]]))
 print("PASS: strict initial-setup proof also supports retry after a lost recovery result")
+
+let restartSuite = "DotLinkHostRestartTest-" + UUID().uuidString
+let restartDefaults = UserDefaults(suiteName: restartSuite)!
+defer { restartDefaults.removePersistentDomain(forName: restartSuite) }
+let restartDriver = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+var restartedToken: String?
+var restartCompletion: ((Bool) -> Void)?
+restartDriver.restartHost = { token, reply in restartedToken = token; restartCompletion = reply }
+var scheduledRestart: (() -> Void)?
+restartDriver.scheduleHostRestart = { scheduledRestart = $0 }
+var restartChoice: SPUUserUpdateChoice?
+precondition(restartDriver.restartBeforeDownload(build: "999", url: release, reply: { restartChoice = $0 }))
+precondition(restartChoice == .dismiss && restartDriver.blocksActions, "Cancel old Sparkle session before relaunch")
+restartDriver.dismissUpdateInstallation()
+precondition(restartDriver.blocksActions, "Sparkle dismissal must not reopen settings during the handoff")
+precondition(restartedToken == nil)
+scheduledRestart?()
+precondition(restartedToken != nil && restartDriver.progressActive)
+let resumedDriver = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+resumedDriver.consumeHostRestart(arguments: ["test", "--resume-update", restartedToken!])
+precondition(resumedDriver.takeResumedApproval(build: "999", url: release))
+precondition(!resumedDriver.takeResumedApproval(build: "999", url: release), "Approval is consumed once")
+restartCompletion?(false)
+precondition(!restartDriver.blocksActions && !restartDriver.working)
+precondition(restartDefaults.dictionary(forKey: "DotLinkUpdateHostRestart") == nil)
+for scenario in ["token", "expired", "future", "target", "url", "normal-start", "recovery-failed"] {
+    restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970 + (scenario == "expired" ? -121 : scenario == "future" ? 60 : 0), "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+    let d = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+    d.consumeHostRestart(arguments: scenario == "normal-start" ? ["test"] : ["test", "--resume-update", scenario == "token" ? "wrong" : "token"])
+    if scenario == "recovery-failed" { d.resumeAfterHostRestart(ready: false) }
+    precondition(!d.takeResumedApproval(build: scenario == "target" ? "1000" : "999", url: scenario == "url" ? release + "2" : release), scenario)
+    precondition(restartDefaults.dictionary(forKey: "DotLinkUpdateHostRestart") == nil)
+}
+print("PASS: cancel-before-restart, blocked actions, exact-target single-use approval, expired/incorrect tokens, failed arming/recovery")
+restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970, "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+let alreadyInstalled = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+alreadyInstalled.consumeHostRestart(arguments: ["test", "--resume-update", "token"])
+precondition(alreadyInstalled.resumeAfterHostRestart(ready: true, currentBuild: "999"))
+precondition(!alreadyInstalled.progressActive && !alreadyInstalled.working)
+precondition(!alreadyInstalled.takeResumedApproval(build: "999", url: release))
+print("PASS: an already-installed approved target completes after fresh startup without another click")
+let offlineConfigured: [String: Any] = ["installed": true, "servicesConfigured": true, "bridge": false, "device": false, "tunnel": false, "updateRecovery": ["recovered": false]]
+precondition(AppUpdater.refreshedHostCanContinue(offlineConfigured), "No recovery journal and an offline relay must not prevent updating")
+precondition(!AppUpdater.recoveredStateIsReady(offlineConfigured), "Offline is not successful target recovery")
+precondition(!AppUpdater.refreshedHostCanContinue(["installed": true, "servicesConfigured": true]), "Unknown helper recovery cannot resume")
+restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970, "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+let offlineTarget = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+offlineTarget.consumeHostRestart(arguments: ["test", "--resume-update", "token"])
+precondition(!offlineTarget.resumeAfterHostRestart(ready: true, currentBuild: "999", targetReady: false))
+precondition(offlineTarget.progressActive && !offlineTarget.working, "Installed version alone is not success when recovery is unavailable")
+print("PASS: pre-install offline relay can update, while target completion still needs recovery")
+for exited in [false, true] {
+    restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970, "hostPID": 42, "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+    let launchdDriver = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+    launchdDriver.consumeHostRestart(arguments: ["test", "--background"], hasExited: { pid in precondition(pid == 42); return exited })
+    precondition(launchdDriver.takeResumedApproval(build: "999", url: release) == exited)
+    precondition(!launchdDriver.takeResumedApproval(build: "999", url: release))
+}
+print("PASS: launchd relaunch consumes approval only after old PID exit, once")
+restartDefaults.set(["token": "token", "at": Date().timeIntervalSince1970, "build": "999", "url": release], forKey: "DotLinkUpdateHostRestart")
+let degradedResume = AppUpdater(automaticUpdatesEnabled: false, presentProgress: false, progressDefaults: restartDefaults)
+var resumedChecks = 0
+degradedResume.requestUpdateCheck = { resumedChecks += 1 }
+degradedResume.consumeHostRestart(arguments: ["test", "--resume-update", "token"])
+precondition(!degradedResume.resumeAfterHostRestart(ready: AppUpdater.refreshedHostCanContinue(offlineConfigured), currentBuild: "998", targetReady: false))
+precondition(resumedChecks == 1 && degradedResume.working && degradedResume.progressActive)
+precondition(degradedResume.takeResumedApproval(build: "999", url: release))
+print("PASS: degraded relay reaches the resumed update check and retains exact-target consent")
