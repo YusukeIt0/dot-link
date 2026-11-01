@@ -53,6 +53,15 @@ test('device gateway negotiates history, shares existing ingestion, isolates old
   assert.equal((await device('/api/location/update', {sharing_id, sequence: 2, fix: fix(), history})).status, 200);
   let read = (await mcp('get_location_history', {detail: 'observations'})).result.structuredContent;
   assert.equal(read.entries.length, 1); assert.equal(read.source, 'phone_location');
+  // Optional history metadata must not break live fixes from a mixed-version peer.
+  let sequence = 2;
+  for (const invalid of [{...history, timezone: 'x'.repeat(81)}, {...history, protocol: 2}, null]) {
+    time += 15_000;
+    const response = await device('/api/location/update', {sharing_id, sequence: ++sequence, fix: fix(), history: invalid});
+    assert.equal(response.status, 200);
+    const result = await response.json();
+    assert.equal(result.accepted, true); assert.equal(result.historyCount, 1);
+  }
   await device('/api/location/control', {sharing_id, enabled: false});
   assert.equal((await mcp('get_location_history')).result.structuredContent.status, 'available', 'recording stop leaves separately permitted past history readable');
   await control('simulate', 'walk'); read = (await mcp('get_location_history')).result.structuredContent;
