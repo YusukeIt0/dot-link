@@ -94,7 +94,9 @@ export class LocationHistoryStore {
     const cutoff = this.now() - HISTORY_RETENTION_MS;
     const a = this.db.prepare('DELETE FROM observations WHERE measured<=? OR measured>?').run(cutoff, this.now());
     const b = this.db.prepare('DELETE FROM simulation WHERE measured<=? OR measured>?').run(cutoff, this.now());
-    if (a.changes || b.changes) { this.reload(); this.changed(); }
+    // Retention changes the data revision, not consent: keep negotiated uploads
+    // and unrelated recent reads usable while their own evidence is retained.
+    if (a.changes || b.changes) { this.reload(); this.changes.emit(); }
   }
   status(owner?: string) {
     try { this.maintain(); } catch { this.fail(); }
@@ -167,7 +169,9 @@ export class LocationHistoryStore {
     if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};
     if (this.dirty) this.reload();
     const result = this.index.read(raw);
-    const id = randomUUID(); this.reads.set(id, {epoch: this.epoch, expires: this.now() + 5 * 60_000});
+    const first = 'coverage' in result ? result.coverage.first_observed_at : null;
+    const expires = Math.min(this.now() + 5 * 60_000, first ? Date.parse(first) + HISTORY_RETENTION_MS : Infinity);
+    const id = randomUUID(); this.reads.set(id, {epoch: this.epoch, expires});
     while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
     return {...result, history_context_id: id};
   }
@@ -176,7 +180,13 @@ export class LocationHistoryStore {
     const record = this.reads.get(input.history_context_id);
     const guard = () => { this.maintain(); if (!record || !this.authorized() || this.consent.scenario === 'revoked' || record.epoch !== this.epoch || record.expires <= this.now()) throw failure(); return true; };
     guard();
-    return this.announce({message_id: input.history_context_id, utterance_id: input.utterance_id, text: input.text}, guard);
+    // A context may support several question-linked replies; identical retries
+    // retain one ID. UUIDv8 carries a bounded deterministic SHA-256 identity.
+    const bytes = createHash('sha256').update(JSON.stringify([input.history_context_id, input.utterance_id, input.text])).digest().subarray(0, 16);
+    bytes[6] = (bytes[6] & 0x0f) | 0x80; bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = bytes.toString('hex');
+    const message_id = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+    return this.announce({message_id, utterance_id: input.utterance_id, text: input.text}, guard);
   }
   close() { if (this.closed) return; this.closed = true; clearInterval(this.timer); this.reads.clear(); this.index.clear(); this.geography.clear(); this.db.close(); }
 }

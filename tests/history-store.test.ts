@@ -105,3 +105,36 @@ test('a queued historical reply rechecks deletion before the normal reply commit
   assert.equal(h.bridge.history().find(x => x.id === question.id)?.reply, undefined);
   assert.equal(h.store.status(owner).historyCount, 0);
 });
+
+test('retention pruning preserves negotiated uploads and recent replies while expiring old evidence', async t => {
+  const h = setup(t); h.control('enable'); h.advance(1000); h.ingest();
+  const epoch = h.store.status(owner).historyEpoch;
+  h.advance(HISTORY_RETENTION_MS - 30_000); h.ingest();
+  await h.bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
+  const question = await h.bridge.submit({id: randomUUID(), text: 'Recent evidence?'});
+  const old = h.store.read() as any;
+  const recent = h.store.read({start_at: h.fix().measured_at}) as any;
+  h.advance(31_000);
+  assert.equal(h.ingest('session-a', {protocol: 1, epoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}), true);
+  assert.equal(h.store.status(owner).historyEpoch, epoch);
+  assert.equal(h.store.status(owner).historyCount, 2);
+  await h.store.respond({history_context_id: recent.history_context_id, utterance_id: question.id, text: 'The recent point is retained.'});
+  assert.throws(() => h.store.respond({history_context_id: old.history_context_id, utterance_id: question.id, text: 'Expired evidence.'}));
+  h.control('disable', undefined, epoch);
+  assert.equal(h.store.status(owner).historyEnabled, false);
+});
+
+test('one history context supports different linked follow-ups with idempotent retries', async t => {
+  const h = setup(t); h.control('enable'); h.control('simulate', 'walk');
+  await h.bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
+  const question = await h.bridge.submit({id: randomUUID(), text: 'Explain the fictional walk.'});
+  const context = (h.store.read() as any).history_context_id;
+  const send = (text: string) => h.store.respond({history_context_id: context, utterance_id: question.id, text});
+  const first = await send('The fictional east road.') as any;
+  const followup = await send('Then the fictional north road.') as any;
+  assert.notEqual(first.message_id, followup.message_id);
+  assert.deepEqual(await send('Then the fictional north road.'), followup);
+  assert.equal(h.bridge.history().find(x => x.id === question.id)?.reply, 'The fictional east road.');
+  assert.equal(h.bridge.outboundHistory().length, 1);
+  assert.equal(h.bridge.outboundHistory()[0].reply, 'Then the fictional north road.');
+});
