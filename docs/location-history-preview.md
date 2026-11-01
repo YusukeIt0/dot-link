@@ -1,8 +1,22 @@
-# Synthetic history conversation preview
+# Location history Beta and isolated preview
 
-First testable stage of [#264](https://github.com/YusukeIt0/dot-link/issues/264),
-implemented under [#265](https://github.com/YusukeIt0/dot-link/issues/265).
-This is a development fixture, not enabled personal-location history.
+The usable Beta continuation is tracked under [#267](https://github.com/YusukeIt0/dot-link/issues/267)
+and parent [#264](https://github.com/YusukeIt0/dot-link/issues/264). The normal relay
+now constructs an opt-in SQLite history owner. See [setup](setup.md#remember-recent-places-beta)
+and [data handling](privacy.md#recent-places-beta) for consent, retention and deletion.
+`get_location_history` reads evidence; `respond_to_history` returns a question-linked
+G2 answer after rechecking access. No proactive history event is introduced.
+
+Use the installed Beta's **Test history** scenarios for an actual existing-Dot/G2
+session. Real collection pauses during simulation; synthetic rows cannot become
+phone history. Cover walk, partial, stopped, empty, revoked and no-map cases, an
+unrelated ordinary question, restart, and delete/stop. Record actual Dot tool use,
+reply association and wearer observations separately from automatic tests. A local
+RPC pass is not actual-Dot or physical acceptance.
+
+The independent runner below remains useful for isolated fixtures. Its listener
+has no G2 send endpoint and does not read installed credentials. Statements below
+about fixture storage apply to that runner, not the opt-in installed Beta.
 
 ## What is ready to test
 
@@ -12,10 +26,9 @@ groups candidate stays and movement observations, and exposes a bounded
 It reuses `distanceMeters` and `geographicEvidence`; map names and geometry in this
 fixture are invented, never downloaded or represented as real venues.
 
-The normal `server/main.ts` does not construct a history provider. Normal discovery
-does not advertise the tool; stale calls return `tool_unavailable`. Neither phone
-upload schemas nor consent, SDK sampling, current-location guards, persistent
-personal data or normal reply/event flows change. The runner reads no installed
+The isolated runner constructs only a fixture history provider. It does not
+change installed consent, SDK sampling, current-location guards, personal data
+or normal reply/event flows. The runner reads no installed
 keys, pairing or geography cache and contacts no external service.
 
 The preview exposes only authenticated history reads and discovery. It has no
@@ -139,14 +152,11 @@ poor accuracy, gaps/stops, duplicate/reordered points, interval/timezone queries
 expiry, deletion, access revocation, output/capacity bounds, authenticated HTTP,
 absence of callbacks/device writes and the normal relay's unchanged discovery.
 They do not establish natural Dot behavior, iOS background acquisition, battery
-performance or actual G2 display. Persistent restart/rollback, real consent UI,
-live ingestion and full mixed-version rollout belong to later implementation.
+performance or actual G2 display. Persistent restart, consent, live ingestion and mixed-version protocol checks
+are covered separately by `history-store.test.ts`, `history-sharing.test.ts` and
+`history-beta.integration.ts`; device observations remain separate.
 
-Documentation audit for this stage: the current privacy promise that no exact
-phone-coordinate trail is stored remains true. This runner accepts only explicitly
-synthetic observations in memory. No user-facing release note, permission, consent
-translation, dependency version or Even Hub form changes are needed to run this
-isolated developer fixture. Before stage 2 enables personal history, update the
-privacy/geography wording, all consent languages and independent Even declarations
-as required by #264, and verify mixed-version payload negotiation. No paid API,
-alternative map platform or local business directory has been added.
+The original fixture stage did not change personal-data handling. The installed
+Beta does: its privacy/setup text, consent translations and actual-build permission
+explanations must be checked together before device distribution. No paid API,
+alternative map platform or local business directory is added.

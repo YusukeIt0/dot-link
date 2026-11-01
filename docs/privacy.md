@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects the November 1, 2026 Beta implementation. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
@@ -65,7 +65,7 @@ Stopping services alone does not delete history. Manage or delete information al
 
 Location sharing starts off. When enabled in the Even app, the phone location, measurement time and accuracy (and speed/heading when available) are sent to your connected Mac. Your existing Dot can read the latest location and decide whether to offer useful information. Turning sharing off stops new location uploads and requests that the Mac clear its current location and block location-based announcements. If the stop cannot reach the Mac, that remote state is not cleared immediately: sharing expires 90 seconds after the last accepted relay update, and old measurements cannot be used as fresh location. Pending stop requests are saved and retried. A confirmed glasses-app exit also ends the live sharing session while retaining the saved choice for the next launch. Hiding the phone page alone does not stop sharing. You control the OS and Even app location permissions.
 
-Dot Link does not save an exact coordinate trail to disk. The latest phone fix and short-lived decision context remain in Mac memory; preferences, subscriptions and revoked identifiers are saved. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
+Without the separate **Remember recent places** opt-in, Dot Link does not save an exact phone-coordinate trail to disk. The latest phone fix and short-lived decision context remain in Mac memory; preferences, subscriptions and revoked identifiers are saved. Optional history is described below. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
 
 While sharing has a fresh measurement and Dot has an active location subscription, the Mac automatically retrieves nearby geographic data from Overture Maps. Coordinates are available immediately; map references can arrive later, be incomplete, or be unavailable. Map proximity is not proof of a visit, road membership or safe passage. References include source attribution and are shared with Dot alongside the coordinates. No paid geocoding, places or search API is used by this component.
 
@@ -74,6 +74,51 @@ Requests go to `stac.overturemaps.org` and Overture’s Azure distribution at `o
 Reusable public map bytes and normalized areas are stored in an owner-only cache on the Mac, limited to 256 MiB. Area cells are roughly two kilometres across with surrounding margins. Cache contents and last-use days can reveal approximate past areas even though filenames are hashed; hashes are not location anonymization. Use times are rounded to whole days. Entries unused for 30 days are removed, and older entries may be evicted sooner to meet capacity. Cleanup runs at relay startup and every six hours while it runs, including when sharing is off; if the relay is stopped, cleanup resumes on the next launch. Normalized areas refresh after seven days independently of their use age.
 
 Stopping sharing, losing a fresh measurement, ending Dot’s subscription, revoking pairing or stopping the relay cancels acquisition and clears live geographic context. Already cached map files remain until expiry or capacity eviction. Uninstalling Dot Link moves this cache to Trash with the other app data, including for supported development installations. Stopping sharing does not delete that cache, backups or information already read by Dot.
+
+## Recent places (Beta)
+
+**Remember recent places** is a separate choice under Location sharing, off by
+default. It requires compatible Mac and Even versions. Enabling current-location
+sharing does not enable history. When both are enabled, accepted phone measurements
+are saved on the selected Mac: exact coordinates, measurement/receipt times,
+accuracy, available speed/heading, timezone/UTC offset and recording-session
+boundaries. Existing geographic references may be attached; history does not
+start additional map requests or store walking routes or terrain queries.
+
+The owner-only SQLite database is in the Mac runtime's `location-history`
+directory (directory mode 0700, file mode 0600). It is not separately encrypted by
+Dot Link. It retains at most 168 hours and 50,000 observations, evicting the oldest
+when full; the database has a 256 MiB page limit. Expiry runs at startup, on access
+and every minute while the relay runs. When stopped, cleanup resumes on launch.
+App updates retain this data outside the bundle. Filesystem/device backups may
+retain older copies; local deletion cannot erase those backups.
+
+Your existing Dot can read bounded historical evidence through the normal
+connection when history is enabled. Candidate stays and nearby road references
+are uncertain evidence, not proof of visits or a continuous route. Turning
+**Share my location** off stops new collection but leaves separately enabled
+historical reads available. Turning **Remember recent places** off stops collection
+and historical access; saved observations remain until expiry. **Delete and stop**
+removes the stored observations and disables history. A failed or offline control
+shows an error rather than claiming the Mac has stopped. Reconnecting another Mac
+does not inherit consent. Revoking the owning phone's pairing invalidates access
+immediately and removes this history during the next maintenance/access pass
+after confirmed revocation, pairing removal or expiry. A temporary authorization
+lookup failure blocks access without deleting retained history.
+
+History-based G2 replies use a short-lived history context and recheck access,
+deletion and expiry before being saved as ordinary question-linked replies.
+Deleting local history cannot retract information or conversations already sent
+to Dot/OpenAI. Those services' retention and memory controls remain separate.
+Uninstalling moves the runtime, including this database, to Trash.
+
+Beta **Test history** scenarios use explicitly fictional coordinates and names in
+a separate table. During a scenario, real history collection is paused and reads
+are marked synthetic. Ending the scenario deletes its rows and returns to personal
+history; it does not erase retained personal observations. A Beta restart preserves
+the scenario; a non-Beta relay clears it. Test answers can still enter ordinary
+conversation history and the provider's conversation, so they must be understood
+as fictional test data.
 
 ## Walking and terrain
 

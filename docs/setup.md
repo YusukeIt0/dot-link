@@ -100,6 +100,26 @@ the option off stops pending queries when the Mac receives the stop. The saved
 choice belongs to the selected Mac. Open **Data sources and privacy** for the
 bundled English disclosure, support contact and full attribution.
 
+### Remember recent places (Beta)
+
+With compatible Beta versions on both devices, open **Location sharing** and turn
+on **Remember recent places** separately from **Share my location**. This lets Dot
+refer to up to seven days of recorded places and movement. Collection needs both
+options; old companions keep ordinary location sharing and do not upload history.
+Refresh your existing ChatGPT connection's tools to add `get_location_history`
+and `respond_to_history`, then continue your normal conversation. You do not need
+a separate Dot or a new event subscription for historical questions.
+
+Turning current-location sharing off leaves existing history readable. Turn
+**Remember recent places** off to stop collection and historical access, or choose
+**Delete and stop** to erase the local history too. A failed control must be retried
+when the Mac is reachable. See [retention and deletion](privacy.md#recent-places-beta).
+
+For stationary Beta testing, **Test history** offers fictional movement scenarios.
+They temporarily replace the evidence Dot reads and pause real history collection.
+Tell Dot once that the scenario is fictional; select **End test** when finished.
+Ordinary conversation continues with empty or partial history.
+
 ## Updates
 
 Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. Starting a manual update interrupts the active conversation while the Mac app restarts. After you choose **Update**, Dot Link first refreshes the running app and continues the approved update automatically; you do not need to quit, reopen it, or approve the same update again. A progress window shows download, verification, preparation and installation; after restart it shows connection recovery, then automatically opens Dot Link and closes the progress window. A paused connection stays paused. Percentages are shown only when progress is measured. Closing the progress window does not cancel the update. If the app says **Finish the current settings operation, then click Retry update**, finish that operation and choose **Retry update**.

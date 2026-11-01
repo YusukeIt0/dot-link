@@ -15,7 +15,7 @@ for (const match of source.matchAll(/import\s+\{[^}]*\}\s+from\s+'(\.\/[^']+)'/g
 const script = stripTypeScriptTypes(source
   .replace(/import\s+[\s\S]*?from\s+'[^']+';\n/g, '')
   .replace(/import '\.\/style.css';/, '')
-  .replace('import.meta.env.VITE_APP_VERSION', "'test'")
+  .replaceAll('import.meta.env.VITE_APP_VERSION', "'test'")
   .replace('import.meta.env.VITE_EXIT_DIAGNOSTICS', 'exitDiagnosticsFlag'));
 const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
 
