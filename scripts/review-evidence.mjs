@@ -169,15 +169,33 @@ export function gatherContext(snapshot, api, paginate) {
         author: x.user?.login, body: x.body, updated_at: x.updated_at}))};
     // Reuse only an ancestor's observations with unchanged runtime. Do not ask
     // testers to repeat a device session merely for docs/tests/version metadata.
+    // Give the static reviewer the comparison it cannot obtain from .git.
+    // Eligibility preserves the existing path policy; the reviewer must still
+    // check whether these paths affect the particular observed behavior.
+    const comparedSources = new Set();
+    context.evidence_comparisons = [];
     for (const evidence of record.evidence.filter(x => ['runtime', 'device'].includes(x.kind))) {
       if (evidence.commit === record.head) continue;
+      if (comparedSources.has(evidence.commit)) continue;
       const comparison = api(`compare/${evidence.commit}...${record.head}`);
-      const reusable = ['ahead', 'identical'].includes(comparison.status) &&
-        comparison.merge_base_commit?.sha === evidence.commit && Array.isArray(comparison.files) &&
-        comparison.files.length < 300 && comparison.files.every(f => f.status !== 'renamed' &&
+      const ancestor = ['ahead', 'identical'].includes(comparison.status) &&
+        comparison.merge_base_commit?.sha === evidence.commit;
+      const complete = Array.isArray(comparison.files) && comparison.files.length < 300;
+      const reusable = ancestor && complete && comparison.files.every(f => f.status !== 'renamed' &&
           (['docs/', 'tests/', 'site/'].some(p => f.filename.startsWith(p)) || websiteOnlyAsset(f.filename) || f.filename === 'README.md' ||
           f.status === 'modified' && versionFiles.has(f.filename) && versionOnly(f.filename,
             readMetadata(api, f.filename, evidence.commit), readMetadata(api, f.filename, record.head))));
+      const result = {source: evidence.commit, target: record.head, ancestor,
+        complete, eligible: reusable,
+        changed_files: complete ? comparison.files.map(f => ({path: f.filename, status: f.status,
+          ...(f.previous_filename ? {previous_path: f.previous_filename} : {})})) : [],
+        reason: !ancestor ? 'Observation source is not a verified ancestor of the current head.' :
+          !complete ? 'Changed-file comparison is missing or potentially truncated; no paths are reported.' :
+          !reusable ? 'Changes exceed the existing evidence-reuse policy.' :
+          comparison.files.length === 0 ? 'No file content changed since the observation.' :
+          'Changes are within the existing reuse policy; assess their effect on the recorded observation.'};
+      comparedSources.add(evidence.commit);
+      context.evidence_comparisons.push(result);
       if (!reusable) context.acceptance = {...context.acceptance, status: 'stale',
         reason: 'Runtime/device evidence does not cover the current code; verify applicability before reuse.'};
     }

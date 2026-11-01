@@ -180,6 +180,28 @@ jobs:
             Explain remaining device checks as operations and expected user behavior.
             Do not turn a pending test into a successful observation. Do not demand
             device testing for tooling/docs changes with no runtime effect.
+            Keep verification proportional to the agreed current-stage outcome.
+            context.evidence_comparisons contains deterministic source-to-head
+            ancestry, bounded changed paths and reuse eligibility for earlier
+            runtime/device observations. An eligible comparison permits reuse,
+            not automatic semantic coverage: check whether the changed paths
+            affect the recorded behavior (site/locales changes can affect a site
+            rendering observation). Use the supplied comparison rather than
+            requiring inaccessible git history or an identical observation SHA.
+            When behavior and assumptions remain applicable, carry the evidence
+            forward. A repeat check needs a concrete affected requirement and
+            changed behavior, new defect or changed assumption. Do not ask for
+            another test merely because equivalent evidence has a different form.
+            Put only unmet current-stage requirements or concrete safety/correctness
+            evidence needs in assessment.gaps. Explain which behavior lacks proof.
+            Keep checks that require merge/deployment in next_steps when they are
+            explicitly subsequent stages; do not use them to block that prior stage.
+            Never defer a required pre-merge check just by calling it post-deployment.
+            CI pending/unavailable is handled by the independent CI gate, not an
+            acceptance gap requiring another model review after CI completes.
+            Optional improvements belong in non-blocking advice, not new completion
+            conditions. Once the current requirements are covered and no introduced
+            defect or concrete evidence gap remains, finish without expanding scope.
             Product decisions concern purpose, scope and UX. Investigate technical
             questions yourself; do not ask a nontechnical maintainer to approve code.
             For technical findings explain the user-visible consequence, verified
