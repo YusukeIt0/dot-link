@@ -42,14 +42,27 @@ their own PRs and follow the same review and decision flow.
 | --- | --- |
 | npm (root, `tools/evenhub`) and lockfiles | Dependabot version updates and security alerts |
 | GitHub Actions (SHA-pinned with version comments) | Dependabot version updates |
-| Node.js in CI workflows and the bundled Mac runtime (`scripts/mac-runtime-manifest.json`), including the npm it ships | Not a Dependabot ecosystem here; covered by the pinned-runtime watch (next step of #274) |
-| Sparkle version and checksum (`config/mac-update.json`) | Same; version and checksum must change together |
-| tunnel-client and whisper.cpp (`scripts/mac-runtime-manifest.json`) | Same; version, URL and SHA-256 must change together |
+| Node.js in CI workflows and the bundled Mac runtime (`scripts/mac-runtime-manifest.json`), including the npm it ships | Pinned-runtime watch: newer releases on the pinned major, security releases, bundled npm, and CI/bundle version drift |
+| Sparkle version and checksum (`config/mac-update.json`) | Pinned-runtime watch: newer release and repository advisories published after the pinned release |
+| tunnel-client and whisper.cpp (`scripts/mac-runtime-manifest.json`) | Pinned-runtime watch: same as Sparkle |
 
-The pinned-runtime watch alerts the maintainer with the dependency, the new
-version or advisory, why no automatic proposal is generated, and the next action.
-Version pins and integrity checks stay; floating versions are not a substitute
-for maintenance.
+### Pinned-runtime watch
+
+`.github/workflows/pinned-runtime-watch.yml` runs weekly (Monday 03:17 UTC) and on
+manual dispatch from `main`. `scripts/check-pinned-runtimes.mjs` reads every pin
+from the repository and compares it with the official Node.js release list and the
+upstream GitHub releases and published advisories. It keeps one tracking issue,
+"Pinned runtime updates available", opened by `github-actions`. The issue is
+created when something is actionable, updated in place when the report changes,
+and closed when everything is current. Each entry gives the update or advisory,
+why no automatic PR is generated (the version must change together with its
+URL/checksum and be verified against upstream), and the next action. An advisory
+is reported upstream; it does not establish exposure in Dot Link.
+
+The watch never edits pins, checksums or code, and it needs only `contents: read`
+and `issues: write`. Version pins and integrity checks stay; floating versions are
+not a substitute for maintenance. Run `node scripts/check-pinned-runtimes.mjs`
+locally to print the report without touching issues.
 
 ## Operational limits
 
