@@ -11,8 +11,11 @@ require reading the diff. See #274.
    - npm in `tools/evenhub`
    - GitHub Actions
 
-   Minor and patch version updates are grouped per ecosystem, giving one decision
-   per batch. Majors and security updates arrive as separate PRs.
+   All of them, including majors, arrive as one weekly pull request through a
+   multi-ecosystem group (maintainer decision, 2026-11-09, #286). That means one
+   decision per week. A breaking major in the batch is fixed on that PR by the
+   implementing AI before the decision. Security updates arrive separately and
+   immediately.
 2. Each Dependabot PR runs the ordinary CI (`Tests`; `Branch validation` for the
    branch push, as for any branch). Existing duplicate avoidance and cancellation
    are unchanged.
