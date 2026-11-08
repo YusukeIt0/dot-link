@@ -41,8 +41,11 @@ export function readPins(read = path => readFileSync(path, 'utf8')) {
     tunnel: manifest.tunnel.version, whisper: manifest.whisper.version };
 }
 
+export const eolWarningDays = 180;
 // index.json is nodejs.org's release list (newest first) with npm and security flags.
-export function nodeStatus(index, pinned, ci) {
+// schedule is nodejs/Release schedule.json (null when unavailable): end-of-life of the
+// pinned major cannot be seen from releases alone, because none appear after it.
+export function nodeStatus(index, pinned, ci, schedule = null, today = new Date().toISOString().slice(0, 10)) {
   const major = parseVersion(pinned)?.[0];
   if (major === undefined) throw new Error('Unrecognized Node pin');
   const line = index.filter(row => parseVersion(row.version)?.[0] === major);
@@ -54,9 +57,19 @@ export function nodeStatus(index, pinned, ci) {
   if (!current) findings.push(`Pinned ${pinned} is not in the official release list.`);
   if (mismatched.length) findings.push(`CI and the bundled runtime differ: ${mismatched.join('; ')} (bundled ${pinned}).`);
   if (!ci.some(({ values }) => values.length)) findings.push('No CI node-version pin was found.');
+  const latestLts = index.filter(row => row.lts).reduce((best, row) => !best || compareVersions(row.version, best.version) > 0 ? row : best, null);
+  const end = schedule?.[`v${major}`]?.end;
+  let eol = null;
+  if (!schedule) findings.push('Node.js release schedule unavailable, so end-of-life status is unknown. Rerun the watch or check https://github.com/nodejs/Release.');
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(end ?? '')) findings.push(`No end-of-life date for Node.js ${major} in the release schedule.`);
+  else {
+    const days = Math.round((Date.parse(end) - Date.parse(today)) / 86_400_000);
+    eol = { end, days };
+    if (days <= eolWarningDays) findings.push(`Node.js ${major} reaches end-of-life on ${end} (${days < 0 ? `${-days} days ago` : `in ${days} days`}). Plan the bundled runtime and CI move to a supported LTS major${latestLts && parseVersion(latestLts.version)[0] > major ? ` (latest LTS: ${latestLts.version})` : ''}.`);
+  }
   return {
     id: 'node', name: `Node.js ${major} (CI and bundled Mac runtime)`, pinned, latest: latest?.version ?? pinned,
-    outdated: newer.length > 0, security: newer.some(row => row.security === true),
+    outdated: newer.length > 0, security: newer.some(row => row.security === true), eol,
     npm: { pinned: current?.npm ?? 'unknown', latest: latest?.npm ?? 'unknown' },
     link: latest ? `https://nodejs.org/en/blog/release/${latest.version}` : 'https://nodejs.org/en/about/previous-releases',
     integrity: 'version, URL and sha256 in `scripts/mac-runtime-manifest.json` (official SHASUMS256), plus node-version in CI workflows',
@@ -121,7 +134,9 @@ async function json(url, token) {
 async function main() {
   const token = process.env.GH_TOKEN;
   const pins = readPins();
-  const rows = [nodeStatus(await json('https://nodejs.org/dist/index.json'), pins.node, pins.nodeCi)];
+  let schedule = null;
+  try { schedule = await json('https://raw.githubusercontent.com/nodejs/Release/main/schedule.json'); } catch { /* Unknown, reported as a finding. */ }
+  const rows = [nodeStatus(await json('https://nodejs.org/dist/index.json'), pins.node, pins.nodeCi, schedule)];
   for (const source of sources) {
     const api = `https://api.github.com/repos/${source.repo}`;
     const latest = await json(`${api}/releases/latest`, token);

@@ -51,7 +51,7 @@ their own PRs and follow the same review and decision flow.
 `.github/workflows/pinned-runtime-watch.yml` runs weekly (Monday 03:17 UTC) and on
 manual dispatch from `main`. `scripts/check-pinned-runtimes.mjs` reads every pin
 from the repository and compares it with the official Node.js release list and the
-upstream GitHub releases and published advisories. It keeps one tracking issue,
+upstream GitHub releases and published advisories. For Node.js it also reads the official release schedule (`nodejs/Release` `schedule.json`) and reports when the pinned major is within 180 days of end-of-life, naming the latest LTS. An unavailable schedule or advisory lookup is reported as unknown and keeps the issue open. It keeps one tracking issue,
 "Pinned runtime updates available", opened by `github-actions`. The issue is
 created when something is actionable, updated in place when the report changes,
 and closed when everything is current. Each entry gives the update or advisory,
