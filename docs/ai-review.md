@@ -27,7 +27,11 @@ check the linked run and request another review.
 
 A maintainer can also use **Actions → dotsweeper review → Run workflow**, selecting
 `main` and entering an issue or PR number. Closed, locked and draft items are
-not reviewed. Automated bot accounts do not trigger this workflow.
+not reviewed. Automated bot accounts do not trigger this workflow, with one
+exception: Dependabot's own non-draft PR events (opened, ready for review and
+synchronize) are reviewed automatically, as are maintainer pushes onto a Dependabot
+PR. The bot is authenticated by ID and login from `config/development-policy.json`;
+its comments and other bots' events are ignored. See [dependency updates](dependency-updates.md).
 
 ## State changes and completion
 

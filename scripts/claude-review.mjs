@@ -2,7 +2,7 @@ import {validateTriage, planLabels} from './review-labels.mjs';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {createHash} from 'node:crypto';
-import {acceptanceMarker, trustedUser, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
+import {acceptanceMarker, trustedUser, dependencyBot, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 if (repo !== 'YusukeIt0/dot-link') throw new Error('This workflow is restricted to public Dot Link');
@@ -90,6 +90,9 @@ class InvalidResult extends Error {}
 function authorized(s) {
   const name = process.env.GITHUB_EVENT_NAME;
   const actor = event.sender;
+  // A dependency bot may start review only for its own non-draft PR events.
+  if (actor?.type === 'Bot') return name === 'pull_request_target' && dependencyBot(actor) && dependencyBot(s.issue.user)
+    && ['opened', 'ready_for_review', 'synchronize'].includes(event.action);
   if (actor?.type !== 'User') return false;
   if (name === 'issue_comment') {
     const live = get(`${root}/issues/comments/${event.comment.id}`);
@@ -105,7 +108,7 @@ function authorized(s) {
   }
   return (name === 'issues' && event.action === 'opened') ||
     (name === 'pull_request_target' && (['opened', 'ready_for_review'].includes(event.action) ||
-      (event.action === 'synchronize' && trustedUser(s.issue.user) && trustedUser(actor))));
+      (event.action === 'synchronize' && trustedUser(actor) && (trustedUser(s.issue.user) || dependencyBot(s.issue.user)))));
 }
 function boundedInput(s) {
   const input = JSON.stringify(s.data, null, 2);

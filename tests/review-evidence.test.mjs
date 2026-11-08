@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acceptanceMarker, policy, hash, scopeDigest, acceptanceFromComments, validateAcceptance,
-  validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, versionOnly, trustedUser, authenticateComments} from '../scripts/review-evidence.mjs';
+  validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, versionOnly, trustedUser, dependencyBot, authenticateComments} from '../scripts/review-evidence.mjs';
 
 const head = 'b'.repeat(40), before = 'a'.repeat(40);
 const owner = {...policy.trustedMaintainers[0], type: 'User'};
@@ -255,4 +255,13 @@ test('advisory review survives CI transition and missing association without cla
   assert.equal(context.ci_selection.status, 'held'); assert.deepEqual(context.ci, []);
   const missing = gatherContext({pr: {...pr, head: {...pr.head, repo: null}}, rows: []}, () => {throw Error('not reached');}, () => []);
   assert.equal(missing.ci_selection.status, 'held');
+});
+
+test('dependency bot identity requires exact Bot type, ID and login and is never a trusted maintainer', () => {
+  const bot = {...policy.dependencyBots[0], type: 'Bot'};
+  assert.equal(dependencyBot(bot), true);
+  assert.equal(trustedUser(bot), false);
+  for (const user of [{...bot, id: 1}, {...bot, login: 'dependabot'}, {...bot, type: 'User'}, {...policy.trustedMaintainers[0], type: 'User'}, null]) {
+    assert.equal(dependencyBot(user), false);
+  }
 });

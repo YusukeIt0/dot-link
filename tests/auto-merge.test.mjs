@@ -100,6 +100,13 @@ test('trust, freshness, exact CI, findings, unknown evidence and sensitive chang
     const s = fixture(); change(s); assert.equal(evaluate(s).eligible, false, change.toString());
   }
 });
+test('a dependency-bot PR is held for the maintainer even with otherwise complete evidence', () => {
+  const s = fixture();
+  assert.deepEqual(evaluate(s).reasons, []);
+  s.pr.user = {...policy.dependencyBots[0], type: 'Bot'};
+  assert.ok(evaluate(s).reasons.some(reason => /not an explicitly trusted/.test(reason)));
+  assert.equal(evaluate(s).eligible, false);
+});
 test('latest associated CI wins even when a previous run succeeded', () => {
   const s = fixture(); s.ciRuns = [s.ciRun, {...s.ciRun, id: 790, conclusion: 'failure'}];
   const client = clientFor(s), original = client.pages;
