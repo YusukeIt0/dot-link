@@ -1,0 +1,17 @@
+{
+  "description": "Static copy of the GA4 reporting contract for the official website (issue #273). Tests compare site/analytics.mjs with this file; they never contact GA4. Update this file, the code and docs/website-analytics.md together only when the registered GA4 configuration changes.",
+  "events": {
+    "install_click": ["cta_id", "placement"],
+    "cta_click": ["cta_id", "placement"],
+    "language_switch": ["target_lang"],
+    "video_start": ["video_id"],
+    "video_complete": ["video_id"]
+  },
+  "dimensions": {
+    "site_lang": ["en", "ja", "zh-Hant", "zh-Hans", "ko", "ar", "fr", "de"],
+    "cta_id": ["install", "quickstart", "watch"],
+    "placement": ["hero", "setup", "footer"],
+    "target_lang": ["en", "ja", "zh-Hant", "zh-Hans", "ko", "ar", "fr", "de"],
+    "video_id": ["dot-link-introduction"]
+  }
+}

@@ -10,6 +10,27 @@ const languagePaths = new Map([
   ['/dot-link/fr/', 'fr'], ['/dot-link/de/', 'de'],
 ]);
 const denied = { analytics_storage: 'denied', ad_storage: 'denied', ad_user_data: 'denied', ad_personalization: 'denied' };
+const siteLanguages = Object.freeze([...languagePaths.values()]);
+// GA4 reporting contract: the only custom parameters and values sent. Each name is
+// registered as an event-scoped custom dimension; see docs/website-analytics.md.
+export const ga4Contract = Object.freeze({
+  events: Object.freeze({
+    install_click: Object.freeze(['cta_id', 'placement']),
+    cta_click: Object.freeze(['cta_id', 'placement']),
+    language_switch: Object.freeze(['target_lang']),
+    video_start: Object.freeze(['video_id']),
+    video_complete: Object.freeze(['video_id']),
+  }),
+  dimensions: Object.freeze({
+    site_lang: siteLanguages,
+    cta_id: Object.freeze(['install', 'quickstart', 'watch']),
+    placement: Object.freeze(['hero', 'setup', 'footer']),
+    target_lang: siteLanguages,
+    video_id: Object.freeze(['dot-link-introduction']),
+  }),
+});
+const allowed = (dimension, value) => ga4Contract.dimensions[dimension].includes(value);
+const [videoId] = ga4Contract.dimensions.video_id;
 
 export function readConsent(storage, now = Date.now()) {
   try {
@@ -233,24 +254,24 @@ export function initAnalytics(win, doc) {
     const link = event.target.closest?.('a');
     if (!link) return;
     const targetLang = link.getAttribute('hreflang');
-    if (link.closest('.language-links') && [...languagePaths.values()].includes(targetLang)) {
+    if (link.closest('.language-links') && allowed('target_lang', targetLang)) {
       if (targetLang !== context?.site_lang) send('language_switch', { target_lang: targetLang });
       return;
     }
     const action = link.dataset.analytics;
-    if (!['install', 'quickstart', 'watch'].includes(action)) return;
+    if (!allowed('cta_id', action)) return;
     const placement = link.dataset.placement;
-    if (!['hero', 'setup', 'footer'].includes(placement)) return;
+    if (!allowed('placement', placement)) return;
     send(action === 'install' ? 'install_click' : 'cta_click', { cta_id: action, placement });
   }
   doc.addEventListener('click', clicked);
   doc.addEventListener('auxclick', clicked);
   const video = doc.querySelector('#film video');
   video?.addEventListener('playing', () => {
-    if (!videoStarted) videoStarted = send('video_start', { video_id: 'dot-link-introduction' });
+    if (!videoStarted) videoStarted = send('video_start', { video_id: videoId });
   });
   video?.addEventListener('ended', () => {
-    if (videoStarted && !videoCompleted) videoCompleted = send('video_complete', { video_id: 'dot-link-introduction' });
+    if (videoStarted && !videoCompleted) videoCompleted = send('video_complete', { video_id: videoId });
   });
   panel.hidden = Boolean(consent);
   start();
