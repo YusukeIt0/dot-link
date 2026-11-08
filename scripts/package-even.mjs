@@ -37,6 +37,10 @@ if (!files.some(file => file.path === manifest.entrypoint)) throw new Error('Mis
 await mkdir('.runtime/release', {recursive:true,mode:0o700});
 const output = resolve(`.runtime/release/dot-link-${manifest.version}${release ? '' : '-beta'}.ehpk`);
 const candidate = `${output}.candidate-${process.pid}`;
+// Record the CLI that actually packed this artifact, and refuse a stale install.
+const cliVersion = JSON.parse(await readFile('tools/evenhub/node_modules/@evenrealities/evenhub-cli/package.json', 'utf8')).version;
+const cliPin = JSON.parse(await readFile('tools/evenhub/package.json', 'utf8')).dependencies['@evenrealities/evenhub-cli'];
+if (cliVersion !== cliPin) throw new Error(`Installed Even Hub CLI ${cliVersion} does not match the pinned ${cliPin}. Run npm ci in tools/evenhub.`);
 const result = spawnSync(process.execPath, ['tools/evenhub/node_modules/@evenrealities/evenhub-cli/main.js',
   'pack', 'app.json', 'dist', '--sdk-ver', manifest.min_sdk_version, '-o', candidate], {encoding:'utf8'});
 const packingLog = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
@@ -47,7 +51,7 @@ if (result.status !== 0 || /WARNING|default floor|fallback/i.test(packingLog) ||
 }
 await rename(candidate,output);
 const data = await readFile(output);
-const receipt = {...build,version:manifest.version,sdk:manifest.min_sdk_version,minAppVersion:minimumApp[1],cli:'0.1.14',
+const receipt = {...build,version:manifest.version,sdk:manifest.min_sdk_version,minAppVersion:minimumApp[1],cli:cliVersion,
   scope:release ? 'Main release artifact; upload, submission and publication require their own authorization' : 'Self-only beta candidate; not approved for public submission',
   unresolved:['Runtime relay destination permission is not established by an empty manifest whitelist','Verify applicable physical acceptance before distribution'],
   bytes:data.length,sha256:createHash('sha256').update(data).digest('hex'),files};
