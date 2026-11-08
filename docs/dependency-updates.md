@@ -54,8 +54,12 @@ for maintenance.
 ## Operational limits
 
 - Dependabot-triggered `pull_request_target` runs must receive the review
-  credentials. The workflow's "Check subscription credential" step makes a missing
-  credential a visible failure. This is confirmed on the first Dependabot PR after
-  this change.
+  credentials. Two steps depend on them. If the App key is missing, intake fails at
+  "Create dotsweeper publishing token" before any PR comment is posted, so the
+  failure shows only in the Actions tab. If the subscription credential is missing,
+  the run fails visibly at "Check subscription credential". GitHub documents that
+  `pull_request_target` runs against a base not created by Dependabot (here `main`)
+  receive normal secrets. This is confirmed on the first Dependabot PR after this
+  change; if that PR shows no dotsweeper comment, check the intake token step first.
 - A PR left open while `main` advances must be updated (`@dependabot rebase` or a
   branch update) before merging. That reruns CI and review for the new revision.
