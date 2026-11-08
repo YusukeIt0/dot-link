@@ -33,6 +33,13 @@ require reading the diff. See #274.
    recommendation. A withheld or failed review is investigated and rerun, never
    treated as clean.
 
+   Once someone else commits to a Dependabot branch, Dependabot stops rebasing or
+   updating that PR. The implementing AI then keeps it current itself, updating
+   the branch from `main` and resolving conflicts, so CI and review rerun on the
+   new revision. Do not use `@dependabot rebase` or `@dependabot recreate`: they
+   force-push and discard the fix commits. If the fixes are abandoned, close the PR
+   and let the next scheduled run propose the update again.
+
 Evidence must match the current PR revision. Missing, skipped, cancelled, failed
 or stale CI and review stay visible and never count as verification. Merging still
 uses `node scripts/check-review-before-merge.mjs <PR>`.
