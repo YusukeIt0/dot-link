@@ -2,6 +2,7 @@
   "version": 1,
   "activationValue": "reviewed-policy-v1",
   "trustedMaintainers": [{"login": "YusukeIt0", "id": 213780070}],
+  "dependencyBots": [{"login": "dependabot[bot]", "id": 49699333}],
   "requiredJobs": ["workflow-lint", "test"],
   "allowedRoots": ["src/", "server/", "native/", "tests/", "docs/", "site/", "assets/", "public/"],
   "protectedPaths": [

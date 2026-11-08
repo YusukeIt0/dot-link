@@ -37,6 +37,10 @@ export function readMetadata(api, path, ref) {
 }
 export const trustedUser = user => user?.type === 'User' && policy.trustedMaintainers.some(
   row => row.id === user.id && row.login === user.login);
+// Dependency update PRs may be reviewed automatically; they are never trusted
+// maintainers, so the merge coordinator keeps holding them for the owner.
+export const dependencyBot = user => user?.type === 'Bot' && (policy.dependencyBots ?? []).some(
+  row => row.id === user.id && row.login === user.login);
 export const commentRevisionQuery = `query($id:ID!) { node(id:$id) { ... on IssueComment {
   id body updatedAt lastEditedAt
   author { __typename login ... on User { databaseId } ... on Bot { databaseId } }

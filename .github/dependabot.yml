@@ -1,0 +1,33 @@
+version: 2
+# Dependency update proposals (#274). Each PR receives the ordinary CI and an
+# automatic dotsweeper review, then stops for the maintainer's merge decision:
+# the merge coordinator never merges PRs that a dependency bot authored.
+# Minor/patch version updates are grouped per ecosystem and week so the
+# maintainer sees one decision per batch; majors and security updates stay
+# separate. Node.js, npm, Sparkle, tunnel-client and whisper.cpp pins are not
+# Dependabot ecosystems here; see docs/dependency-updates.md.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-root-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /tools/evenhub
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      npm-evenhub-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]

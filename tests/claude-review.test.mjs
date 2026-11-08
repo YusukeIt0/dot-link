@@ -401,6 +401,26 @@ test('trusted synchronize starts a review but another contributor cannot trigger
   }
 });
 
+test('Dependabot PR events start review automatically; other bot events and bot comments do not', t => {
+  const bot = {...policy.dependencyBots[0], type: 'Bot'};
+  const owner = {...policy.trustedMaintainers[0], type: 'User'};
+  const impostor = {...bot, id: 1};
+  for (const [author, sender, action, accepted] of [
+    [bot, bot, 'opened', true], [bot, bot, 'synchronize', true], [bot, bot, 'ready_for_review', true],
+    [bot, owner, 'synchronize', true], [bot, user, 'synchronize', false],
+    [owner, bot, 'synchronize', false], [user, bot, 'opened', false], [impostor, impostor, 'opened', false],
+    [bot, {id: 41898282, login: 'github-actions[bot]', type: 'Bot'}, 'synchronize', false]]) {
+    const f = use(t, {issue: {...issue, user: author, pull_request: {}}, eventName: 'pull_request_target',
+      event: {action, pull_request: {...pr, user: author}, sender}});
+    const r = f.run('intake'); success(r);
+    assert.equal(r.outputs.accepted, String(accepted), `${author.login}/${sender.login}/${action}`);
+  }
+  const command = {id: 77, user: bot, body: '/dotlink review', issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+  const f = use(t, {issue: {...issue, user: bot, pull_request: {}}, eventName: 'issue_comment',
+    event: {action: 'created', issue: {...issue, user: bot}, sender: bot, comment: command}, command});
+  success(f.run('intake')); assert.equal(f.writes().length, 0);
+});
+
 test('unsupported issue and PR relationships preserve technical findings without publishing invented links', t => {
   for (const isPR of [false, true]) {
     const f = use(t, isPR ? {issue: {...issue, body: 'Closes #73', pull_request: {}},
@@ -468,6 +488,16 @@ test('workflow concurrency keeps non-acting events out of the authorized item qu
     assert.equal(group('issue_comment', {sender: user, issue: {number: 12, user}, comment: {user, body}}), 'ignored-999');
   }
   assert.equal(group('issue_comment', {sender: {...user, type: 'Bot'}}), 'ignored-999');
+  const bot = {...policy.dependencyBots[0], type: 'Bot'}, owner = {...policy.trustedMaintainers[0], type: 'User'};
+  for (const action of ['opened', 'ready_for_review', 'synchronize']) {
+    assert.equal(group('pull_request_target', {sender: bot, action, pull_request: {number: 12, draft: false, user: bot}}), 'item-12');
+  }
+  assert.equal(group('pull_request_target', {sender: owner, action: 'synchronize', pull_request: {number: 12, draft: false, user: bot}}), 'item-12');
+  for (const [sender, author, draft] of [[bot, owner, false], [bot, user, false], [bot, bot, true], [{...bot, id: 1}, {...bot, id: 1}, false],
+    [{id: 41898282, login: 'github-actions[bot]', type: 'Bot'}, bot, false]]) {
+    assert.equal(group('pull_request_target', {sender, action: 'synchronize', pull_request: {number: 12, draft, user: author}}), 'ignored-999');
+  }
+  assert.equal(group('issue_comment', {sender: bot, issue: {number: 12, user: bot}, comment: {user: bot, body: '/dotlink review'}}), 'ignored-999');
   assert.equal(group('issue_comment', {sender: user, issue: {number: 12, user}, comment: {user: {id: 456}, body: '/dotlink review'}}), 'ignored-999');
 });
 

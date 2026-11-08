@@ -70,6 +70,11 @@ blockers and merge API errors are not automatically retried. Logs identify chang
 top-level input categories without publishing their contents. Full input values
 are still compared; retrying never waives a gate.
 
+Dependency update PRs are never eligible: their author is a dependency bot, not a
+trusted maintainer, so the coordinator always holds them for the maintainer's
+explicit merge decision even when CI and review are complete. A test pins this
+behavior. See [dependency updates](dependency-updates.md).
+
 ## Latest pending request and failure recovery
 
 Relevant events share the fixed repository-wide concurrency group

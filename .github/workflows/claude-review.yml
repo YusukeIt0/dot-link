@@ -21,21 +21,26 @@ permissions: {}
 concurrency:
   # Do not let unrelated comments/bot events/untrusted synchronize events replace
   # a queued authorized review. Live authorization is still enforced by intake.
-  # Keep automatic owner IDs aligned with config/development-policy.json.
+  # Keep automatic owner and dependency-bot IDs aligned with config/development-policy.json.
   group: >-
     opus-review-${{
+      ((github.event_name == 'pull_request_target' && github.event.sender.type == 'Bot' &&
+        github.event.sender.id == 49699333 && github.event.sender.login == 'dependabot[bot]' &&
+        github.event.pull_request.draft == false &&
+        github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.login == 'dependabot[bot]') ||
       github.event.sender.type == 'User' && (
         (github.event_name == 'issues' && github.event.action == 'opened') ||
         (github.event_name == 'pull_request_target' && github.event.pull_request.draft == false && (
           github.event.action != 'synchronize' ||
-          (github.event.sender.id == 213780070 && github.event.pull_request.user.id == 213780070))) ||
+          (github.event.sender.id == 213780070 && (github.event.pull_request.user.id == 213780070 ||
+            (github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.login == 'dependabot[bot]'))))) ||
         (github.event_name == 'issue_comment' && github.event.comment.user.id == github.event.sender.id && (
           (github.event.comment.body == '/dotlink review' && (
             github.event.sender.id == github.event.issue.user.id ||
             contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))) ||
           (github.event.sender.id == 213780070 && startsWith(github.event.comment.body, '<!-- dot-link-acceptance:v1 -->')))) ||
         (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
-      ) && format('item-{0}', github.event.issue.number || github.event.pull_request.number || inputs.item_number) ||
+      )) && format('item-{0}', github.event.issue.number || github.event.pull_request.number || inputs.item_number) ||
       format('ignored-{0}', github.run_id)
     }}
   cancel-in-progress: false
@@ -47,7 +52,9 @@ jobs:
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) &&
       (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/dotlink review') || startsWith(github.event.comment.body, '<!-- dot-link-acceptance:v1 -->')) &&
-      github.event.sender.type == 'User'
+      (github.event.sender.type == 'User' ||
+        (github.event_name == 'pull_request_target' && github.event.sender.type == 'Bot' &&
+          github.event.sender.id == 49699333 && github.event.sender.login == 'dependabot[bot]'))
     runs-on: ubuntu-latest
     timeout-minutes: 3
     permissions:
@@ -133,6 +140,8 @@ jobs:
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_non_write_users: "*"
+          # Only Dependabot's own PR events pass intake; never admit every bot.
+          allowed_bots: "dependabot[bot]"
           show_full_output: false
           include_fix_links: false
           classify_inline_comments: false
@@ -147,7 +156,15 @@ jobs:
             --json-schema '{"type":"object","additionalProperties":false,"required":["summary","findings","next_steps","limitations","triage","assessment"],"properties":{"summary":{"type":"string"},"findings":{"type":"array","maxItems":10,"items":{"type":"object","additionalProperties":false,"required":["severity","file","line","title","reason"],"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"file":{"type":"string"},"line":{"type":"integer","minimum":0},"title":{"type":"string"},"reason":{"type":"string"}}}},"next_steps":{"type":"string"},"limitations":{"type":"string"},"triage":{"type":"object","additionalProperties":false,"required":["priority","priority_reason","labels"],"properties":{"priority":{"enum":[null,"P0","P1","P2","P3"]},"priority_reason":{"type":"string"},"labels":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["name","reason"],"properties":{"name":{"enum":["bug","enhancement","documentation","validation","ux","reliability","regression","impact:ux-friction","impact:ux-release-blocker","needs-info","needs-live-repro","needs-product-decision","tracking"]},"reason":{"type":"string"}}}}}},"assessment":{"type":"object","additionalProperties":false,"required":["scope","device","requirements","gaps","architecture","related"],"properties":{"scope":{"enum":["aligned","needs-product-decision","unknown"]},"device":{"enum":["not-required","recorded","missing"]},"requirements":{"type":"array","maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["id","status","reason"],"properties":{"id":{"type":"string"},"status":{"enum":["covered","gap","unknown"]},"reason":{"type":"string"}}}},"gaps":{"type":"array","maxItems":10,"items":{"type":"string"}},"architecture":{"type":"array","maxItems":3,"items":{"type":"object","additionalProperties":false,"required":["file","signal","trigger","impact","next_step"],"properties":{"file":{"type":"string"},"signal":{"type":"string"},"trigger":{"type":"string"},"impact":{"type":"string"},"next_step":{"type":"string"}}}},"related":{"type":"array","maxItems":8,"items":{"type":"object","additionalProperties":false,"required":["number","relationship","reason"],"properties":{"number":{"type":"integer","minimum":1},"relationship":{"enum":["related","possible-duplicate","dependency","possibly-resolved"]},"reason":{"type":"string"}}}}}}}}'
           prompt: |
             Review the public Dot Link issue or pull request in .review/input.json.
-            The kind field identifies an issue or PR. Read relevant checked-out main
+            The kind field identifies an issue or PR. If the PR author is
+            dependabot[bot] (a dependency update), begin the summary with a decision
+            brief for a maintainer who does not read code: each dependency and
+            version change; reason/urgency; any security advisory, distinguishing a
+            reported vulnerable version from evidence of actual exposure in Dot Link;
+            expected product impact and compatibility concerns (shipped app, Even
+            package, Mac bundle, website or CI only); checks completed by CI as listed
+            in context; unresolved findings; and a recommended next step. Dependency
+            updates always stop for the maintainer's explicit merge decision. Read relevant checked-out main
             code and docs. For a child PR the base field pins its target branch/commit:
             first read .review/base-changes.diff, the exact delta from this main
             checkout to that base. Then read .review/changes.diff for the PR changes
