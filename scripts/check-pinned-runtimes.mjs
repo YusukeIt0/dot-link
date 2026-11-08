@@ -64,14 +64,17 @@ export function nodeStatus(index, pinned, ci) {
   };
 }
 
+// `advisories === null` means the lookup failed: security status is unknown, never "no".
 export function releaseStatus(source, pinned, latest, advisories, pinnedPublishedAt) {
   if (!latest?.tag_name) throw new Error(`No latest release for ${source.repo}`);
   const relevant = (advisories ?? []).filter(a => a.state === 'published' && (!pinnedPublishedAt || a.published_at > pinnedPublishedAt))
     .map(a => ({ id: a.ghsa_id, severity: a.severity ?? 'unknown', summary: String(a.summary ?? '').slice(0, 160), url: a.html_url }));
   return {
     id: source.id, name: source.name, pinned, latest: latest.tag_name,
-    outdated: compareVersions(latest.tag_name, pinned) > 0, security: relevant.length > 0, advisories: relevant,
-    link: latest.html_url, integrity: source.integrity, findings: [],
+    outdated: compareVersions(latest.tag_name, pinned) > 0,
+    security: advisories === null ? null : relevant.length > 0, advisories: relevant,
+    link: latest.html_url, integrity: source.integrity,
+    findings: advisories === null ? ['Advisory lookup failed, so security status is unknown. Rerun the watch or check upstream advisories manually.'] : [],
   };
 }
 
@@ -82,7 +85,8 @@ export function renderIssue(rows, checkedAt) {
     '| Runtime | Pinned | Latest | Security | Upstream |', '| --- | --- | --- | --- | --- |'];
   for (const row of rows) {
     const npm = row.npm ? ` (npm ${row.npm.pinned} → ${row.npm.latest})` : '';
-    lines.push(`| ${cell(row.name)} | ${cell(row.pinned)}${npm} | ${cell(row.latest)}${row.outdated ? ' (newer)' : ''} | ${row.security ? 'yes' : 'no'} | [release](${row.link}) |`);
+    const security = row.security === null ? 'unknown' : row.security ? 'yes' : 'no';
+    lines.push(`| ${cell(row.name)} | ${cell(row.pinned)}${npm} | ${cell(row.latest)}${row.outdated ? ' (newer)' : ''} | ${security} | [release](${row.link}) |`);
   }
   for (const row of actionable) {
     lines.push('', `### ${row.name}`);
@@ -90,8 +94,10 @@ export function renderIssue(rows, checkedAt) {
     for (const advisory of row.advisories ?? []) lines.push(`- Advisory [${advisory.id}](${advisory.url}) (${advisory.severity}): ${cell(advisory.summary)}. Reported upstream; exposure in Dot Link is not established by this watch.`);
     if (row.id === 'node' && row.security) lines.push('- A newer release on this line is marked as a security release.');
     for (const finding of row.findings) lines.push(`- ${finding}`);
-    lines.push(`- Why no automatic PR: ${row.integrity} must change together and be verified against upstream before review.`);
-    lines.push('- Next action: prepare a PR that updates the version and integrity data, run the existing checks, and record the source/build identity for the maintainer decision.');
+    if (row.outdated || row.security) {
+      lines.push(`- Why no automatic PR: ${row.integrity} must change together and be verified against upstream before review.`);
+      lines.push('- Next action: prepare a PR that updates the version and integrity data, run the existing checks, and record the source/build identity for the maintainer decision.');
+    }
   }
   return { body: lines.join('\n') + '\n', actionable: actionable.length };
 }
@@ -121,8 +127,8 @@ async function main() {
     const latest = await json(`${api}/releases/latest`, token);
     let pinnedRelease = null;
     try { pinnedRelease = await json(`${api}/releases/tags/${encodeURIComponent(pins[source.id])}`, token); } catch { /* Tag without a release: compare advisories from all time. */ }
-    let advisories = [];
-    try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Advisory listing unavailable; the table still reports versions. */ }
+    let advisories = null;
+    try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Unknown, reported as a finding; never treated as no advisories. */ }
     rows.push(releaseStatus(source, pins[source.id], latest, advisories, pinnedRelease?.published_at));
   }
   const report = renderIssue(rows, new Date().toISOString().slice(0, 10));

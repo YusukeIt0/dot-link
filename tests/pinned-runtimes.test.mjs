@@ -57,6 +57,17 @@ test('release status reports newer versions and only advisories after the pinned
   assert.throws(() => releaseStatus(sparkle, '2.10.0', {}, [], null));
 });
 
+test('a failed advisory lookup is unknown, stays actionable and never closes the tracking issue', () => {
+  const unknown = releaseStatus(sparkle, '2.10.1', { tag_name: '2.10.1', html_url: 'x' }, null, null);
+  assert.equal(unknown.outdated, false); assert.equal(unknown.security, null);
+  assert.match(unknown.findings.join(), /Advisory lookup failed/);
+  const report = renderIssue([unknown], '2026-11-09');
+  assert.equal(report.actionable, 1);
+  assert.match(report.body, /\| Sparkle \| 2\.10\.1 \| 2\.10\.1 \| unknown \|/);
+  assert.doesNotMatch(report.body, /Why no automatic PR/);
+  assert.equal(decide({ number: 5, body: 'old' }, report).action, 'update');
+});
+
 test('the tracking issue explains each actionable runtime and stays quiet when everything is current', () => {
   const rows = [nodeStatus(index.slice(2), 'v22.23.4', ci),
     releaseStatus(sparkle, '2.10.0', { tag_name: '2.10.1', html_url: 'https://example.test/rel' }, [], null)];
