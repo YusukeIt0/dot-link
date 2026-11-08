@@ -251,6 +251,10 @@ jobs:
             investigate such a concrete defect with evidence like any other issue.
             For PRs report only actionable defects introduced by the change, identifying
             a changed file, new-side line, triggering condition and practical impact.
+            A finding's file must be one the PR changes. When the needed fix is in an
+            unchanged file (for example documentation that lists versions), anchor the
+            finding to the changed line that causes it, such as the manifest version
+            line, and name the other file in the reason; or put it in next_steps.
             For issues investigate the report or idea against current code and docs;
             distinguish verified facts, plausible causes, missing information and product
             decisions. Help the author refine a rough report. Ask only focused questions.
