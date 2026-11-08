@@ -26,10 +26,12 @@ require reading the diff. See #274.
    coordinator only merges PRs authored by a trusted maintainer, so dependency
    PRs are always held, even when every check passes.
 5. Review findings on a dependency PR are fixed before the merge decision, not
-   accepted as-is (maintainer direction, 2026-11-09). The implementing agent pushes the fix to the
-   Dependabot branch under the maintainer identity. That push refreshes CI and
-   review automatically. Only then is the PR presented with a recommendation.
-   A withheld or failed review is investigated and rerun, never treated as clean.
+   accepted as-is (maintainer direction, 2026-11-09). The implementing AI, Codex or
+   Claude Code, makes the fix on the Dependabot branch; the maintainer does not.
+   Its commits use the repository's required maintainer Git identity. That push
+   refreshes CI and review automatically. Only then is the PR presented with a
+   recommendation. A withheld or failed review is investigated and rerun, never
+   treated as clean.
 
 Evidence must match the current PR revision. Missing, skipped, cancelled, failed
 or stale CI and review stay visible and never count as verification. Merging still
