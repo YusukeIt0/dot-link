@@ -1,5 +1,5 @@
 #!/bin/sh
-# Same suite for PR/main and pre-PR branches; native tests always run on macOS.
+# Full product suite selected by run-ci-plan.mjs; native tests always run on macOS.
 set -eu
 npm ci
 npm test

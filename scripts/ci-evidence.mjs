@@ -56,7 +56,7 @@ export function assertCI(target, run, jobs, comparison) {
       run.run_attempt < 1 || run.status !== 'completed' || run.conclusion !== 'success' ||
       !Array.isArray(jobs) || jobs.some(j => j.status !== 'completed' || j.conclusion !== 'success') ||
       requiredCIJobs.some(name => jobs.filter(j => j.name === name).length !== 1)) {
-    throw new Error('Full PR CI must succeed for the exact head with the current base included; skipped is not success.');
+    throw new Error('Required PR CI must succeed for the exact head with the current base included; skipped is not success.');
   }
 }
 

@@ -52,7 +52,7 @@ class ProductCIValidation(unittest.TestCase):
         events = ci.get('on', ci.get(True))
         self.assertEqual(events['push']['branches'], ['main'])
         self.assertEqual(events['pull_request']['types'], ['opened', 'synchronize', 'reopened'])
-        self.assertEqual(ci['jobs']['test']['runs-on'], 'macos-15')
+        self.assertEqual(ci['jobs']['test']['runs-on'], "${{ needs.workflow-lint.outputs.runner || 'macos-15' }}")
         self.assertEqual(ci['jobs']['test']['needs'], 'workflow-lint')
         self.assertEqual(ci['jobs']['test']['if'], "${{ !cancelled() }}")
         self.assertNotIn('ready_for_review', events['pull_request']['types'])
@@ -68,9 +68,14 @@ class ProductCIValidation(unittest.TestCase):
         events = branch.get('on', branch.get(True))
         self.assertEqual(events['push']['branches-ignore'], ['main'])
         self.assertNotIn('test', branch['jobs'])
-        self.assertEqual(branch['jobs']['branch-test']['runs-on'], 'macos-15')
+        self.assertEqual(branch['jobs']['branch-test']['runs-on'], "${{ needs.branch-preflight.outputs.runner || 'macos-15' }}")
         self.assertEqual(branch['jobs']['branch-test']['if'],
                          "${{ !cancelled() && needs.branch-preflight.result == 'success' && needs.branch-preflight.outputs.run == 'true' }}")
         self.assertNotEqual(ci['concurrency']['group'], branch['concurrency']['group'])
         for job in [ci['jobs']['test'], branch['jobs']['branch-test']]:
-            self.assertEqual(job['steps'][-1]['run'], 'sh scripts/run-ci-tests.sh')
+            self.assertEqual(job['steps'][-1]['run'], 'node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"')
+        for job in [ci['jobs']['workflow-lint'], branch['jobs']['branch-preflight']]:
+            self.assertEqual(job['steps'][-1]['run'], 'node scripts/ci-plan.mjs --event')
+        ownership = next(s for s in branch['jobs']['branch-test']['steps'] if s.get('id') == 'admission')
+        self.assertEqual(ownership['run'], 'node scripts/branch-ci-admission.mjs')
+        self.assertEqual(branch['jobs']['branch-test']['steps'][-1]['if'], "steps.admission.outputs.run == 'true'")
