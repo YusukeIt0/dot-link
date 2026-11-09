@@ -11,7 +11,7 @@ dotlink_install() (
   message() {
     case "$dotlink_language:$1" in
       ja:platform) echo 'Apple Silicon搭載のMacが必要です。' ;;
-      ja:os) echo 'macOS 13以降が必要です。' ;;
+      ja:os) echo 'macOS %s以降が必要です。' ;;
       ja:existing) echo 'Dot Linkは導入済みです。アプリの「アップデートを確認」を使ってください。' ;;
       ja:latest) echo 'Dot Linkの最新の正式版を確認しています…' ;;
       ja:release) echo '最新の正式Mac版を確認できませんでした。' ;;
@@ -23,7 +23,7 @@ dotlink_install() (
       ja:race) echo '導入先にアプリが作成されたため停止しました。既存アプリは置き換えていません。' ;;
       ja:installed) echo '%s を導入しました。Dot Linkを開きます…' ;;
       *:platform) echo 'An Apple Silicon Mac is required.' ;;
-      *:os) echo 'macOS 13 or later is required.' ;;
+      *:os) echo 'macOS %s or later is required.' ;;
       *:existing) echo 'Dot Link is already present. Use Check for updates in the app.' ;;
       *:latest) echo 'Finding the latest stable Dot Link release…' ;;
       *:release) echo 'The latest stable Mac release could not be verified.' ;;
@@ -42,7 +42,20 @@ dotlink_install() (
   # hw.optional.arm64 also works from a Terminal running under Rosetta.
   [ "$(sysctl -n hw.optional.arm64 2>/dev/null)" = 1 ] || fail platform
   dotlink_os="$(sw_vers -productVersion)"
-  [ "${dotlink_os%%.*}" -ge 13 ] || fail os
+  version_key() {
+    [[ "$1" =~ ^[0-9]{1,4}(\.[0-9]{1,4}){0,2}$ ]] || return 1
+    local major minor patch
+    IFS=. read -r major minor patch <<< "$1"
+    minor="${minor:-0}"; patch="${patch:-0}"
+    printf '%04d%04d%04d' "$((10#$major))" "$((10#$minor))" "$((10#$patch))"
+  }
+  version_at_least() {
+    local actual required
+    actual="$(version_key "$1")" || return 1
+    required="$(version_key "$2")" || return 1
+    [[ "$actual" == "$required" || "$actual" > "$required" ]]
+  }
+  version_at_least "$dotlink_os" 13.5 || fail os 13.5
   dotlink_destination="$HOME/Applications/Dot Link.app"
   if [ -e "$dotlink_destination" ] || [ -L "$dotlink_destination" ]; then
     fail existing
@@ -86,6 +99,11 @@ dotlink_install() (
   codesign --verify --deep --strict 'unpacked/Dot Link.app'
   dotlink_bundle_id="$(plutil -extract CFBundleIdentifier raw -expect string -o - 'unpacked/Dot Link.app/Contents/Info.plist')"
   [ "$dotlink_bundle_id" = app.tripsurf.dotlink.mac ] || fail identity
+  # Read the signed app's requirement, including future releases. Never install
+  # a newer runtime on an OS that only supports an older Dot Link release.
+  dotlink_min_os="$(plutil -extract LSMinimumSystemVersion raw -expect string -o - 'unpacked/Dot Link.app/Contents/Info.plist')" || fail release
+  version_key "$dotlink_min_os" >/dev/null || fail release
+  version_at_least "$dotlink_os" "$dotlink_min_os" || fail os "$dotlink_min_os"
   mkdir -p "$HOME/Applications"
   mv -n 'unpacked/Dot Link.app' "$dotlink_destination"
   [ ! -e 'unpacked/Dot Link.app' ] || fail race

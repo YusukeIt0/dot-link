@@ -1,0 +1,5 @@
+export function macAppcast({version,build,minimumSystemVersion,notes,downloadRepository,tag,name,signature,size}) {
+  if(!/^\d+\.\d+(?:\.\d+)?$/.test(minimumSystemVersion))throw new Error("Invalid minimum macOS version");
+const xml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
+return `<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Dot Link for Mac</title><item><title>Dot Link ${version}</title><sparkle:version>${build}</sparkle:version><sparkle:shortVersionString>${version}</sparkle:shortVersionString><sparkle:minimumSystemVersion>${minimumSystemVersion}</sparkle:minimumSystemVersion><description sparkle:format="plain-text">${xml(notes)}</description><enclosure url="https://github.com/${downloadRepository}/releases/download/${tag}/${name}" sparkle:installationType="application" sparkle:edSignature="${xml(signature)}" length="${size}" type="application/octet-stream" /></item></channel></rss>\n`;
+}

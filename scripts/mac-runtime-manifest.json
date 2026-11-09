@@ -1,8 +1,8 @@
 {
   "node": {
-    "version": "v22.23.4",
-    "url": "https://nodejs.org/dist/v22.23.4/node-v22.23.4-darwin-arm64.tar.xz",
-    "sha256": "037650d0839f457747396f052073fb48333d31bf5abd3c98b74da20d89ebb1ad"
+    "version": "v26.13.0",
+    "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0-darwin-arm64.tar.xz",
+    "sha256": "6f5b3187d9df9fc007e881167905bc7d69ad26450ddc377c83d63256a2495b6e"
   },
   "tunnel": {
     "version": "v0.0.20",
