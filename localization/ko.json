@@ -573,5 +573,9 @@
   "even.history_off": "기록 접근이 꺼져 있습니다.",
   "even.history_count": "{count}개의 측정값 저장됨. 위치 공유 중에 기록합니다.",
   "even.history_failed": "기록 설정을 업데이트하지 못했습니다. 다시 연결한 후 시도하세요.",
-  "even.history_unavailable": "호환되는 Mac에 연결하여 기록을 관리하세요."
+  "even.history_unavailable": "호환되는 Mac에 연결하여 기록을 관리하세요.",
+  "mac.reconnect_help_title": "연결이 복구되지 않는 경우",
+  "mac.reconnect_help": "이전에 연결한 적이 있다면 ChatGPT에 로그인하고 기존 Dot에게 다음과 같이 말하세요.\n“Dot Link 연결 상태를 확인하고 G2에서 발화를 받는 이벤트 구독을 다시 시작해 줘.”\n그런 다음 이 화면으로 돌아와 “{check}” 버튼을 누르세요.",
+  "mac.open_chatgpt": "ChatGPT 열기",
+  "mac.initial_connection_title": "처음 연결하는 경우"
 }

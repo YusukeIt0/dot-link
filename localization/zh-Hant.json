@@ -573,5 +573,9 @@
   "even.history_off": "歷史記錄存取已關閉。",
   "even.history_count": "已儲存{count}筆測量。位置分享期間會記錄。",
   "even.history_failed": "無法更新記錄設定。請重新連線後再試。",
-  "even.history_unavailable": "連線至相容的Mac以管理記錄。"
+  "even.history_unavailable": "連線至相容的Mac以管理記錄。",
+  "mac.reconnect_help_title": "連線未恢復時",
+  "mac.reconnect_help": "如果之前已連線，請登入 ChatGPT，並對原本的 Dot 說：\n「請確認 Dot Link 的連線狀態，並恢復接收 G2 發話的事件訂閱。」\n然後回到此畫面，按一下「{check}」。",
+  "mac.open_chatgpt": "開啟 ChatGPT",
+  "mac.initial_connection_title": "首次連線"
 }
