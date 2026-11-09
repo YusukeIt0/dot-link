@@ -11,6 +11,10 @@ Dot can use weather for a valid shared location or an explicitly requested place
 in ordinary conversation. It decides whether a change merits speaking. Dot Link
 acquires and describes evidence; it does not implement personal recommendations,
 an AI, or a weather prediction engine. Geography downloads must not delay weather.
+Weather, maps, movement, terrain and history are optional decision evidence, not
+prerequisites for conversation. Missing consent/data or a failed source disables
+only that evidence; Dot should continue with what is known and express uncertainty.
+The existing feature paths must be checked for this boundary during integration.
 
 ## Provider comparison — November 10, 2026
 
