@@ -29,6 +29,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/branch-ci-admission.mjs
       - run: sh scripts/check-workflows.sh
+      - name: Verify impact policy on Linux
+        run: node --test tests/ci-plan.test.mjs tests/ci-release-metadata.test.mjs
       - id: impact
         run: node scripts/ci-plan.mjs --event
   branch-test:
@@ -58,7 +60,7 @@ jobs:
         with:
           node-version: '26.13.0'
           package-manager-cache: false
-          cache: npm
+          cache: ${{ needs.branch-preflight.outputs.runner == 'macos-15' && 'npm' || '' }}
       - name: Run impact-selected validation
         if: steps.admission.outputs.run == 'true'
         env:

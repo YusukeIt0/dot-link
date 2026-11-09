@@ -31,6 +31,8 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - run: sh scripts/check-workflows.sh
+      - name: Verify impact policy on Linux
+        run: node --test tests/ci-plan.test.mjs tests/ci-release-metadata.test.mjs
       - id: impact
         run: node scripts/ci-plan.mjs --event
   test:
@@ -56,7 +58,7 @@ jobs:
         with:
           node-version: '26.13.0'
           package-manager-cache: false
-          cache: npm
+          cache: ${{ needs.workflow-lint.outputs.runner == 'macos-15' && 'npm' || '' }}
       - name: Run impact-selected validation
         env:
           CI_BASE: ${{ needs.workflow-lint.outputs.base }}
