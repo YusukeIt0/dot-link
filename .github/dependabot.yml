@@ -1,33 +1,26 @@
 version: 2
-# Dependency update proposals (#274). Each PR receives the ordinary CI and an
-# automatic dotsweeper review, then stops for the maintainer's merge decision:
-# the merge coordinator never merges PRs that a dependency bot authored.
-# Minor/patch version updates are grouped per ecosystem and week so the
-# maintainer sees one decision per batch; majors and security updates stay
-# separate. Node.js, npm, Sparkle, tunnel-client and whisper.cpp pins are not
-# Dependabot ecosystems here; see docs/dependency-updates.md.
+# Dependency update proposals (#274, #286). All version updates for npm (root and
+# tools/evenhub) and GitHub Actions arrive as ONE weekly pull request through a
+# multi-ecosystem group. Each PR receives the ordinary CI and an automatic
+# dotsweeper review; the implementing AI fixes review findings on the PR; then it
+# stops for the maintainer's merge decision (dependency-bot PRs are never merged
+# automatically). Security updates are separate and immediate. Node.js, npm,
+# Sparkle, tunnel-client and whisper.cpp pins are covered by the pinned-runtime
+# watch instead; see docs/dependency-updates.md.
+multi-ecosystem-groups:
+  weekly-dependencies:
+    schedule:
+      interval: weekly
 updates:
   - package-ecosystem: npm
     directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      npm-root-minor-and-patch:
-        update-types: [minor, patch]
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
   - package-ecosystem: npm
     directory: /tools/evenhub
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      npm-evenhub-minor-and-patch:
-        update-types: [minor, patch]
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
   - package-ecosystem: github-actions
     directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      actions-minor-and-patch:
-        update-types: [minor, patch]
+    patterns: ["*"]
+    multi-ecosystem-group: weekly-dependencies
