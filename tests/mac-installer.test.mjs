@@ -64,13 +64,13 @@ test('existing app is preserved without downloading', {skip:process.platform!=='
 test('installer enforces the downloaded app minimum including minor and future OS versions', {skip:process.platform!=='darwin'},()=>{
   for(const os of ['13.0','13.4','13.4.9']) {
     const r=run(release(),{os});assert.notEqual(r.status,0);assert.equal(r.installed,false);assert.equal(r.opened,false);
-    assert.match(r.stderr,/macOS 13\.5 or later/);
+    assert.match(r.stderr,/macOS 13\.5 or later/);assert.equal(r.requests,'');
   }
   for(const os of ['13.5','13.5.1','13.10','14.0','26.1']) {
     const r=run(release(),{os});assert.equal(r.status,0,r.stderr);assert.ok(r.installed&&r.opened);
   }
   const future=run(release(),{os:'14.1',minimumOS:'14.2'});assert.notEqual(future.status,0);assert.equal(future.installed,false);
-  const legacy=run(release(),{os:'13.0',minimumOS:'13.0'});assert.equal(legacy.status,0,legacy.stderr);
+  const legacy=run(release(),{os:'13.0',minimumOS:'13.0'});assert.notEqual(legacy.status,0);assert.equal(legacy.requests,'');
   for(const minimumOS of ['', '13.bad', '13.5.0.1', undefined]) {
     // null exercises missing/unusable plist data (undefined uses the fixture default).
     const r=run(release(),{minimumOS:minimumOS??null});assert.notEqual(r.status,0);assert.equal(r.installed,false);

@@ -55,7 +55,7 @@ dotlink_install() (
     required="$(version_key "$2")" || return 1
     [[ "$actual" == "$required" || "$actual" > "$required" ]]
   }
-  version_at_least "$dotlink_os" 13.0 || fail os 13.0
+  version_at_least "$dotlink_os" 13.5 || fail os 13.5
   dotlink_destination="$HOME/Applications/Dot Link.app"
   if [ -e "$dotlink_destination" ] || [ -L "$dotlink_destination" ]; then
     fail existing
