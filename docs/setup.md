@@ -44,7 +44,7 @@ The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; th
 
 ### If the connection does not return
 
-If a previously connected Mac returns to the ChatGPT connection screen, sign in to ChatGPT and ask your existing Dot: “Check the connection to Dot Link and resume the event subscription for receiving utterances from G2.” Then return to the Mac app and choose **Check connection to Dot**. This button checks the connection; it does not create a subscription. Reuse your existing plugin and pairing.
+If a previously connected Mac returns to the ChatGPT connection screen, choose **Open ChatGPT**, sign in if needed, and ask your existing Dot: “Check the connection to Dot Link and resume the event subscription for receiving utterances from G2.” Then return to the Mac app and choose **Check connection to Dot**. This button checks the connection; it does not create a subscription. Reuse your existing plugin and pairing.
 
 Dot Link retains subscriptions across restarts. [ChatGPT automatically refreshes subscriptions before their expiration](https://developers.openai.com/plugins/build/mcp-events#refresh-a-subscription), but the documented behavior does not specify how long it retries after a refresh fails while the Mac is offline. Use the recovery steps above if the connection remains unavailable; a restart alone does not mean the saved setup was erased.
 

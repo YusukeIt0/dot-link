@@ -575,5 +575,6 @@
   "even.history_failed": "无法更新记录设置。请重新连接后重试。",
   "even.history_unavailable": "连接到兼容的Mac以管理记录。",
   "mac.reconnect_help_title": "连接未恢复时",
-  "mac.reconnect_help": "如果之前已连接，请登录 ChatGPT，并对原来的 Dot 说：\n“请检查 Dot Link 的连接状态，并恢复接收 G2 发言的事件订阅。”\n然后回到此页面，点击“{check}”。"
+  "mac.reconnect_help": "如果之前已连接，请登录 ChatGPT，并对原来的 Dot 说：\n“请检查 Dot Link 的连接状态，并恢复接收 G2 发言的事件订阅。”\n然后回到此页面，点击“{check}”。",
+  "mac.open_chatgpt": "打开 ChatGPT"
 }

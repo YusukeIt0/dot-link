@@ -450,6 +450,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             reconnectHelp.isSelectable = true
             stack.addArrangedSubview(reconnectHelp)
             reconnectHelp.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+            button(tr("mac.open_chatgpt")) { [weak self] in self?.open("https://chatgpt.com/") }
             button(tr("mac.check_connection_to_dot")) { [weak self] in self?.inspect() }
             space()
             add(tr("mac.1_add_the_plugin"), size: 16, bold: true)

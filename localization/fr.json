@@ -575,5 +575,6 @@
   "even.history_failed": "Impossible de modifier les réglages. Reconnectez-vous et réessayez.",
   "even.history_unavailable": "Connectez-vous à un Mac compatible pour gérer l’historique.",
   "mac.reconnect_help_title": "Si la connexion ne se rétablit pas",
-  "mac.reconnect_help": "Si vous aviez déjà établi la connexion, connectez-vous à ChatGPT et dites à votre Dot habituel :\n« Vérifie la connexion à Dot Link et réactive l’abonnement aux événements pour recevoir les messages des G2. »\nRevenez ensuite ici et cliquez sur « {check} »."
+  "mac.reconnect_help": "Si vous aviez déjà établi la connexion, connectez-vous à ChatGPT et dites à votre Dot habituel :\n« Vérifie la connexion à Dot Link et réactive l’abonnement aux événements pour recevoir les messages des G2. »\nRevenez ensuite ici et cliquez sur « {check} ».",
+  "mac.open_chatgpt": "Ouvrir ChatGPT"
 }

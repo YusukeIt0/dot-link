@@ -575,5 +575,6 @@
   "even.history_failed": "Verlaufseinstellungen konnten nicht geändert werden. Erneut verbinden und versuchen.",
   "even.history_unavailable": "Zum Verwalten des Verlaufs mit einem kompatiblen Mac verbinden.",
   "mac.reconnect_help_title": "Wenn die Verbindung nicht wiederhergestellt wird",
-  "mac.reconnect_help": "Wenn Sie bereits verbunden waren, melden Sie sich bei ChatGPT an und sagen Sie Ihrem bisherigen Dot:\n„Prüfe die Verbindung zu Dot Link und aktiviere das Ereignisabonnement zum Empfang von Äußerungen der G2 erneut.“\nKehren Sie dann hierher zurück und klicken Sie auf „{check}“."
+  "mac.reconnect_help": "Wenn Sie bereits verbunden waren, melden Sie sich bei ChatGPT an und sagen Sie Ihrem bisherigen Dot:\n„Prüfe die Verbindung zu Dot Link und aktiviere das Ereignisabonnement zum Empfang von Äußerungen der G2 erneut.“\nKehren Sie dann hierher zurück und klicken Sie auf „{check}“.",
+  "mac.open_chatgpt": "ChatGPT öffnen"
 }
