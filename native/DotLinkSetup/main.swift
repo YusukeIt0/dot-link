@@ -344,6 +344,22 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         statusCard("Even G2", symbol: "eyeglasses", detail: tr("mac.pairing"), status: yes("evenPaired") ? tr("mac.saved") : yes("evenPairingKnown") ? tr("mac.not_paired") : tr("mac.unknown_150"), statusIcon: yes("evenPaired") ? "checkmark.circle.fill" : "questionmark.circle", color: yes("evenPaired") ? .systemGreen : .systemOrange, help: tr("mac.this_shows_whether_pairing_is_saved_this_screen_cannot_check_whether_eve"))
     }
     func open(_ url: String) { if let value = URL(string: url) { NSWorkspace.shared.open(value) } }
+    func reconnectHelpCard() {
+        let content = NSStackView(); content.orientation = .vertical; content.alignment = .leading; content.spacing = 12
+        content.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
+        let title = label(tr("mac.reconnect_help_title"), size: 16, bold: true)
+        let help = label(tr("mac.reconnect_help", ["check": tr("mac.check_connection_to_dot")]))
+        help.isSelectable = true
+        content.addArrangedSubview(title); content.addArrangedSubview(help)
+        let openChatGPT = ActionButton(tr("mac.open_chatgpt")) { [weak self] in self?.open("https://chatgpt.com/") }
+        let check = ActionButton(tr("mac.check_connection_to_dot")) { [weak self] in self?.inspect() }
+        for action in [openChatGPT, check] { action.controlSize = .large; action.isEnabled = !busy; content.addArrangedSubview(action) }
+        let card = NSBox(); card.boxType = .custom; card.borderColor = .separatorColor; card.borderWidth = 1; card.cornerRadius = 12
+        card.fillColor = .controlBackgroundColor; card.contentViewMargins = .zero; card.contentView = content
+        stack.addArrangedSubview(card)
+        card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+        for text in [title, help] { text.widthAnchor.constraint(equalTo: card.widthAnchor, constant: -38).isActive = true }
+    }
     func render() {
         updateMenu()
         stack = NSStackView(); stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 14; stack.edgeInsets = NSEdgeInsets(top: 28, left: 32, bottom: 28, right: 32); stack.translatesAutoresizingMaskIntoConstraints = false
@@ -445,14 +461,6 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(yes("lifecycleStopped") ? tr("mac.resume") : tr("mac.start_relay"), primary: true) { [weak self] in self?.menuResume() }
         case "subscribe":
             add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
-            add(tr("mac.reconnect_help_title"), size: 16, bold: true)
-            let reconnectHelp = label(tr("mac.reconnect_help", ["check": tr("mac.check_connection_to_dot")]))
-            reconnectHelp.isSelectable = true
-            stack.addArrangedSubview(reconnectHelp)
-            reconnectHelp.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
-            button(tr("mac.open_chatgpt")) { [weak self] in self?.open("https://chatgpt.com/") }
-            button(tr("mac.check_connection_to_dot")) { [weak self] in self?.inspect() }
-            space()
             add(tr("mac.1_add_the_plugin"), size: 16, bold: true)
             add(tr("mac.plugins_add_add_custom_mcp_server"))
             add(tr("mac.name_dot_link_or_a_name_of_your_choice_nconnection_tunnel_select_this_ma"))
@@ -466,6 +474,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             add(tr("mac.3_return_here_to_check_the_connection"), size: 16, bold: true)
             add(tr("mac.when_your_dot_confirms_setup_is_complete_click_below"))
             button(tr("mac.check_connection_to_dot"), primary: true) { [weak self] in self?.inspect() }
+            space()
+            reconnectHelpCard()
         case "pair":
             add(tr("mac.connections"), size: 22, bold: true)
             connectionCards()
