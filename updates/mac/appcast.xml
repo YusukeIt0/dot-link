@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.30</title><sparkle:version>109</sparkle:version><sparkle:shortVersionString>0.4.30</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added optional recent-place history for Dot, stored on your Mac for up to 7 days.
-- Added separate history consent and deletion controls on your phone.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.30-109/Dot-Link-0.4.30-109-arm64.zip" sparkle:installationType="application" sparkle:edSignature="edcrynS3XTt8XSKVX8AYS8DA/ROTDC8kfPwajN8JpJOv7g/ElPIrcveUIiFHdF9G53v+pPy3I0iKJiKdsPu8DA==" length="59639369" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: v3hsxaXu8a6xpEMQtvj3petsuENpwfsGyFL0fRgIbT1CafhH0kWizaYHmTXzvaxlMhFetJMLqQdtHw6yPSsKBg==
-length: 1187
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.31</title><sparkle:version>110</sparkle:version><sparkle:shortVersionString>0.4.31</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added clear steps to reconnect with your existing Dot when the connection does not return.
+- Improved connection startup and readiness handling.
+- Fixed update handling for release notes and installation paths containing Unicode characters.
+- Updated local map-data components.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.31-110/Dot-Link-0.4.31-110-arm64.zip" sparkle:installationType="application" sparkle:edSignature="rvszdEF29iadksqZslh9tPyJj3pGKKINS4X3xS0aZ5/D4RbF/mlL6/7uvaYgr44oix9obeyWZQ44lZqCxGo6Cw==" length="60743809" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: ZNycjG0SwQ5NlFKGthx/SKtyBE2dZ5pbJ+zG7Czo24sLbgeYJWbCpFg1FkXF/ldaLukXCGGehn7usdo/2iAXDQ==
+length: 1313
 -->
