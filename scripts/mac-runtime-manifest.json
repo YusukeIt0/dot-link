@@ -5,9 +5,9 @@
     "sha256": "037650d0839f457747396f052073fb48333d31bf5abd3c98b74da20d89ebb1ad"
   },
   "tunnel": {
-    "version": "v0.0.16",
-    "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.16/tunnel-client-v0.0.16-darwin-arm64.zip",
-    "sha256": "a160820d45089b5253d8d671fe2a689bde0f73d78c135d1497a7b33f28a3ac62"
+    "version": "v0.0.20",
+    "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.20/tunnel-client-v0.0.20-darwin-arm64.zip",
+    "sha256": "f4689e75a835f69f1bbb9c59de9c4debb8e9c9cbbdd2721aa93378b4b048fd33"
   },
   "whisper": {
     "version": "v1.9.5",
