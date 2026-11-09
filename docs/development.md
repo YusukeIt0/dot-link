@@ -351,7 +351,7 @@ comparison covers its entire difference from main, not just the last push.
 | Website source and website-only README/film assets | Complete localized static build/link checks and analytics consent/privacy tests |
 | Only the two Mac version values | Parse plist, require increasing build/nondecreasing version, preserve every other byte including identity, minimum OS and permissions |
 | Signed Mac update feed | XML schema, app version/OS, public release status/notes, archive length/hash and both Ed25519 signatures using only the public key |
-| Product, native, permissions, dependencies, tests, automation, protected assurance docs or unknown/unsafe changes | Existing full macOS suite; a changed feed also receives direct release validation |
+| Product, native, permissions, dependencies, tests, automation, protected assurance docs or unknown/unsafe changes | Existing full macOS suite; a changed feed also receives direct release validation when a safe comparison identifies it |
 
 Combinations of recognized non-runtime changes run the union of their checks.
 Deleted/renamed files, symlinks, executable files, invalid/missing comparisons and
@@ -359,7 +359,13 @@ unmerged baselines retain full scope. A selected check failing does **not** fall
 back to a broader suite and call that success. The direct plist/feed checks are
 new CI coverage, not assertions that the old product suite verified release files.
 Feed network failure fails validation; it is not evidence of an invalid signature.
-The public archive request is size/time bounded and receives no credential.
+The release-metadata API lookup and public archive download are anonymous. An API
+rate limit or transient network failure can hold a valid release PR; inspect the
+failure and retry the same-head run after service recovery. Do not waive signature
+or artifact failures. The archive request is size/time bounded and receives no
+credential. When comparison is unavailable or the baseline is unmerged, the
+planner cannot safely identify changed files and runs only the full product suite;
+that fallback does not claim the additional direct feed check was performed.
 
 The `workflow-lint` job emits the runner and compared revisions. The single
 required `test` job recomputes the plan from Git and explicitly passes or fails;
