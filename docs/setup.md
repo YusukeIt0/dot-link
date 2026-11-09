@@ -42,6 +42,12 @@ Your account needs OpenAI tunnels and custom MCP connections in ChatGPT. Dot Lin
 
 The tunnel connects Dot to the Mac; Tailscale connects the iPhone to the Mac; the pairing code authorizes the Even companion. Keep API keys and pairing codes private. App updates need no GitHub token.
 
+### If the connection does not return
+
+If a previously connected Mac returns to the ChatGPT connection screen, sign in to ChatGPT and ask your existing Dot: “Check the connection to Dot Link and resume the event subscription for receiving utterances from G2.” Then return to the Mac app and choose **Check connection to Dot**. This button checks the connection; it does not create a subscription. Reuse your existing plugin and pairing.
+
+Dot Link retains subscriptions across restarts. [ChatGPT automatically refreshes subscriptions before their expiration](https://developers.openai.com/plugins/build/mcp-events#refresh-a-subscription), but the documented behavior does not specify how long it retries after a refresh fails while the Mac is offline. Use the recovery steps above if the connection remains unavailable; a restart alone does not mean the saved setup was erased.
+
 ## Conversation and display
 
 The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.

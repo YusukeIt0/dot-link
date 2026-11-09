@@ -445,6 +445,13 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(yes("lifecycleStopped") ? tr("mac.resume") : tr("mac.start_relay"), primary: true) { [weak self] in self?.menuResume() }
         case "subscribe":
             add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
+            add(tr("mac.reconnect_help_title"), size: 16, bold: true)
+            let reconnectHelp = label(tr("mac.reconnect_help", ["check": tr("mac.check_connection_to_dot")]))
+            reconnectHelp.isSelectable = true
+            stack.addArrangedSubview(reconnectHelp)
+            reconnectHelp.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+            button(tr("mac.check_connection_to_dot")) { [weak self] in self?.inspect() }
+            space()
             add(tr("mac.1_add_the_plugin"), size: 16, bold: true)
             add(tr("mac.plugins_add_add_custom_mcp_server"))
             add(tr("mac.name_dot_link_or_a_name_of_your_choice_nconnection_tunnel_select_this_ma"))
