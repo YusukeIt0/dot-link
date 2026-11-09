@@ -160,10 +160,13 @@ test('cache prunes old forecasts but retains cooldowns and bounds retained coord
 
 test('cache file uses private permissions, validates size/schema and never follows a file symlink', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'dot-weather-')); t.after(() => rm(directory, {recursive: true, force: true}));
-  const path = join(directory, 'cache.json'), cache = new WeatherCache(path);
+  const path = join(directory, 'cache.json'), cache = new WeatherCache(path, () => NOW);
   const empty: WeatherCacheState = {version: 1, nextRequestAt: 0, entries: []};
   await cache.write(empty); assert.deepEqual(await cache.read(), empty); assert.equal((await stat(path)).mode & 0o777, 0o600);
-  await writeFile(path, '{}'); await assert.rejects(cache.read(), /unavailable/);
+  await writeFile(path, '{}');
+  const recovered = await cache.read();
+  assert.deepEqual(recovered, {version: 1, nextRequestAt: NOW + 24 * HOUR, entries: []});
+  assert.deepEqual(await new WeatherCache(path, () => NOW + HOUR).read(), recovered);
   await rm(path); const other = join(directory, 'private.txt'); await writeFile(other, 'private'); await symlink(other, path);
   await assert.rejects(cache.read()); assert.equal(await readFile(other, 'utf8'), 'private');
 });
@@ -195,4 +198,30 @@ test('transport reports 203, 304 and rate limiting without exposing the request 
   assert.equal((await unchanged.load(POINT, undefined, new AbortController().signal)).notModified, true);
   const limited = new MetNorwayProvider(async () => new Response(null, {status: 429, headers: {'retry-after': '300'}}), () => NOW);
   await assert.rejects(limited.load(POINT, undefined, new AbortController().signal), error => error instanceof WeatherSourceError && error.retryAt === NOW + 300_000 && !error.message.includes('lat='));
+});
+
+test('a transient cache read error can recover in the same process without bypassing stored cooldowns', async t => {
+  let reads = 0, calls = 0;
+  const service = new WeatherService('/unused', {now: () => NOW,
+    cache: {read: async () => {if (++reads === 1) throw new Error('temporary I/O'); return {version: 1, nextRequestAt: NOW + HOUR, entries: []};}, write: async () => {}},
+    provider: {id: 'met-norway-locationforecast-2', load: async () => {calls++; throw new Error('must not run');}}});
+  t.after(() => service.close());
+  const first = await service.query(POINT, new AbortController().signal, () => {});
+  assert.match(first.limitations.join(' '), /Local cache/);
+  const second = await service.query(POINT, new AbortController().signal, () => {});
+  assert.match(second.limitations.join(' '), /cooling down/);
+  assert.equal(reads, 2); assert.equal(calls, 0);
+});
+
+test('first request failure retains the documented conservative identical-query interval across restart', async t => {
+  const f = serviceFixture(t);
+  f.setLoad(async () => {throw new Error('network timeout');});
+  assert.equal((await f.query()).status, 'unavailable');
+  f.advance(2 * HOUR); f.service.close();
+  const restarted = f.create();
+  assert.equal((await restarted.query(POINT, new AbortController().signal, () => {})).status, 'unavailable');
+  assert.equal(f.calls(), 1);
+  f.advance(HOUR + 1);
+  await restarted.query(POINT, new AbortController().signal, () => {});
+  assert.equal(f.calls(), 2);
 });

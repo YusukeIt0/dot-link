@@ -59,7 +59,7 @@ export class WeatherService {
       pruneWeatherCache(state, this.now()); await this.cache.write(state); this.state = state;
       if (!this.closed) {this.maintenance = setInterval(() => {void this.maintain().catch(() => {});}, HOUR); this.maintenance.unref();}
       return state;
-    });
+    }).catch(error => {this.loading = undefined; throw error;});
     return this.loading;
   }
   private async maintain() {

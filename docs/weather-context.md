@@ -131,3 +131,18 @@ semantics, not global accuracy. Then refresh the registered app and verify the
 existing Dot actually sees and uses the new definitions. Prepare one ordinary-use
 device session for current weather, another place, stopped sharing and optional G2
 readability. Preserve source/build identity and separate observed and unknown results.
+
+### Acquisition recovery policy
+
+The conservative three-hour identical-query minimum also applies after failure
+or cancellation: the current product FAQ does not grant an exception for failed
+requests. This can delay first-use recovery after a transient network failure;
+Dot should continue without weather and may use its other authorized sources.
+Do not silently shorten that interval on an assumption about provider terms.
+
+Transient local-cache read failures can retry on the next query. Invalid regular
+cache files are atomically replaced with an empty cache and a persisted 24-hour
+global recovery interval, rather than permanently disabling weather or immediately
+repeating unknown requests. No corrupt coordinate copy is retained. Permission,
+symlink and other I/O errors remain unavailable until the underlying condition is
+fixed; they do not trigger network traffic.

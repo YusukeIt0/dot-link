@@ -22,15 +22,30 @@ const DAY = 86_400_000;
 /** One relay owns this file. Coarse forecasts expire; cooldown hashes prevent refetch storms. */
 export class WeatherCache {
   private readonly path: string;
-  constructor(path: string) {this.path = path;}
+  private readonly now: () => number;
+  constructor(path: string, now: () => number = Date.now) {this.path = path; this.now = now;}
   async read(): Promise<WeatherCacheState> {
     let handle;
     try {
       handle = await open(this.path, constants.O_RDONLY | constants.O_NOFOLLOW);
       const info = await handle.stat();
-      if (!info.isFile() || info.size > MAX_BYTES) throw new Error('Invalid weather cache');
+      if (!info.isFile()) throw new Error('Invalid weather cache');
       await handle.chmod(0o600);
-      return weatherCacheSchema.parse(JSON.parse(await handle.readFile('utf8')));
+      try {
+        if (info.size > MAX_BYTES) throw new Error('Oversized weather cache');
+        const content = await handle.readFile('utf8');
+        return weatherCacheSchema.parse(JSON.parse(content));
+      } catch (error) {
+        // Recover invalid data only, never permission/read errors or nonregular paths.
+        if ((error as NodeJS.ErrnoException).code) throw error;
+        const current = await lstat(this.path);
+        if (!current.isFile() || current.dev !== info.dev || current.ino !== info.ino) throw new Error('Weather cache changed');
+        // Atomically replace unusable data with a conservative blackout. Do not
+        // retain corrupt coordinate payloads indefinitely in a diagnostic copy.
+        const recovered: WeatherCacheState = {version: 1, nextRequestAt: this.now() + DAY, entries: []};
+        await this.write(recovered);
+        return recovered;
+      }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return {version: 1, nextRequestAt: 0, entries: []};
       // Do not erase request-suppression evidence and then issue another request.
