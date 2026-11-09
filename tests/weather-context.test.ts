@@ -87,6 +87,10 @@ test('phone consent does not migrate across Mac targets and failed changes stay 
  ui.receive({weatherProtocol:1,weatherEpoch:randomUUID(),weatherTerms:WEATHER_TERMS,weatherEnabled:false});await ui.control(true);assert.equal(ui.status().failed,true);assert.equal(ui.status().weatherEnabled,false);
  target='two';assert.equal(ui.status().supported,false);await ui.control(true);assert.equal(requests.length,1);
  target='one';now=46_000;assert.equal(ui.status().supported,false);
+ ui.reset();assert.equal(ui.status().supported,false);
+ ui.receive({weatherProtocol:1,weatherEpoch:randomUUID(),weatherTerms:WEATHER_TERMS,weatherEnabled:true});
+ assert.equal(ui.status().failed,false);assert.equal(ui.status().supported,true);assert.equal(ui.status().weatherEnabled,true);
+ assert.equal(requests.length,1,'reconnecting confirms server state without another toggle request');
 });
 
 test('clock advancement changes cached temperature and humidity without another provider request',async t=>{

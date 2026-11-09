@@ -10,7 +10,7 @@ export class WeatherSharing {
   private failed = false;
   private options: {target: () => string | undefined; api: (input: unknown) => Promise<unknown>; changed: () => void; now?: () => number};
   constructor(options: WeatherSharing['options']) {this.options = options;}
-  receive(value: WeatherStatus) {this.value = value; this.origin = this.options.target(); this.received = this.now(); this.options.changed();}
+  receive(value: WeatherStatus) {this.value = value; this.origin = this.options.target(); this.received = this.now(); this.failed = false; this.options.changed();}
   private now() {return (this.options.now ?? Date.now)();}
   reset() {this.value = {}; this.origin = undefined; this.received = -Infinity; this.options.changed();}
   status() {
