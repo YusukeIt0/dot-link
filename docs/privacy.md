@@ -202,8 +202,12 @@ consent, bounded changes also enrich the existing location event; Dot decides
 whether to speak. Data is optional model forecast evidence, not sensor observations
 or a safety recommendation. Geography downloads never block weather acquisition.
 
-The private Mac cache holds at most 16 coarse query entries, forecasts and retry
-metadata for 24 hours, pruned at access/startup and hourly while active. No raw phone
+The private Mac cache holds at most 16 coarse-position forecasts, which expire
+after 24 hours and are removed at access/startup and hourly while active. Physical
+cleanup can therefore lag expiry until the next maintenance pass or startup. Up
+to 64 hashed query keys with retry timestamps remain until their service-specified
+cooldown ends, potentially longer than 24 hours after extended backoff. Hashes of
+coarse positions can be guessed and are not location anonymization. No raw phone
 fixes, place labels or references enter this cache. The same query waits at least
 three hours between attempts (including failures), and all queries share a
 one-minute minimum; response expiry/backoff can extend these intervals. Cache
