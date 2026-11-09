@@ -576,5 +576,6 @@
   "even.history_unavailable": "Connect to a compatible Mac to manage history.",
   "mac.reconnect_help_title": "If the connection does not return",
   "mac.reconnect_help": "Already connected before? Sign in to ChatGPT and tell your existing Dot:\n“Check the connection to Dot Link and resume the event subscription for receiving utterances from G2.”\nThen return here and click “{check}”.",
-  "mac.open_chatgpt": "Open ChatGPT"
+  "mac.open_chatgpt": "Open ChatGPT",
+  "mac.initial_connection_title": "First-time connection"
 }

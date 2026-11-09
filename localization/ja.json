@@ -576,5 +576,6 @@
   "even.history_unavailable": "対応するMacに接続すると履歴を管理できます。",
   "mac.reconnect_help_title": "接続が戻らない場合",
   "mac.reconnect_help": "以前接続していた場合は、ChatGPTにログインして、いつものDotに次のように伝えてください。\n「Dot Linkとの接続状態を確認して、G2からの発話を受け取るイベント購読を再開して」\nその後、この画面に戻り「{check}」を押してください。",
-  "mac.open_chatgpt": "ChatGPTを開く"
+  "mac.open_chatgpt": "ChatGPTを開く",
+  "mac.initial_connection_title": "初めて接続する場合"
 }
