@@ -21,9 +21,14 @@ npm test
 npm run test:http
 npm run build
 sh scripts/test-notification-native.sh
+sh scripts/test-setup-native.sh
 ```
 
-Main pushes and pull requests run these checks in Tests. Work-branch pushes use Branch validation until an open PR owns validation for the same head. Passing checks do not publish an application automatically. Only a tested release updates installed clients.
+These are the full product checks. Main pushes, PRs and work branches use the
+[shared impact policy](#verification-by-change-impact) to select them or the
+bounded non-runtime checks. Work branches use Branch validation until an open PR
+owns validation for the same head. Passing checks do not publish an application
+automatically. Only a tested release updates installed clients.
 
 Failed branch preflight already fails Branch validation and does not allocate a
 macOS job just to report the same failure. This differs from the required PR
@@ -287,11 +292,14 @@ media. Keep that separate from speaker-role work.
 `Tests` is canonical for main pushes and PRs (including drafts and child PRs).
 `Branch validation` checks non-main pushes without a matching open PR. Its distinct
 `branch-test` check cannot replace required `test`. Read failures retain branch
-validation. PR creation concurrent with a branch run may temporarily run both;
-branch-only and merge-context evidence are not interchangeable.
+validation. Admission is checked again after runner allocation, before dependency
+installation. A matching PR opened during that wait takes ownership; the branch
+summary states that no product validation was performed. A PR opened after that
+second check can still overlap; no polling or arbitrary delay is added.
+Branch-only and PR evidence are not interchangeable.
 
 Review evidence and both merge gates share `scripts/ci-evidence.mjs`: select the
-latest matching full PR workflow and its latest attempt for the exact head,
+latest matching complete PR workflow and its latest attempt for the exact head,
 verify current-base inclusion for v2 (exact dispatch base for v1), and require all
 jobs to succeed. Never search backward for a passing run. Cancelled,
 skipped, missing and stale evidence holds integration. Unknown fork association
@@ -311,8 +319,8 @@ conclusions, selected evidence and any recovery in the existing PR.
 See [technical ownership](development-assurance.md#technical-ownership-across-agent-sessions)
 for the division between UX decisions and agent-owned implementation/verification.
 
-Tests v2 checks out the exact PR head for both workflow lint and the full macOS
-suite. Before testing and before merging, GitHub's comparison must prove the
+Tests v2 checks out the exact PR head for both workflow lint and impact-selected
+validation. Before testing and before merging, GitHub's comparison must prove the
 current target base is an ancestor of that head (`ahead` or `identical`, with the
 base as merge base). Therefore the tested tree is the tree that will be integrated.
 If the target advances with new code, update the PR branch first; that new head
@@ -327,6 +335,56 @@ is updated and tested. Independent review still pins the current target base,
 main, head, agreed scope and PR text; retargeting invalidates that review receipt.
 This separates code validation from review-context changes without a metadata
 workflow, result cache, polling loop or synthetic success check.
+
+### Verification by change impact
+
+`scripts/ci-plan.mjs` is the single impact policy used by local validation, branch
+validation and required PR/main Tests. It compares immutable Git trees, checks
+every changed path/mode, and explains the selected checks. Narrow validation
+inherits unchanged product coverage only from a baseline already integrated into
+`origin/main`. A child based on unmerged product work gets the full suite. A branch
+comparison covers its entire difference from main, not just the last push.
+
+| Change impact | Required validation |
+| --- | --- |
+| README and ordinary Markdown documentation | Changed local links/conflict markers, recommended installer command, dependency documentation consistency |
+| Website source and website-only README/film assets | Complete localized static build/link checks and analytics consent/privacy tests |
+| Only the two Mac version values | Parse plist, require increasing build/nondecreasing version, preserve every other byte including identity, minimum OS and permissions |
+| Signed Mac update feed | XML schema, app version/OS, public release status/notes, archive length/hash and both Ed25519 signatures using only the public key |
+| Product, native, permissions, dependencies, tests, automation, protected assurance docs or unknown/unsafe changes | Existing full macOS suite; a changed feed also receives direct release validation |
+
+Combinations of recognized non-runtime changes run the union of their checks.
+Deleted/renamed files, symlinks, executable files, invalid/missing comparisons and
+unmerged baselines retain full scope. A selected check failing does **not** fall
+back to a broader suite and call that success. The direct plist/feed checks are
+new CI coverage, not assertions that the old product suite verified release files.
+Feed network failure fails validation; it is not evidence of an invalid signature.
+The public archive request is size/time bounded and receives no credential.
+
+The `workflow-lint` job emits the runner and compared revisions. The single
+required `test` job recomputes the plan from Git and explicitly passes or fails;
+it runs on Ubuntu for bounded non-runtime checks and macOS for full product work.
+No required jobs are skipped or renamed. Baseline inclusion and exact-head/retry
+selection in review and both merge gates remain unchanged. A retarget can reuse
+the same validated head only under their existing ancestry rules: narrowed runs
+already established that its unchanged product code came from integrated main.
+Changes to the planner/workflows themselves use full scope and remain protected
+from automatic merge. Review still decides whether prose, rendered UI or device
+observations need additional evidence; a classifier is not a semantic review.
+
+For a clean checkout at the target commit, run:
+
+```sh
+node scripts/ci-plan.mjs <base-sha> <head-sha>
+node scripts/run-ci-plan.mjs <base-sha> <head-sha>
+```
+
+Without a usable comparison, the runner chooses full product validation. It
+refuses a different checked-out head or tracked working changes. Summaries record
+base/head, selection/reason and execution seconds. Compare avoided installs,
+builds and native tests as well as elapsed time; runner queues and model review
+are separate costs. Native coverage stays on macOS, and website publishing and
+normal configured-Mac release acceptance remain separate authorized stages.
 
 The fixed `CI v2` title records dispatch provenance. Mutable associated PR base
 metadata is never used as proof of the tested tree. Historical `CI v1` runs retain

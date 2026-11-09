@@ -82,6 +82,16 @@ test('malformed ref metadata cannot suppress branch validation', async () => {
 });
 
 import {currentCI} from '../scripts/ci-current.mjs';
+test('a matching PR opened during runner allocation takes ownership at the second admission check', async () => {
+  const context = {repository, ref: 'work', head};
+  let rows = [];
+  const get = async path => path.startsWith('git/') ? {object: {sha: head}} : rows;
+  assert.equal((await branchAdmission(context, get)).run, true);
+  rows = [{...pr, state: 'open'}];
+  assert.equal((await branchAdmission(context, get)).run, false);
+  rows[0].head = {...pr.head, sha: base};
+  assert.equal((await branchAdmission(context, get)).run, true, 'A different head cannot suppress validation');
+});
 test('late starts and stale retries cannot execute expensive tests against a moved PR/ref', () => {
   const event = {pull_request: {...pr, state: 'open'}};
   assert.equal(currentCI('pull_request', event, event.pull_request, base, {status: 'ahead', merge_base_commit: {sha: base}}), true);
@@ -121,7 +131,7 @@ test('obsolete metadata titles and unknown skips cannot revive older successful 
     const skipped = {...run(), id: 20, display_title, conclusion: 'skipped'};
     const selected = selectCI([skipped, run()], target);
     assert.equal(selected.id, 20);
-    assert.throws(() => assertCI(target, selected, jobs()), /Full PR CI/);
+    assert.throws(() => assertCI(target, selected, jobs()), /Required PR CI/);
   }
 });
 

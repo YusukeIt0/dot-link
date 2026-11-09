@@ -20,16 +20,23 @@ jobs:
   workflow-lint:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    outputs:
+      runner: ${{ steps.impact.outputs.runner }}
+      base: ${{ steps.impact.outputs.base }}
+      head: ${{ steps.impact.outputs.head }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - run: sh scripts/check-workflows.sh
+      - id: impact
+        run: node scripts/ci-plan.mjs --event
   test:
     needs: workflow-lint
     if: ${{ !cancelled() }}
-    runs-on: macos-15
+    runs-on: ${{ needs.workflow-lint.outputs.runner || 'macos-15' }}
     timeout-minutes: 15
     steps:
       - name: Require successful workflow checks
@@ -40,6 +47,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
       - name: Require current triggering revision
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,4 +57,8 @@ jobs:
           node-version: '26.13.0'
           package-manager-cache: false
           cache: npm
-      - run: sh scripts/run-ci-tests.sh
+      - name: Run impact-selected validation
+        env:
+          CI_BASE: ${{ needs.workflow-lint.outputs.base }}
+          CI_HEAD: ${{ needs.workflow-lint.outputs.head }}
+        run: node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"
