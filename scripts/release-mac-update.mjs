@@ -1,3 +1,4 @@
+import {macAppcast} from './lib/mac-appcast.mjs';
 // Publisher only. The client does not run gh or receive this signing key.
 import {readFile,writeFile,mkdir,stat} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
@@ -12,6 +13,8 @@ if((await stat(key)).mode&0o077)throw new Error('Signing key permissions must be
 const run=(cmd,args)=>{const r=spawnSync(cmd,args,{encoding:'utf8',maxBuffer:10e6});if(r.status!==0)throw new Error(`${cmd} failed (${r.status})`);return r.stdout.trim();};
 const info=join(app,'Contents/Info.plist'),field=k=>run('/usr/libexec/PlistBuddy',['-c','Print :'+k,info]);
 const version=field('CFBundleShortVersionString'),build=field('CFBundleVersion');
+const minimumSystemVersion=field('LSMinimumSystemVersion');
+if(!/^\d+\.\d+(?:\.\d+)?$/.test(minimumSystemVersion))throw new Error('Invalid minimum macOS version');
 const metadata=JSON.parse(run('/usr/bin/plutil',['-convert','json','-o','-',info]));
 if(metadata.DotLinkBeta===true)throw new Error('Private Beta builds cannot be published; prepare and review a stable release build first');
 if(!/^\d+\.\d+\.\d+$/.test(version)||!/^\d+$/.test(build)||field('SUPublicEDKey')!==config.publicKey||field('CFBundleIdentifier')!=='app.tripsurf.dotlink.mac')throw new Error('Unexpected bundle identity or key');
@@ -31,8 +34,7 @@ run('gh',['release','create',tag,archive,'--repo',config.repository,'--target',c
 const release=JSON.parse(run('gh',['api',`repos/${config.repository}/releases?per_page=100`])).find(item=>item.tag_name===tag);
 if(!release)throw new Error('Draft release not found');
 const asset=release.assets.find(a=>a.name===name);if(!asset)throw new Error('Release asset missing');
-const xml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
-const feed=`<?xml version="1.0" encoding="utf-8"?>\n<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><title>Dot Link for Mac</title><item><title>Dot Link ${version}</title><sparkle:version>${build}</sparkle:version><sparkle:shortVersionString>${version}</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion><description sparkle:format="plain-text">${xml(notes)}</description><enclosure url="https://github.com/${downloadRepository}/releases/download/${tag}/${name}" sparkle:installationType="application" sparkle:edSignature="${xml(signature)}" length="${asset.size}" type="application/octet-stream" /></item></channel></rss>\n`;
+const feed=macAppcast({version,build,minimumSystemVersion,notes,downloadRepository,tag,name,signature,size:asset.size});
 await mkdir('updates/mac',{recursive:true});const feedFile=resolve(config.feedPath);await writeFile(feedFile,feed);
 run(signer,['--ed-key-file',key,feedFile]);run(signer,['--verify','--ed-key-file',key,feedFile]);
 run('gh',['release','edit',tag,'--repo',config.repository,'--draft=false']);

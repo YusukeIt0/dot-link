@@ -2,8 +2,13 @@
 
 ## Tests
 
+The Mac app requires macOS 13.5 or later, matching the official Node 26 arm64
+binary. The native build target and generated Sparkle feed use the app plist
+minimum; the installer also checks the signed downloaded app before installing.
+Older installed apps remain in place on earlier macOS versions.
+
 Use a supported Node.js release with current security fixes. The packaged runtime
-and CI use 22.23.4, pinned in `scripts/mac-runtime-manifest.json`. The
+and CI use 26.13.0, pinned in `scripts/mac-runtime-manifest.json`. The
 `engines.node` value `>=22.18.0` is the native TypeScript execution compatibility
 floor, not a security guarantee. A higher lower bound alone would still admit
 vulnerable versions on other major lines. For the October 21, 2026 security

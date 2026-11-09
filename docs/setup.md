@@ -4,6 +4,10 @@
 
 ## Manual installation
 
+Mac releases using Node 26 require macOS 13.5 or later. On macOS 13.0–13.4,
+update macOS first. The updater filters incompatible releases and leaves your
+existing app and stored data in place.
+
 For the recommended one-command install, use the [quickstart](https://github.com/YusukeIt0/dot-link#quickstart).
 
 Download `Dot-Link-…-arm64.zip` from the [latest Mac release](https://github.com/YusukeIt0/dot-link/releases/latest), unzip it, and move **Dot Link.app** to `~/Applications`. Create that folder if needed. Choose the app ZIP, not GitHub's source-code archives. Open the app and continue at [Prepare this Mac](https://github.com/YusukeIt0/dot-link#1-install-on-your-mac).

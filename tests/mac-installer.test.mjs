@@ -13,17 +13,17 @@ const url = 'https://github.com/YusukeIt0/dot-link/releases/download/mac-v9.8.7-
 const release = () => ({draft:false, prerelease:false, tag_name:'mac-v9.8.7-999', body:null, assets:[
   {name:'unrelated.txt',label:null}, {name:'Dot-Link-9.8.7-999-arm64.zip', browser_download_url:url, digest:`sha256:${hash}`},
 ]});
-function run(metadata, {existing=false, badSignature=false, language='en-US', bundleId='app.tripsurf.dotlink.mac'}={}) {
+function run(metadata, {existing=false, badSignature=false, language='en-US', bundleId='app.tripsurf.dotlink.mac', os='13.5', minimumOS='13.5'}={}) {
   const root = mkdtempSync(join(tmpdir(), 'dot-link-installer-test-'));
   try {
     const bin=join(root,'bin'), destination=join(root,'Applications','Dot Link.app');
     mkdirSync(bin); mkdirSync(join(root,'tmp'));
     writeFileSync(join(root,'release.json'),JSON.stringify(metadata));
     writeFileSync(join(root,'archive'),zip);
-    writeFileSync(join(root,'Info.plist'),JSON.stringify({CFBundleIdentifier:bundleId}));
+    writeFileSync(join(root,'Info.plist'),JSON.stringify({CFBundleIdentifier:bundleId,LSMinimumSystemVersion:minimumOS}));
     const mock=(name,body)=>writeFileSync(join(bin,name),'#!/bin/bash\nset -eu\n'+body+'\n',{mode:0o755});
     mock('defaults',`printf '(\\n    \"${language}\"\\n)\\n'`);
-    mock('uname','echo Darwin'); mock('sysctl','echo 1'); mock('sw_vers','echo 13.0');
+    mock('uname','echo Darwin'); mock('sysctl','echo 1'); mock('sw_vers',`echo '${os}'`);
     mock('curl',`printf '%s\\n' "$*" >> '${root}/requests'\nwhile [ "$1" != --output ]; do shift; done\ncase "$2" in release.json) cp '${root}/release.json' "$2" ;; Dot-Link.zip) cp '${root}/archive' "$2" ;; *) exit 9 ;; esac`);
     mock('ditto',`mkdir -p 'unpacked/Dot Link.app/Contents'
 cp '${root}/Info.plist' 'unpacked/Dot Link.app/Contents/Info.plist'`);
@@ -59,6 +59,24 @@ test('installer stops before installation for unsafe or unavailable release data
 });
 test('existing app is preserved without downloading', {skip:process.platform!=='darwin'},()=>{
   const r=run(release(),{existing:true});assert.notEqual(r.status,0);assert.equal(r.requests,'');assert.ok(r.installed);assert.equal(r.opened,false);
+});
+
+test('installer enforces the downloaded app minimum including minor and future OS versions', {skip:process.platform!=='darwin'},()=>{
+  for(const os of ['13.0','13.4','13.4.9']) {
+    const r=run(release(),{os});assert.notEqual(r.status,0);assert.equal(r.installed,false);assert.equal(r.opened,false);
+    assert.match(r.stderr,/macOS 13\.5 or later/);
+  }
+  for(const os of ['13.5','13.5.1','13.10','14.0','26.1']) {
+    const r=run(release(),{os});assert.equal(r.status,0,r.stderr);assert.ok(r.installed&&r.opened);
+  }
+  const future=run(release(),{os:'14.1',minimumOS:'14.2'});assert.notEqual(future.status,0);assert.equal(future.installed,false);
+  const legacy=run(release(),{os:'13.0',minimumOS:'13.0'});assert.equal(legacy.status,0,legacy.stderr);
+  for(const minimumOS of ['', '13.bad', '13.5.0.1', undefined]) {
+    // null exercises missing/unusable plist data (undefined uses the fixture default).
+    const r=run(release(),{minimumOS:minimumOS??null});assert.notEqual(r.status,0);assert.equal(r.installed,false);
+  }
+  const existing=run(release(),{os:'13.4',existing:true});assert.equal(existing.requests,'');assert.ok(existing.installed);assert.equal(existing.opened,false);
+  const ja=run(release(),{os:'13.4',language:'ja-JP'});assert.match(ja.stderr,/macOS 13\.5以降/);
 });
 
 test('installer follows macOS language with English fallback', {skip:process.platform!=='darwin'},()=>{

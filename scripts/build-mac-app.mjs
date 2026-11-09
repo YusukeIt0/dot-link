@@ -7,6 +7,9 @@ const root=resolve('.'), output=resolve(process.argv[2] ?? '.runtime/mac-app/Dot
 if (!output.startsWith(join(root,'.runtime')+'/') || !output.endsWith('/Dot Link.app')) throw new Error('Build output must be a Dot Link.app below .runtime');
 const build=JSON.parse(await readFile(join(root,'dist/build-info.txt'),'utf8')), source=sourceIdentity();
 const sourceVersion=JSON.parse(await readFile(join(root,'package.json'),'utf8')).version;
+const minimumOSResult=spawnSync('/usr/bin/plutil',['-extract','LSMinimumSystemVersion','raw','-o','-','native/DotLinkSetup/Info.plist'],{encoding:'utf8'});
+const minimumOS=minimumOSResult.stdout.trim();
+if(minimumOSResult.status!==0||!/^\d+\.\d+(?:\.\d+)?$/.test(minimumOS))throw new Error('Invalid minimum macOS version');
 (source.branch==='main'?assertReleaseBuild:assertBetaBuild)(build,sourceVersion,source);
 const run=(cmd,args)=>{const r=spawnSync(cmd,args,{stdio:'inherit'});if(r.status!==0)throw new Error('Build step failed: '+cmd);};
 run(process.execPath,['scripts/localization.mjs']);
@@ -67,7 +70,7 @@ for(const [key,type,value] of [
 ])run('/usr/libexec/PlistBuddy',['-c',`Add :${key} ${type} ${value}`,info]);
 await cp('assets/brand/orbit/DotLink.icns',join(contents,'Resources/DotLink.icns'));
 await mkdir('.runtime/swift-module-cache',{recursive:true});
-run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target','arm64-apple-macos13.0','-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/Localization.swift','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/UpdateProgressWindow.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/NotificationMenu/NotificationProbeResult.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/SetupFailure.swift','native/DotLinkSetup/WindowLayout.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
+run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target',`arm64-apple-macos${minimumOS}`,'-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/Localization.swift','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/UpdateProgressWindow.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/NotificationMenu/NotificationProbeResult.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/SetupFailure.swift','native/DotLinkSetup/WindowLayout.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
 for(const name of ['node','tunnel-client','whisper-cli'])run('/usr/bin/codesign',['--force','--sign','-',join(payload,'.runtime/bin',name)]);
 run('/usr/bin/codesign',['--force','--sign','-','--identifier','app.tripsurf.dotlink.mac',output]);
 run('/usr/bin/codesign',['--verify','--deep','--strict',output]);
