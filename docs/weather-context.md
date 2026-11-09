@@ -146,3 +146,34 @@ global recovery interval, rather than permanently disabling weather or immediate
 repeating unknown requests. No corrupt coordinate copy is retained. Permission,
 symlink and other I/O errors remain unavailable until the underlying condition is
 fixed; they do not trigger network traffic.
+
+## Integration behavior
+
+`WeatherContext` owns consent, owner/epoch validation and acquisition lifecycle;
+`LocationContext` remains the owner of fresh positions, events and responses.
+`get_weather_context` has strict current and specified-place modes. The device
+HTTP gateway forwards the authenticated subject to `/api/weather`; MCP cannot
+change consent. Consent storage failure disables only weather at startup.
+
+Automatic checks run every 30 seconds only while consent, fresh location and the
+existing location subscription allow them. Same-cell checks are at most once per
+minute; the acquisition cache enforces much longer external-request limits.
+Time advances select the appropriate forecast sample and future intervals. Current
+sample values (including temperature/humidity), model updates and status changes
+produce new decision contexts. Retrieval/check timestamps alone do not. Identical
+weather survives same-cell phone updates; movement to another cell removes old
+weather immediately. Late requests recheck the original lease, owner, consent and
+cell, with the existing 100-metre movement guard too.
+
+Weather revisions share the location event's 30-second minimum, pending coalescing
+and retry behavior. A silent outcome does not suppress a later weather revision.
+Weather revocation invalidates weather-bearing response contexts; ordinary fresh
+location responses remain available. Concurrent readers of the same cell share
+acquisition and each rechecks access. Different-cell concurrent work receives the
+service's bounded busy/unavailable evidence rather than creating a queue; tools
+instruct Dot to continue, not poll. Revoking the source of a shared request can
+cancel both readers; neither may return an unchecked result.
+
+Integration fixtures are not evidence of live MET reachability, existing-Dot tool
+adoption or G2 display. Those remain the bounded acceptance sequence above, after
+human terms acceptance and applicable deployment/consent authorization.

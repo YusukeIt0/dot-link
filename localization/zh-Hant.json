@@ -577,5 +577,13 @@
   "mac.reconnect_help_title": "連線未恢復時",
   "mac.reconnect_help": "如果之前已連線，請登入 ChatGPT，並對原本的 Dot 說：\n「請確認 Dot Link 的連線狀態，並恢復接收 G2 發話的事件訂閱。」\n然後回到此畫面，按一下「{check}」。",
   "mac.open_chatgpt": "開啟 ChatGPT",
-  "mac.initial_connection_title": "首次連線"
+  "mac.initial_connection_title": "首次連線",
+  "even.weather": "氣象資訊",
+  "even.weather_disclosure": "Mac會向api.met.no傳送經過四捨五入的座標以取得預報。該服務也會收到Mac的IP位址。",
+  "even.weather_terms": "閱讀服務條款",
+  "even.weather_accept": "我已閱讀、理解並接受MET Norway服務條款，並同意傳送經過四捨五入的座標及Mac的IP位址以取得天氣預報。要啟用氣象資訊嗎？",
+  "even.weather_failed": "無法確認變更。請重新連線並檢查設定。",
+  "even.weather_unavailable": "連接已更新的Mac以管理氣象資訊。",
+  "even.weather_on": "氣象資訊已啟用。",
+  "even.weather_off": "氣象資訊已關閉。"
 }

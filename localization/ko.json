@@ -577,5 +577,13 @@
   "mac.reconnect_help_title": "연결이 복구되지 않는 경우",
   "mac.reconnect_help": "이전에 연결한 적이 있다면 ChatGPT에 로그인하고 기존 Dot에게 다음과 같이 말하세요.\n“Dot Link 연결 상태를 확인하고 G2에서 발화를 받는 이벤트 구독을 다시 시작해 줘.”\n그런 다음 이 화면으로 돌아와 “{check}” 버튼을 누르세요.",
   "mac.open_chatgpt": "ChatGPT 열기",
-  "mac.initial_connection_title": "처음 연결하는 경우"
+  "mac.initial_connection_title": "처음 연결하는 경우",
+  "even.weather": "기상 정보",
+  "even.weather_disclosure": "Mac에서 api.met.no로 반올림한 좌표를 보내 예보를 받습니다. 서비스에는 Mac의 IP 주소도 전달됩니다.",
+  "even.weather_terms": "서비스 약관 읽기",
+  "even.weather_accept": "MET Norway 서비스 약관을 읽고 이해했으며 동의합니다. 예보를 위해 반올림한 좌표와 Mac의 IP 주소를 전송하는 것을 허용합니다. 기상 정보를 활성화할까요?",
+  "even.weather_failed": "변경을 확인하지 못했습니다. 다시 연결한 후 설정을 확인하세요.",
+  "even.weather_unavailable": "업데이트된 Mac에 연결하여 기상 정보를 설정하세요.",
+  "even.weather_on": "기상 정보가 활성화되어 있습니다.",
+  "even.weather_off": "기상 정보가 꺼져 있습니다."
 }

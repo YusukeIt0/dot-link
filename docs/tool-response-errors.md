@@ -209,3 +209,25 @@ are outside this extension. No new UI strings or diagnostic collection is added.
 The existing local `callback_host_rejected` warning retains its sanitized
 hostname for setup troubleshooting; it never contains the full URL or secret
 and is not included in the Dot error response.
+
+## Optional weather
+
+`get_weather_context` accepts either `{mode:"current"}` or `{mode:"specified",
+place:{latitude,longitude,label,source,reference}}`. Specified-place provenance is
+required and never establishes the owner's whereabouts. No MCP tool changes
+weather consent. Like other tools, expected rejections use `error.data.reason`:
+
+- `weather_disabled`: consent is absent, revoked, owned by a different device or
+  changed during acquisition. Continue with available evidence.
+- `location_unavailable`: current sharing is off, disconnected or stale.
+- `location_changed`: the owner, subscription or coarse region changed during a
+  request. Re-read fresh context if still needed; do not use the late result.
+- Existing `sharing_inactive`, `context_unknown`, `context_expired` and
+  `moved_too_far` reasons retain the live-location guards and recovery semantics.
+- `invalid_arguments`: select one mode and include the specified-place provenance.
+
+Source outages, missing forecasts and service limits ordinarily return evidence
+marked unavailable/stale with limitations, rather than blocking conversation.
+Current-location responses use `respond_to_location` and retain the pending
+question's `utterance_id`. Specified-place answers use the ordinary conversation
+path. See [weather context](weather-context.md).

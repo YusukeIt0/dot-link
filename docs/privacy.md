@@ -184,3 +184,43 @@ Google signals, advertising personalization and user-provided-data collection ar
 ## Contact
 
 For non-sensitive reports, use [GitHub Issues](https://github.com/YusukeIt0/dot-link/issues) or [email support](mailto:yusuke.ito@tripsurf.app). Do not attach credentials, pairing codes, recordings, conversations or unreviewed diagnostic files.
+
+## Weather context
+
+**Weather context** is independently off by default. Enabling it on the selected
+Mac requires reading and accepting the [MET Norway service terms](https://api.met.no/doc/TermsOfService).
+Existing location, walking/terrain and history consent never enables it. The Mac
+sends coordinates rounded to 0.01 degrees to `api.met.no`, plus an identifying
+app/version/project User-Agent; the service also sees the outgoing IP address.
+It receives no phone identifier, conversation, name or location history. Rounded
+coordinates can still be sensitive and are not anonymous.
+
+Dot may request a fresh shared current location or an explicitly requested place
+with coordinate provenance. Specified-place requests do not change or establish
+current location. With a valid location subscription, fresh location and weather
+consent, bounded changes also enrich the existing location event; Dot decides
+whether to speak. Data is optional model forecast evidence, not sensor observations
+or a safety recommendation. Geography downloads never block weather acquisition.
+
+The private Mac cache holds at most 16 coarse query entries, forecasts and retry
+metadata for 24 hours, pruned at access/startup and hourly while active. No raw phone
+fixes, place labels or references enter this cache. The same query waits at least
+three hours between attempts (including failures), and all queries share a
+one-minute minimum; response expiry/backoff can extend these intervals. Cache
+corruption resets it with a persisted 24-hour recovery pause. Off stops use and
+cancels pending requests after the Mac receives the change; the bounded cache
+remains until expiry to preserve service limits. It is not an exact movement trail.
+
+Consent is retained only on the selected Mac for its paired owner. Revocation
+invalidates access and late results; a restart requires fresh phone location for
+current weather. Stopping location sharing or losing its fresh lease prevents
+current-location weather, while explicitly requested places can still use the
+separate weather permission. An unconfirmed change is shown as failed; reconnect
+and check the setting. Stops cannot retract requests already received by the
+service, or data already read by Dot. Weather-based answers may enter ordinary
+conversation history. Dot's data handling is separate.
+
+Based on [MET Norway](https://api.met.no/) data under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), normalized and subset by
+Dot Link. Source credit, valid/update/retrieval times and limitations accompany
+results. The companion includes [weather source and privacy details](../public/weather-sources.html).

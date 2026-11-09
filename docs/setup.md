@@ -163,3 +163,24 @@ Each app initially follows its device language, with English as the fallback,
 and lets you select another supported language. The choice does not translate
 conversations or change pairing, notification sharing, speech-service
 configuration, or the wake phrase.
+
+## Optional weather context
+
+In the companion's Location sharing section, read the **Weather context**
+disclosure and MET Norway service terms before enabling it. This separate choice
+is off by default and belongs to the selected Mac. Current-location weather also
+needs fresh location sharing; a different place explicitly named in conversation
+does not. No paid API, account or API key is needed.
+
+Update the Mac and companion to matching versions that offer this control. Refresh
+the existing Dot Link connection's tools in ChatGPT, then restart the existing Dot
+so it loads the new definitions. Confirm `get_weather_context` is available there;
+a successful connection refresh alone does not establish that the running Dot
+loaded it. Ask an ordinary weather question without repeating an already shared
+location, or ask about another place. Forecasts, unknown fields and source limits
+remain visible to Dot. Weather failure does not prevent ordinary conversation.
+
+Turning weather off stops all weather use after the Mac acknowledges it. Turning
+location sharing off only stops current-location weather. If a setting change
+cannot be confirmed, reconnect and check it. See the [source/privacy details](../public/weather-sources.html)
+for the coarse-coordinate cache and request intervals.

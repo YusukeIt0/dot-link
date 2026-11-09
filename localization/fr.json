@@ -577,5 +577,13 @@
   "mac.reconnect_help_title": "Si la connexion ne se rétablit pas",
   "mac.reconnect_help": "Si vous aviez déjà établi la connexion, connectez-vous à ChatGPT et dites à votre Dot habituel :\n« Vérifie la connexion à Dot Link et réactive l’abonnement aux événements pour recevoir les messages des G2. »\nRevenez ensuite ici et cliquez sur « {check} ».",
   "mac.open_chatgpt": "Ouvrir ChatGPT",
-  "mac.initial_connection_title": "Première connexion"
+  "mac.initial_connection_title": "Première connexion",
+  "even.weather": "Contexte météo",
+  "even.weather_disclosure": "Votre Mac envoie des coordonnées arrondies à api.met.no pour obtenir des prévisions. Le service reçoit aussi son adresse IP.",
+  "even.weather_terms": "Lire les conditions du service",
+  "even.weather_accept": "J’ai lu, compris et accepté les conditions du service MET Norway et j’autorise l’envoi de coordonnées arrondies et de l’adresse IP de mon Mac pour les prévisions météo. Activer la météo ?",
+  "even.weather_failed": "Modification non confirmée. Reconnectez-vous et vérifiez le réglage.",
+  "even.weather_unavailable": "Connectez-vous à un Mac à jour pour gérer la météo.",
+  "even.weather_on": "Le contexte météo est activé.",
+  "even.weather_off": "Le contexte météo est désactivé."
 }

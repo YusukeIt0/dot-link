@@ -1,3 +1,5 @@
+import { WeatherContext } from './weather/context.ts';
+import { WeatherService } from './weather/service.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Bridge } from './bridge.ts';
@@ -37,8 +39,15 @@ const locations = new LocationContext(resolve('.runtime/location-subscription.js
   (input, guard, context) => bridge.sendMessage(input, guard, context), Date.now,
   owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
   output=>new LocalGeography(resolve('.runtime/geography'),output),()=>new MobilityAcquisition(), {attachGeography: (fix, evidence, owner) => history?.attachGeography(fix, evidence, owner)});
-const server = bridgeServer(bridge, tokens, notifications, locations, history);
+let weather: WeatherContext | undefined;
+try {
+  weather = new WeatherContext(resolve('.runtime/weather-consent.json'),
+    new WeatherService(resolve('.runtime/weather-cache.json')), locations,
+    {ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
+      ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
+} catch { console.error('Weather unavailable; ordinary conversation remains available'); }
+const server = bridgeServer(bridge, tokens, notifications, locations, history, weather);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.listen(port, '127.0.0.1', () => console.log(`Private Dot bridge listening on 127.0.0.1:${port}; Dot connection not verified`));
-for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {history?.close();locations.close();server.close(() => process.exit(0));});
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {weather?.close();history?.close();locations.close();server.close(() => process.exit(0));});

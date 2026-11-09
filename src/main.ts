@@ -1,3 +1,4 @@
+import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
 import { RuntimeNative } from './runtime-native.ts';
 import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
@@ -211,6 +212,24 @@ function renderHistoryStatus() {
 }
 el<HTMLInputElement>('history-share').onchange = () => { void historySharing.control(el<HTMLInputElement>('history-share').checked ? 'enable' : 'disable'); };
 el<HTMLButtonElement>('history-delete').onclick = () => { if (confirm(t('even.history_delete_confirm'))) void historySharing.control('delete'); };
+const weatherSharing = new WeatherSharing({
+  target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
+  api: input => session.location('/api/weather', input), changed: () => renderWeatherStatus(),
+});
+function renderWeatherStatus() {
+  if (exited) return;
+  const s = weatherSharing.status();
+  const toggle = el<HTMLInputElement>('weather-share'); toggle.checked = s.weatherEnabled === true;
+  toggle.disabled = !s.supported || s.pending;
+  el('weather-status').textContent = s.failed ? t('even.weather_failed') : !s.supported ? t('even.weather_unavailable') :
+    s.weatherEnabled ? t('even.weather_on') : t('even.weather_off');
+}
+el<HTMLInputElement>('weather-share').onchange = () => {
+  const enabled = el<HTMLInputElement>('weather-share').checked;
+  if (enabled && !confirm(t('even.weather_accept'))) {renderWeatherStatus(); return;}
+  void weatherSharing.control(enabled);
+};
+renderWeatherStatus();
 const locationSharing = new LocationSharing({
   historyUpload: () => historySharing.upload(),
   storage: () => localStorage,
@@ -254,7 +273,7 @@ el<HTMLInputElement>('mobility-share').onchange = () => locationSharing.setMobil
 const connectionTransitions = new ConnectionTransitions({
   session,
   stopUpdates: () => updates.stop(), cancelPlayback: () => playback.cancel(),
-  stopLocation: () => { historySharing.reset(); locationSharing.setEnabled(false); }, clearLegacyPairing: () => pairing.forget(),
+  stopLocation: () => { historySharing.reset(); weatherSharing.reset(); locationSharing.setEnabled(false); }, clearLegacyPairing: () => pairing.forget(),
   resetInteraction: (pairing, newIdentity) => {
     transcriptionController?.abort(); transcriptionController = undefined;
     photoRevision++; photoSelecting = false;
@@ -387,10 +406,10 @@ function showMessage(): void {
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
-interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus; messages: Message[]; }
+interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
-  historySharing.receive(snapshot.status);
+  historySharing.receive(snapshot.status); weatherSharing.receive(snapshot.status);
   locationSharing.receive(snapshot.status);
   subscribed = snapshot.status.subscribed;
   photosSupported = snapshot.status.photoAttachments === 1;
@@ -725,7 +744,7 @@ function applyLanguage(): void {
   setLanguage(next); document.documentElement.lang = next;
   renderLanguageOptions();
   renderStaticAccessibility();
-  renderLocationStatus(); renderHistoryStatus();
+  renderLocationStatus(); renderHistoryStatus(); renderWeatherStatus();
   for (const { element, key } of staticLabels) {
     // Runtime status/controls may have replaced the initial label.
     if (supportedLanguages.some(locale => element.textContent === message(key, locale))) element.textContent = t(key);
