@@ -20,6 +20,7 @@ export const notificationInput = z.object({
   title: z.string().trim().min(1).max(1000), body: z.string().max(4000),
   observed_at: z.string().datetime(),
   source_verification: z.enum(['synthetic-test-marker', 'accessibility']),
+  sharing_id: z.string().uuid().optional(),
 }).strict();
 const record = notificationInput.extend({
   status: z.enum(['pending', 'accepted', 'failed', 'announced']),
@@ -30,7 +31,7 @@ const record = notificationInput.extend({
 });
 const schema = z.object({ version: z.literal(1), subscription: subscription.optional(), notifications: z.array(record).max(100), sharingManaged: z.boolean().optional(), activationStoppedFor: z.string().uuid().optional() });
 type State = z.infer<typeof schema>;
-const sharingControl = z.object({version: z.literal(1), id: z.string().uuid(), enabled: z.boolean(), updatedAt: z.number().finite()}).strict();
+const sharingControl = z.object({version: z.literal(1), id: z.string().uuid(), epoch: z.string().uuid(), enabled: z.boolean(), updatedAt: z.number().finite()}).strict();
 
 export const notificationEvent = {
   name: eventName,
@@ -100,9 +101,9 @@ export class NotificationInbox {
     return control ? {id: control.id, expiresAt: control.updatedAt + 30_000,
       subscribed: !!this.active(), activationStopped: this.state.activationStoppedFor === control.id} : undefined;
   }
-  private sharingAllowed() {
+  private sharingAllowed(id?: string) {
     const control = this.sharingControl();
-    return !this.state.sharingManaged || !!control;
+    return !this.state.sharingManaged || !!control && control.epoch === id;
   }
   private refreshSharing() {
     const intent = this.sharingIntent();
@@ -209,7 +210,7 @@ export class NotificationInbox {
       // including legacy migration with ordinary sharing disabled. They never
       // create a sharing intent or activate reception by themselves.
       const diagnostic = p.source_verification === 'synthetic-test-marker' && p.source_app === 'Dot Notification Lab' && /^DOT-LAB-[A-F0-9]{8}$/.test(p.title);
-      if (!this.sharingAllowed() && !diagnostic) throw new Error('Notification sharing is stopped; nothing sent');
+      if (!this.sharingAllowed(p.sharing_id) && !diagnostic) throw new Error('Notification sharing is stopped; nothing sent');
       const sub = this.active();
       if (!sub) throw new Error('No notification subscription; nothing sent');
       const n: State['notifications'][number] = { ...p, status: 'pending', received_at: new Date().toISOString() };

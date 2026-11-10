@@ -26,12 +26,14 @@ function fixture() {
   const bridge = new Bridge(join(root,'bridge.json'),sender,hosts);
   const inbox = new NotificationInbox(join(root,'notifications.json'),sender,hosts,()=>now);
   const activation = new SharingActivation(join(root,'activation.json'),bridge,inbox,()=>now,'notification');
-  let id = randomUUID();
+  let id = randomUUID(), epoch = randomUUID(), wasEnabled = false;
   const control = (enabled = true, fresh = false) => {
     if (fresh) id = randomUUID();
-    writeFileSync(join(root,'notification-sharing.json'),JSON.stringify({version:1,id,enabled,updatedAt:now}),{mode:0o600});
+    if (enabled && (!wasEnabled || fresh)) epoch = randomUUID();
+    wasEnabled = enabled;
+    writeFileSync(join(root,'notification-sharing.json'),JSON.stringify({version:1,id,epoch,enabled,updatedAt:now}),{mode:0o600});
   };
-  const payload = () => ({id:randomUUID(),source_app:'Fixture',title:'Synthetic notification',body:'Test only',observed_at:new Date(now).toISOString(),source_verification:'synthetic-test-marker'});
+  const payload = () => ({id:randomUUID(),source_app:'Fixture',title:'Synthetic notification',body:'Test only',observed_at:new Date(now).toISOString(),source_verification:'synthetic-test-marker',sharing_id:epoch});
   return {root,voice,notification,bridge,inbox,activation,events,control,payload,sender,hosts,now:()=>now,
     advance:(ms:number)=>{now+=ms;}, response:(status:number)=>{response=status;},
     close:()=>{activation.close();inbox.close();bridge.close();rmSync(root,{recursive:true,force:true});}};
@@ -123,4 +125,21 @@ test('location and notification controls coexist in the bounded input envelope w
   assert.equal(rows.length,10);assert.deepEqual(rows.slice(0,2).map((row:any)=>row.event),['location.updated','notification.created']);
   assert.equal(f.bridge.history()[8].readAt,undefined);
   f.control(false);assert.deepEqual(f.activation.pending(),[]);assert.equal(activation.pending().length,1);
+});
+
+test('a notification captured before stop cannot cross a new sharing choice, while an accepted retry stays idempotent',async t=>{
+  const f=fixture();t.after(f.close);f.control();await f.inbox.subscribe(f.notification);
+  const stale=f.payload(), accepted=f.payload();await f.inbox.submit(accepted);
+  f.control(false);f.control(true,true);
+  await assert.rejects(f.inbox.submit(stale),/sharing is stopped/);
+  const {sharing_id: _id,...missing}=f.payload();await assert.rejects(f.inbox.submit(missing),/sharing is stopped/);
+  await f.inbox.submit(accepted);assert.equal(f.events.length,1);
+  await f.inbox.submit(f.payload());assert.equal(f.events.length,2);
+});
+
+test('pause and resume fence earlier notifications without making a new sharing choice',async t=>{
+  const f=fixture();t.after(f.close);f.control();await f.inbox.subscribe(f.notification);
+  const stale=f.payload();f.control(false);f.control();
+  await assert.rejects(f.inbox.submit(stale),/sharing is stopped/);
+  await f.inbox.submit(f.payload());assert.equal(f.events.length,1);
 });
