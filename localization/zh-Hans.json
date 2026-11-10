@@ -437,7 +437,7 @@
   "mac.remove_all_even_connections_230": "要移除所有 Even 连接吗？",
   "mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing": "此操作会使通过此 Mac 配对码注册的所有 Even 连接失效，包括尚未使用的配对码。消息发送和位置共享会停止，各设备都必须重新配对。\n\nChatGPT 连接设置和已保存的对话会保留。",
   "mac.remove_all": "全部移除",
-  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "使用此 Mac 的 Dot Link 连接来接收我的 Even G2 消息。会话为 personal-g2。请订阅 utterance.created，使用 get_pending_utterances 读取实际 ID 和消息，再用 reply_to_g2 回复。主动发送新消息请使用 send_message_to_g2。首先请检查 get_status。",
+  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "请让现有的 Dot 通过这台 Mac 的 Dot Link 连接使用 personal-g2 会话。订阅 utterance.created 和 location.updated。用 get_pending_utterances 读取消息和共享操作请求，用 reply_to_g2 回答实际问题。当我在 Dot Link 中开启共享时，根据获准使用的最新信息判断是否值得提供提示；否则通过 respond_to_location 保持安静。无需额外设置监控或再次确认。请先检查 get_status。",
   "mac.setup_message_copied_paste_and_send_it_to_your_existing_dot": "设置消息已复制。请粘贴到您原本的 Dot 并发送。",
   "mac.copied_paste_it_on_your_iphone": "已复制。请粘贴到 iPhone 上。",
   "mac.expired_create_a_new_pairing_code": "已过期。请创建新的配对码。",

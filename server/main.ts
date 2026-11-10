@@ -13,6 +13,7 @@ import { LocalGeography } from './geography/loader.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 import { LocationHistoryStore } from './history/store.ts';
 import { createHash } from 'node:crypto';
+import { SharingActivation } from './sharing-activation.ts';
 
 const tokens = {
   mcp: readFileSync(resolve('.runtime/mcp-key'), 'utf8').trim(),
@@ -46,7 +47,10 @@ try {
     {ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
       ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
 } catch { console.error('Weather unavailable; ordinary conversation remains available'); }
-const server = bridgeServer(bridge, tokens, notifications, locations, history, weather);
+let activation: SharingActivation | undefined;
+try { activation = new SharingActivation(resolve('.runtime/sharing-activation.json'), bridge, locations); }
+catch { console.error('Sharing activation unavailable; ordinary conversation remains available'); }
+const server = bridgeServer(bridge, tokens, notifications, locations, history, weather, activation);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.listen(port, '127.0.0.1', () => console.log(`Private Dot bridge listening on 127.0.0.1:${port}; Dot connection not verified`));

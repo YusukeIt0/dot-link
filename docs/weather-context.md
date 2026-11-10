@@ -155,6 +155,27 @@ fixed; they do not trigger network traffic.
 HTTP gateway forwards the authenticated subject to `/api/weather`; MCP cannot
 change consent. Consent storage failure disables only weather at startup.
 
+The sharing controls include autonomous context reception. Users do not separately
+configure event subscriptions or ask Dot to enable proactive weather. The normal
+Mac setup message prepares both input and location reception. For an existing
+input-only connection, `SharingActivation` sends an explicitly identified owner
+sharing-control request through that verified input subscription. The pending
+input tool includes it in the legacy `utterances` envelope with explicit
+`source: owner_sharing_control` provenance and text identifying the app action.
+Existing handlers that process only that list can therefore see the action without
+account-specific instruction changes. Control acknowledgements never create a
+G2 message or history entry, and succeed only after actual registration. ChatGPT must create its
+own `location.updated` subscription; the relay never fabricates one or copies a
+callback to a different event. No control request enters G2 conversation history.
+Requests are invalidated by stop, expired consent, owner revocation or shutdown;
+delivery has at most three attempts with a persistent identity and retry budget.
+An explicit `events/unsubscribe` stops activation for that sharing session, including
+across relay restart. It is not treated as subscription expiry or transport failure;
+a new sharing session or an explicit subscription can resume reception.
+Actual `locationSubscribed` state remains the readiness signal. An accepted
+webhook alone is not successful activation. Existing weather consent remains
+independent, so preparing context reception does not authorize provider queries.
+
 Automatic checks run every 30 seconds only while consent, fresh location and the
 existing location subscription allow them. Same-cell checks are at most once per
 minute; the acquisition cache enforces much longer external-request limits.

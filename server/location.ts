@@ -20,7 +20,8 @@ const EVENT = 'location.updated';
 const eventArgs = z.object({ session_id: z.literal(SESSION) }).strict();
 const delivery = z.object({ mode: z.literal('webhook'), url: z.string().max(2048), secret: z.string().max(100) }).strict();
 const subscriptionSchema = z.object({ id: z.string(), url: z.string(), secret: z.string(), expiresAt: z.number() });
-const diskSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), revoked: z.array(z.string().uuid()).max(100) });
+const diskSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), revoked: z.array(z.string().uuid()).max(100),
+  activationStoppedFor: z.string().uuid().optional() });
 const fixSchema = z.object({
   latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180),
   accuracy: z.number().min(0).max(200), measured_at: z.string().datetime(),
@@ -114,6 +115,13 @@ export class LocationContext {
   }
   private save(next = this.disk) { writeFileSync(`${this.path}.tmp`, JSON.stringify(next), { mode: 0o600 }); renameSync(`${this.path}.tmp`, this.path); this.disk = next; }
   private active(): Subscription | undefined { const sub = this.disk.subscription; return sub && sub.expiresAt > this.now() ? sub : undefined; }
+  /** Consent lifecycle only; never expose coordinates or a device owner here. */
+  sharingIntent() {
+    this.checkOwner();
+    return !this.closed && this.sharingId && this.leaseUntil > this.now()
+      ? {id: this.sharingId, expiresAt: this.leaseUntil, subscribed: !!this.active(),
+        activationStopped: this.disk.activationStoppedFor === this.sharingId} : undefined;
+  }
   private checkOwner() {
     if (this.owner && !this.ownerAuthorized(this.owner)) this.clear();
   }
@@ -337,7 +345,7 @@ export class LocationContext {
       const id = 'sub_' + createHash('sha256').update(JSON.stringify([SESSION, EVENT, p.delivery.url])).digest('hex').slice(0, 32);
       if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
-      await this.sender.verify(sub); this.save({ ...this.disk, subscription: sub });this.syncGeography(true); this.maybeEvent(); this.changes.emit();
+      await this.sender.verify(sub); this.save({ ...this.disk, subscription: sub, activationStoppedFor: undefined });this.syncGeography(true); this.maybeEvent(); this.changes.emit();
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
     this.subscriptions = run.catch(() => {}); return run;
@@ -345,7 +353,8 @@ export class LocationContext {
   unsubscribe(raw: unknown) {
     const run = this.subscriptions.then(() => {
       const p = subscriptionArguments(z.object({ name: z.literal(EVENT), arguments: eventArgs, delivery: delivery.omit({ secret: true }) }), raw);
-      if (this.disk.subscription?.url === p.delivery.url) { this.save({ ...this.disk, subscription: undefined });this.syncGeography(); this.pending = undefined; if (this.retry) clearTimeout(this.retry); this.changes.emit(); }
+      if (this.disk.subscription?.url === p.delivery.url) { this.save({ ...this.disk, subscription: undefined,
+        activationStoppedFor: this.sharingId ?? this.disk.activationStoppedFor });this.syncGeography(); this.pending = undefined; if (this.retry) clearTimeout(this.retry); this.changes.emit(); }
       return {};
     });
     this.subscriptions = run.catch(() => {}); return run;
