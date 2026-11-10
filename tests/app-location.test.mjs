@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, realpath, symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ensureAppLocation, handoffApp, managedAppPath} from '../scripts/lib/app-location.mjs';
+import {ensureAppLocation, handoffApp, managedAppPath, runAppHandoff, consumeHandoffFailure} from '../scripts/lib/app-location.mjs';
 import {verifyUpdateApp} from '../scripts/lib/update-storage.mjs';
 import {installMenuApp} from '../scripts/lib/menu-install.mjs';
 
@@ -142,4 +142,38 @@ test('handoff refuses a foreign host and never signals a host that stays alive',
   const execute = async (cmd, args) => cmd === '/bin/ps' ? `501 original ${f.source}/Contents/MacOS/DotLink` : f.execute(cmd, args);
   await assert.rejects(handoffApp({source: f.source, hostPID: 1234}, {...f, execute, uid: 501, wait: async () => {waits++;}}), /APP_LOCATION_REPAIR/);
   assert.equal(waits, 80); await f.preserved();
+});
+
+test('post-exit open failure reopens source once with guidance and consumes a bounded receipt', async t => {
+  const f = await fixture(t); let reads = 0; const opens = [];
+  const now = Date.now();
+  const execute = async (cmd, args) => {
+    if (cmd === '/bin/ps') return ++reads === 1 ? `501 original ${f.source}/Contents/MacOS/DotLink` : '';
+    if (cmd === '/usr/bin/open') {
+      opens.push(args);
+      if (args[0] === f.app) throw new Error('launch failed');
+      return '';
+    }
+    return f.execute(cmd, args);
+  };
+  assert.equal(await runAppHandoff({source:f.source,hostPID:1234},{...f,execute,uid:501,now}), 'failed');
+  assert.deepEqual(opens, [[f.app],[f.source,'--args','--app-location-failed']]);
+  assert.equal(await consumeHandoffFailure({home:f.home,now:now+1}), 'APP_LOCATION_REPAIR');
+  assert.equal(await consumeHandoffFailure({home:f.home,now:now+2}), undefined);
+  await f.preserved();
+});
+
+test('failed fallback leaves a receipt for manual launch, expires it, and pre-arm failures do not reopen anything', async t => {
+  const f = await fixture(t); let reads=0, opens=0; const now=Date.now();
+  const execute=async(cmd,args)=>{
+    if(cmd==='/bin/ps')return ++reads===1?`501 original ${f.source}/Contents/MacOS/DotLink`:'';
+    if(cmd==='/usr/bin/open'){opens++;throw new Error('no GUI session');}
+    return f.execute(cmd,args);
+  };
+  assert.equal(await runAppHandoff({source:f.source,hostPID:1234},{...f,execute,uid:501,now}), 'failed');
+  assert.equal(opens,2);
+  assert.equal(await consumeHandoffFailure({home:f.home,now:now+300001}),undefined);
+  await assert.rejects(runAppHandoff({source:f.source,hostPID:0},{...f,execute,uid:501}),/APP_LOCATION_REPAIR/);
+  assert.equal(opens,2);
+  assert.equal(await consumeHandoffFailure({home:f.home,now}),undefined);
 });

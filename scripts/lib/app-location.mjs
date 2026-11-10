@@ -1,5 +1,5 @@
 import {fork} from 'node:child_process';
-import {lstat, realpath} from 'node:fs/promises';
+import {lstat, realpath, mkdir, writeFile, readFile, rename, unlink} from 'node:fs/promises';
 import {join, resolve} from 'node:path';
 import {homedir} from 'node:os';
 import {fileURLToPath} from 'node:url';
@@ -10,6 +10,31 @@ import {installMenuApp} from './menu-install.mjs';
 
 export const managedAppPath = (home = homedir()) => join(home, 'Applications/Dot Link.app');
 const failure = (code, cause) => Object.assign(new Error(code, {cause}), {setupCode: code});
+const failurePath = home => join(home, 'Library/Caches/app.tripsurf.dotlink.mac/location-handoff.json');
+const locationCodes = new Set(['APP_LOCATION_MISSING', 'APP_LOCATION_REPAIR', 'APP_LOCATION_OLDER']);
+
+// A failed detached handoff must remain visible on the next launch even when
+// LaunchServices cannot reopen either copy. The receipt contains no paths/data.
+export async function consumeHandoffFailure({home = homedir(), now = Date.now()} = {}) {
+  const file = failurePath(home);
+  try {
+    await regularPath(file);
+    const receipt = JSON.parse(await readFile(file, 'utf8'));
+    await unlink(file);
+    if (receipt.version === 1 && Number.isFinite(receipt.at) && receipt.at <= now && now - receipt.at < 300000 && locationCodes.has(receipt.code)) return receipt.code;
+  } catch { /* An absent/invalid receipt must not prevent ordinary startup. */ }
+  return undefined;
+}
+async function saveHandoffFailure(code, {home, now}) {
+  const parent = join(home, 'Library/Caches/app.tripsurf.dotlink.mac');
+  await mkdir(parent, {recursive: true, mode: 0o700});
+  await regularPath(parent);
+  const temp = join(parent, `location-handoff.${process.pid}.tmp`);
+  try {
+    await writeFile(temp, JSON.stringify({version: 1, at: now, code}), {mode: 0o600, flag: 'wx'});
+    await rename(temp, failurePath(home));
+  } finally { await unlink(temp).catch(() => {}); }
+}
 async function buildNumber(app, execute) {
   const value = await execute('/usr/bin/plutil', ['-extract', 'CFBundleVersion', 'raw', '-o', '-', join(app, 'Contents/Info.plist')]);
   if (!/^\d+$/.test(value) || !Number.isSafeInteger(Number(value))) throw failure('APP_LOCATION_REPAIR');
@@ -94,9 +119,27 @@ export async function armAppHandoff(options) {
   });
 }
 
+export async function runAppHandoff(options, {home = homedir(), execute = run, now = Date.now(), ...dependencies} = {}) {
+  let armed = false;
+  try { return await handoffApp(options, {home, execute, ...dependencies, ready: () => {armed = true; dependencies.ready?.();}}); }
+  catch (error) {
+    if (!armed) throw error; // The original GUI is still available to show guidance.
+    const code = locationCodes.has(error.message) ? error.message : 'APP_LOCATION_REPAIR';
+    try { await saveHandoffFailure(code, {home, now}); } catch { /* The explicit argument below still exposes the failure. */ }
+    try {
+      await verifyUpdateApp(options.source, execute);
+      // The marker/argument makes this one recovery opening show guidance rather
+      // than immediately starting another detached handoff.
+      await execute('/usr/bin/open', [options.source, '--args', '--app-location-failed']);
+    } catch { /* Receipt remains for a later manual launch. No unbounded retry. */ }
+    return 'failed';
+  }
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   try {
     if (process.argv[2] !== '--handoff') throw new Error('invalid action');
-    await handoffApp(JSON.parse(process.argv[3]), {ready: () => process.send?.('ready')});
+    const result = await runAppHandoff(JSON.parse(process.argv[3]), {ready: () => process.send?.('ready')});
+    if (result === 'failed') process.exitCode = 1;
   } catch { process.exitCode = 1; }
 }

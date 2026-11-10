@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { discoverInstallation, installPayload, exists, nextSetupStep } from './lib/mac-install.mjs';
 import { installMenuApp, registerMenuApp } from './lib/menu-install.mjs';
-import { ensureAppLocation, armAppHandoff } from './lib/app-location.mjs';
+import { ensureAppLocation, armAppHandoff, consumeHandoffFailure, managedAppPath } from './lib/app-location.mjs';
 import { prepareUpdate, finishUpdate, initialSetupReady } from './lib/app-update.mjs';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
@@ -114,6 +114,8 @@ async function saveTunnel() {
 try {
   let result;
   if (action === 'app-locate') {
+    const previousFailure = await consumeHandoffFailure();
+    if (input.handoffFailed === 'true' || (previousFailure && appBundle !== managedAppPath())) throw new Error(previousFailure ?? 'APP_LOCATION_REPAIR');
     const location = await ensureAppLocation(appBundle);
     if (location.handoff) await armAppHandoff({source:location.source,hostPID:Number(input.hostPID),background:input.background==='true'});
     result = {appLocationReady:!location.handoff,appHandoff:location.handoff};

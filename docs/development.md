@@ -124,7 +124,11 @@ unverifiable canonical copy produces localized replacement guidance; an equal or
 newer verified copy is opened after the original GUI exits. The detached handoff
 pins the source PID/owner/start time/executable, waits at most 20 seconds, rechecks
 the target and never signals the GUI or changes launchd. Background launches stay
-background launches. Settings, journal and pause/quit intent are untouched by
+background launches. A post-acknowledgment handoff failure writes a path-free,
+five-minute, single-use receipt in the app's user cache and attempts to reopen the
+verified source once with localized guidance, without another automatic handoff.
+If that opening also fails, the next manual external launch consumes the receipt;
+a canonical launch clears it and proceeds normally. Settings, journal and pause/quit intent are untouched by
 location handling; the canonical app then follows ordinary startup recovery.
 Missing managed bundles also produce a specific error in recovery and resume
 instead of enabling jobs with absent executables. Ownership checks still recognize

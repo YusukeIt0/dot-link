@@ -106,15 +106,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         contentScroll = SetupWindowLayout.install(in: window)
         render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         automaticResumePending = !CommandLine.arguments.contains("--background")
-        locateApp()
+        locateApp(handoffFailed: CommandLine.arguments.contains("--app-location-failed"))
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateExpiry()
             self?.refreshVisiblePairing()
         }
     }
-    func locateApp() {
+    func locateApp(handoffFailed: Bool = false) {
         automaticResumePending = !CommandLine.arguments.contains("--background")
-        perform("app-locate", input: ["hostPID": String(ProcessInfo.processInfo.processIdentifier), "background": CommandLine.arguments.contains("--background") ? "true" : "false"])
+        perform("app-locate", input: ["hostPID": String(ProcessInfo.processInfo.processIdentifier), "background": CommandLine.arguments.contains("--background") ? "true" : "false", "handoffFailed": handoffFailed ? "true" : "false"])
     }
     func updateAppMenu() {
         let menu = NSMenu(); let appItem = NSMenuItem(); menu.addItem(appItem)
