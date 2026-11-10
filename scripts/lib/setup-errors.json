@@ -379,13 +379,13 @@
       "de": "Dot Link fehlt in ~/Applications. Beenden Sie die App, legen Sie eine offizielle Kopie von Dot Link.app dort ab und öffnen Sie sie. Behalten Sie Ihre gespeicherten Einstellungen."
     },
     "APP_LOCATION_REPAIR": {
-      "en": "Could not safely open the installed app. Quit and replace only ~/Applications/Dot Link.app with an official download. Keep your saved settings.",
-      "ja": "インストール済みアプリを安全に開けません。終了して~/Applications/Dot Link.appだけを公式配布版に入れ替えてください。保存済み設定は残してください。",
-      "ko": "설치된 앱을 안전하게 열 수 없습니다. 앱을 종료하고 ~/Applications/Dot Link.app만 공식 배포본으로 교체하세요. 저장된 설정은 유지하세요.",
-      "zh-Hant": "無法安全地開啟已安裝的 App。請結束 App，僅將 ~/Applications/Dot Link.app 換成官方下載版本。請保留已儲存的設定。",
-      "zh-Hans": "无法安全地打开已安装的应用。请退出应用，仅将 ~/Applications/Dot Link.app 替换为官方下载版本。请保留已保存的设置。",
-      "fr": "Impossible d’ouvrir l’app installée en toute sécurité. Quittez l’app et remplacez uniquement ~/Applications/Dot Link.app par une copie officielle. Conservez vos réglages enregistrés.",
-      "de": "Die installierte App lässt sich nicht sicher öffnen. Beenden Sie die App und ersetzen Sie nur ~/Applications/Dot Link.app durch einen offiziellen Download. Behalten Sie Ihre gespeicherten Einstellungen."
+      "en": "Quit Dot Link. Use a regular ~/Applications folder containing a full official copy of Dot Link.app; replace any links at these paths. Keep your saved settings, then reopen Dot Link.",
+      "ja": "Dot Linkを終了し、通常の~/Applicationsフォルダと公式のDot Link.app本体を使用してください。これらがリンクの場合は置き換えてください。保存済み設定は残して開き直してください。",
+      "ko": "Dot Link를 종료하세요. 일반 ~/Applications 폴더와 공식 Dot Link.app 전체 복사본을 사용하고, 해당 경로의 링크는 교체하세요. 저장된 설정은 유지한 채 다시 여세요.",
+      "zh-Hant": "請結束 Dot Link，使用一般的 ~/Applications 資料夾和完整的官方 Dot Link.app 副本；如果這些路徑是連結，請替換連結。保留已儲存的設定，然後重新開啟。",
+      "zh-Hans": "请退出 Dot Link，使用普通的 ~/Applications 文件夹和完整的官方 Dot Link.app 副本；如果这些路径是链接，请替换链接。保留已保存的设置，然后重新打开。",
+      "fr": "Quittez Dot Link. Utilisez un dossier ~/Applications ordinaire contenant une copie complète de l’app officielle Dot Link.app ; remplacez les liens à ces emplacements. Conservez vos réglages, puis rouvrez l’app.",
+      "de": "Beenden Sie Dot Link. Verwenden Sie einen normalen Ordner ~/Applications mit einer vollständigen offiziellen Kopie von Dot Link.app; ersetzen Sie Verknüpfungen an diesen Pfaden. Behalten Sie Ihre Einstellungen und öffnen Sie die App erneut."
     },
     "APP_LOCATION_OLDER": {
       "en": "A newer copy is open outside ~/Applications. Quit and replace only ~/Applications/Dot Link.app with this newer copy, then open it. Keep your saved settings.",

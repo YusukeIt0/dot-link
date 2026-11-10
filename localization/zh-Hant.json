@@ -591,6 +591,6 @@
   "mac.open_applications_folder": "開啟 Applications 資料夾",
   "mac.download_dot_link": "下載 Dot Link",
   "setup.codes.APP_LOCATION_MISSING": "~/Applications 中沒有 Dot Link。請結束 App，將官方 Dot Link.app 放入該資料夾後重新開啟。請保留已儲存的設定。",
-  "setup.codes.APP_LOCATION_REPAIR": "無法安全地開啟已安裝的 App。請結束 App，僅將 ~/Applications/Dot Link.app 換成官方下載版本。請保留已儲存的設定。",
+  "setup.codes.APP_LOCATION_REPAIR": "請結束 Dot Link，使用一般的 ~/Applications 資料夾和完整的官方 Dot Link.app 副本；如果這些路徑是連結，請替換連結。保留已儲存的設定，然後重新開啟。",
   "setup.codes.APP_LOCATION_OLDER": "目前從 ~/Applications 以外的位置開啟了較新版本。請結束 App，僅將 ~/Applications/Dot Link.app 換成這個較新版本後重新開啟。請保留已儲存的設定。"
 }

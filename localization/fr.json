@@ -591,6 +591,6 @@
   "mac.open_applications_folder": "Ouvrir le dossier Applications",
   "mac.download_dot_link": "Télécharger Dot Link",
   "setup.codes.APP_LOCATION_MISSING": "Dot Link est absent de ~/Applications. Quittez l’app, placez-y une copie officielle de Dot Link.app, puis ouvrez-la. Conservez vos réglages enregistrés.",
-  "setup.codes.APP_LOCATION_REPAIR": "Impossible d’ouvrir l’app installée en toute sécurité. Quittez l’app et remplacez uniquement ~/Applications/Dot Link.app par une copie officielle. Conservez vos réglages enregistrés.",
+  "setup.codes.APP_LOCATION_REPAIR": "Quittez Dot Link. Utilisez un dossier ~/Applications ordinaire contenant une copie complète de l’app officielle Dot Link.app ; remplacez les liens à ces emplacements. Conservez vos réglages, puis rouvrez l’app.",
   "setup.codes.APP_LOCATION_OLDER": "Une version plus récente est ouverte en dehors de ~/Applications. Quittez l’app, remplacez uniquement ~/Applications/Dot Link.app par cette version, puis ouvrez-la. Conservez vos réglages enregistrés."
 }
