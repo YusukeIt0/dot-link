@@ -2,6 +2,7 @@ import {validateTriage, planLabels} from './review-labels.mjs';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {latestReceipt, assertReviewRun} from './review-receipt.mjs';
+import {collectPriorReviews} from './review-provenance.mjs';
 import {hash, reviewInput, acceptanceMarker, trustedUser, dependencyBot, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
@@ -43,12 +44,15 @@ function snapshot() {
   const main = get(`${root}/commits/main`).sha;
   const base = pr && pr.base.ref !== 'main'
     ? {ref: pr.base.ref, sha: get(`${root}/commits/${encodeURIComponent(pr.base.ref)}`).sha} : undefined;
+  const priorReviews = pr && collectPriorReviews(pr, rows, path => get(`${root}/${path}`), path =>
+    JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat(), id =>
+    JSON.parse(gh(['api', 'graphql', '-f', `query=${commentRevisionQuery}`, '-F', `id=${id}`])).data.node, botId);
   const scope = pr && scopeRevision(rows, pr.head.sha, path => get(`${root}/${path}`), path =>
-    JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
+    JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat(), priorReviews);
   const feedback = pr && reviewDiscussion(pr.number, path => JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
   const data = reviewInput(issue, pr, main, rows, base, scope, feedback);
   const fingerprint = hash(data);
-  return {issue, pr, rows, data, fingerprint};
+  return {issue, pr, rows, data, fingerprint, priorReviews};
 }
 function publish(rows, body) {
   const existing = rows.filter(owned).at(-1);
