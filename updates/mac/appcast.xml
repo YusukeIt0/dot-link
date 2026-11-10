@@ -1,9 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.36</title><sparkle:version>116</sparkle:version><sparkle:shortVersionString>0.4.36</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Fixed recovery after an interrupted setup or update, keeping saved connection settings and history.
-- Made recovery available when a previous setup or update is unfinished.
-- Improved guidance for replacing a damaged app without deleting saved settings.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.36-116/Dot-Link-0.4.36-116-arm64.zip" sparkle:installationType="application" sparkle:edSignature="cPLAlQo971NFrk4D3NwDUi+ZnUEYLm3Uw1NZnQVM1nDt+7YbQ/5U6Iv/uA0KHcETpgtLHwCs2TK6/BCvQWsuDA==" length="68454177" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 57Exzd6yPan3KJEhkjoQSD1fsKq4KHSfN4+d8INA62LhwkJm3NlDAL1jGME6fMgDj0Ei1jaH6qIOxq8WVVVnBg==
-length: 1289
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.37</title><sparkle:version>117</sparkle:version><sparkle:shortVersionString>0.4.37</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Fixed startup when the installed Mac app has been moved or is missing. Dot Link now restores a verified copy and opens it from Applications.
+- Added clearer recovery guidance for older or damaged installed copies while preserving saved settings and connections.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.37-117/Dot-Link-0.4.37-117-arm64.zip" sparkle:installationType="application" sparkle:edSignature="tomDIILVoCFYs1EzRsdDGuTV4eEWs4Z7Cy0huN+r5UvyT2r0Llyr8EdQnIU8pgWsR73VQnEyQuazNHjSnPp3Aw==" length="68464639" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: xTn7RhGIR0RKI5L7uCjS7d02T5pWG2nwh88TSPm4CCUjdZ1m8q/m5M69XKQKvkYIBg4zCdBdEyNy1ZoAVsSUCw==
+length: 1297
 -->
