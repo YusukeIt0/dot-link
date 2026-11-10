@@ -17,7 +17,7 @@ if (process.env.CI_REUSE_RUN) {
   reused = await verifyReuse(Number(process.env.CI_REUSE_RUN),
     reuseContext({...process.env, CI_HEAD: actual}), githubReader(process.env.GH_TOKEN));
   // Runner may already be Linux. Never silently substitute incomplete native tests.
-  if (!reused) throw new Error('Reuse evidence changed or is unavailable; rerun the workflow for full macOS validation.');
+  if (!reused) throw new Error('Reuse evidence changed or is unavailable. Use GitHub "Re-run all jobs" for full macOS validation; "Re-run failed jobs" retains the old reuse plan and cannot recover it.');
 }
 const run = (command, args) => {
   const r = spawnSync(command, args, {stdio: 'inherit'});

@@ -393,7 +393,8 @@ Preflight searches at most 100 recent Tests runs and verifies at most five match
 candidates. It also checks that the source has no newer run/attempt, and the consuming
 job verifies the source again. Missing evidence or API failure during planning keeps
 full macOS execution. Lost/changed evidence after allocation fails the current job;
-rerun the whole workflow to force full macOS validation. Manual reruns and local
+choose GitHub **Re-run all jobs** to force full macOS validation. **Re-run failed
+jobs** inherits the earlier Ubuntu reuse plan and cannot recover it. Manual reruns and local
 commands do not reuse execution. The 24-hour bound limits, but cannot eliminate,
 hosted-runner/environment drift; rerun fully when an external assumption changes.
 
