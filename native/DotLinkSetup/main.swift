@@ -57,6 +57,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var quitting = false
     var restartingUpdateHost = false
     var automaticResumePending = false
+    var appLocationReady = false
+    var appLocationValidated = false
     var currentAction = ""
     var lastChecked: Date?
     var migratingNotifications = false
@@ -105,14 +107,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         contentScroll = SetupWindowLayout.install(in: window)
         render(); if !CommandLine.arguments.contains("--background") && !quietUpdate { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
         automaticResumePending = !CommandLine.arguments.contains("--background")
-        configureUpdater()
-        appUpdater?.consumeHostRestart()
-        appUpdater?.beginStartupRecovery()
-        perform("update-recover")
+        locateApp(handoffFailed: CommandLine.arguments.contains("--app-location-failed"))
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateExpiry()
             self?.refreshVisiblePairing()
         }
+    }
+    func locateApp(handoffFailed: Bool = false) {
+        automaticResumePending = !CommandLine.arguments.contains("--background")
+        perform("app-locate", input: ["hostPID": String(ProcessInfo.processInfo.processIdentifier), "background": CommandLine.arguments.contains("--background") ? "true" : "false", "handoffFailed": handoffFailed ? "true" : "false"])
     }
     func updateAppMenu() {
         let menu = NSMenu(); let appItem = NSMenuItem(); menu.addItem(appItem)
@@ -252,13 +255,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         item(tr("mac.pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
         item(tr("mac.resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
         menu.addItem(.separator())
-        item(appUpdater?.checkTitle ?? tr("mac.check_for_updates"), #selector(menuCheckUpdate))
+        item(appUpdater?.checkTitle ?? tr("mac.check_for_updates"), #selector(menuCheckUpdate), enabled: appLocationReady)
         if let updater = appUpdater, !updater.message.isEmpty { let update = NSMenuItem(title: updater.message, action: nil, keyEquivalent: ""); update.isEnabled = false; menu.addItem(update) }
         menu.addItem(.separator())
         let quit = NSMenuItem(title: tr("mac.quit_dot_link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
         statusItem.menu = menu
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Before location validation this copy must not mutate relay lifecycle.
+        if !appLocationValidated && !busy { return .terminateNow }
         if restartingUpdateHost { notifications?.shutdown(); return .terminateNow }
         if appUpdater?.prepared == true {
             if appUpdater?.silentRelaunch == true { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateBackgroundRelaunchAt") }
@@ -425,7 +430,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             else { add(tr("mac.finish_mac_setup_to_configure_notifications")) }
             return
         }
-        if !showingPairing && step != "pair" && !yes("lifecycleStopped") { add(tr("mac.1_prepare_mac_2_connect_dot_3_pair_iphone"), size: 13, bold: true) }
+        if !showingPairing && step != "pair" && step != "appLocation" && !yes("lifecycleStopped") { add(tr("mac.1_prepare_mac_2_connect_dot_3_pair_iphone"), size: 13, bold: true) }
         space()
         if !message.isEmpty {
             let l = label(message); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
@@ -515,6 +520,13 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             outputSettings.controlSize = .large; outputSettings.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil); outputSettings.imagePosition = .imageLeading
             actions.addArrangedSubview(outputSettings)
             stack.addArrangedSubview(actions)
+        case "appLocation":
+            add(tr("mac.app_location_title"), size: 23, bold: true)
+            button(tr("mac.check_again"), primary: true) { [weak self] in self?.locateApp() }
+            button(tr("mac.open_applications_folder")) {
+                NSWorkspace.shared.open(URL(fileURLWithPath: NSHomeDirectory() + "/Applications", isDirectory: true))
+            }
+            button(tr("mac.download_dot_link")) { [weak self] in self?.open("https://github.com/YusukeIt0/dot-link/releases") }
         case "updateRecovery":
             add(tr("mac.the_relay_has_not_recovered_after_the_update"), size: 23, bold: true)
             add(tr("mac.your_settings_and_history_are_preserved_check_the_network_connection_and"))
@@ -528,17 +540,17 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(tr("mac.check"), primary: true) { [weak self] in self?.inspect() }
         }
         space()
-        if step != "pair" && step != "subscribe" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
+        if step != "pair" && step != "subscribe" && step != "appLocation" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
         let footer = NSStackView(); footer.orientation = .horizontal; footer.spacing = 10
         if let checked = lastChecked {
             let f = DateFormatter(); f.locale = Locale(identifier: Localization.shared.metadata[language]?.dateLocale ?? "en_US"); f.timeStyle = .medium
             let checkedLabel = label(tr("mac.last_checked") + f.string(from: checked), size: 12); checkedLabel.textColor = .secondaryLabelColor; footer.addArrangedSubview(checkedLabel)
         }
-        if step != "checking" {
+        if step != "checking" && appLocationReady {
             let refresh = ActionButton("") { [weak self] in self?.inspect() }; refresh.image = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: tr("mac.refresh_status")); refresh.isBordered = false; refresh.toolTip = tr("mac.refresh_status"); refresh.setAccessibilityLabel(refresh.toolTip!); footer.addArrangedSubview(refresh)
         }
         let footerSpace = NSView(); footerSpace.setContentHuggingPriority(.defaultLow, for: .horizontal); footer.addArrangedSubview(footerSpace)
-        let details = ActionButton("") { [weak self] in self?.showingDetails = true; self?.messageRecord = nil; self?.render() }; details.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: tr("mac.advanced_settings")); details.isBordered = false; details.toolTip = tr("mac.advanced_settings"); details.setAccessibilityLabel(details.toolTip!); footer.addArrangedSubview(details)
+        let details = ActionButton("") { [weak self] in self?.showingDetails = true; self?.messageRecord = nil; self?.render() }; details.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: tr("mac.advanced_settings")); details.isBordered = false; details.toolTip = tr("mac.advanced_settings"); details.setAccessibilityLabel(details.toolTip!); details.isEnabled = appLocationReady; footer.addArrangedSubview(details)
         stack.addArrangedSubview(footer); footer.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
     }
     @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = Localization.shared.languages[sender.indexOfSelectedItem]; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); notifications?.refreshLanguage(); updateAppMenu(); render() }
@@ -640,7 +652,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupFailure.copied = true; render()
     }
     func perform(_ action: String, input: [String: String] = [:]) {
-        guard !busy, appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; messageRecord = nil
+        guard appLocationReady || action == "app-locate" || (action == "shutdown" && appLocationValidated) else { return }
+        guard !busy, action == "app-locate" || appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; messageRecord = nil
         pairingRefreshGeneration += 1
         setupFailure.begin(action)
         if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
@@ -677,6 +690,20 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             progress?.isIndeterminate = false; progress?.doubleValue = Double(pct)
         case "result":
             busy = false; helper = nil
+            if currentAction == "app-locate" {
+                if value["appHandoff"] as? Bool == true {
+                    restartingUpdateHost = true; NSApp.terminate(nil); return
+                }
+                guard value["appLocationReady"] as? Bool == true else {
+                    receive(["kind": "error", "code": "APP_LOCATION_REPAIR"]); return
+                }
+                appLocationReady = true
+                appLocationValidated = true
+                if appUpdater == nil { configureUpdater() }
+                appUpdater?.consumeHostRestart()
+                appUpdater?.beginStartupRecovery()
+                perform("update-recover"); return
+            }
             if value["quitReady"] as? Bool == true {
                 allowTermination = true; notifications?.shutdown(); NSApp.reply(toApplicationShouldTerminate: true); return
             }
@@ -744,6 +771,13 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFailed() }
             let code = value["code"] as? String ?? "SETUP_FAILED"
+            if currentAction == "app-locate" || ["APP_LOCATION_MISSING", "APP_LOCATION_REPAIR", "APP_LOCATION_OLDER"].contains(code) {
+                appLocationReady = false; state = ["step": "appLocation"]
+                showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = false
+                let locationCode = ["APP_LOCATION_MISSING", "APP_LOCATION_OLDER"].contains(code) ? code : "APP_LOCATION_REPAIR"
+                messageRecord = LocalizedMessage("setup.codes." + locationCode)
+                updateMenu(); render(); showWindow(); return
+            }
             if SetupFailurePresentation.requiresRecovery(code) { state["step"] = "updateRecovery" }
             if ["MULTIPLE_INSTALLATIONS", "EXISTING_SERVICE_CONFLICT", "EXISTING_SERVICE_UNREADABLE", "INSTALL_FOLDER_OCCUPIED"].contains(code) { state["step"] = "conflict" }
             messageRecord = LocalizedMessage("mac.setup_could_not_complete_existing_settings_have_been_preserved_check_the", suffix: " (\(code))")

@@ -14,6 +14,14 @@ Download `Dot-Link-…-arm64.zip` from the [latest Mac release](https://github.c
 
 The installer checks the release checksum, app signature consistency and bundle identity. These checks do not provide Apple notarization. You can [inspect the installer](https://github.com/YusukeIt0/dot-link/blob/main/install.sh).
 
+From Mac 0.4.37, opening Dot Link elsewhere restores a missing app in `~/Applications`
+and opens the installed copy before connecting. If an equal or newer verified copy
+is already installed there, Dot Link opens it without replacing it. If the installed
+copy is older or cannot be verified, follow the app's replacement guidance. Replace
+only the app; keep your saved settings and do not use **Uninstall**. Finder may
+display Applications in your language; **Go → Go to Folder → `~/Applications`**
+opens the intended folder.
+
 ### First launch
 
 Dot Link is not Apple-notarized. If macOS says it cannot verify the developer and you trust the download, dismiss the warning, then open **System Settings → Privacy & Security → Open Anyway**. Authenticate in the Mac dialog and choose **Open**. A warning that the app is damaged or will harm your computer is different; see [Apple's guidance](https://support.apple.com/en-us/102445).
@@ -139,6 +147,7 @@ When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your
 | --- | --- |
 | Start relay fails | Follow the failed step and guidance shown in the Mac app. For Tailscale errors, check that Tailscale is connected and review MagicDNS, HTTPS Certificates and Serve access in the Tailscale admin console. An existing Serve/Funnel configuration is not replaced automatically. If it still fails, choose **Copy diagnostics** and include that text in your issue. |
 | A previous setup or update is unfinished | Choose **Retry recovery**. Dot Link completes the interrupted change using the installed app and keeps your connection settings, keys, pairing and history. Do not delete recovery files or uninstall. If the app reports that it cannot verify itself, replace only the app with an official download, keeping Application Support data, then reopen it. |
+| The app asks you to check its location | Quit Dot Link and follow the replacement guidance for `~/Applications/Dot Link.app`. This location requires a regular Applications folder and a full app copy; replace a link at either path rather than replacing files at its destination. Keep Application Support data and update records. Open the installed app afterward; you do not need to recreate your tunnel, keys or pairing. |
 | Mac cannot reach Dot | Confirm tunnel ID, API-key permissions and the connection selected in your existing Dot. Send the Mac app's setup message and choose **Check connection to Dot**. |
 | Even cannot connect | Keep the Mac awake, resume Dot Link, and connect Mac and iPhone to the same Tailscale network. Generate a fresh code and paste it in full within two minutes. |
 | Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. |

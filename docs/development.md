@@ -116,6 +116,26 @@ The app uses one public update feed at `https://raw.githubusercontent.com/Yusuke
 
 ### Manual update behavior
 
+Startup resolves the running bundle's real filesystem path before configuring the
+updater or recovering/resuming services. An external copy verifies itself and the
+canonical `~/Applications/Dot Link.app`; if the latter is missing, a verified staged
+copy is installed. Existing bundles are never replaced by this path. An older or
+unverifiable canonical copy produces localized replacement guidance; an equal or
+newer verified copy is opened after the original GUI exits. The detached handoff
+pins the source PID/owner/start time/executable, waits at most 20 seconds, rechecks
+the target and never signals the GUI or changes launchd. Background launches stay
+background launches. A post-acknowledgment handoff failure writes a path-free,
+five-minute, single-use receipt in the app's user cache and attempts to reopen the
+verified source once with localized guidance, without another automatic handoff.
+If that opening also fails, the next manual external launch consumes the receipt;
+a canonical launch clears it and proceeds normally. Settings, journal and pause/quit intent are untouched by
+location handling; the canonical app then follows ordinary startup recovery.
+Missing managed bundles also produce a specific error in recovery and resume
+instead of enabling jobs with absent executables. Ownership checks still recognize
+those jobs so that restoration is possible. Run `node --test
+tests/app-location.test.mjs tests/menu-install.test.mjs tests/app-lifecycle.test.mjs
+tests/app-update.test.mjs` for the location and data-preservation boundaries.
+
 Choosing **Update** explicitly permits interrupting the connection and conversation in progress. Before downloading a newly approved manual update, the UI cancels its old Sparkle session and hands off to a fresh host process. A detached helper verifies the installed bundle, captures the host PID, owner, start time and executable, and acknowledges readiness before the UI exits without stopping the relay. It waits for actual exit; after 10 seconds it sends TERM to the matching original host, then KILL after 15 seconds, and stops after 20 seconds if exit still cannot be established. It never signals by app name or restarts a launchd job. Before opening the installed app it verifies the bundle again. A short-lived, single-use token resumes only the approved build and download URL after startup recovery. A different target requires fresh approval; starts without an active approved handoff and expired markers do not resume an update. If the existing launchd job reopens a terminated host before the helper does, that fresh UI can consume the same approval only after the old PID has disappeared. The helper avoids reopening an already-running replacement. No launchd settings are changed. A configured relay that is temporarily offline, with no pending recovery journal, can still update; target completion continues to require verified recovery. A target already running after this handoff completes without another confirmation. Paused services remain paused. Handoff verification/arming failure leaves the current app available for retry; uncertain process state or relaunch failure does not trigger an unbounded retry.
 
 After Sparkle verifies the download, the Mac app uses `update-prepare-manual` to journal the prior running/paused state, back up the app, and stop its owned services through the normal lifecycle. It does not wait for a device long-poll, transcription, or pending reply to become idle. Pairing, credentials, and persisted messages are retained; unsent speech may need to be repeated. A stopped relay remains stopped after relaunch, while a running relay is restored and health-checked.

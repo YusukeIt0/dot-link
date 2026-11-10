@@ -1,11 +1,39 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm, access, realpath, symlink, chmod, readdir } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, access, realpath, symlink, chmod, readdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay } from '../scripts/lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from '../scripts/lib/app-uninstall.mjs';
 const exists=p=>access(p).then(()=>true,()=>false);
+test('missing managed app blocks resume before enabling jobs or changing pause intent',async t=>{
+ const f=await fixture(t);
+ await writeFile(join(f.runtime,'lifecycle.json'),JSON.stringify({stopped:true,reason:'pause'}));
+ await rm(f.app,{recursive:true});
+ await assert.rejects(resumeServices(f.directory,f),/APP_LOCATION_MISSING/);
+ assert.ok(!f.calls.some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','bootstrap'].includes(op)));
+ assert.equal((await lifecycleState(f.directory)).lifecycleReason,'pause');
+});
+test('differently cased Applications supports pause, resume and confirmed quit',async t=>{
+ const f=await fixture(t);
+ await rename(join(f.home,'Applications'),join(f.home,'applications'));
+ try {await realpath(f.app);} catch(error) {if(error.code==='ENOENT'){t.skip('case-sensitive filesystem');return;}throw error;}
+ await suspendServices(f.directory,f);
+ await resumeServices(f.directory,f);
+ assert.equal(f.loaded.size,4);assert.equal(f.disabled.size,0);
+ assert.equal((await lifecycleState(f.directory)).lifecycleStopped,false);
+ await suspendServices(f.directory,{...f,reason:'quit'});
+ assert.equal(f.loaded.size,1);assert.equal(f.disabled.size,4);
+ assert.equal((await lifecycleState(f.directory)).lifecycleReason,'quit');
+});
+for(const redirect of ['folder','app'])test(`resume rejects redirected ${redirect} without enabling jobs`,async t=>{
+ const f=await fixture(t);await suspendServices(f.directory,f);f.calls.length=0;
+ const path=redirect==='folder'?join(f.home,'Applications'):f.app;
+ const target=join(f.home,'redirect-target');await rename(path,target);await symlink(target,path);
+ await assert.rejects(resumeServices(f.directory,f),error=>error.message==='APP_LOCATION_REPAIR'&&error.setupCode==='APP_LOCATION_REPAIR');
+ assert.ok(!f.calls.some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','bootstrap'].includes(op)));
+ assert.equal((await lifecycleState(f.directory)).lifecycleReason,'pause');
+});
 async function fixture(t,{managed=false}={}) {
  const home=await realpath(await mkdtemp(join(tmpdir(),'dot-lifecycle-')));t.after(()=>rm(home,{recursive:true,force:true}));
  const directory=managed?join(home,'Library/Application Support/Dot Link'):join(home,'even-g2-dot');

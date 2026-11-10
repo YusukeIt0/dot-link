@@ -35,7 +35,9 @@ export async function withUpdateStorage(directory,operation,{timeout=10}={}){
 }
 
 export async function verifyUpdateApp(app,execute=run){
- if(!(await regularPath(app)).isDirectory())throw new Error('UPDATE_APP_INVALID');
+ let entry;
+ try{entry=await regularPath(app);}catch(cause){if(cause.code==='ENOENT')throw Object.assign(new Error('APP_LOCATION_MISSING',{cause}),{setupCode:'APP_LOCATION_MISSING'});throw cause;}
+ if(!entry.isDirectory())throw new Error('UPDATE_APP_INVALID');
  await regularPath(join(app,'Contents/Info.plist'));
  if(await execute('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(app,'Contents/Info.plist')])!==bundleID)throw new Error('UPDATE_APP_INVALID');
  try{await execute('/usr/bin/codesign',['--verify','--deep','--strict',app]);}

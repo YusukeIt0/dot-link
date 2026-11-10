@@ -586,5 +586,11 @@
   "even.weather_unavailable": "更新済みのMacに接続すると設定できます。",
   "even.weather_on": "気象情報は有効です。",
   "even.weather_off": "気象情報はオフです。",
-  "mac.notification_reception_stopped": "通知の受信は停止中です。再開するには共有をオフにしてからオンにしてください。"
+  "mac.notification_reception_stopped": "通知の受信は停止中です。再開するには共有をオフにしてからオンにしてください。",
+  "mac.app_location_title": "アプリの配置を確認",
+  "mac.open_applications_folder": "Applicationsフォルダを開く",
+  "mac.download_dot_link": "Dot Linkをダウンロード",
+  "setup.codes.APP_LOCATION_MISSING": "~/ApplicationsにDot Linkがありません。終了して公式のDot Link.appを配置し、開き直してください。保存済み設定は残してください。",
+  "setup.codes.APP_LOCATION_REPAIR": "Dot Linkを終了し、通常の~/Applicationsフォルダと公式のDot Link.app本体を使用してください。これらがリンクの場合は置き換えてください。保存済み設定は残して開き直してください。",
+  "setup.codes.APP_LOCATION_OLDER": "~/Applications以外から新しい版を開いています。終了して~/Applications/Dot Link.appだけをこの新しい版に入れ替え、開き直してください。保存済み設定は残してください。"
 }

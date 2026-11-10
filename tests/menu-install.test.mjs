@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installMenuApp, registerMenuApp } from '../scripts/lib/menu-install.mjs';
+import { ownedJobs } from '../scripts/lib/app-lifecycle.mjs';
+import { run } from '../scripts/lib/setup.mjs';
 test('menu app installation preserves an existing app and registers background login launch',async t=>{
- const home=await mkdtemp(join(tmpdir(),'dot-menu-'));t.after(()=>rm(home,{recursive:true,force:true}));
+ const home=await realpath(await mkdtemp(join(tmpdir(),'dot-menu-')));t.after(()=>rm(home,{recursive:true,force:true}));
  const source=join(home,'source.app');await mkdir(join(source,'Contents/MacOS'),{recursive:true});
  await writeFile(join(source,'Contents/Info.plist'),'fixture');await writeFile(join(source,'Contents/MacOS/DotLink'),'fixture');
  const execute=async()=> 'app.tripsurf.dotlink.mac';
@@ -20,4 +22,20 @@ test('menu app installation preserves an existing app and registers background l
  assert.doesNotMatch(plist,/StandardOutPath/);
  await assert.rejects(registerMenuApp(app,{home,execute:async()=>JSON.stringify({Label:'foreign'})}),/MENU_SERVICE_CONFLICT/);
  await assert.rejects(installMenuApp(source,{home,execute:async()=> 'foreign'}),/APP_BUNDLE_INVALID/);
+});
+
+test('differently cased Applications preserves login registration ownership across reinstall',async t=>{
+ const home=await realpath(await mkdtemp(join(tmpdir(),'dot-menu-case-')));t.after(()=>rm(home,{recursive:true,force:true}));
+ await mkdir(join(home,'applications'));
+ try {await realpath(join(home,'Applications'));} catch(error) {if(error.code==='ENOENT'){t.skip('case-sensitive filesystem');return;}throw error;}
+ const source=join(home,'source.app');await mkdir(join(source,'Contents/MacOS'),{recursive:true});
+ await writeFile(join(source,'Contents/Info.plist'),'fixture');await writeFile(join(source,'Contents/MacOS/DotLink'),'fixture');
+ const execute=async(command,args)=>command==='/bin/launchctl'?'':args[0]==='-extract'?'app.tripsurf.dotlink.mac':run(command,args);
+ const app=await installMenuApp(source,{home,execute});
+ assert.equal(app,join(home,'Applications/Dot Link.app'));
+ await registerMenuApp(app,{home,execute});
+ assert.equal((await ownedJobs(home,{home,execute,includeUI:true,app}))[0].name,'setup-ui');
+ const again=await installMenuApp(source,{home,execute});
+ await registerMenuApp(again,{home,execute});
+ assert.equal((await ownedJobs(home,{home,execute,includeUI:true,app})).length,1);
 });

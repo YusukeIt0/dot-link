@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { discoverInstallation, installPayload, exists, nextSetupStep } from './lib/mac-install.mjs';
 import { installMenuApp, registerMenuApp } from './lib/menu-install.mjs';
+import { ensureAppLocation, armAppHandoff, consumeHandoffFailure, isManagedApp } from './lib/app-location.mjs';
 import { prepareUpdate, finishUpdate, initialSetupReady } from './lib/app-update.mjs';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
@@ -112,7 +113,14 @@ async function saveTunnel() {
 
 try {
   let result;
-  if (['update-prepare','update-prepare-manual'].includes(action)) {
+  if (action === 'app-locate') {
+    const previousFailure = await consumeHandoffFailure();
+    if (input.handoffFailed === 'true' || (previousFailure && !await isManagedApp(appBundle))) throw new Error(previousFailure ?? 'APP_LOCATION_REPAIR');
+    const location = await ensureAppLocation(appBundle);
+    if (location.handoff) await armAppHandoff({source:location.source,hostPID:Number(input.hostPID),background:input.background==='true'});
+    result = {appLocationReady:!location.handoff,appHandoff:location.handoff};
+  }
+  else if (['update-prepare','update-prepare-manual'].includes(action)) {
     const found = await discoverInstallation();
     result = await prepareUpdate(found.directory, {interrupt:action==='update-prepare-manual',...(process.argv[3]!==undefined?{hostPID:Number(process.argv[3])}:{})});
   }

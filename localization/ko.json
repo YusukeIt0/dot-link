@@ -586,5 +586,11 @@
   "even.weather_unavailable": "업데이트된 Mac에 연결하여 기상 정보를 설정하세요.",
   "even.weather_on": "기상 정보가 활성화되어 있습니다.",
   "even.weather_off": "기상 정보가 꺼져 있습니다.",
-  "mac.notification_reception_stopped": "알림 수신이 중지되었습니다. 다시 시작하려면 공유를 껐다가 켜세요."
+  "mac.notification_reception_stopped": "알림 수신이 중지되었습니다. 다시 시작하려면 공유를 껐다가 켜세요.",
+  "mac.app_location_title": "설치된 앱 확인",
+  "mac.open_applications_folder": "Applications 폴더 열기",
+  "mac.download_dot_link": "Dot Link 다운로드",
+  "setup.codes.APP_LOCATION_MISSING": "~/Applications에 Dot Link가 없습니다. 앱을 종료한 후 공식 Dot Link.app을 해당 폴더에 넣고 다시 여세요. 저장된 설정은 유지하세요.",
+  "setup.codes.APP_LOCATION_REPAIR": "Dot Link를 종료하세요. 일반 ~/Applications 폴더와 공식 Dot Link.app 전체 복사본을 사용하고, 해당 경로의 링크는 교체하세요. 저장된 설정은 유지한 채 다시 여세요.",
+  "setup.codes.APP_LOCATION_OLDER": "~/Applications 외부에서 더 최신 버전을 열었습니다. 앱을 종료하고 ~/Applications/Dot Link.app만 이 최신 버전으로 교체한 후 다시 여세요. 저장된 설정은 유지하세요."
 }
