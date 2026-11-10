@@ -14,7 +14,7 @@ const settle = () => new Promise<void>(resolve => setImmediate(resolve));
 function fixture() {
   const directory = mkdtempSync(join(tmpdir(), 'dot-sharing-'));
   const path = join(directory, 'activation.json');
-  let now = Date.now(), authorized = true, response = 202;
+  let now = Date.now(), authorized = true, response = 202, locationResponse: number | undefined;
   let receive: ((event: any) => Promise<void>) | undefined;
   const events: any[] = [];
   const hosts = ['callback.example.test'];
@@ -25,20 +25,26 @@ function fixture() {
   const sender = new WebhookSender(async (_url, raw) => {
     const event = JSON.parse(raw);
     if (event.type === 'verification') return {status: 200, body: JSON.stringify({challenge: event.challenge})};
-    events.push(event); await receive?.(event); return {status: response, body: '{}'};
+    events.push(event); await receive?.(event); return {status: event.name === 'location.updated' ? locationResponse ?? response : response, body: '{}'};
   });
   const bridge = new Bridge(join(directory, 'bridge.json'), sender, hosts);
   const locations = new LocationContext(join(directory, 'location.json'), sender, hosts,
     (input, guard, context) => bridge.sendMessage(input, guard, context), () => now, () => authorized);
+  const locationInstances = [locations];
+  const restoreLocations = () => {
+    const restored = new LocationContext(join(directory,'location.json'),sender,hosts,
+      (input,guard,context)=>bridge.sendMessage(input,guard,context),()=>now,()=>authorized);
+    locationInstances.push(restored); return restored;
+  };
   const activations: SharingActivation[] = [];
-  const activate = () => {const a = new SharingActivation(path, bridge, locations, () => now); activations.push(a); return a;};
+  const activate = (context = locations) => {const a = new SharingActivation(path, bridge, context, () => now); activations.push(a); return a;};
   const id = randomUUID(), owner = 'a'.repeat(64);
   const enable = () => locations.control({sharing_id: id, enabled: true}, owner);
   const stop = () => locations.control({sharing_id: id, enabled: false}, owner);
-  return {path, bridge, locations, voice, location, events, id, owner, enable, stop, activate,
+  return {path, bridge, locations, voice, location, events, id, owner, enable, stop, activate, restoreLocations,
     advance: (ms: number) => {now += ms;}, revoke: () => {authorized = false;},
-    response: (status: number) => {response = status;}, receive: (fn: typeof receive) => {receive = fn;},
-    close: () => {for (const a of activations) a.close(); bridge.close(); locations.close(); rmSync(directory, {recursive: true, force: true});}};
+    response: (status: number) => {response = status;}, locationResponse: (status:number) => {locationResponse=status;}, receive: (fn: typeof receive) => {receive = fn;},
+    close: () => {for (const a of activations) a.close(); bridge.close(); for(const l of locationInstances)l.close(); rmSync(directory, {recursive: true, force: true});}};
 }
 
 test('existing utterance-only connection: one sharing action requests actual location registration without fake conversation', async t => {
@@ -132,15 +138,44 @@ test('revocation during delivery prevents delayed activation and no denied callb
   assert.deepEqual(a.pending(), []);
 });
 
-test('an established subscription that later stops can be re-established without cycling sharing', async t => {
+test('a deliberate conversational stop is not reversed, while a new sharing choice can activate again', async t => {
   const f = fixture(); t.after(f.close); await f.bridge.subscribe(f.voice);
   const a = f.activate(); f.enable(); await settle();
   await f.locations.subscribe(f.location); await settle();
   assert.equal(JSON.parse(readFileSync(f.path,'utf8')).delivery,'complete');
   await f.locations.unsubscribe({name:f.location.name, arguments:f.location.arguments,
     delivery:{mode:'webhook',url:f.location.delivery.url}});
+  await settle(); assert.equal(f.events.length,1);
+  assert.deepEqual(a.pending(),[]);
+  a.close(); f.locations.close(); const restored = f.restoreLocations();
+  restored.control({sharing_id:f.id,enabled:true},f.owner);
+  const resumed = f.activate(restored); await resumed.sync();
+  assert.equal(f.events.length,1); assert.deepEqual(resumed.pending(),[]);
+  restored.control({sharing_id:f.id,enabled:false},f.owner);
+  restored.control({sharing_id:randomUUID(),enabled:true},f.owner);
   await settle(); assert.equal(f.events.length,2);
   assert.notEqual(f.events[0].eventId,f.events[1].eventId);
+  assert.equal(resumed.pending().length,1);
+});
+
+test('natural subscription expiration can recover without another sharing choice', async t => {
+  const f = fixture(); t.after(f.close); await f.bridge.subscribe(f.voice);
+  const a = f.activate(); f.enable(); await settle();
+  await f.locations.subscribe({...f.location,ttlMs:1_000}); await settle();
+  f.advance(1_001); await a.sync();
+  assert.equal(f.events.filter(e=>e.name==='utterance.created').length,2);
+  assert.equal(a.pending().length,1);
+});
+
+test('a gone location callback can recover through the surviving input connection', async t => {
+  const f=fixture(); t.after(f.close); await f.bridge.subscribe(f.voice);
+  const a=f.activate(); f.enable(); await settle();
+  await f.locations.subscribe(f.location); await settle(); f.locationResponse(410);
+  f.locations.update({sharing_id:f.id,sequence:1,fix:{latitude:10,longitude:20,accuracy:5,measured_at:new Date().toISOString()}},f.owner);
+  await settle(); await settle();
+  assert.equal(f.bridge.status().subscribed,true);
+  assert.equal(f.locations.status().locationSubscribed,false);
+  assert.equal(f.events.filter(e=>e.name==='utterance.created').length,2);
   assert.equal(a.pending().length,1);
 });
 

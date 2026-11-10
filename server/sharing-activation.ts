@@ -39,7 +39,7 @@ export class SharingActivation {
   }
   private source(includeSubscribed = false) {
     const intent = this.locations.sharingIntent(), destination = this.bridge.inputDestination();
-    if (this.closed || !intent || (!includeSubscribed && intent.subscribed) || !destination) return undefined;
+    if (this.closed || !intent || intent.activationStopped || (!includeSubscribed && intent.subscribed) || !destination) return undefined;
     return {key: createHash('sha256').update(JSON.stringify([intent.id, destination.id])).digest('hex'),
       destinationId: destination.id, subscribed: intent.subscribed, expiresAt: Math.min(intent.expiresAt, destination.expiresAt)};
   }

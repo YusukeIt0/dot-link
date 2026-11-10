@@ -165,6 +165,9 @@ own `location.updated` subscription; the relay never fabricates one or copies a
 callback to a different event. No control request enters G2 conversation history.
 Requests are invalidated by stop, expired consent, owner revocation or shutdown;
 delivery has at most three attempts with a persistent identity and retry budget.
+An explicit `events/unsubscribe` stops activation for that sharing session, including
+across relay restart. It is not treated as subscription expiry or transport failure;
+a new sharing session or an explicit subscription can resume reception.
 Actual `locationSubscribed` state remains the readiness signal. An accepted
 webhook alone is not successful activation. Existing weather consent remains
 independent, so preparing context reception does not authorize provider queries.
