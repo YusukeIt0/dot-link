@@ -437,7 +437,7 @@
   "mac.remove_all_even_connections_230": "Evenの接続をすべて解除しますか？",
   "mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing": "このMacの接続コードで登録したすべてのEven接続と、使用前のコードを無効にします。会話の送受信と位置共有が止まり、使う端末は接続し直す必要があります。\n\nChatGPT側の接続設定と保存済みの会話は残ります。",
   "mac.remove_all": "すべて解除",
-  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "このMac用のDot Link接続を使って、私のEven G2からの発話を受け取ってください。セッションはpersonal-g2です。utterance.createdを購読し、届いたらget_pending_utterancesで実際のIDと本文を取得して、reply_to_g2で返してください。新しい連絡はsend_message_to_g2を使ってください。まずget_statusで接続を確認してください。",
+  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "このMacのDot Link接続を、いつものDotでpersonal-g2に使ってください。utterance.createdとlocation.updatedを購読してください。get_pending_utterancesで発話と共有操作の依頼を読み、実際の質問にはreply_to_g2で答えてください。Dot Linkで共有をオンにしたら、許可された新しい情報から案内する価値を判断し、必要がなければrespond_to_locationで沈黙を選んでください。追加の監視設定や確認は不要です。まずget_statusを確認してください。",
   "mac.setup_message_copied_paste_and_send_it_to_your_existing_dot": "設定メッセージをコピーしました。いつものDotへ貼り付けて送ってください。",
   "mac.copied_paste_it_on_your_iphone": "コピーしました。iPhoneへ貼り付けてください。",
   "mac.expired_create_a_new_pairing_code": "期限が切れました。新しい接続コードを作成してください。",

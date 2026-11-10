@@ -39,7 +39,7 @@ type State = z.infer<typeof stateSchema>;
 type Subscription = z.infer<typeof subscriptionSchema>;
 
 export const eventDefinition = {
-  name: 'utterance.created', description: 'A new utterance from the owner of this personal Even G2 bridge.',
+  name: 'utterance.created', description: 'New owner input from this personal Even G2 bridge. Read get_pending_utterances: ordinary utterances and explicitly identified sharing-control requests are separate. A sharing-control request represents an app control action, not spoken text or a question to answer.',
   delivery: ['webhook'],
   inputSchema: { type: 'object', properties: { session_id: { type: 'string', const: SESSION } }, required: ['session_id'], additionalProperties: false },
   payloadSchema: { type: 'object', properties: {
@@ -63,7 +63,7 @@ export const statusTool = {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const pendingTool = {
-  name: 'get_pending_utterances', description: 'Read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
+  name: 'get_pending_utterances', description: 'Read owner input. control_requests are explicit app sharing actions, not spoken messages or questions: while sharing remains enabled, establish their requested location.updated subscription for personal-g2 using the normal event mechanism without asking for another setting or confirmation. Preserve the utterance subscription; do not reply to a control request on G2 or treat its ID as an utterance_id. Re-read before acting and do nothing for an absent/revoked request. Then read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -156,6 +156,20 @@ export class Bridge {
     return sub && sub.expiresAt > Date.now() ? sub : undefined;
   }
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
+  /** Identity only: callback credentials never leave the transport owner. */
+  inputDestination() { const sub = this.active(); return sub ? { id: sub.id, expiresAt: sub.expiresAt } : undefined; }
+  async sendSharingControl(input: {id: string; createdAt: string}, destinationId: string, allowed: () => boolean) {
+    const sub = this.active();
+    if (this.closed || !sub || sub.id !== destinationId || !allowed()) return undefined;
+    const eventId = `evt_${input.id}`;
+    const response = await this.sender.send(sub, eventId, {eventId, name: 'utterance.created', timestamp: input.createdAt,
+      data: {session_id: SESSION, utterance_id: input.id,
+        text: '[Dot Link app control, not a spoken message] The owner enabled location sharing.'}, cursor: null});
+    if (response.status === 410) await this.serial(async () => {
+      if (this.state.subscription === sub) this.save({...this.state, subscription: undefined});
+    });
+    return response.status;
+  }
   private publicMessage(item: State['messages'][number]) {
     const { photos: _photos, photoDigests, ...message } = item;
     return { ...message, ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
@@ -189,9 +203,9 @@ export class Bridge {
         ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}),
         ...(item.photosExpired ? { photos_expired: true } : {}) })) };
   }
-  pendingResult(input: unknown = {}) {
+  pendingResult(input: unknown = {}, controlRequests?: unknown[]) {
     if (!z.object({}).strict().safeParse(input).success) throw new ReadResponseError();
-    const value = this.pending();
+    const value = {...this.pending(), ...(controlRequests?.length ? {control_requests: controlRequests} : {})};
     const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
       { type: 'text', text: JSON.stringify(value) },
     ];

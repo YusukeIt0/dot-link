@@ -155,6 +155,20 @@ fixed; they do not trigger network traffic.
 HTTP gateway forwards the authenticated subject to `/api/weather`; MCP cannot
 change consent. Consent storage failure disables only weather at startup.
 
+The sharing controls include autonomous context reception. Users do not separately
+configure event subscriptions or ask Dot to enable proactive weather. The normal
+Mac setup message prepares both input and location reception. For an existing
+input-only connection, `SharingActivation` sends an explicitly identified owner
+sharing-control request through that verified input subscription. The pending
+input tool returns it separately from real utterances. ChatGPT must create its
+own `location.updated` subscription; the relay never fabricates one or copies a
+callback to a different event. No control request enters G2 conversation history.
+Requests are invalidated by stop, expired consent, owner revocation or shutdown;
+delivery has at most three attempts with a persistent identity and retry budget.
+Actual `locationSubscribed` state remains the readiness signal. An accepted
+webhook alone is not successful activation. Existing weather consent remains
+independent, so preparing context reception does not authorize provider queries.
+
 Automatic checks run every 30 seconds only while consent, fresh location and the
 existing location subscription allow them. Same-cell checks are at most once per
 minute; the acquisition cache enforces much longer external-request limits.

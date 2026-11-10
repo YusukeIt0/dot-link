@@ -114,6 +114,12 @@ export class LocationContext {
   }
   private save(next = this.disk) { writeFileSync(`${this.path}.tmp`, JSON.stringify(next), { mode: 0o600 }); renameSync(`${this.path}.tmp`, this.path); this.disk = next; }
   private active(): Subscription | undefined { const sub = this.disk.subscription; return sub && sub.expiresAt > this.now() ? sub : undefined; }
+  /** Consent lifecycle only; never expose coordinates or a device owner here. */
+  sharingIntent() {
+    this.checkOwner();
+    return !this.closed && this.sharingId && this.leaseUntil > this.now()
+      ? {id: this.sharingId, expiresAt: this.leaseUntil, subscribed: !!this.active()} : undefined;
+  }
   private checkOwner() {
     if (this.owner && !this.ownerAuthorized(this.owner)) this.clear();
   }

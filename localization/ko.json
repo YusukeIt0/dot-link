@@ -437,7 +437,7 @@
   "mac.remove_all_even_connections_230": "모든 Even 연결을 해제할까요?",
   "mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing": "사용하지 않은 코드를 포함하여 이 Mac의 페어링 코드로 등록한 모든 Even 연결을 무효화합니다. 메시지와 위치 공유가 중지되며 각 기기를 다시 페어링해야 합니다.\n\nChatGPT 연결 설정과 저장된 대화는 유지됩니다.",
   "mac.remove_all": "모두 해제",
-  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "이 Mac의 Dot Link 연결로 내 Even G2 메시지를 받아 주세요. 세션은 personal-g2입니다. utterance.created를 구독하고 get_pending_utterances로 실제 ID와 메시지를 읽은 후 reply_to_g2로 답해 주세요. 새 메시지에는 send_message_to_g2를 사용하세요. 먼저 get_status를 확인해 주세요.",
+  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "이 Mac의 Dot Link 연결을 기존 Dot에서 personal-g2 세션으로 사용해 주세요. utterance.created와 location.updated를 구독하세요. get_pending_utterances로 발화와 공유 설정 요청을 읽고 실제 질문에는 reply_to_g2로 답하세요. Dot Link에서 공유를 켜면 허용된 최신 정보를 바탕으로 유용한 안내가 필요한지 판단하고, 필요 없으면 respond_to_location으로 침묵을 선택하세요. 추가 모니터링 설정이나 확인은 필요 없습니다. 먼저 get_status를 확인하세요.",
   "mac.setup_message_copied_paste_and_send_it_to_your_existing_dot": "설정 메시지를 복사했습니다. 기존 Dot에게 붙여넣어 보내세요.",
   "mac.copied_paste_it_on_your_iphone": "복사했습니다. iPhone에 붙여넣으세요.",
   "mac.expired_create_a_new_pairing_code": "만료되었습니다. 새 페어링 코드를 만드세요.",
