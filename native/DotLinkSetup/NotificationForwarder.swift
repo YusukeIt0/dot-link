@@ -18,6 +18,7 @@ final class NotificationForwarder {
         let title: String
         let body: String
         let observedAt: Double
+        let sharingID: String?
     }
     let ledger: NotificationDeliveryLedger
     private let runtime: URL
@@ -25,16 +26,37 @@ final class NotificationForwarder {
     private let changed: () -> Void
     private let session: URLSession
     private let retryDelay: Double
+    private let sharingNow: () -> Double
+    private var sharingIntentID: String?
     private var payloads: [String: Payload] = [:]
     private var tasks: [String: URLSessionDataTask] = [:]
+    private var lastSharingWrite: (id: String, epoch: String, enabled: Bool, at: Double)?
+    // Only permission/control metadata crosses this local file; never notification text.
+    func syncSharing(id: String, force: Bool = false) {
+        sharingIntentID = id
+        let enabled = allowed(), now = sharingNow()
+        if !force, let last = lastSharingWrite, last.id == id, last.enabled == enabled, now >= last.at, now - last.at < 4 { return }
+        // A pause, access loss, restart or expired heartbeat fences old queued
+        // payloads, without resetting the owner's explicit reception-stop choice.
+        let sameInterval = lastSharingWrite.map { $0.id == id && $0.enabled && now >= $0.at && now - $0.at < 30 } ?? false
+        let epoch = enabled && sameInterval ? lastSharingWrite!.epoch : UUID().uuidString.lowercased()
+        do {
+            let url = runtime.appendingPathComponent("notification-sharing.json")
+            let data = try JSONSerialization.data(withJSONObject: ["version": 1, "id": id, "epoch": epoch, "enabled": enabled, "updatedAt": now * 1000])
+            try data.write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            lastSharingWrite = (id, epoch, enabled, now)
+        } catch { lastSharingWrite = nil }
+    }
     private var generation = 0
     private var statusTask: URLSessionDataTask?
     private(set) var extractionEvents: [ExtractionEvent] = []
     private(set) var subscriptionReady: Bool?
+    private(set) var receptionState: String?
     private(set) var statusAvailable = false
     private(set) var lastStatusAt: Double?
-    init(runtime: URL, session: URLSession = .shared, retryDelay: Double = 5, allowed: @escaping () -> Bool, changed: @escaping () -> Void) {
-        self.session = session; self.retryDelay = retryDelay
+    init(runtime: URL, session: URLSession = .shared, retryDelay: Double = 5, sharingNow: @escaping () -> Double = { Date().timeIntervalSince1970 }, allowed: @escaping () -> Bool, changed: @escaping () -> Void) {
+        self.session = session; self.retryDelay = retryDelay; self.sharingNow = sharingNow
         self.runtime = runtime; self.allowed = allowed; self.changed = changed
         ledger = NotificationDeliveryLedger(url: runtime.appendingPathComponent("notification-menu-unified/delivery-ledger.json"))
     }
@@ -44,6 +66,9 @@ final class NotificationForwarder {
         }
     }
     func observe(_ extractions: [NotificationExtraction], selected: Bool) {
+        // The event may wake an idle app before its health timer runs. Refresh
+        // before capturing the interval; retries must keep that captured ID.
+        if selected, allowed(), let id = sharingIntentID { syncSharing(id: id) }
         for value in extractions {
             var disposition = "held"
             var notificationID: String?
@@ -69,7 +94,7 @@ final class NotificationForwarder {
             guard let entry = ledger.reserve(identity: identity, at: Date().timeIntervalSince1970) else { disposition = "ledger_unavailable"; continue }
             disposition = "reserved"; notificationID = entry.id
             let payload = Payload(identity: identity, id: entry.id, sourceApp: notification.sourceApp, title: notification.title,
-                body: notification.body, observedAt: entry.observedAt)
+                body: notification.body, observedAt: entry.observedAt, sharingID: lastSharingWrite?.enabled == true ? lastSharingWrite?.epoch : nil)
             payloads[identity] = payload
             post(payload, attempt: 1, generation: generation)
         }
@@ -96,10 +121,12 @@ final class NotificationForwarder {
     private func post(_ payload: Payload, attempt: Int, generation current: Int) {
         guard generation == current, allowed(), ledger.healthy, payloads[payload.identity] != nil else { return }
         do {
-            let req = try request(path: "/api/notifications", object: ["id": payload.id,
+            var object: [String: Any] = ["id": payload.id,
                 "source_app": payload.sourceApp, "title": payload.title, "body": payload.body,
                 "observed_at": ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: payload.observedAt)),
-                "source_verification": "accessibility"])
+                "source_verification": "accessibility"]
+            if let sharingID = payload.sharingID { object["sharing_id"] = sharingID }
+            let req = try request(path: "/api/notifications", object: object)
             guard ledger.update(identity: payload.identity, stage: "posting", attempts: attempt) else { return }
             let task = session.dataTask(with: req) { [weak self] data, response, error in
                 DispatchQueue.main.async {
@@ -153,6 +180,7 @@ final class NotificationForwarder {
                         self.statusAvailable = false; self.changed(); return
                     }
                     self.statusAvailable = true; self.subscriptionReady = subscribed
+                    self.receptionState = value["notificationReception"] as? String
                     self.lastStatusAt = Date().timeIntervalSince1970
                     for record in records {
                         guard let id = record["id"] as? String, let entry = entries.first(where: { $0.id == id }),

@@ -23,7 +23,11 @@ const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.
 
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
 
-export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation): Promise<unknown> {
+export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[]): Promise<unknown> {
+  const activations = activation ? (Array.isArray(activation) ? activation : [activation]) : [];
+  const acknowledge = (name: 'reply_to_g2' | 'send_message_to_g2', args: unknown) => {
+    for (const item of activations) {const result = item.acknowledge(name, args); if (result) return result;}
+  };
   const parsed = rpcSchema.safeParse(raw);
   if (!parsed.success) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid request' } };
   const { id, method, params } = parsed.data;
@@ -67,7 +71,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
         if (name === 'get_pending_utterances') {
-          return { jsonrpc: '2.0', id, ...await rpcResponse(() => bridge.pendingResult(args, activation?.pending())) };
+          return { jsonrpc: '2.0', id, ...await rpcResponse(() => bridge.pendingResult(args, activations.flatMap(item => item.pending()))) };
         }
         return { jsonrpc: '2.0', id, ...await toolResponse(() => {
           switch (name) {
@@ -81,8 +85,8 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
             case 'get_location_history': return history!.read(args);
             case 'respond_to_history': return history!.respond!(args);
             case 'get_mobility_context': return locations!.readMobility(args);
-            case 'send_message_to_g2': return activation?.acknowledge(name, args) ?? bridge.sendMessage(args);
-            case 'reply_to_g2': return activation?.acknowledge(name, args) ?? bridge.reply(args);
+            case 'send_message_to_g2': return acknowledge(name, args) ?? bridge.sendMessage(args);
+            case 'reply_to_g2': return acknowledge(name, args) ?? bridge.reply(args);
             case 'set_notification_disposition': return notifications!.decide(args);
             case 'announce_notification_to_g2': return notifications!.announce(args);
           }
@@ -121,7 +125,7 @@ async function body(request: IncomingMessage, limit = 32768): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation) {
+export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[]) {
   if (tokens.mcp.length < 32 || tokens.device.length < 32 || tokens.mcp === tokens.device) throw new Error('Use distinct bridge tokens of at least 32 characters');
   if (notifications && (!tokens.notification || tokens.notification.length < 32 || [tokens.mcp, tokens.device].includes(tokens.notification))) throw new Error('Use a distinct notification ingestion token');
   const instance = randomUUID();
@@ -222,6 +226,6 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       else send(400, { error: 'Request rejected; no successful delivery is implied' });
     }
   });
-  server.once('close', () => { activation?.close(); bridge.close(); unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); unsubscribeHistory?.(); unsubscribeWeather?.(); weather?.close(); locations?.close(); histories?.close(); for (const wake of [...waiting]) wake(); });
+  server.once('close', () => { for (const item of activation ? (Array.isArray(activation) ? activation : [activation]) : []) item.close(); notifications?.close(); bridge.close(); unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); unsubscribeHistory?.(); unsubscribeWeather?.(); weather?.close(); locations?.close(); histories?.close(); for (const wake of [...waiting]) wake(); });
   return server;
 }

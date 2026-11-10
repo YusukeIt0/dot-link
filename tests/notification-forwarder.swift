@@ -55,8 +55,23 @@ let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [Fixtur
 let session = URLSession(configuration: config)
 defer { session.invalidateAndCancel() }
 var allowed = true
+var sharingTime = Date().timeIntervalSince1970
 var onChange: () -> Void = {}
-let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, allowed: { allowed }, changed: { onChange() })
+let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, sharingNow: { sharingTime }, allowed: { allowed }, changed: { onChange() })
+let sharingID = UUID().uuidString.lowercased()
+forwarder.syncSharing(id: sharingID)
+let controlURL = root.appendingPathComponent("notification-sharing.json")
+func sharing() throws -> [String: Any] { try JSONSerialization.jsonObject(with: Data(contentsOf: controlURL)) as! [String: Any] }
+let initialSharing = try sharing(); check(initialSharing["id"] as? String == sharingID)
+check((try? sharing()["enabled"] as? Bool) == true)
+check((try? FileManager.default.attributesOfItem(atPath: controlURL.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+allowed = false; forwarder.syncSharing(id: sharingID)
+check((try? sharing()["enabled"] as? Bool) == false)
+allowed = true; forwarder.syncSharing(id: sharingID)
+check((try? sharing()["enabled"] as? Bool) == true)
+let resumedSharing = try sharing()
+let sharingEpoch = resumedSharing["epoch"] as! String
+check(sharingEpoch != initialSharing["epoch"] as? String)
 forwarder.observe(fixture("excluded"), selected: false)
 check(FixtureProtocol.posts.isEmpty)
 forwarder.observe(fixture("excluded"), selected: true)
@@ -70,6 +85,8 @@ FixtureProtocol.failNextPost()
 forwarder.observe(fixture("first", source: ""), selected: true)
 wait { forwarder.ledger.entries.first { $0.identity == NotificationReader.opaqueIdentity("first") }?.stage == "dot_notified" }
 check(FixtureProtocol.posts.count == 2)
+check(FixtureProtocol.posts[0]["sharing_id"] as? String == sharingEpoch)
+check(FixtureProtocol.posts[1]["sharing_id"] as? String == sharingEpoch)
 check(FixtureProtocol.posts[0]["source_app"] as? String == "Mac notification (source unknown)")
 check(FixtureProtocol.posts[0]["title"] as? String == "Fixture sender")
 check(FixtureProtocol.posts[0]["id"] as? String == FixtureProtocol.posts[1]["id"] as? String)
@@ -96,6 +113,16 @@ check(FixtureProtocol.posts.count == 4)
 let encoded = try JSONEncoder().encode(forwarder.ledger.entries)
 let text = String(data: encoded, encoding: .utf8)!
 check(!text.contains("Fixture sender") && !text.contains("same body"))
+// An event arriving before a delayed health timer must publish a fresh lease
+// and stamp its payload with that new interval, not the expired one.
+allowed = true; sharingTime += 31
+forwarder.observe(fixture("after-idle"), selected: true)
+wait { forwarder.ledger.entry(NotificationReader.opaqueIdentity("after-idle"))?.stage == "dot_notified" }
+let afterIdle = try sharing()
+check(afterIdle["epoch"] as? String != sharingEpoch)
+check(afterIdle["updatedAt"] as? Double == sharingTime * 1000)
+check(FixtureProtocol.posts.last?["sharing_id"] as? String == afterIdle["epoch"] as? String)
+check(afterIdle["id"] as? String == sharingID)
 print("\(count) notification selection/retry/cancellation checks passed")
 }
 }
