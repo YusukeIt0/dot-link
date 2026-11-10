@@ -169,7 +169,7 @@ export class Bridge {
     const eventId = `evt_${input.id}`;
     const response = await this.sender.send(sub, eventId, {eventId, name: 'utterance.created', timestamp: input.createdAt,
       data: {session_id: SESSION, utterance_id: input.id,
-        text: input.feature === 'notification' ? '[Dot Link app control, not a spoken message] The owner enabled Mac notification sharing.' : '[Dot Link app control, not a spoken message] The owner enabled location sharing.'}, cursor: null});
+        text: `[Dot Link app control, not a spoken message] The owner enabled ${input.feature === 'notification' ? 'Mac notification' : 'location'} sharing and requests reception on this same personal-g2 connection. Read get_pending_utterances and carry out the current owner_sharing_control request for ${input.feature === 'notification' ? 'notification.created' : 'location.updated'}, even if no spoken utterance is pending. Preserve the existing conversation and other feature subscriptions. This app action already authorizes reception; do not ask for a second setup step or send a setup confirmation to G2. If the control item is no longer present, do nothing.`}, cursor: null});
     if (response.status === 410) await this.serial(async () => {
       if (this.state.subscription === sub) this.save({...this.state, subscription: undefined});
     });
