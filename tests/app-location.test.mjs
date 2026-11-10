@@ -73,6 +73,26 @@ test('case-insensitive Applications spelling does not cause a handoff to itself'
   assert.equal(f.calls.length, 0); await f.preserved();
 });
 
+test('fresh installation and missing-app restoration resolve an aliased home safely', async t => {
+  const f = await fixture(t), alias = f.home + '-alias';
+  await symlink(f.home, alias); t.after(() => rm(alias, {force:true}));
+  assert.equal(await installMenuApp(f.source, {...f, home:alias}), f.app);
+  await rm(f.app, {recursive:true});
+  const restored = await ensureAppLocation(f.source, {...f, home:alias});
+  assert.deepEqual(restored, {app:f.app, source:f.source, handoff:true});
+  await f.preserved();
+});
+
+test('restoration into differently cased Applications verifies the resolved candidate', async t => {
+  const f = await fixture(t);
+  await mkdir(join(f.home, 'applications'));
+  try { await realpath(join(f.home, 'Applications')); } catch (error) { if(error.code==='ENOENT') {t.skip('case-sensitive filesystem');return;} throw error; }
+  const restored=await ensureAppLocation(f.source,f);
+  assert.equal(restored.handoff,true);
+  assert.equal(restored.app,join(f.home,'applications/Dot Link.app'));
+  await f.preserved();
+});
+
 for (const build of [117, 118]) test(`external copy hands off to equal/newer managed build ${build} without replacing it`, async t => {
   const f = await fixture(t); await f.bundle(f.app, build);
   const before = await readFile(join(f.app, 'Contents/Info.plist'), 'utf8');

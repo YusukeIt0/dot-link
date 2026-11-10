@@ -6,17 +6,14 @@ import {fileURLToPath} from 'node:url';
 import {run} from './setup.mjs';
 import {regularPath} from './app-lifecycle.mjs';
 import {verifyUpdateApp} from './update-storage.mjs';
-import {installMenuApp} from './menu-install.mjs';
+import {installMenuApp, resolvedMenuAppPath} from './menu-install.mjs';
 
 export const managedAppPath = (home = homedir()) => join(home, 'Applications/Dot Link.app');
 export async function isManagedApp(source, home = homedir()) {
-  const app = managedAppPath(home);
   try {
-    // Home aliases/case differences do not create another app. Redirecting the
-    // managed Applications directory or bundle itself is still disallowed.
-    if ((await lstat(join(home, 'Applications'))).isSymbolicLink() || (await lstat(app)).isSymbolicLink()) return false;
+    const app = await resolvedMenuAppPath(home);
     return await realpath(source) === await realpath(app);
-  } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  } catch (error) { if (error.code === 'ENOENT' || error.message === 'UNSAFE_INSTALL_PATH') return false; throw error; }
 }
 const failure = (code, cause) => Object.assign(new Error(code, {cause}), {setupCode: code});
 const failurePath = home => join(home, 'Library/Caches/app.tripsurf.dotlink.mac/location-handoff.json');
@@ -53,7 +50,9 @@ async function buildNumber(app, execute) {
 // Resolve the filesystem location, never Finder's localized display name. No
 // services, saved settings, update journals or existing bundles are changed.
 export async function ensureAppLocation(source, {home = homedir(), execute = run} = {}) {
-  const app = managedAppPath(home);
+  let app;
+  try { app = await resolvedMenuAppPath(home); }
+  catch (cause) { throw failure('APP_LOCATION_REPAIR', cause); }
   let current;
   try { current = await realpath(source); }
   catch (cause) { throw failure('APP_LOCATION_MISSING', cause); }
@@ -86,8 +85,8 @@ export async function handoffApp({source, hostPID, background = false}, {
   wait = ms => new Promise(resolve => setTimeout(resolve, ms)), ready = () => {},
 } = {}) {
   if (!Number.isSafeInteger(hostPID) || hostPID < 2 || typeof source !== 'string' || resolve(source) !== source) throw failure('APP_LOCATION_REPAIR');
-  const target = managedAppPath(home);
   const location = await ensureAppLocation(source, {home, execute});
+  const target = location.app;
   if (!location.handoff || location.source !== source) throw failure('APP_LOCATION_REPAIR');
   const sourceBuild = await buildNumber(source, execute);
   const executable = join(source, 'Contents/MacOS/DotLink');
