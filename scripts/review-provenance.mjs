@@ -102,6 +102,10 @@ export function collectPriorReviews(pr, rows, api, paginate, readNode, botId) {
     if (Buffer.byteLength(JSON.stringify(entry)) > 40_000) return invalid('Prior product evidence exceeds the bounded context size.');
     return entry;
   });
-  if (Buffer.byteLength(JSON.stringify(entries)) > 50_000) throw new RangeError('Prior review context exceeds its bounded size.');
+  if (Buffer.byteLength(JSON.stringify(entries)) > 50_000) {
+    const unavailable = entries.map(({pr, url}) => ({pr, url, status: 'unavailable',
+      reason: 'Combined prior review context exceeds 50,000 bytes; reduce the referenced evidence scope.'}));
+    return {entries: unavailable, digest: hash(unavailable)};
+  }
   return {entries, digest: hash(entries)};
 }

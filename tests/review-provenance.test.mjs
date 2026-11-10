@@ -162,3 +162,24 @@ test('prior references are optional, bounded and cannot recursively import deliv
   f.sourceRows.length = 201;
   assert.equal(f.collect().entries[0].status, 'unavailable');
 });
+
+test('combined oversized references explain unavailable coverage instead of failing intake', () => {
+  const f = fixture();
+  f.current.prior_reviews = [323, 324];
+  f.rows[0].body = acceptanceBody(f.current);
+  f.sourceRows[1].body += '\n' + 'Detailed reasoning. '.repeat(1400);
+  const api = path => path === 'pulls/324' ? {...f.source, number: 324} : f.api(path);
+  const pages = path => path === 'issues/324/comments?per_page=100'
+    ? f.sourceRows.map(row => ({...row, issue_url: `https://api.github.com/repos/${repository}/issues/324`})) : f.pages(path);
+  const prior = collectPriorReviews(f.pr, f.rows, api, pages, f.readNode, bot.id);
+  assert.equal(prior.entries.length, 2);
+  for (const entry of prior.entries) {
+    assert.equal(entry.status, 'unavailable');
+    assert.match(entry.reason, /Combined prior review context/);
+  }
+  assert.ok(Buffer.byteLength(JSON.stringify(prior)) < 1000);
+  assert.equal(prior.digest, hash(prior.entries));
+  const context = gatherContext({pr: f.pr, rows: f.rows, priorReviews: prior}, f.api, f.pages);
+  assert.equal(context.acceptance.status, 'stale');
+  assert.ok(acceptanceBlockers(context.acceptance, assessment).length);
+});
