@@ -1,0 +1,78 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {randomBytes,randomUUID} from 'node:crypto';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {once} from 'node:events';
+import {request as httpRequest, type Server} from 'node:http';
+import {Bridge} from '../server/bridge.ts';
+import {LocationContext} from '../server/location.ts';
+import {WeatherContext,WEATHER_TERMS} from '../server/weather/context.ts';
+import {WeatherService} from '../server/weather/service.ts';
+import {weatherSource} from '../server/weather/types.ts';
+import {bridgeServer} from '../server/http.ts';
+import {deviceServer} from '../server/device.ts';
+import {PairingAuthority} from '../server/pairing-authority.ts';
+import {WebhookSender} from '../server/webhook.ts';
+import {RelaySettings} from '../src/relay-connection.ts';
+import {RelaySession} from '../src/relay-session.ts';
+import {WeatherSharing} from '../src/weather-sharing.ts';
+async function listen(s:Server){s.listen(0,'127.0.0.1');await once(s,'listening');return `http://127.0.0.1:${(s.address() as {port:number}).port}`;}
+test('paired gateway forwards authenticated weather consent, serves actual MCP tools and keeps question replies intact',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'weather-http-'));const servers:Server[]=[];
+ t.after(async()=>{for(const s of servers){s.closeAllConnections();await new Promise<void>(r=>s.close(()=>r()));}rmSync(dir,{recursive:true,force:true});});
+ const tokens={device:randomBytes(32).toString('base64url'),mcp:randomBytes(32).toString('base64url')};
+ const pairing=new PairingAuthority(join(dir,'pairing'));const origin='http://127.0.0.1:53001';
+ const invite=pairing.issue('https://fixture.tailtest.ts.net'),session=pairing.exchange(invite.code,origin)!;
+ const sender=new WebhookSender(async(_url,raw)=>{const e=JSON.parse(raw);return {status:200,body:JSON.stringify(e.type==='verification'?{challenge:e.challenge}:{})};});
+ const bridge=new Bridge(join(dir,'bridge.json'),sender,['callback.example.test']);
+ const locations=new LocationContext(join(dir,'locations.json'),sender,['callback.example.test'],(input,guard,c)=>bridge.sendMessage(input,guard,c),Date.now,id=>pairing.authorizedSubject(id));
+ let calls=0;
+ const service=new WeatherService(join(dir,'weather.json'),{provider:{id:'met-norway-locationforecast-2',load:async point=>{calls++;return {notModified:false,deprecated:false,forecast:{provider:'met-norway-locationforecast-2',point,elevation_m:0,updated_at:new Date().toISOString(),samples:[{valid_at:new Date(Date.now()-1000).toISOString(),temperature_c:28,humidity_percent:80,wind_m_s:2,wind_from_degrees:90,pressure_hpa:1010,cloud_percent:40,precipitation:[]}]}};}}});
+ const weather=new WeatherContext(join(dir,'consent.json'),service,locations,{ownerAuthorized:id=>pairing.authorizedSubject(id),automatic:false});
+ const inner=bridgeServer(bridge,tokens,undefined,locations,undefined,weather);servers.push(inner);const base=await listen(inner);
+ const outer=deviceServer({token:tokens.device,origin:'https://device.test',directory:dir,bridgeURL:base,pairing,transcribe:async()=>{throw Error('Not expected');}});servers.push(outer);const deviceBase=await listen(outer);
+ const device=(path:string,input?:unknown,extra:Record<string,string>={}):Promise<{status:number;body:any}>=>new Promise((resolve,reject)=>{
+  const req=httpRequest(deviceBase+path,{method:input===undefined?'GET':'POST',headers:{Host:'device.test',Origin:origin,Authorization:`Bearer ${session.token}`,'Content-Type':'application/json',...extra}},res=>{
+   const parts:Buffer[]=[];res.on('data',p=>parts.push(p));res.on('end',()=>{const raw=Buffer.concat(parts).toString();resolve({status:res.statusCode!,body:raw?JSON.parse(raw):null});});
+  });req.on('error',reject);req.end(input===undefined?undefined:JSON.stringify(input));
+ });
+ const rpc=async(method:string,params?:unknown)=>(await fetch(base+'/mcp',{method:'POST',headers:{Authorization:`Bearer ${tokens.mcp}`,'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})})).json() as Promise<any>;
+ const call=(name:string,args:unknown={})=>rpc('tools/call',{name,arguments:args});
+ let state=(await device('/api/status')).body;assert.equal(state.weatherEnabled,false);assert.equal(state.weatherProtocol,1);
+ assert.ok((await rpc('tools/list')).result.tools.some((x:any)=>x.name==='get_weather_context'));
+ assert.equal((await call('get_weather_context',{mode:'current'})).error.data.reason,'weather_disabled');assert.equal(calls,0);
+ const control={protocol:1,epoch:state.weatherEpoch,enabled:true,terms:WEATHER_TERMS};
+ assert.equal((await device('/api/weather',control,{Authorization:'Bearer invalid'})).status,401);
+ assert.equal((await device('/api/weather',control,{Origin:'https://foreign.test'})).status,403);
+ const enabled=await device('/api/weather',control,{'X-G2-Location-Owner':'f'.repeat(64)});assert.equal(enabled.status,200);state=enabled.body;assert.equal(state.weatherEnabled,true);
+ // Exercise the companion's real route validation and request construction,
+ // with only the network destination redirected into this local HTTP fixture.
+ const values=new Map<string,string>();
+ const settings=new RelaySettings(()=>({getItem:k=>values.get(k)??null,setItem:(k,v)=>{values.set(k,v);},removeItem:k=>{values.delete(k);}}));
+ settings.save({origin:'https://fixture.tailtest.ts.net',token:session.token,expiresAt:Date.now()+60_000});
+ const relay=new RelaySession({settings,legacyToken:'',appOrigin:origin,rejected:()=>assert.fail('Pairing rejected'),persistenceFailed:()=>assert.fail('Persistence failed'),
+  fetch:(async(url,init)=>{assert.equal(new URL(String(url)).origin,'https://fixture.tailtest.ts.net');const headers=new Headers(init?.headers);
+   assert.equal(headers.get('Authorization'),`Bearer ${session.token}`);assert.equal(init?.method,'POST');
+   const response=await device(new URL(String(url)).pathname,JSON.parse(String(init?.body)),{Authorization:headers.get('Authorization')!});
+   return new Response(JSON.stringify(response.body),{status:response.status});}) as typeof fetch});
+ t.after(()=>relay.stop());
+ const companion=new WeatherSharing({target:()=>relay.credentials?.origin,api:input=>relay.location('/api/weather',input),changed:()=>{}});
+ companion.receive(state);await companion.control(false);
+ assert.equal(companion.status().failed,false,'the companion can send weather consent through its actual relay route');
+ assert.equal(companion.status().weatherEnabled,false);assert.equal((await device('/api/status')).body.weatherEnabled,false);
+ await companion.control(true);assert.equal(companion.status().failed,false);assert.equal(companion.status().weatherEnabled,true);
+ state=(await device('/api/status')).body;assert.equal(state.weatherEnabled,true);
+ const sharing_id=randomUUID();await device('/api/location/control',{sharing_id,enabled:true});
+ await device('/api/location/update',{sharing_id,sequence:1,fix:{latitude:10,longitude:20,accuracy:5,measured_at:new Date().toISOString()}});
+ const current=(await call('get_weather_context',{mode:'current'})).result.structuredContent;assert.equal(current.mode,'current');assert.equal(current.evidence.current.temperature_c,28);assert.deepEqual(current.evidence.source,weatherSource);
+ await bridge.subscribe({name:'utterance.created',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://callback.example.test/events',secret:'whsec_'+randomBytes(32).toString('base64')}});
+ const utterance_id=randomUUID();await device('/api/utterances',{id:utterance_id,text:'Synthetic weather question'});
+ const answer=await call('respond_to_location',{context_id:current.context_id,utterance_id,disposition:'announce',text:'The model forecast is 28 C, with uncertainty.'});assert.equal(answer.result.structuredContent.stored_for_g2,true);
+ assert.equal(bridge.history()[0].reply,'The model forecast is 28 C, with uncertainty.');assert.equal(bridge.outboundHistory().length,0);
+ await device('/api/weather',{protocol:1,epoch:state.weatherEpoch,enabled:false});assert.equal((await call('get_weather_context',{mode:'current'})).error.data.reason,'weather_disabled');
+ assert.equal((await call('get_location_context')).result.structuredContent.context.weather,undefined);
+ const nextId=randomUUID();await device('/api/utterances',{id:nextId,text:'Ordinary question without weather'});assert.equal((await call('reply_to_g2',{utterance_id:nextId,text:'Conversation continues.'})).result.isError,undefined);
+ await device('/api/pair/revoke',{});assert.equal(weather.status(pairing.subject(session.token,origin)).weatherEnabled,false);
+});

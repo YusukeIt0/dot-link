@@ -1,3 +1,4 @@
+import { WeatherContext, weatherContextTool } from './weather/context.ts';
 import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -16,12 +17,13 @@ import { locationHistoryTool, historyResponseTool, type HistoryReader } from './
 
 import type { LocationHistoryStore } from './history/store.ts';
 import { historyUploadSchema } from './history/store.ts';
+import type { SharingActivation } from './sharing-activation.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
 
-export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader): Promise<unknown> {
+export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation): Promise<unknown> {
   const parsed = rpcSchema.safeParse(raw);
   if (!parsed.success) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Invalid request' } };
   const { id, method, params } = parsed.data;
@@ -46,7 +48,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, mobilityContextTool, locationResponseTool] : []), ...(history ? [locationHistoryTool, ...(history.respond ? [historyResponseTool] : [])] : [])] }; break;
+      case 'tools/list': result = { tools: [...(weather ? [weatherContextTool] : []), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, mobilityContextTool, locationResponseTool] : []), ...(history ? [locationHistoryTool, ...(history.respond ? [historyResponseTool] : [])] : [])] }; break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
@@ -54,10 +56,10 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         const { name, arguments: args } = parsedCall.data;
         const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
         const locationNames = ['get_location_context', 'get_mobility_context', 'respond_to_location'];
-        if (![...notificationNames, ...locationNames, 'get_location_history', 'respond_to_history', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
+        if (![...notificationNames, ...locationNames, 'get_weather_context', 'get_location_history', 'respond_to_history', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
           throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
         }
-        if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (!history && ['get_location_history', 'respond_to_history'].includes(name)) || (name === 'respond_to_history' && !history?.respond)) {
+        if ((name === 'get_weather_context' && !weather) || (!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (!history && ['get_location_history', 'respond_to_history'].includes(name)) || (name === 'respond_to_history' && !history?.respond)) {
           throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
         }
         if (name === 'respond_to_location') {
@@ -65,7 +67,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
           result = { content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value }; break;
         }
         if (name === 'get_pending_utterances') {
-          return { jsonrpc: '2.0', id, ...await rpcResponse(() => bridge.pendingResult(args)) };
+          return { jsonrpc: '2.0', id, ...await rpcResponse(() => bridge.pendingResult(args, activation?.pending())) };
         }
         return { jsonrpc: '2.0', id, ...await toolResponse(() => {
           switch (name) {
@@ -74,12 +76,13 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
               return { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
             }
             case 'get_pending_notifications': return notifications!.pending(args);
+            case 'get_weather_context': return weather!.read(args);
             case 'get_location_context': return locations!.read(args);
             case 'get_location_history': return history!.read(args);
             case 'respond_to_history': return history!.respond!(args);
             case 'get_mobility_context': return locations!.readMobility(args);
-            case 'send_message_to_g2': return bridge.sendMessage(args);
-            case 'reply_to_g2': return bridge.reply(args);
+            case 'send_message_to_g2': return activation?.acknowledge(name, args) ?? bridge.sendMessage(args);
+            case 'reply_to_g2': return activation?.acknowledge(name, args) ?? bridge.reply(args);
             case 'set_notification_disposition': return notifications!.decide(args);
             case 'announce_notification_to_g2': return notifications!.announce(args);
           }
@@ -118,7 +121,7 @@ async function body(request: IncomingMessage, limit = 32768): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore) {
+export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation) {
   if (tokens.mcp.length < 32 || tokens.device.length < 32 || tokens.mcp === tokens.device) throw new Error('Use distinct bridge tokens of at least 32 characters');
   if (notifications && (!tokens.notification || tokens.notification.length < 32 || [tokens.mcp, tokens.device].includes(tokens.notification))) throw new Error('Use a distinct notification ingestion token');
   const instance = randomUUID();
@@ -128,11 +131,12 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
   const unsubscribeBridge = bridge.changes.subscribe(changed);
   const unsubscribeNotifications = notifications?.changes.subscribe(changed);
   const unsubscribeLocations = locations?.changes.subscribe(changed);
+  const unsubscribeWeather = weather?.changes.subscribe(changed);
   const unsubscribeHistory = histories?.changes.subscribe(changed);
   const cursor = () => `${instance}:${revision}`;
   const history = () => [...bridge.history(), ...bridge.outboundHistory(), ...(notifications?.history() ?? [])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-100);
-  const deviceStatus = (owner?: string) => ({ ...bridge.status(), photoAttachments: 1, ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}) });
+  const deviceStatus = (owner?: string) => ({ ...bridge.status(), photoAttachments: 1, ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}), ...(weather?.status(owner) ?? {}) });
   const snapshot = (owner?: string) => ({ revision: cursor(), status: deviceStatus(owner), messages: history() });
   const server = createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -143,7 +147,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     if (request.headers.origin) { send(403, { error: 'Browser origin not enabled' }); return; }
     // This bridge uses static credentials, not OAuth. Missing metadata and
     // other unknown routes must be 404 rather than an authentication challenge.
-    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications', '/api/notifications/status'] : []), ...(locations ? ['/api/location/control', '/api/location/update', '/api/location/revoke'] : []), ...(histories ? ['/api/location/history'] : [])].includes(request.url ?? '')) {
+    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications', '/api/notifications/status'] : []), ...(locations ? ['/api/location/control', '/api/location/update', '/api/location/revoke'] : []), ...(histories ? ['/api/location/history'] : []), ...(weather ? ['/api/weather'] : [])].includes(request.url ?? '')) {
       send(404, { error: 'Not found' }); return;
     }
     const token = request.url === '/mcp' ? tokens.mcp : ['/api/notifications', '/api/notifications/status'].includes(request.url ?? '') ? tokens.notification! : tokens.device;
@@ -151,6 +155,10 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     try {
       const subject = request.headers['x-g2-location-owner'];
       const historyOwner = typeof subject === 'string' && /^[a-f0-9]{64}$/.test(subject) ? subject : undefined;
+      if (weather && request.url === '/api/weather' && request.method === 'POST') {
+        if (!historyOwner) { send(400, {error: 'Device subject required'}); return; }
+        send(200, weather.control(await body(request), historyOwner)); return;
+      }
       if (histories && request.url === '/api/location/history' && request.method === 'POST') {
         if (!historyOwner) { send(400, {error: 'Device subject required'}); return; }
         send(200, histories.control(await body(request), historyOwner)); return;
@@ -160,7 +168,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
         const owner = request.headers['x-g2-location-owner'];
         if (typeof owner !== 'string' || !/^[a-f0-9]{64}$/.test(owner)) { send(400, { error: 'Device subject required' }); return; }
         const input = await body(request);
-        if (request.url === '/api/location/revoke') { z.object({}).strict().parse(input); histories?.revokeOwner(owner); send(200, locations.revokeOwner(owner)); return; }
+        if (request.url === '/api/location/revoke') { z.object({}).strict().parse(input); histories?.revokeOwner(owner); try {weather?.revokeOwner(owner);} catch { /* Optional persistence cannot prevent live-location revocation. */ } send(200, locations.revokeOwner(owner)); return; }
         if (request.url === '/api/location/control') { send(200, locations.control(input, owner)); return; }
         const envelope = input as Record<string, unknown>;
         const hasHistory = envelope && Object.hasOwn(envelope, 'history');
@@ -205,7 +213,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       if (request.url === '/api/utterances' && request.method === 'POST') { send(200, await bridge.submit(await body(request, PHOTO_REQUEST_BYTES))); return; }
       if (notifications && request.url === '/api/notifications' && request.method === 'POST') { send(200, await notifications.submit(await body(request))); return; }
       if (request.url === '/mcp' && request.method === 'POST') {
-        const result = await rpc(bridge, await body(request), notifications, locations, histories); send(result === undefined ? 202 : 200, result); return;
+        const result = await rpc(bridge, await body(request), notifications, locations, histories, weather, activation); send(result === undefined ? 202 : 200, result); return;
       }
       if (request.url === '/mcp') { response.setHeader('Allow', 'POST'); send(405, { error: 'Method not allowed' }); return; }
       send(404, { error: 'Not found' });
@@ -214,6 +222,6 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       else send(400, { error: 'Request rejected; no successful delivery is implied' });
     }
   });
-  server.once('close', () => { bridge.close(); unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); unsubscribeHistory?.(); locations?.close(); histories?.close(); for (const wake of [...waiting]) wake(); });
+  server.once('close', () => { activation?.close(); bridge.close(); unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); unsubscribeHistory?.(); unsubscribeWeather?.(); weather?.close(); locations?.close(); histories?.close(); for (const wake of [...waiting]) wake(); });
   return server;
 }

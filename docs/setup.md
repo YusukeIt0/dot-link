@@ -92,7 +92,7 @@ Requires Mac 0.4.0 or later and Even 0.2.23 or later.
 
 In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context`, `get_mobility_context` and `respond_to_location`, with the `location.updated` event.
 
-Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Then ask your existing Dot to monitor location changes and notify you on G2 only when useful information matches your preferences. Dot must create an event subscription; updating tools alone does not start announcements.
+For automatic context reception, update to Mac 0.4.34 or later. Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Dot Link connects that choice to your existing Dot's context reception. There is no separate monitoring switch or follow-up setup request. Dot decides whether useful information warrants an announcement, and can remain silent. The status shows when Dot is ready. With **Weather context** enabled, weather for the shared current location joins those same decisions.
 
 With Mac 0.4.23 or later, nearby streets, paths, areas and terrain references are added automatically while Dot is subscribed. Coordinates remain available during map loading or failure; a first area can take several minutes, while cached areas are faster. No region-download step is needed. References are not navigation or evidence that you entered a venue.
 
@@ -163,3 +163,24 @@ Each app initially follows its device language, with English as the fallback,
 and lets you select another supported language. The choice does not translate
 conversations or change pairing, notification sharing, speech-service
 configuration, or the wake phrase.
+
+## Optional weather context
+
+In the companion's Location sharing section, read the **Weather context**
+disclosure and MET Norway service terms before enabling it. This separate choice
+is off by default and belongs to the selected Mac. Current-location weather also
+needs fresh location sharing; a different place explicitly named in conversation
+does not. No paid API, account or API key is needed.
+
+Update the Mac and companion to matching versions that offer this control. Refresh
+the existing Dot Link connection's tools in ChatGPT, then restart the existing Dot
+so it loads the new definitions. Confirm `get_weather_context` is available there;
+a successful connection refresh alone does not establish that the running Dot
+loaded it. Ask an ordinary weather question without repeating an already shared
+location, or ask about another place. Forecasts, unknown fields and source limits
+remain visible to Dot. Weather failure does not prevent ordinary conversation.
+
+Turning weather off stops all weather use after the Mac acknowledges it. Turning
+location sharing off only stops current-location weather. If a setting change
+cannot be confirmed, reconnect and check it. See the [source/privacy details](../public/weather-sources.html)
+for the coarse-coordinate cache and request intervals.
