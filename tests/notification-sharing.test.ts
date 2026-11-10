@@ -135,6 +135,8 @@ test('a notification captured before stop cannot cross a new sharing choice, whi
   const {sharing_id: _id,...missing}=f.payload();await assert.rejects(f.inbox.submit(missing),/sharing is stopped/);
   await f.inbox.submit(accepted);assert.equal(f.events.length,1);
   await f.inbox.submit(f.payload());assert.equal(f.events.length,2);
+  const stored=JSON.parse(readFileSync(join(f.root,'notifications.json'),'utf8'));
+  assert.ok(stored.notifications.every((item:any)=>!Object.hasOwn(item,'sharing_id')));
 });
 
 test('pause and resume fence earlier notifications without making a new sharing choice',async t=>{

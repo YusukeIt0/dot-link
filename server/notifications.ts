@@ -22,7 +22,7 @@ export const notificationInput = z.object({
   source_verification: z.enum(['synthetic-test-marker', 'accessibility']),
   sharing_id: z.string().uuid().optional(),
 }).strict();
-const record = notificationInput.extend({
+const record = notificationInput.omit({sharing_id: true}).extend({
   status: z.enum(['pending', 'accepted', 'failed', 'announced']),
   announcement: z.string().optional(), announced_at: z.string().datetime().optional(),
   received_at: z.string().datetime().optional(), dot_read_at: z.string().datetime().optional(),
@@ -198,7 +198,9 @@ export class NotificationInbox {
   }
   submit(input: unknown) {
     return this.serial(async () => {
-      const p = notificationInput.parse(input);
+      // Admission metadata is transport-only. Keep the saved notification format
+      // readable by the previous app during a verified update rollback.
+      const {sharing_id: sharingID, ...p} = notificationInput.parse(input);
       const existing = this.state.notifications.find(n => n.id === p.id);
       if (existing) {
         const { status: _status, announcement: _announcement, announced_at: _announcedAt,
@@ -210,7 +212,7 @@ export class NotificationInbox {
       // including legacy migration with ordinary sharing disabled. They never
       // create a sharing intent or activate reception by themselves.
       const diagnostic = p.source_verification === 'synthetic-test-marker' && p.source_app === 'Dot Notification Lab' && /^DOT-LAB-[A-F0-9]{8}$/.test(p.title);
-      if (!this.sharingAllowed(p.sharing_id) && !diagnostic) throw new Error('Notification sharing is stopped; nothing sent');
+      if (!this.sharingAllowed(sharingID) && !diagnostic) throw new Error('Notification sharing is stopped; nothing sent');
       const sub = this.active();
       if (!sub) throw new Error('No notification subscription; nothing sent');
       const n: State['notifications'][number] = { ...p, status: 'pending', received_at: new Date().toISOString() };
