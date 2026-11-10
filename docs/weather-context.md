@@ -1,9 +1,11 @@
 # Worldwide weather context
 
-Work for [#300](https://github.com/YusukeIt0/dot-link/issues/300). This document
-describes the implementation decision and acceptance contract, not a released
-capability. Actual service, existing-Dot and device evidence must be recorded
-separately from offline tests. Main merge and publication await owner instruction.
+This document describes weather context in Mac 0.4.34 and Even 0.3.57 source.
+See [#300](https://github.com/YusukeIt0/dot-link/issues/300) for acceptance and
+delivery records. Source integration, Mac release and Even Hub availability are
+separate states; check the release feed and Even Hub for the versions available
+to you. Actual service, existing-Dot and device evidence is recorded separately
+from offline tests.
 
 ## Outcome and boundaries
 
@@ -89,8 +91,8 @@ sources/privacy page follows the existing application attribution pattern.
    path, localization and privacy/source documentation. It consumes acquisition
    without embedding provider-specific response paths in the location owner.
 
-The integration branch remains separate from main. Child integration requires its
-checks and independent review. Runtime fixtures are not device acceptance.
+The acquisition and integration changes were reviewed and integrated through
+child PRs before main integration. Runtime fixtures are not device acceptance.
 
 ## Evidence contract and failure behavior
 
