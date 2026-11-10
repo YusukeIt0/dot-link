@@ -26,12 +26,15 @@ final class NotificationForwarder {
     private let changed: () -> Void
     private let session: URLSession
     private let retryDelay: Double
+    private let sharingNow: () -> Double
+    private var sharingIntentID: String?
     private var payloads: [String: Payload] = [:]
     private var tasks: [String: URLSessionDataTask] = [:]
     private var lastSharingWrite: (id: String, epoch: String, enabled: Bool, at: Double)?
     // Only permission/control metadata crosses this local file; never notification text.
     func syncSharing(id: String, force: Bool = false) {
-        let enabled = allowed(), now = Date().timeIntervalSince1970
+        sharingIntentID = id
+        let enabled = allowed(), now = sharingNow()
         if !force, let last = lastSharingWrite, last.id == id, last.enabled == enabled, now >= last.at, now - last.at < 4 { return }
         // A pause, access loss, restart or expired heartbeat fences old queued
         // payloads, without resetting the owner's explicit reception-stop choice.
@@ -52,8 +55,8 @@ final class NotificationForwarder {
     private(set) var receptionState: String?
     private(set) var statusAvailable = false
     private(set) var lastStatusAt: Double?
-    init(runtime: URL, session: URLSession = .shared, retryDelay: Double = 5, allowed: @escaping () -> Bool, changed: @escaping () -> Void) {
-        self.session = session; self.retryDelay = retryDelay
+    init(runtime: URL, session: URLSession = .shared, retryDelay: Double = 5, sharingNow: @escaping () -> Double = { Date().timeIntervalSince1970 }, allowed: @escaping () -> Bool, changed: @escaping () -> Void) {
+        self.session = session; self.retryDelay = retryDelay; self.sharingNow = sharingNow
         self.runtime = runtime; self.allowed = allowed; self.changed = changed
         ledger = NotificationDeliveryLedger(url: runtime.appendingPathComponent("notification-menu-unified/delivery-ledger.json"))
     }
@@ -63,6 +66,9 @@ final class NotificationForwarder {
         }
     }
     func observe(_ extractions: [NotificationExtraction], selected: Bool) {
+        // The event may wake an idle app before its health timer runs. Refresh
+        // before capturing the interval; retries must keep that captured ID.
+        if selected, allowed(), let id = sharingIntentID { syncSharing(id: id) }
         for value in extractions {
             var disposition = "held"
             var notificationID: String?

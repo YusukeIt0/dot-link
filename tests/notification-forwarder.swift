@@ -55,8 +55,9 @@ let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [Fixtur
 let session = URLSession(configuration: config)
 defer { session.invalidateAndCancel() }
 var allowed = true
+var sharingTime = Date().timeIntervalSince1970
 var onChange: () -> Void = {}
-let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, allowed: { allowed }, changed: { onChange() })
+let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, sharingNow: { sharingTime }, allowed: { allowed }, changed: { onChange() })
 let sharingID = UUID().uuidString.lowercased()
 forwarder.syncSharing(id: sharingID)
 let controlURL = root.appendingPathComponent("notification-sharing.json")
@@ -112,6 +113,16 @@ check(FixtureProtocol.posts.count == 4)
 let encoded = try JSONEncoder().encode(forwarder.ledger.entries)
 let text = String(data: encoded, encoding: .utf8)!
 check(!text.contains("Fixture sender") && !text.contains("same body"))
+// An event arriving before a delayed health timer must publish a fresh lease
+// and stamp its payload with that new interval, not the expired one.
+allowed = true; sharingTime += 31
+forwarder.observe(fixture("after-idle"), selected: true)
+wait { forwarder.ledger.entry(NotificationReader.opaqueIdentity("after-idle"))?.stage == "dot_notified" }
+let afterIdle = try sharing()
+check(afterIdle["epoch"] as? String != sharingEpoch)
+check(afterIdle["updatedAt"] as? Double == sharingTime * 1000)
+check(FixtureProtocol.posts.last?["sharing_id"] as? String == afterIdle["epoch"] as? String)
+check(afterIdle["id"] as? String == sharingID)
 print("\(count) notification selection/retry/cancellation checks passed")
 }
 }
