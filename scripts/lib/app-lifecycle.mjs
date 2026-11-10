@@ -74,7 +74,11 @@ export async function resumeServices(directory, {home=homedir(),execute=run,wait
   const jobs = await ownedJobs(directory,{home,execute,includeUI:true,app});
   if (!['bridge','device','tunnel'].every(name=>jobs.some(j=>j.name===name))) throw new Error('SERVICE_SETUP_REQUIRED');
   try { await regularPath(app===join(home,'Applications/Dot Link.app') ? await resolvedMenuAppPath(home) : app); }
-  catch(cause) { if(cause.code==='ENOENT')throw Object.assign(new Error('APP_LOCATION_MISSING',{cause}),{setupCode:'APP_LOCATION_MISSING'});throw cause; }
+  catch(cause) {
+    const code=cause.code==='ENOENT'?'APP_LOCATION_MISSING':cause.message==='UNSAFE_INSTALL_PATH'?'APP_LOCATION_REPAIR':undefined;
+    if(code)throw Object.assign(new Error(code,{cause}),{setupCode:code});
+    throw cause;
+  }
   const domain=`gui/${uid}`;
   for (const job of jobs) await execute('/bin/launchctl',['enable',`${domain}/${job.label}`]);
   for (const job of jobs.filter(j=>j.name!=='setup-ui')) await activateAgent(domain,job.label,job.path,{execute,wait});

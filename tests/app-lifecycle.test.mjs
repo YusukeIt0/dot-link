@@ -30,7 +30,7 @@ for(const redirect of ['folder','app'])test(`resume rejects redirected ${redirec
  const f=await fixture(t);await suspendServices(f.directory,f);f.calls.length=0;
  const path=redirect==='folder'?join(f.home,'Applications'):f.app;
  const target=join(f.home,'redirect-target');await rename(path,target);await symlink(target,path);
- await assert.rejects(resumeServices(f.directory,f),/UNSAFE_INSTALL_PATH/);
+ await assert.rejects(resumeServices(f.directory,f),error=>error.message==='APP_LOCATION_REPAIR'&&error.setupCode==='APP_LOCATION_REPAIR');
  assert.ok(!f.calls.some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','bootstrap'].includes(op)));
  assert.equal((await lifecycleState(f.directory)).lifecycleReason,'pause');
 });
