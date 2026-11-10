@@ -21,6 +21,16 @@ const ready = () => ({
 test('published result and complete owning workflow authorize only the reviewed head',()=>{
   assert.equal(assertReady(ready()),head);
 });
+test('shared input serialization preserves existing receipt fingerprints', () => {
+  assert.equal(fingerprint, '37af04a96abfad3a6044273bcafc25d6c39790f1708142d6acfb59fa4b63af66');
+});
+test('a coalesced request keeps the original owner and cannot substitute its skipped jobs', () => {
+  const x = ready();
+  assert.equal(assertReady(x), head);
+  x.run = {...x.run, id: 999};
+  x.jobs[1].conclusion = 'skipped';
+  assert.throws(() => assertReady(x), /owning review workflow/);
+});
 test('model completion alone cannot satisfy the merge gate',()=>{
   for(const change of [
     x=>x.jobs.pop(),

@@ -54,6 +54,8 @@ else if(p.includes('/issues/73/comments?')) console.log(JSON.stringify([f.scopeC
 else if(p.includes('/comments?')) console.log(JSON.stringify([f.comments]));
 else if(p.endsWith('/issues/73')) console.log(JSON.stringify(f.scopeIssue));
 else if(p.includes('/issues?')) console.log(JSON.stringify(f.related || []));
+else if(p.includes('/actions/runs/') && p.includes('/jobs?')) console.log(JSON.stringify([{jobs:f.reviewJobs || ['intake','review','report'].map(name=>({name,status:'completed',conclusion:'success'}))}]));
+else if(p.includes('/actions/runs/')) console.log(JSON.stringify(f.reviewRun || {id:1234,path:'.github/workflows/claude-review.yml',repository:{full_name:'YusukeIt0/dot-link'},status:'completed',conclusion:'success',run_attempt:1}));
 else if(p.includes('/actions/workflows/ci.yml/runs')) console.log(JSON.stringify({workflow_runs:f.ciRuns || []}));
 else if(p.includes('/issues/comments/')) console.log(JSON.stringify(f.command));
 else if(p.includes('/collaborators/')) console.log(JSON.stringify({permission:f.permission}));
@@ -379,6 +381,9 @@ test('evidence context is reviewed and published with a bound machine-readable a
   success(f.run('report', {REVIEW_CONTEXT_JSON: prepared.outputs.context, REVIEW_JSON: JSON.stringify({...result, findings: [], assessment})}));
   const receipt = latestReceipt(f.read().comments, 98765);
   assert.equal(receipt.quality.findings, 0); assert.equal(receipt.quality.acceptance.comment_id, 40);
+  const live = f.read();
+  assert.equal(receipt.fingerprint, fingerprintPR({...live.issue, ...live.pr}, live.main, live.comments,
+    undefined, context.scope && {number: 73, digest: scopeDigest(scopeIssue, [])}));
   assert.equal(receipt.quality.assessment.requirements[0].id, 'R1');
   assert.match(f.read().comments.at(-1).body, /Physical verification: not-required/);
 });
@@ -577,4 +582,136 @@ test('child base diff at 500000 bytes is kept in full', t => {
   success(f.run('intake')); const prepared = f.run('prepare'); success(prepared);
   assert.equal(prepared.outputs.ready, 'true');
   assert.equal(readFileSync(join(f.dir, '.review/base-changes.diff')).length, 500000);
+});
+
+
+const automaticPR = {issue: {...issue, pull_request: {}}, eventName: 'pull_request_target',
+  event: {action: 'ready_for_review', pull_request: pr, sender: user}};
+function completePR(t, options = {}) {
+  const f = use(t, {...automaticPR, ...options});
+  success(f.run('intake')); success(f.run('report'));
+  return f;
+}
+
+test('equivalent automatic PR requests preserve the complete receipt and skip model admission', t => {
+  const f = completePR(t);
+  const before = f.read().comments, writes = f.writes().length;
+  // Even a failed diff fetch cannot consume model work for this identical input.
+  f.update({failDiff: true});
+  const r = f.run('intake', {GITHUB_RUN_ID: '5678'}); success(r);
+  assert.equal(r.outputs.accepted, 'false'); assert.equal(r.outputs.owner, undefined);
+  assert.deepEqual(f.read().comments, before); assert.equal(f.writes().length, writes);
+  assert.match(readFileSync(join(f.dir, 'summary'), 'utf8'), /coalesced.*1234/);
+  // A late reporter from the skipped request cannot erase the previous result.
+  success(f.run('report', {GITHUB_RUN_ID: '5678', REVIEW_OWNER: '5678:1', REVIEW_OUTCOME: 'cancelled'}));
+  assert.deepEqual(f.read().comments, before); assert.equal(f.writes().length, writes);
+  assert.equal(latestReceipt(f.read().comments, 98765).runId, '1234');
+});
+
+test('acceptance-update and ready events coalesce in either order', t => {
+  const actor = {...policy.trustedMaintainers[0], type: 'User'};
+  const record = {version: 1, head, scope: {approved: true, issue: 73, digest: 'a'.repeat(64)},
+    requirements: [{id: 'R1', expected: 'Preserve review'}], evidence: [], product_decisions: []};
+  const command = {id: 40, user: actor, body: acceptanceMarker + '\n```json\n' + JSON.stringify(record) + '\n```',
+    issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+  const acceptanceEvent = {action: 'edited', issue, sender: actor, comment: command};
+  for (const first of ['issue_comment', 'pull_request_target']) {
+    const f = use(t, {...automaticPR, comments: [command], command,
+      scopeIssue: {number: 73, title: 'Review', body: 'Preserve results', state: 'open'},
+      permission: 'write', eventName: first, event: first === 'issue_comment' ? acceptanceEvent : automaticPR.event});
+    success(f.run('intake')); success(f.run('report'));
+    const before = f.read().comments, writes = f.writes().length;
+    const second = first === 'issue_comment' ? 'pull_request_target' : 'issue_comment';
+    writeFileSync(join(f.dir, 'event.json'), JSON.stringify(second === 'issue_comment' ? acceptanceEvent : automaticPR.event));
+    const r = f.run('intake', {GITHUB_EVENT_NAME: second, GITHUB_RUN_ID: '5678'}); success(r);
+    assert.equal(r.outputs.accepted, 'false'); assert.equal(f.writes().length, writes);
+    assert.deepEqual(f.read().comments, before);
+  }
+});
+
+for (const change of ['head', 'main', 'body', 'discussion', 'inline', 'formal', 'base', 'scope', 'evidence']) {
+  test(`changed ${change} requires fresh review despite a completed result`, t => {
+    const actor = {...policy.trustedMaintainers[0], type: 'User'};
+    const record = {version: 1, head, scope: {approved: true, issue: 73, digest: 'a'.repeat(64)},
+      requirements: [{id: 'R1', expected: 'Preserve review'}], evidence: [], product_decisions: []};
+    const comment = {id: 40, user: actor, body: acceptanceMarker + '\n```json\n' + JSON.stringify(record) + '\n```'};
+    const f = completePR(t, {comments: [comment], scopeIssue: {number: 73, title: 'Review', body: 'Preserve results', state: 'open'}});
+    const live = f.read();
+    if (change === 'head') f.update({pr: {...live.pr, head: {sha: 'c'.repeat(40)}}});
+    if (change === 'main') f.update({main: 'c'.repeat(40)});
+    if (change === 'body') f.update({issue: {...live.issue, body: 'Changed scope'}});
+    if (change === 'discussion') f.update({comments: [...live.comments, {id: 41, user, body: 'New evidence'}]});
+    if (change === 'inline') f.update({inlineComments: [{id: 41, user, body: 'New feedback', commit_id: head}]});
+    if (change === 'formal') f.update({reviews: [{id: 41, user, body: 'New feedback', state: 'COMMENTED', commit_id: head}]});
+    if (change === 'base') f.update({pr: {...live.pr, base: {...pr.base, ref: 'parent', sha: main}}});
+    if (change === 'scope') f.update({scopeIssue: {...live.scopeIssue, body: 'New requirement'}});
+    if (change === 'evidence') f.update({comments: live.comments.map(row => row.id === 40 ? {...row, body: row.body.replace('Preserve review', 'New acceptance requirement')} : row)});
+    const r = f.run('intake', {GITHUB_RUN_ID: '5678'}); success(r);
+    assert.equal(r.outputs.accepted, 'true');
+    assert.match(f.read().comments.at(-1).body, /owner:5678:1/);
+    success(f.run('report', {GITHUB_RUN_ID: '5678', REVIEW_OUTCOME: 'cancelled'}));
+    assert.match(f.read().comments.at(-1).body, /Cancelled/);
+  });
+}
+
+test('parent movement invalidates coalescing even with identical main and head', t => {
+  const f = completePR(t, {pr: {...pr, base: {...pr.base, ref: 'parent', sha: main}}});
+  f.update({baseSha: 'c'.repeat(40)});
+  const r = f.run('intake', {GITHUB_RUN_ID: '5678'}); success(r); assert.equal(r.outputs.accepted, 'true');
+});
+
+for (const request of ['command', 'dispatch', 'all-jobs']) test(`explicit ${request} requests fresh intake for identical input`, t => {
+  const f = completePR(t);
+  const command = {id: 77, user, body: '/dotlink review', issue_url: 'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+  f.update({command, permission: 'write'});
+  if (request !== 'all-jobs') writeFileSync(join(f.dir, 'event.json'), JSON.stringify({sender: user, comment: command, issue}));
+  const env = request === 'all-jobs' ? {GITHUB_RUN_ATTEMPT: '2'} : {GITHUB_EVENT_NAME: request === 'command' ? 'issue_comment' : 'workflow_dispatch', GITHUB_RUN_ID: '5678'};
+  const r = f.run('intake', env); success(r); assert.equal(r.outputs.accepted, 'true');
+});
+
+for (const state of ['failed-run', 'pending-run', 'wrong-workflow', 'missing-job', 'cancelled-job', 'edited', 'incomplete', 'newer-incomplete']) {
+  test(`${state} cannot supply a coalesced review`, t => {
+    const f = completePR(t); const live = f.read();
+    const run = {id: 1234, path: '.github/workflows/claude-review.yml', repository: {full_name: 'YusukeIt0/dot-link'}, status: 'completed', conclusion: 'success', run_attempt: 1};
+    if (state === 'failed-run') f.update({reviewRun: {...run, conclusion: 'failure'}});
+    if (state === 'pending-run') f.update({reviewRun: {...run, status: 'in_progress', conclusion: null}});
+    if (state === 'wrong-workflow') f.update({reviewRun: {...run, path: 'other.yml'}});
+    if (state === 'missing-job') f.update({reviewJobs: []});
+    if (state === 'cancelled-job') f.update({reviewJobs: ['intake', 'review', 'report'].map(name => ({name, status: 'completed', conclusion: name === 'report' ? 'cancelled' : 'success'}))});
+    if (state === 'edited') f.update({comments: live.comments.map(row => ({...row, editor: user}))});
+    if (state === 'incomplete') f.update({comments: live.comments.map(row => ({...row, body: row.body.replace('· Complete', '· Failed')}))});
+    if (state === 'newer-incomplete') f.update({comments: [{...live.comments[0], id: 998, node_id: 'comment998'}, {...live.comments[0], body: live.comments[0].body.replace('· Complete', '· Failed')}]});
+    const r = f.run('intake', {GITHUB_RUN_ID: '5678'}); success(r); assert.equal(r.outputs.accepted, 'true');
+    assert.match(f.read().comments.at(-1).body, /Reviewing/);
+  });
+}
+
+test('coalescing API failure preserves the completed comment and fails visibly', t => {
+  const f = completePR(t); const before = f.read().comments, writes = f.writes().length;
+  f.update({failRead: '/actions/runs/'});
+  assert.notEqual(f.run('intake', {GITHUB_RUN_ID: '5678'}).status, 0);
+  assert.deepEqual(f.read().comments, before); assert.equal(f.writes().length, writes);
+});
+
+test('an older owner cannot overwrite a later bot comment', t => {
+  const f = completePR(t); const live = f.read();
+  const newer = {...live.comments[0], id: 998, node_id: 'comment998',
+    body: live.comments[0].body.replace('owner:1234:1', 'owner:5678:1')};
+  f.update({comments: [...live.comments, newer]});
+  const writes = f.writes().length;
+  success(f.run('report', {REVIEW_OUTCOME: 'cancelled'}));
+  assert.equal(f.writes().length, writes);
+  assert.deepEqual(f.read().comments.at(-1), newer);
+});
+
+test('stale failed-job rerun stops before model input and explains fresh-intake recovery', t => {
+  const f = use(t, automaticPR); success(f.run('intake'));
+  f.update({issue: {...f.read().issue, body: 'New discussion'}});
+  const prep = f.run('prepare', {GITHUB_RUN_ATTEMPT: '2'}); success(prep);
+  assert.equal(prep.outputs.ready, 'false'); assert.equal(existsSync(join(f.dir, '.review/input.json')), false);
+  success(f.run('report', {GITHUB_RUN_ATTEMPT: '2', REVIEW_PREPARED: 'false'}));
+  for (const body of [f.read().comments.at(-1).body, readFileSync(join(f.dir, 'summary'), 'utf8')]) {
+    assert.match(body, /Outdated/); assert.match(body, /Re-run failed jobs reuses the original intake input/);
+    assert.match(body, /Re-run all jobs/); assert.match(body, /\/dotlink review/);
+  }
 });

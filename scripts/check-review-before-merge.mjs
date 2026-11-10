@@ -1,45 +1,16 @@
 import {collectCI, ciTarget, assertCI} from './ci-evidence.mjs';
 // Read-only maintainer gate. Does not approve, merge, rerun, or change branch rules.
-import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
+import {hash, reviewInput, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repository = 'YusukeIt0/dot-link';
-const marker = '<!-- dot-link-opus-review:v1 -->';
-
-export function latestReceipt(comments, botId) {
-  const row = comments.filter(x => String(x.user?.id) === String(botId) &&
-    x.user?.login === 'dotsweeper[bot]' && x.user?.type === 'Bot' && x.body?.startsWith(marker)).at(-1);
-  if (!row) throw new Error('No verified dotsweeper comment.');
-  if (!row.revision_verified || row.revision_author?.type !== 'Bot' ||
-      row.revision_author.login !== 'dotsweeper[bot]' || String(row.revision_author.id) !== String(botId)) {
-    throw new Error('Current review comment revision is not authenticated to dotsweeper.');
-  }
-  const match = row.body.match(/^<!-- dot-link-opus-review:v1 -->\n<!-- dot-link-review-owner:([1-9]\d*):([1-9]\d*) -->\n## dotsweeper review · Complete\n\n<!-- dot-link-review-input:head=([a-f0-9]{40});main=([a-f0-9]{40});input=([a-f0-9]{64}) -->/);
-  if (!match) throw new Error('Latest review is incomplete, outdated, failed, or predates revision receipts.');
-  const baseMatch = row.body.slice(match[0].length).match(/^\n\n<!-- dot-link-review-base:ref=([^;\s]+);sha=([a-f0-9]{40}) -->/);
-  const base = baseMatch ? {ref: decodeURIComponent(baseMatch[1]), sha: baseMatch[2]} : undefined;
-  const qualityMatch = row.body.slice(match[0].length + (baseMatch?.[0].length || 0)).match(/^\n\n<!-- dot-link-review-quality:([A-Za-z0-9_-]+) -->/);
-  let quality;
-  if (qualityMatch) {
-    if (qualityMatch[1].length > 80_000) throw new Error('Oversized review quality receipt.');
-    quality = JSON.parse(Buffer.from(qualityMatch[1], 'base64url').toString('utf8'));
-  }
-  return {base, quality, runId: match[1], intakeAttempt: Number(match[2]), head: match[3], main: match[4], fingerprint: match[5], commentId: row.id};
-}
+export {latestReceipt} from './review-receipt.mjs';
+import {latestReceipt, assertReviewRun} from './review-receipt.mjs';
 
 export function fingerprintPR(pr, main, comments, base, scope, feedback) {
-  const discussion = comments.filter(row => row.user?.type !== 'Bot').map(row => ({
-    id:row.id, author:row.user?.login, body:row.body, updated_at:row.updated_at,
-  }));
-  const data = {number:pr.number, title:pr.title, body:pr.body, author:pr.user.login,
-    kind:'pull_request', main, head:pr.head.sha, discussion};
-  if (pr.base?.ref !== 'main') data.base = base;
-  if (scope) data.scope = scope;
-  if (feedback?.length) data.reviewDiscussion = feedback;
-  return createHash('sha256').update(JSON.stringify(data)).digest('hex');
+  return hash(reviewInput(pr, pr, main, comments, base, scope, feedback));
 }
 
 export function assertReady({pr, main, base, scope, feedback, expectedBase = 'main', comments, receipt, run, jobs, checks, ciRun, ciJobs, ciComparison, baseComparison}) {
@@ -54,15 +25,7 @@ export function assertReady({pr, main, base, scope, feedback, expectedBase = 'ma
   if (pr.head?.sha !== receipt.head || main !== receipt.main) throw new Error('PR head or main changed since the published review.');
   if (fingerprintPR(pr, main, comments, base, scope, feedback) !== receipt.fingerprint) throw new Error('PR description, discussion, inline review or agreed scope changed since review.');
   if (pr.mergeable !== true || pr.mergeable_state !== 'clean') throw new Error('GitHub has not confirmed the PR is cleanly mergeable.');
-  if (String(run.id) !== receipt.runId || run.path !== '.github/workflows/claude-review.yml' ||
-      run.repository?.full_name !== repository || run.status !== 'completed' || run.conclusion !== 'success' ||
-      run.run_attempt < receipt.intakeAttempt) throw new Error('The owning review workflow has not completed successfully.');
-  for (const name of ['intake', 'review', 'report']) {
-    const matches = jobs.filter(x => x.name === name);
-    if (matches.length !== 1 || matches[0].status !== 'completed' || matches[0].conclusion !== 'success') {
-      throw new Error(`Review job is not successfully complete: ${name}`);
-    }
-  }
+  assertReviewRun(receipt, run, jobs);
   if ((expectedBase === 'main' && !checks.length) || checks.some(x => x.bucket !== 'pass')) throw new Error('Required checks are missing, pending, or unsuccessful.');
   assertCI(ciTarget(pr, base || {ref: 'main', sha: main}), ciRun, ciJobs, ciComparison);
   return pr.head.sha;

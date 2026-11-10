@@ -6,6 +6,19 @@ import {readFileSync} from 'node:fs';
 export const policy = JSON.parse(readFileSync(new URL('../config/development-policy.json', import.meta.url), 'utf8'));
 export const acceptanceMarker = '<!-- dot-link-acceptance:v1 -->';
 export const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+// Preserve the receipt serialization across intake and both merge-gate callers.
+export function reviewInput(issue, pr, main, comments, base, scope, feedback) {
+  const discussion = comments.filter(row => row.user?.type !== 'Bot').map(row => ({
+    id: row.id, author: row.user?.login, body: row.body, updated_at: row.updated_at,
+  }));
+  const data = {number: issue.number, title: issue.title, body: issue.body,
+    author: issue.user?.login, kind: pr ? 'pull_request' : 'issue',
+    main, head: pr?.head.sha || '', discussion};
+  if (pr && pr.base?.ref !== 'main') data.base = base;
+  if (scope) data.scope = scope;
+  if (feedback?.length) data.reviewDiscussion = feedback;
+  return data;
+}
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const text = (value, max = 4000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
 const list = (value, max) => Array.isArray(value) && value.length <= max;
