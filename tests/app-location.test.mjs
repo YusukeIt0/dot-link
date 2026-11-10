@@ -76,7 +76,7 @@ test('case-insensitive Applications spelling does not cause a handoff to itself'
 test('fresh installation and missing-app restoration resolve an aliased home safely', async t => {
   const f = await fixture(t), alias = f.home + '-alias';
   await symlink(f.home, alias); t.after(() => rm(alias, {force:true}));
-  assert.equal(await installMenuApp(f.source, {...f, home:alias}), f.app);
+  assert.equal(await installMenuApp(f.source, {...f, home:alias}), join(alias,'Applications/Dot Link.app'));
   await rm(f.app, {recursive:true});
   const restored = await ensureAppLocation(f.source, {...f, home:alias});
   assert.deepEqual(restored, {app:f.app, source:f.source, handoff:true});

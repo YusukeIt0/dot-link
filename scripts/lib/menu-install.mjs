@@ -21,10 +21,13 @@ export async function installMenuApp(source, {home=homedir(),execute=run,verify=
   const identity = path => execute('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(path,'Contents/Info.plist')]);
   if(await identity(source)!==identifier)throw new Error('APP_BUNDLE_INVALID');
   const destination=await resolvedMenuAppPath(home);
+  // Keep the registration contract consistent with lifecycle ownership checks.
+  // Filesystem operations still use the safely resolved destination.
+  const registeredPath=join(home,'Applications/Dot Link.app');
   if(await exists(destination)) {
     if(await identity(destination)!==identifier)throw new Error('APP_BUNDLE_CONFLICT');
     // Updating an existing app is a separate operation, never an unreviewed overwrite.
-    return destination;
+    return registeredPath;
   }
   await mkdir(dirname(destination),{recursive:true});
   if((await lstat(dirname(destination))).isSymbolicLink() || await realpath(dirname(destination))!==dirname(destination))throw new Error('UNSAFE_INSTALL_PATH');
@@ -38,7 +41,7 @@ export async function installMenuApp(source, {home=homedir(),execute=run,verify=
     catch(error) { if(error.code!=='ENOENT')throw error; }
     await rename(candidate,destination);
   } finally { await rm(staging,{recursive:true,force:true}); }
-  return destination;
+  return registeredPath;
 }
 export async function registerMenuApp(app,{home=homedir(),execute=run}={}) {
   const label='local.even-g2-dot.setup-ui';
