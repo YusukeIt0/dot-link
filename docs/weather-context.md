@@ -146,3 +146,55 @@ global recovery interval, rather than permanently disabling weather or immediate
 repeating unknown requests. No corrupt coordinate copy is retained. Permission,
 symlink and other I/O errors remain unavailable until the underlying condition is
 fixed; they do not trigger network traffic.
+
+## Integration behavior
+
+`WeatherContext` owns consent, owner/epoch validation and acquisition lifecycle;
+`LocationContext` remains the owner of fresh positions, events and responses.
+`get_weather_context` has strict current and specified-place modes. The device
+HTTP gateway forwards the authenticated subject to `/api/weather`; MCP cannot
+change consent. Consent storage failure disables only weather at startup.
+
+The sharing controls include autonomous context reception. Users do not separately
+configure event subscriptions or ask Dot to enable proactive weather. The normal
+Mac setup message prepares both input and location reception. For an existing
+input-only connection, `SharingActivation` sends an explicitly identified owner
+sharing-control request through that verified input subscription. The pending
+input tool includes it in the legacy `utterances` envelope with explicit
+`source: owner_sharing_control` provenance and text identifying the app action.
+Existing handlers that process only that list can therefore see the action without
+account-specific instruction changes. Control acknowledgements never create a
+G2 message or history entry, and succeed only after actual registration. ChatGPT must create its
+own `location.updated` subscription; the relay never fabricates one or copies a
+callback to a different event. No control request enters G2 conversation history.
+Requests are invalidated by stop, expired consent, owner revocation or shutdown;
+delivery has at most three attempts with a persistent identity and retry budget.
+An explicit `events/unsubscribe` stops activation for that sharing session, including
+across relay restart. It is not treated as subscription expiry or transport failure;
+a new sharing session or an explicit subscription can resume reception.
+Actual `locationSubscribed` state remains the readiness signal. An accepted
+webhook alone is not successful activation. Existing weather consent remains
+independent, so preparing context reception does not authorize provider queries.
+
+Automatic checks run every 30 seconds only while consent, fresh location and the
+existing location subscription allow them. Same-cell checks are at most once per
+minute; the acquisition cache enforces much longer external-request limits.
+Time advances select the appropriate forecast sample and future intervals. Current
+sample values (including temperature/humidity), model updates and status changes
+produce new decision contexts. Retrieval/check timestamps alone do not. Identical
+weather survives same-cell phone updates; movement to another cell removes old
+weather immediately. Late requests recheck the original lease, owner, consent and
+cell, with the existing 100-metre movement guard too.
+
+Weather revisions share the location event's 30-second minimum, pending coalescing
+and retry behavior. A silent outcome does not suppress a later weather revision.
+Weather revocation invalidates weather-bearing response contexts; ordinary fresh
+location responses remain available. Concurrent readers of the same cell share
+acquisition and each rechecks access. Different-cell concurrent work receives the
+service's bounded busy/unavailable evidence rather than creating a queue; tools
+instruct Dot to continue, not poll. Revoking the source of a shared request can
+cancel both readers; neither may return an unchecked result.
+
+Integration fixtures are not evidence of live MET reachability, existing-Dot tool
+adoption or G2 display. Those remain the bounded acceptance sequence above, after
+human terms acceptance and applicable deployment/consent authorization.

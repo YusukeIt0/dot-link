@@ -437,7 +437,7 @@
   "mac.remove_all_even_connections_230": "要移除所有 Even 連線嗎？",
   "mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing": "此操作會使透過此 Mac 配對碼註冊的所有 Even 連線失效，包括尚未使用的配對碼。訊息傳送和位置分享會停止，各裝置都必須重新配對。\n\nChatGPT 連線設定及已儲存的對話會保留。",
   "mac.remove_all": "全部移除",
-  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "使用此 Mac 的 Dot Link 連線來接收我的 Even G2 訊息。工作階段為 personal-g2。請訂閱 utterance.created，使用 get_pending_utterances 讀取實際 ID 和訊息，再以 reply_to_g2 回覆。主動傳送新訊息請使用 send_message_to_g2。首先請檢查 get_status。",
+  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "請讓現有的 Dot 透過這台 Mac 的 Dot Link 連線使用 personal-g2 工作階段。訂閱 utterance.created 和 location.updated。用 get_pending_utterances 讀取訊息和共享操作請求，用 reply_to_g2 回答實際問題。當我在 Dot Link 中開啟共享時，根據獲准使用的最新資訊判斷是否值得提供提示；否則透過 respond_to_location 保持安靜。無需額外設定監控或再次確認。請先檢查 get_status。",
   "mac.setup_message_copied_paste_and_send_it_to_your_existing_dot": "設定訊息已複製。請貼到您原本的 Dot 並傳送。",
   "mac.copied_paste_it_on_your_iphone": "已複製。請貼到 iPhone 上。",
   "mac.expired_create_a_new_pairing_code": "已過期。請建立新的配對碼。",
@@ -577,5 +577,13 @@
   "mac.reconnect_help_title": "連線未恢復時",
   "mac.reconnect_help": "如果之前已連線，請登入 ChatGPT，並對原本的 Dot 說：\n「請確認 Dot Link 的連線狀態，並恢復接收 G2 發話的事件訂閱。」\n然後回到此畫面，按一下「{check}」。",
   "mac.open_chatgpt": "開啟 ChatGPT",
-  "mac.initial_connection_title": "首次連線"
+  "mac.initial_connection_title": "首次連線",
+  "even.weather": "氣象資訊",
+  "even.weather_disclosure": "Mac會向api.met.no傳送經過四捨五入的座標以取得預報。該服務也會收到Mac的IP位址。",
+  "even.weather_terms": "閱讀服務條款",
+  "even.weather_accept": "我已閱讀、理解並接受MET Norway服務條款，並同意傳送經過四捨五入的座標及Mac的IP位址以取得天氣預報。要啟用氣象資訊嗎？",
+  "even.weather_failed": "無法確認變更。請重新連線並檢查設定。",
+  "even.weather_unavailable": "連接已更新的Mac以管理氣象資訊。",
+  "even.weather_on": "氣象資訊已啟用。",
+  "even.weather_off": "氣象資訊已關閉。"
 }

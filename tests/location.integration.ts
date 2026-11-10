@@ -12,6 +12,7 @@ import { deviceServer } from '../server/device.ts';
 import { LocationContext } from '../server/location.ts';
 import { PairingAuthority } from '../server/pairing-authority.ts';
 import { WebhookSender } from '../server/webhook.ts';
+import { SharingActivation } from '../server/sharing-activation.ts';
 
 async function listen(server: Server) {server.listen(0, '127.0.0.1'); await once(server, 'listening'); const address = server.address(); assert(address && typeof address !== 'string'); return `http://127.0.0.1:${address.port}`;}
 const post = (url: string, headers: Record<string, string>, body: unknown) => new Promise<{status: number; data: any}>((resolve, reject) => {
@@ -32,7 +33,8 @@ test('paired phone location reaches a distinct MCP context; token rotation works
   const locations = new LocationContext(join(dir, 'location.json'), sender, hosts, (input, guard, context) => bridge.sendMessage(input, guard, context));
   t.after(()=>{locations.close();bridge.close();});
   const tokens = {device: randomBytes(32).toString('base64url'), mcp: randomBytes(32).toString('base64url')};
-  const relay = bridgeServer(bridge, tokens, undefined, locations);
+  const activation = new SharingActivation(join(dir,'activation.json'),bridge,locations);
+  const relay = bridgeServer(bridge, tokens, undefined, locations, undefined, undefined, activation);
   servers.push(relay);
   const relayURL = await listen(relay);
   const pairing = new PairingAuthority(join(dir, 'pairing'));
@@ -65,6 +67,16 @@ test('paired phone location reaches a distinct MCP context; token rotation works
   assert.equal(JSON.stringify(invalid.data).includes('Private test text'), false);
   assert.equal(locations.status().locationDecisionAt, null);
   await bridge.subscribe({name:'utterance.created',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://callback.example.test/events',secret:'whsec_'+randomBytes(32).toString('base64')}});
+  await activation.sync();
+  const controls = await post(relayURL + '/mcp', mcpHeaders, {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'get_pending_utterances',arguments:{}}});
+  assert.equal(controls.data.result.structuredContent.utterances[0].source,'owner_sharing_control');
+  assert.equal(controls.data.result.structuredContent.utterances[0].event,'location.updated');
+  assert.deepEqual(bridge.history(),[]);
+  const registration = await post(relayURL + '/mcp',mcpHeaders,{jsonrpc:'2.0',id:5,method:'events/subscribe',params:{
+    name:'location.updated',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://callback.example.test/location',secret:'whsec_'+randomBytes(32).toString('base64')}}});
+  assert.ok(registration.data.result.id);
+  assert.equal(locations.status().locationSubscribed,true);
+  assert.deepEqual(activation.pending(),[]);
   const utterance_id=randomUUID();
   await bridge.submit({id:utterance_id,text:'Synthetic nearby question'});
   const announcement = await post(relayURL + '/mcp', mcpHeaders, {jsonrpc: '2.0', id: 2, method: 'tools/call', params: {name: 'respond_to_location', arguments: {context_id: contextId, utterance_id, disposition: 'announce', text: 'Synthetic recommendation'}}});

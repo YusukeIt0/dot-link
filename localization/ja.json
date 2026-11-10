@@ -437,7 +437,7 @@
   "mac.remove_all_even_connections_230": "Evenの接続をすべて解除しますか？",
   "mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing": "このMacの接続コードで登録したすべてのEven接続と、使用前のコードを無効にします。会話の送受信と位置共有が止まり、使う端末は接続し直す必要があります。\n\nChatGPT側の接続設定と保存済みの会話は残ります。",
   "mac.remove_all": "すべて解除",
-  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "このMac用のDot Link接続を使って、私のEven G2からの発話を受け取ってください。セッションはpersonal-g2です。utterance.createdを購読し、届いたらget_pending_utterancesで実際のIDと本文を取得して、reply_to_g2で返してください。新しい連絡はsend_message_to_g2を使ってください。まずget_statusで接続を確認してください。",
+  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "このMacのDot Link接続を、いつものDotでpersonal-g2に使ってください。utterance.createdとlocation.updatedを購読してください。get_pending_utterancesで発話と共有操作の依頼を読み、実際の質問にはreply_to_g2で答えてください。Dot Linkで共有をオンにしたら、許可された新しい情報から案内する価値を判断し、必要がなければrespond_to_locationで沈黙を選んでください。追加の監視設定や確認は不要です。まずget_statusを確認してください。",
   "mac.setup_message_copied_paste_and_send_it_to_your_existing_dot": "設定メッセージをコピーしました。いつものDotへ貼り付けて送ってください。",
   "mac.copied_paste_it_on_your_iphone": "コピーしました。iPhoneへ貼り付けてください。",
   "mac.expired_create_a_new_pairing_code": "期限が切れました。新しい接続コードを作成してください。",
@@ -577,5 +577,13 @@
   "mac.reconnect_help_title": "接続が戻らない場合",
   "mac.reconnect_help": "以前接続していた場合は、ChatGPTにログインして、いつものDotに次のように伝えてください。\n「Dot Linkとの接続状態を確認して、G2からの発話を受け取るイベント購読を再開して」\nその後、この画面に戻り「{check}」を押してください。",
   "mac.open_chatgpt": "ChatGPTを開く",
-  "mac.initial_connection_title": "初めて接続する場合"
+  "mac.initial_connection_title": "初めて接続する場合",
+  "even.weather": "気象情報",
+  "even.weather_disclosure": "Macからapi.met.noへ丸めた座標を送り、予報を取得します。送信元IPアドレスも相手に伝わります。",
+  "even.weather_terms": "利用規約を読む",
+  "even.weather_accept": "MET Norwayの利用規約を読み、理解し、同意しました。予報取得のため、丸めた座標とMacのIPアドレスを送信することを許可します。気象情報を有効にしますか？",
+  "even.weather_failed": "変更を確認できませんでした。再接続して設定を確認してください。",
+  "even.weather_unavailable": "更新済みのMacに接続すると設定できます。",
+  "even.weather_on": "気象情報は有効です。",
+  "even.weather_off": "気象情報はオフです。"
 }

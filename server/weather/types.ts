@@ -61,7 +61,7 @@ export interface WeatherEvidence {
 
 /** Approximate one-kilometre cells, no raw phone coordinates in weather storage. */
 export function weatherQueryPoint(raw: WeatherPoint): WeatherPoint {
-  const point = weatherPointSchema.parse(raw);
+  const point = weatherPointSchema.parse({latitude: raw.latitude, longitude: raw.longitude});
   const latitude = Math.round(point.latitude * 100) / 100;
   let longitude = Math.round(point.longitude * 100) / 100;
   if (longitude === 180) longitude = -180;

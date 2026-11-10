@@ -2,7 +2,7 @@
   "package_id": "app.tripsurf.dotlink",
   "edition": "202601",
   "name": "Dot Link",
-  "version": "0.3.54",
+  "version": "0.3.56",
   "min_sdk_version": "0.0.16",
   "entrypoint": "index.html",
   "permissions": [
@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "Share phone location with Dot through your Mac only when enabled. Optional history stays on your Mac for up to 7 days and can be deleted. Optional walking/terrain requests send route coordinates to FOSSGIS and terrain areas to AWS."
+      "desc": "Share phone location with Dot through your Mac only when enabled. Separate options save up to 7 days of history, send walking/terrain queries to FOSSGIS/AWS, or send rounded coordinates to MET Norway for weather forecasts. History can be deleted."
     },
     {
       "name": "camera",

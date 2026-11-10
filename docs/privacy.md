@@ -65,6 +65,8 @@ Stopping services alone does not delete history. Manage or delete information al
 
 Location sharing starts off. When enabled in the Even app, the phone location, measurement time and accuracy (and speed/heading when available) are sent to your connected Mac. Your existing Dot can read the latest location and decide whether to offer useful information. Turning sharing off stops new location uploads and requests that the Mac clear its current location and block location-based announcements. If the stop cannot reach the Mac, that remote state is not cleared immediately: sharing expires 90 seconds after the last accepted relay update, and old measurements cannot be used as fresh location. Pending stop requests are saved and retried. A confirmed glasses-app exit also ends the live sharing session while retaining the saved choice for the next launch. Hiding the phone page alone does not stop sharing. You control the OS and Even app location permissions.
 
+If your connected Dot is receiving conversation input but has not registered for context changes, enabling sharing sends one explicitly identified app-control request through that existing connection. It contains no coordinates and is not stored as a spoken message or answer in conversation history. The existing input list carries it with explicit app-action provenance so older connections can process it. If an older receiver attempts a control reply, the relay returns a non-delivery acknowledgement only after actual subscription; it does not store or display that reply. Dot registers the context subscription through its normal event mechanism; receipt of the request alone does not establish readiness. The Mac keeps only the latest activation identifier, hashed session/destination identity, creation time and bounded delivery-attempt state. Stopping sharing invalidates pending requests.
+
 Without the separate **Remember recent places** opt-in, Dot Link does not save an exact phone-coordinate trail to disk. The latest phone fix and short-lived decision context remain in Mac memory; preferences, subscriptions and revoked identifiers are saved. Optional history is described below. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
 
 While sharing has a fresh measurement and Dot has an active location subscription, the Mac automatically retrieves nearby geographic data from Overture Maps. Coordinates are available immediately; map references can arrive later, be incomplete, or be unavailable. Map proximity is not proof of a visit, road membership or safe passage. References include source attribution and are shared with Dot alongside the coordinates. No paid geocoding, places or search API is used by this component.
@@ -184,3 +186,47 @@ Google signals, advertising personalization and user-provided-data collection ar
 ## Contact
 
 For non-sensitive reports, use [GitHub Issues](https://github.com/YusukeIt0/dot-link/issues) or [email support](mailto:yusuke.ito@tripsurf.app). Do not attach credentials, pairing codes, recordings, conversations or unreviewed diagnostic files.
+
+## Weather context
+
+**Weather context** is independently off by default. Enabling it on the selected
+Mac requires reading and accepting the [MET Norway service terms](https://api.met.no/doc/TermsOfService).
+Existing location, walking/terrain and history consent never enables it. The Mac
+sends coordinates rounded to 0.01 degrees to `api.met.no`, plus an identifying
+app/version/project User-Agent; the service also sees the outgoing IP address.
+It receives no phone identifier, conversation, name or location history. Rounded
+coordinates can still be sensitive and are not anonymous.
+
+Dot may request a fresh shared current location or an explicitly requested place
+with coordinate provenance. Specified-place requests do not change or establish
+current location. With a valid location subscription, fresh location and weather
+consent, bounded changes also enrich the existing location event; Dot decides
+whether to speak. Data is optional model forecast evidence, not sensor observations
+or a safety recommendation. Geography downloads never block weather acquisition.
+
+The private Mac cache holds at most 16 coarse-position forecasts, which expire
+after 24 hours and are removed at access/startup and hourly while active. Physical
+cleanup can therefore lag expiry until the next maintenance pass or startup. Up
+to 64 hashed query keys with retry timestamps remain until their service-specified
+cooldown ends, potentially longer than 24 hours after extended backoff. Hashes of
+coarse positions can be guessed and are not location anonymization. No raw phone
+fixes, place labels or references enter this cache. The same query waits at least
+three hours between attempts (including failures), and all queries share a
+one-minute minimum; response expiry/backoff can extend these intervals. Cache
+corruption resets it with a persisted 24-hour recovery pause. Off stops use and
+cancels pending requests after the Mac receives the change; the bounded cache
+remains until expiry to preserve service limits. It is not an exact movement trail.
+
+Consent is retained only on the selected Mac for its paired owner. Revocation
+invalidates access and late results; a restart requires fresh phone location for
+current weather. Stopping location sharing or losing its fresh lease prevents
+current-location weather, while explicitly requested places can still use the
+separate weather permission. An unconfirmed change is shown as failed; reconnect
+and check the setting. Stops cannot retract requests already received by the
+service, or data already read by Dot. Weather-based answers may enter ordinary
+conversation history. Dot's data handling is separate.
+
+Based on [MET Norway](https://api.met.no/) data under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), normalized and subset by
+Dot Link. Source credit, valid/update/retrieval times and limitations accompany
+results. The companion includes [weather source and privacy details](../public/weather-sources.html).

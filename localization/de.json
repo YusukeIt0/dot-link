@@ -437,7 +437,7 @@
   "mac.remove_all_even_connections_230": "Alle Even-Verbindungen entfernen?",
   "mac.this_invalidates_all_even_connections_registered_with_this_mac_s_pairing": "Dadurch werden alle Even-Verbindungen ungültig, die mit Kopplungscodes dieses Mac registriert wurden, einschließlich unbenutzter Codes. Nachrichten und Standortfreigabe werden gestoppt. Jedes Gerät muss erneut gekoppelt werden.\n\nIhre ChatGPT-Verbindungseinstellungen und gespeicherten Gespräche bleiben erhalten.",
   "mac.remove_all": "Alle entfernen",
-  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "Nutze die Dot-Link-Verbindung dieses Mac, um Nachrichten von meiner Even G2 zu empfangen. Die Sitzung ist personal-g2. Abonniere utterance.created, lies mit get_pending_utterances die tatsächlichen IDs und Nachrichten und antworte mit reply_to_g2. Verwende send_message_to_g2 für neue Nachrichten. Prüfe zuerst get_status.",
+  "mac.use_this_mac_s_dot_link_connection_to_receive_messages_from_my_even_g2_t": "Verwende die Dot-Link-Verbindung dieses Mac mit meinem bisherigen Dot für personal-g2. Abonniere utterance.created und location.updated. Lies Nachrichten und Freigabeanfragen mit get_pending_utterances und beantworte echte Fragen mit reply_to_g2. Wenn ich die Freigabe in Dot Link aktiviere, entscheide anhand aktueller erlaubter Informationen, ob ein Hinweis nützlich ist; andernfalls wähle mit respond_to_location Stille. Keine weitere Überwachungseinstellung oder Bestätigung. Prüfe zuerst get_status.",
   "mac.setup_message_copied_paste_and_send_it_to_your_existing_dot": "Einrichtungsnachricht kopiert. Fügen Sie sie bei Ihrem gewohnten Dot ein und senden Sie sie.",
   "mac.copied_paste_it_on_your_iphone": "Kopiert. Fügen Sie den Code auf Ihrem iPhone ein.",
   "mac.expired_create_a_new_pairing_code": "Abgelaufen. Erstellen Sie einen neuen Kopplungscode.",
@@ -577,5 +577,13 @@
   "mac.reconnect_help_title": "Wenn die Verbindung nicht wiederhergestellt wird",
   "mac.reconnect_help": "Wenn Sie bereits verbunden waren, melden Sie sich bei ChatGPT an und sagen Sie Ihrem bisherigen Dot:\n„Prüfe die Verbindung zu Dot Link und aktiviere das Ereignisabonnement zum Empfang von Äußerungen der G2 erneut.“\nKehren Sie dann hierher zurück und klicken Sie auf „{check}“.",
   "mac.open_chatgpt": "ChatGPT öffnen",
-  "mac.initial_connection_title": "Erste Verbindung"
+  "mac.initial_connection_title": "Erste Verbindung",
+  "even.weather": "Wetterkontext",
+  "even.weather_disclosure": "Dein Mac sendet gerundete Koordinaten an api.met.no, um Vorhersagen abzurufen. Der Dienst erhält auch seine IP-Adresse.",
+  "even.weather_terms": "Nutzungsbedingungen lesen",
+  "even.weather_accept": "Ich habe die Nutzungsbedingungen von MET Norway gelesen, verstanden und akzeptiere sie. Ich erlaube die Übermittlung gerundeter Koordinaten und der IP-Adresse meines Macs für Wettervorhersagen. Wetter aktivieren?",
+  "even.weather_failed": "Änderung nicht bestätigt. Erneut verbinden und Einstellung prüfen.",
+  "even.weather_unavailable": "Verbinde dich mit einem aktualisierten Mac, um Wetter zu verwalten.",
+  "even.weather_on": "Wetterkontext ist aktiviert.",
+  "even.weather_off": "Wetterkontext ist ausgeschaltet."
 }
