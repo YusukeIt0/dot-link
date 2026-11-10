@@ -378,6 +378,32 @@ Changes to the planner/workflows themselves use full scope and remain protected
 from automatic merge. Review still decides whether prose, rendered UI or device
 observations need additional evidence; a classifier is not a semantic review.
 
+CI may reuse **full product execution** for an identical repository tree, including
+a revert or child-to-parent integration. `scripts/ci-reuse.mjs` requires a successful
+Tests run started within the last 24 hours, from the trusted maintainer in this
+repository, with an ancestor source commit and the same complete Git tree. That
+includes the workflows, pinned actions/Node, dependencies and every test input in
+Git. The source attempt must contain both successful required jobs and an actually
+executed `Run full product validation` step on `macos-15`. Narrowed, skipped or reused
+runs cannot supply coverage; reuse chains are prohibited. No run artifacts or logs
+are downloaded or executed. Branch CI may consume this evidence but cannot supply
+it or replace the current PR's required CI.
+
+Preflight searches at most 100 recent Tests runs and verifies at most five matching
+candidates. It also checks that the source has no newer run/attempt, and the consuming
+job verifies the source again. Missing evidence or API failure during planning keeps
+full macOS execution. Lost/changed evidence after allocation fails the current job;
+choose GitHub **Re-run all jobs** to force full macOS validation. **Re-run failed
+jobs** inherits the earlier Ubuntu reuse plan and cannot recover it. Manual reruns and local
+commands do not reuse execution. The 24-hour bound limits, but cannot eliminate,
+hosted-runner/environment drift; rerun fully when an external assumption changes.
+
+Reused product work runs on Ubuntu while any other selected checks still execute.
+Required job names, current-head/target-base checks and review/merge gates are
+unchanged. Workflow summaries identify the source run/attempt, commit/tree and
+avoided product-step seconds separately from queue time. Initial rollout has no
+eligible historical step receipt, so its first identical-tree source runs fully.
+
 For a clean checkout at the target commit, run:
 
 ```sh

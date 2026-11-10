@@ -78,4 +78,15 @@ class ProductCIValidation(unittest.TestCase):
             self.assertEqual(job['steps'][-1]['run'], 'node scripts/ci-plan.mjs --event')
         ownership = next(s for s in branch['jobs']['branch-test']['steps'] if s.get('id') == 'admission')
         self.assertEqual(ownership['run'], 'node scripts/branch-ci-admission.mjs')
-        self.assertEqual(branch['jobs']['branch-test']['steps'][-1]['if'], "steps.admission.outputs.run == 'true'")
+        self.assertIn("steps.admission.outputs.run == 'true'", branch['jobs']['branch-test']['steps'][-1]['if'])
+        for workflow, preflight, test_job in [(ci, 'workflow-lint', 'test'), (branch, 'branch-preflight', 'branch-test')]:
+            steps = workflow['jobs'][test_job]['steps']
+            full = next(s for s in steps if s.get('name') == 'Run full product validation')
+            reused = next(s for s in steps if s.get('name') == 'Run bounded or reused validation')
+            self.assertIn(f"needs.{preflight}.outputs.product == 'true'", full['if'])
+            self.assertIn(f"needs.{preflight}.outputs.reuse == ''", full['if'])
+            self.assertNotIn('CI_REUSE_RUN', full['env'])
+            self.assertIn(f"needs.{preflight}.outputs.reuse != ''", reused['if'])
+            self.assertEqual(reused['env']['CI_REUSE_RUN'], '${{ needs.' + preflight + '.outputs.reuse }}')
+            self.assertEqual(full['run'], 'node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"')
+            self.assertEqual(workflow['permissions']['actions'], 'read')
