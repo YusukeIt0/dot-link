@@ -15,6 +15,9 @@ import {bridgeServer} from '../server/http.ts';
 import {deviceServer} from '../server/device.ts';
 import {PairingAuthority} from '../server/pairing-authority.ts';
 import {WebhookSender} from '../server/webhook.ts';
+import {RelaySettings} from '../src/relay-connection.ts';
+import {RelaySession} from '../src/relay-session.ts';
+import {WeatherSharing} from '../src/weather-sharing.ts';
 async function listen(s:Server){s.listen(0,'127.0.0.1');await once(s,'listening');return `http://127.0.0.1:${(s.address() as {port:number}).port}`;}
 test('paired gateway forwards authenticated weather consent, serves actual MCP tools and keeps question replies intact',async t=>{
  const dir=mkdtempSync(join(tmpdir(),'weather-http-'));const servers:Server[]=[];
@@ -44,6 +47,23 @@ test('paired gateway forwards authenticated weather consent, serves actual MCP t
  assert.equal((await device('/api/weather',control,{Authorization:'Bearer invalid'})).status,401);
  assert.equal((await device('/api/weather',control,{Origin:'https://foreign.test'})).status,403);
  const enabled=await device('/api/weather',control,{'X-G2-Location-Owner':'f'.repeat(64)});assert.equal(enabled.status,200);state=enabled.body;assert.equal(state.weatherEnabled,true);
+ // Exercise the companion's real route validation and request construction,
+ // with only the network destination redirected into this local HTTP fixture.
+ const values=new Map<string,string>();
+ const settings=new RelaySettings(()=>({getItem:k=>values.get(k)??null,setItem:(k,v)=>{values.set(k,v);},removeItem:k=>{values.delete(k);}}));
+ settings.save({origin:'https://fixture.tailtest.ts.net',token:session.token,expiresAt:Date.now()+60_000});
+ const relay=new RelaySession({settings,legacyToken:'',appOrigin:origin,rejected:()=>assert.fail('Pairing rejected'),persistenceFailed:()=>assert.fail('Persistence failed'),
+  fetch:(async(url,init)=>{assert.equal(new URL(String(url)).origin,'https://fixture.tailtest.ts.net');const headers=new Headers(init?.headers);
+   assert.equal(headers.get('Authorization'),`Bearer ${session.token}`);assert.equal(init?.method,'POST');
+   const response=await device(new URL(String(url)).pathname,JSON.parse(String(init?.body)),{Authorization:headers.get('Authorization')!});
+   return new Response(JSON.stringify(response.body),{status:response.status});}) as typeof fetch});
+ t.after(()=>relay.stop());
+ const companion=new WeatherSharing({target:()=>relay.credentials?.origin,api:input=>relay.location('/api/weather',input),changed:()=>{}});
+ companion.receive(state);await companion.control(false);
+ assert.equal(companion.status().failed,false,'the companion can send weather consent through its actual relay route');
+ assert.equal(companion.status().weatherEnabled,false);assert.equal((await device('/api/status')).body.weatherEnabled,false);
+ await companion.control(true);assert.equal(companion.status().failed,false);assert.equal(companion.status().weatherEnabled,true);
+ state=(await device('/api/status')).body;assert.equal(state.weatherEnabled,true);
  const sharing_id=randomUUID();await device('/api/location/control',{sharing_id,enabled:true});
  await device('/api/location/update',{sharing_id,sequence:1,fix:{latitude:10,longitude:20,accuracy:5,measured_at:new Date().toISOString()}});
  const current=(await call('get_weather_context',{mode:'current'})).result.structuredContent;assert.equal(current.mode,'current');assert.equal(current.evidence.current.temperature_c,28);assert.deepEqual(current.evidence.source,weatherSource);

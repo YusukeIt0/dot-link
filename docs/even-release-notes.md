@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.56 Beta
 
 - Added optional weather context for your shared location or another place you ask about.
 - Added a separate weather sharing choice with service terms and source details.
