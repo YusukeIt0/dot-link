@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { run, unloadAgent, activateAgent } from './setup.mjs';
 import { ownedService, serviceNames } from './service-management.mjs';
+import { resolvedMenuAppPath } from './menu-install.mjs';
 
 export const uiLabel = 'local.even-g2-dot.setup-ui';
 export const lifecycleFile = directory => join(directory, '.runtime/lifecycle.json');
@@ -72,7 +73,7 @@ export async function suspendServices(directory, { reason = 'pause', home = home
 export async function resumeServices(directory, {home=homedir(),execute=run,wait,app=join(home,'Applications/Dot Link.app'),uid=process.getuid()}={}) {
   const jobs = await ownedJobs(directory,{home,execute,includeUI:true,app});
   if (!['bridge','device','tunnel'].every(name=>jobs.some(j=>j.name===name))) throw new Error('SERVICE_SETUP_REQUIRED');
-  try { await regularPath(app); }
+  try { await regularPath(app===join(home,'Applications/Dot Link.app') ? await resolvedMenuAppPath(home) : app); }
   catch(cause) { if(cause.code==='ENOENT')throw Object.assign(new Error('APP_LOCATION_MISSING',{cause}),{setupCode:'APP_LOCATION_MISSING'});throw cause; }
   const domain=`gui/${uid}`;
   for (const job of jobs) await execute('/bin/launchctl',['enable',`${domain}/${job.label}`]);
