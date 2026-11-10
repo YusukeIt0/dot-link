@@ -9,6 +9,15 @@ import {verifyUpdateApp} from './update-storage.mjs';
 import {installMenuApp} from './menu-install.mjs';
 
 export const managedAppPath = (home = homedir()) => join(home, 'Applications/Dot Link.app');
+export async function isManagedApp(source, home = homedir()) {
+  const app = managedAppPath(home);
+  try {
+    // Home aliases/case differences do not create another app. Redirecting the
+    // managed Applications directory or bundle itself is still disallowed.
+    if ((await lstat(join(home, 'Applications'))).isSymbolicLink() || (await lstat(app)).isSymbolicLink()) return false;
+    return await realpath(source) === await realpath(app);
+  } catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
 const failure = (code, cause) => Object.assign(new Error(code, {cause}), {setupCode: code});
 const failurePath = home => join(home, 'Library/Caches/app.tripsurf.dotlink.mac/location-handoff.json');
 const locationCodes = new Set(['APP_LOCATION_MISSING', 'APP_LOCATION_REPAIR', 'APP_LOCATION_OLDER']);
@@ -48,8 +57,8 @@ export async function ensureAppLocation(source, {home = homedir(), execute = run
   let current;
   try { current = await realpath(source); }
   catch (cause) { throw failure('APP_LOCATION_MISSING', cause); }
-  if (current === app) {
-    await regularPath(app);
+  if (await isManagedApp(current, home)) {
+    await regularPath(current);
     return {app, handoff: false};
   }
   try {

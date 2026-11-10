@@ -58,6 +58,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var restartingUpdateHost = false
     var automaticResumePending = false
     var appLocationReady = false
+    var appLocationValidated = false
     var currentAction = ""
     var lastChecked: Date?
     var migratingNotifications = false
@@ -262,7 +263,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Before location validation this copy must not mutate relay lifecycle.
-        if !appLocationReady && !busy { return .terminateNow }
+        if !appLocationValidated && !busy { return .terminateNow }
         if restartingUpdateHost { notifications?.shutdown(); return .terminateNow }
         if appUpdater?.prepared == true {
             if appUpdater?.silentRelaunch == true { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateBackgroundRelaunchAt") }
@@ -651,7 +652,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         setupFailure.copied = true; render()
     }
     func perform(_ action: String, input: [String: String] = [:]) {
-        guard appLocationReady || action == "app-locate" else { return }
+        guard appLocationReady || action == "app-locate" || (action == "shutdown" && appLocationValidated) else { return }
         guard !busy, action == "app-locate" || appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; messageRecord = nil
         pairingRefreshGeneration += 1
         setupFailure.begin(action)
@@ -697,6 +698,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     receive(["kind": "error", "code": "APP_LOCATION_REPAIR"]); return
                 }
                 appLocationReady = true
+                appLocationValidated = true
                 if appUpdater == nil { configureUpdater() }
                 appUpdater?.consumeHostRestart()
                 appUpdater?.beginStartupRecovery()

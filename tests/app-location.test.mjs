@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, realpath, symlink} from 'node:fs/promises';
+import {mkdtemp, mkdir, writeFile, readFile, readdir, rm, realpath, symlink, rename} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {ensureAppLocation, handoffApp, managedAppPath, runAppHandoff, consumeHandoffFailure} from '../scripts/lib/app-location.mjs';
+import {ensureAppLocation, handoffApp, managedAppPath, runAppHandoff, consumeHandoffFailure, isManagedApp} from '../scripts/lib/app-location.mjs';
 import {verifyUpdateApp} from '../scripts/lib/update-storage.mjs';
 import {installMenuApp} from '../scripts/lib/menu-install.mjs';
 
@@ -52,6 +52,24 @@ test('normal canonical startup needs no copy or signature process; an alias to i
   const alias = join(f.home, 'alias.app'); await symlink(f.app, alias);
   assert.deepEqual(await ensureAppLocation(f.app, f), {app: f.app, handoff: false});
   assert.deepEqual(await ensureAppLocation(alias, f), {app: f.app, handoff: false});
+  assert.equal(f.calls.length, 0); await f.preserved();
+});
+
+test('home alias is the same installed app, including the failure-receipt identity check', async t => {
+  const f = await fixture(t); await f.bundle(f.app);
+  const alias = f.home + '-alias'; await symlink(f.home, alias);
+  t.after(() => rm(alias, {force:true}));
+  assert.equal(await isManagedApp(f.app, alias), true);
+  assert.equal((await ensureAppLocation(f.app, {...f, home:alias})).handoff, false);
+  assert.equal(f.calls.length, 0); await f.preserved();
+});
+
+test('case-insensitive Applications spelling does not cause a handoff to itself', async t => {
+  const f = await fixture(t); await f.bundle(f.app);
+  await rename(join(f.home, 'Applications'), join(f.home, 'applications'));
+  try { await realpath(f.app); } catch (error) { if(error.code === 'ENOENT') { t.skip('case-sensitive filesystem'); return; } throw error; }
+  assert.equal(await isManagedApp(f.app, f.home), true);
+  assert.equal((await ensureAppLocation(f.app, f)).handoff, false);
   assert.equal(f.calls.length, 0); await f.preserved();
 });
 
