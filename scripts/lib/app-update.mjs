@@ -112,7 +112,7 @@ export async function finishUpdate(directory,options={}){
  }
  return result;
 }
-async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),rollback=false,verify,backgroundCleanup=false,cleanupOnly=false,...options}={}){
+async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join(home,'Applications/Dot Link.app'),rollback=false,restart=false,verify,backgroundCleanup=false,cleanupOnly=false,...options}={}){
  const check=verify??(async()=>{try{const h=JSON.parse(await execute(process.execPath,[join(app,'Contents/Resources/payload/scripts/setup-status.mjs'),directory],{timeout:15000}));return h.bridge===true&&h.device===true&&h.tunnel===true;}catch{return false;}});
  let journal;try{journal=JSON.parse(await readFile(journalPath(directory),'utf8'));}catch(e){
   if(e.code!=='ENOENT')throw e;
@@ -135,7 +135,25 @@ async function finishUpdateLocked(directory,{home=homedir(),execute=run,app=join
   if(!backgroundCleanup)await cleanup(directory,{app,execute});
   return {recovered:true,stopped:journal.stopped};
  }
- if(rollback)for(const j of journal.originals)await writeFile(j.path,j.content,{mode:0o600});
+ // Preparation may have stopped between writing the journal and rebinding all
+ // jobs. Recovery must finish that migration, not repeatedly start stale code
+ // from the data directory. Validate the installed bundle before changing jobs.
+ const replacements=[];
+ if(rollback){
+  for(const j of journal.originals)replacements.push({path:j.path,content:j.content});
+ }else{
+  await verifyUpdateApp(app,execute);
+  for(const job of jobs.filter(j=>['bridge','device','tunnel'].includes(j.name))){
+   const p=JSON.parse(await execute('/usr/bin/plutil',['-convert','json','-o','-',job.path]));
+   replacements.push({path:job.path,content:bundledJob(p,job.name,app,directory)});
+  }
+ }
+ const changed=await Promise.all(replacements.map(async j=>(await readFile(j.path,'utf8'))!==j.content));
+ if(changed.some(Boolean)||(restart&&!journal.stopped)){
+  // launchctl bootstrap alone does not replace an already loaded definition.
+  await suspendServices(directory,{home,execute,app,...options});
+  for(const j of replacements)await writeFile(j.path,j.content,{mode:0o600});
+ }
  if(!journal.stopped){
   await resumeServices(directory,{home,execute,app,...options});
   let healthy=false;

@@ -1,6 +1,10 @@
 import Foundation
 @main enum SetupFailureTests {
     static func main() throws {
+        precondition(SetupFailurePresentation.requiresRecovery("UPDATE_ALREADY_PREPARED"))
+        precondition(SetupFailurePresentation.requiresRecovery("UPDATE_RECOVERY_REQUIRED"))
+        precondition(!SetupFailurePresentation.requiresRecovery("UPDATE_APP_INVALID"))
+        precondition(!SetupFailurePresentation.requiresRecovery("SETUP_FAILED"))
         let catalogURL = URL(fileURLWithPath: "scripts/lib/setup-errors.json")
         let raw: [String: Any] = ["version": 1, "code": "TAILSCALE_HTTPS_FAILED", "stage": "https", "exitCode": 7, "signal": "SIGTERM", "stdout": "sk-private", "message": "sk-private", "origin": "https://private.ts.net"]
         let details = SetupFailureDetails(value: raw, catalogURL: catalogURL)!

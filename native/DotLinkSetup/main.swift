@@ -744,7 +744,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFailed() }
             let code = value["code"] as? String ?? "SETUP_FAILED"
-            if code == "UPDATE_RECOVERY_REQUIRED" { state["step"] = "updateRecovery" }
+            if SetupFailurePresentation.requiresRecovery(code) { state["step"] = "updateRecovery" }
             if ["MULTIPLE_INSTALLATIONS", "EXISTING_SERVICE_CONFLICT", "EXISTING_SERVICE_UNREADABLE", "INSTALL_FOLDER_OCCUPIED"].contains(code) { state["step"] = "conflict" }
             messageRecord = LocalizedMessage("mac.setup_could_not_complete_existing_settings_have_been_preserved_check_the", suffix: " (\(code))")
             if currentAction == "activate" {
@@ -753,6 +753,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     setupFailure.details = SetupFailureDetails(value: failure, catalogURL: payload.appendingPathComponent("scripts/lib/setup-errors.json"))
                 }
                 if setupFailure.details != nil { messageRecord = nil } // Render the retained failure separately from transient status messages.
+            }
+            if code == "UPDATE_APP_INVALID" && setupFailure.details == nil {
+                messageRecord = LocalizedMessage("setup.codes.UPDATE_APP_INVALID")
             }
             if currentAction == "stt-select" { messageRecord = LocalizedMessage("mac.could_not_switch_services_please_try_again") }
             if currentAction == "revoke-pairings" {

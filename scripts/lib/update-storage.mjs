@@ -38,7 +38,8 @@ export async function verifyUpdateApp(app,execute=run){
  if(!(await regularPath(app)).isDirectory())throw new Error('UPDATE_APP_INVALID');
  await regularPath(join(app,'Contents/Info.plist'));
  if(await execute('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',join(app,'Contents/Info.plist')])!==bundleID)throw new Error('UPDATE_APP_INVALID');
- await execute('/usr/bin/codesign',['--verify','--deep','--strict',app]);
+ try{await execute('/usr/bin/codesign',['--verify','--deep','--strict',app]);}
+ catch(cause){throw Object.assign(new Error('UPDATE_APP_INVALID',{cause}),{setupCode:'UPDATE_APP_INVALID'});}
 }
 
 export async function createUpdateBackup(directory){

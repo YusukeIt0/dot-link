@@ -60,6 +60,65 @@ test('failed post-update health retains recovery journal for the next launch',as
  assert.equal((await finishUpdate(f.directory,f)).recovered,true);
 });
 
+test('recovery completes interrupted rebinding using the verified app and preserves saved data',async t=>{
+ const f=await fixture(t);
+ const saved={'device-key':'fixture-device-key','tunnel.yaml':'fixture-tunnel-profile','tunnel-api-key':'fixture-api-key','bridge-state.json':'fixture-history'};
+ for(const [name,value] of Object.entries(saved))await writeFile(join(f.runtime,name),value);
+ await prepareUpdate(f.directory,{...f,bootstrap:true});
+ const journal=await readFile(join(f.runtime,'app-update.json'),'utf8');
+ // Reproduce an interruption before the remaining jobs were rebound. A stale
+ // loaded definition must also be unloaded, not mistaken for a healthy job.
+ const original=JSON.parse(journal).originals;
+ for(const name of ['device','tunnel']){
+  const j=original.find(j=>j.name===name);await writeFile(j.path,j.content);f.loaded.add(name);
+ }
+ const before=f.calls.length;
+ const verify=async()=>{
+  for(const name of ['bridge','device','tunnel']){
+   const p=JSON.parse(await run('/usr/bin/plutil',['-convert','json','-o','-',f.plists[name]]));
+   if(!f.loaded.has(name)||!p.ProgramArguments[0].startsWith(f.app))return false;
+  }
+  return true;
+ };
+ assert.equal((await finishUpdate(f.directory,{...f,verify})).recovered,true);
+ const recovery=f.calls.slice(before);
+ assert.ok(recovery.some(([cmd,op,target])=>cmd==='/bin/launchctl'&&op==='bootout'&&target.endsWith('.device')));
+ assert.ok(recovery.some(([cmd,op])=>cmd==='/usr/bin/codesign'&&op==='--verify'));
+ for(const [name,value] of Object.entries(saved))assert.equal(await readFile(join(f.runtime,name),'utf8'),value);
+ await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
+});
+
+test('recovery refuses a damaged replacement before changing services or discarding its journal',async t=>{
+ const f=await fixture(t);await prepareUpdate(f.directory,{...f,bootstrap:true});
+ const journal=await readFile(join(f.runtime,'app-update.json'),'utf8'),before=f.calls.length;
+ await assert.rejects(finishUpdate(f.directory,{...f,execute:async(cmd,args)=>{
+  if(cmd==='/usr/bin/codesign')throw Object.assign(new Error('invalid signature'),{code:1});
+  return f.execute(cmd,args);
+ }}),/UPDATE_APP_INVALID/);
+ assert.equal(await readFile(join(f.runtime,'app-update.json'),'utf8'),journal);
+ assert.ok(!f.calls.slice(before).some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','disable','bootstrap','bootout'].includes(op)));
+});
+
+test('startup recovery restarts stale loaded jobs even when their on-disk definitions already match',async t=>{
+ const f=await fixture(t);await prepareUpdate(f.directory,{...f,bootstrap:true});
+ for(const name of ['bridge','device','tunnel'])f.loaded.add(name);
+ const before=f.calls.length;
+ const verify=async()=>['bridge','device','tunnel'].every(name=>
+  f.calls.slice(before).some(([cmd,op,target])=>cmd==='/bin/launchctl'&&op==='bootout'&&target.endsWith('.'+name))&&f.loaded.has(name));
+ assert.equal((await finishUpdate(f.directory,{...f,restart:true,verify})).recovered,true);
+});
+
+test('startup recovery keeps an intentional pause and a journal-free launch does not restart services',async t=>{
+ const f=await fixture(t);
+ await writeFile(join(f.runtime,'lifecycle.json'),JSON.stringify({stopped:true,reason:'pause'}));
+ await prepareUpdate(f.directory,f);let before=f.calls.length;
+ assert.deepEqual(await finishUpdate(f.directory,{...f,restart:true}),{recovered:true,stopped:true});
+ assert.ok(!f.calls.slice(before).some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','bootstrap'].includes(op)));
+ before=f.calls.length;
+ assert.deepEqual(await finishUpdate(f.directory,{...f,restart:true}),{recovered:false});
+ assert.ok(!f.calls.slice(before).some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','disable','bootstrap','bootout'].includes(op)));
+});
+
 test('prepared setup updates and recovers without creating services or changing keys and preferences',async t=>{
  for(const rollback of [false,true]){
   const f=await fixture(t,{initialSetup:true});
@@ -138,7 +197,7 @@ test('manual update keeps an already paused relay paused',async t=>{
 test('manual interruption still verifies the app before stopping services',async t=>{
  const f=await fixture(t),execute=f.execute;
  f.execute=async(cmd,args)=>{if(cmd==='/usr/bin/codesign')throw new Error('INVALID_SIGNATURE');return execute(cmd,args);};
- await assert.rejects(prepareUpdate(f.directory,{...f,interrupt:true}),/INVALID_SIGNATURE/);
+ await assert.rejects(prepareUpdate(f.directory,{...f,interrupt:true}),/UPDATE_APP_INVALID/);
  assert.equal(f.disabled.size,0);assert.equal(f.loaded.size,4);
  await assert.rejects(readFile(join(f.runtime,'app-update.json')),/ENOENT/);
 });

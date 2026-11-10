@@ -59,7 +59,7 @@ test('signature failure before arming or after exit never opens an unverified ap
  for(const failAt of [1,2]){
   const {args,options,state}=await fixture(t);const execute=options.execute;
   options.execute=async(cmd,a)=>{const result=await execute(cmd,a);if(cmd==='/usr/bin/codesign'&&state.verified===failAt)throw Error('invalid signature');return result;};
-  await assert.rejects(restartUpdateHost(args,options),/invalid signature/);assert.equal(state.opens.length,0);
+  await assert.rejects(restartUpdateHost(args,options),/UPDATE_APP_INVALID/);assert.equal(state.opens.length,0);
   assert.equal(state.ready,failAt-1);
  }
 });
