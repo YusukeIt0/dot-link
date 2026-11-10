@@ -1,8 +1,8 @@
 import {validateTriage, planLabels} from './review-labels.mjs';
 import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
-import {createHash} from 'node:crypto';
-import {acceptanceMarker, trustedUser, dependencyBot, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
+import {latestReceipt, assertReviewRun} from './review-receipt.mjs';
+import {hash, reviewInput, acceptanceMarker, trustedUser, dependencyBot, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 if (repo !== 'YusukeIt0/dot-link') throw new Error('This workflow is restricted to public Dot Link');
@@ -40,26 +40,18 @@ function snapshot() {
     : pr && (pr.state !== 'open' || pr.base.repo?.full_name !== repo) ? 'The PR is no longer open against this repository.' : '';
   const rows = comments();
   if (reason) return {issue, pr, rows, reason};
-  const discussion = rows.filter(row => row.user?.type !== 'Bot').map(row => ({
-    id: row.id, author: row.user?.login, body: row.body, updated_at: row.updated_at,
-  }));
   const main = get(`${root}/commits/main`).sha;
-  const data = {number: issue.number, title: issue.title, body: issue.body,
-    author: issue.user?.login, kind: pr ? 'pull_request' : 'issue',
-    main, head: pr?.head.sha || '', discussion};
-  if (pr && pr.base.ref !== 'main') data.base = {ref: pr.base.ref, sha: get(`${root}/commits/${encodeURIComponent(pr.base.ref)}`).sha};
+  const base = pr && pr.base.ref !== 'main'
+    ? {ref: pr.base.ref, sha: get(`${root}/commits/${encodeURIComponent(pr.base.ref)}`).sha} : undefined;
   const scope = pr && scopeRevision(rows, pr.head.sha, path => get(`${root}/${path}`), path =>
     JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
-  if (scope) data.scope = scope;
-  if (pr) {
-    const feedback = reviewDiscussion(pr.number, path => JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
-    if (feedback.length) data.reviewDiscussion = feedback;
-  }
-  const fingerprint = createHash('sha256').update(JSON.stringify(data)).digest('hex');
+  const feedback = pr && reviewDiscussion(pr.number, path => JSON.parse(gh(['api', `${root}/${path}`, '--paginate', '--slurp'])).flat());
+  const data = reviewInput(issue, pr, main, rows, base, scope, feedback);
+  const fingerprint = hash(data);
   return {issue, pr, rows, data, fingerprint};
 }
 function publish(rows, body) {
-  const existing = rows.find(owned);
+  const existing = rows.filter(owned).at(-1);
   const payload = {body: marker + '\n' + ownershipMarker + '\n' + body};
   const response = existing ? send(`${root}/issues/comments/${existing.id}`, payload, 'PATCH') : send(`${endpoint}/comments`, payload);
   console.log(`Review status: ${response.html_url}`);
@@ -68,7 +60,7 @@ const runUrl = `https://github.com/${repo}/actions/runs/${process.env.GITHUB_RUN
 const owner = mode === 'intake' ? `${process.env.GITHUB_RUN_ID}:${process.env.GITHUB_RUN_ATTEMPT || '1'}` : process.env.REVIEW_OWNER;
 if (!/^[1-9]\d*:[1-9]\d*$/.test(owner || '')) throw new Error('Missing review ownership token');
 const ownershipMarker = `<!-- dot-link-review-owner:${owner} -->`;
-const ownsRun = rows => rows.some(row => owned(row) && row.body.includes(ownershipMarker));
+const ownsRun = rows => rows.filter(owned).at(-1)?.body.includes(ownershipMarker);
 const summary = body => appendFileSync(process.env.GITHUB_STEP_SUMMARY, body + '\n');
 const help = 'For another review, the author or a maintainer can comment `/dotlink review`.';
 // Expected lifecycle transitions are dispositions, not infrastructure failures.
@@ -76,7 +68,8 @@ const help = 'For another review, the author or a maintainer can comment `/dotli
 function disposition(s) {
   if (!ownsRun(s.rows)) return {state: 'Superseded', reason: 'Another run owns the review comment, or it was removed.'};
   if (s.reason) return {state: 'Skipped', reason: s.reason};
-  if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) return {state: 'Outdated', reason: 'The item, discussion, PR head, target branch or main changed during review.'};
+  if (s.fingerprint !== process.env.REVIEW_FINGERPRINT) return {state: 'Outdated', reason: 'The item, discussion, PR head, target branch or main changed during review.' +
+    (Number(process.env.GITHUB_RUN_ATTEMPT || 1) > 1 ? ' Re-run failed jobs reuses the original intake input. Comment `/dotlink review` or choose Re-run all jobs for fresh intake.' : '')};
   return null;
 }
 function finishWithoutFindings(s, d) {
@@ -109,6 +102,24 @@ function authorized(s) {
   return (name === 'issues' && event.action === 'opened') ||
     (name === 'pull_request_target' && (['opened', 'ready_for_review'].includes(event.action) ||
       (event.action === 'synchronize' && trustedUser(actor) && (trustedUser(s.issue.user) || dependencyBot(s.issue.user)))));
+}
+// The per-item workflow queue serializes automatic requests. Preserve the
+// existing publication owner before a redundant request can claim the comment.
+function equivalentCompletedReview(s) {
+  const name = process.env.GITHUB_EVENT_NAME;
+  const automatic = name === 'pull_request_target' ||
+    (name === 'issue_comment' && event.comment?.body?.startsWith(acceptanceMarker));
+  if (!s.pr || !automatic || Number(process.env.GITHUB_RUN_ATTEMPT || 1) > 1) return null;
+  let receipt;
+  try { receipt = latestReceipt(s.rows, botId); } catch { return null; }
+  if (receipt.head !== s.data.head || receipt.main !== s.data.main ||
+      receipt.fingerprint !== s.fingerprint || JSON.stringify(receipt.base) !== JSON.stringify(s.data.base)) return null;
+  // API failures fail intake without overwriting the completed comment.
+  const run = get(`${root}/actions/runs/${receipt.runId}`);
+  const jobs = JSON.parse(gh(['api', `${root}/actions/runs/${receipt.runId}/jobs?filter=latest&per_page=100`,
+    '--paginate', '--slurp'])).flatMap(page => page.jobs);
+  try { assertReviewRun(receipt, run, jobs); } catch { return null; }
+  return receipt;
 }
 function boundedInput(s) {
   const input = JSON.stringify(s.data, null, 2);
@@ -200,6 +211,11 @@ if (mode === 'intake') {
   const s = snapshot();
   if (s.reason) { summary(`Review skipped: ${s.reason}`); process.exit(0); }
   if (!authorized(s)) { console.log('No authorized review request.'); process.exit(0); }
+  const completed = equivalentCompletedReview(s);
+  if (completed) {
+    summary(`Review coalesced: already reviewed for identical input by run ${completed.runId}. The completed comment and its owner are unchanged; merge gates still verify current evidence.`);
+    process.exit(0);
+  }
   output('number', number);
   output('fingerprint', s.fingerprint);
   output('main_sha', s.data.main);

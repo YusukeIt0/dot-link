@@ -8,7 +8,7 @@ next steps; maintainers decide what to adopt, close or merge.
 
 - A new issue starts a review, including issues from external contributors.
 - A non-draft PR targeting `main` starts a review, including fork PRs.
-- Marking a draft PR ready starts its first review.
+- Marking a draft PR ready requests a review.
 - Pushes by configured trusted authors start re-review. Trusted acceptance-record
   creation/editing also starts re-review; ordinary comments do not.
 - The author or a maintainer with write access can request another review by
@@ -22,8 +22,22 @@ The `dotsweeper` bot, using the Dot Link icon, updates one comment to show revie
 If content or `main` changes during a review, its findings are withheld; request
 another review after the changes settle. Actions concurrency serializes each
 item; GitHub may replace an older pending request with a newer pending request.
-If a workflow is manually cancelled, its last comment can remain in progress;
-check the linked run and request another review.
+Equivalent automatic PR requests coalesce at intake before starting the model or
+claiming the comment. A completed result is retained only when its authenticated
+receipt matches the entire fresh head/main/base, description, discussion, scope
+and evidence fingerprint, and its owning workflow and intake/review/report jobs
+all succeeded. The existing run remains the publication owner, including when it
+reported findings or evidence gaps. Coalescing does not approve the PR or waive
+any merge gate. Changed input requires a new review; a missing, unauthenticated, incomplete
+or unsuccessful receipt cannot supply reuse. API failures fail intake without
+overwriting the completed comment. This applies to PR events and trusted
+acceptance-record updates, not issue reviews, explicit `/dotlink review` commands,
+manual dispatches or **Re-run all jobs**.
+
+Cancelling a redundant, coalesced request cannot replace the completed comment.
+For an accepted review, cancellation is published as `Cancelled` when the report
+job can finish. If that reporter is forcibly stopped or loses access, the comment
+can remain at `Reviewing`; check the linked run and request another review.
 
 A maintainer can also use **Actions → dotsweeper review → Run workflow**, selecting
 `main` and entering an issue or PR number. Closed, locked and draft items are
@@ -47,12 +61,18 @@ input and which run owns the bot comment.
 | Another run owns the comment, or the comment was removed | `Superseded` in the Actions summary; the newer comment is not overwritten. |
 | Authentication/API error, invalid model result, or failed label publication | Failure remains visible; it is not converted into a clean review. |
 | Model job cancelled | `Cancelled` when the report job can finish; no label changes. |
+| Equivalent automatic PR request after a successful completed review | Coalesced in the Actions summary; no model job or comment writes, and the earlier run remains the owner. |
+| Failed-job rerun after input changed | `Outdated` before model work; request `/dotlink review` or **Re-run all jobs** for fresh intake. |
 
 Expected state changes stop model preparation without consuming another model
 run. If the target returns to its original state before reporting, a successful
 preparation stop still reports `Skipped`; genuine preparation failures remain failures.
 An intake ownership token is carried through retries, so rerunning only the
 report job can update its own comment but cannot claim a newer run's comment.
+**Re-run failed jobs** keeps the original intake fingerprint. If that input is
+stale, repeating the same retry cannot refresh it. Use `/dotlink review`, a manual
+dispatch, or **Re-run all jobs** instead. A full rerun explicitly runs fresh intake
+even when the original event was automatic and its input is unchanged.
 The reporter rechecks state before comment publication and between label-removal
 operations. GitHub does not provide a transaction spanning issue state, labels,
 and comments: a change after the last read or a partial API failure can still
@@ -166,7 +186,9 @@ The workflow runs on GitHub-hosted runners with trusted default-branch scripts.
 It never checks out or executes fork/PR-head code. The model job receives only
 read permissions to GitHub and Read/Glob/Grep tools. Intake and publication are
 separate jobs with issue/PR-comment write access and no Claude credential. They
-validate the target, requester, input revision and structured output. Comments
+validate the target, requester, input revision and structured output.
+Intake also has Actions read access to verify a completed review's owning run and
+jobs before coalescing; its App token permissions are unchanged. Comments
 cannot supply arbitrary prompts, commands or a model choice. Public issue/PR
 content is sent to Anthropic for review, and results appear publicly on GitHub.
 Do not submit secrets or private conversations in an issue or PR.
