@@ -82,9 +82,9 @@ For **read-aloud**, use the switch in the Even companion. It starts OFF on first
 
 ## Mac notifications
 
-In the Mac app, choose **Permissions**, add the installed Dot Link.app under macOS **Accessibility**, and enable access. Then turn on **Share all Mac notifications with Dot**. Tell your Dot which notifications you want to hear about.
+In the Mac app, choose **Permissions**, add the installed Dot Link.app under macOS **Accessibility**, and enable access. Then turn on **Share all Mac notifications with Dot**. With Mac 0.4.35 or later, Dot Link asks your existing Dot to receive shared notifications automatically; no separate event setup is needed. You can tell your Dot which notifications you want to hear about.
 
-Sharing starts off. When enabled, readable new notifications—including sender names, headings and text—go to Dot. Some formats are unreadable; delivery and announcements may be delayed. Dot Link does not open the source chat or email, or reply in the source app. Pausing notification collection alone leaves the conversation relay running.
+Sharing starts off. When enabled, readable new notifications—including sender names, headings and text—go to Dot. Some formats are unreadable; delivery and announcements may be delayed. Dot Link does not open the source chat or email, or reply in the source app. Turning sharing off, pausing collection or removing Accessibility access stops new notification sharing. If the app stops unexpectedly, the relay stops accepting new notifications within 30 seconds. Pausing notification collection alone leaves the conversation relay running. Notifications arriving before reception is ready use the existing bounded retries and may be dropped; no offline archive is created. An explicit request to Dot to stop notification reception is preserved until you enable sharing again or explicitly resume reception.
 
 ## Location sharing
 

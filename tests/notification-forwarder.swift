@@ -57,6 +57,17 @@ defer { session.invalidateAndCancel() }
 var allowed = true
 var onChange: () -> Void = {}
 let forwarder = NotificationForwarder(runtime: root, session: session, retryDelay: 0.04, allowed: { allowed }, changed: { onChange() })
+let sharingID = UUID().uuidString.lowercased()
+forwarder.syncSharing(id: sharingID)
+let controlURL = root.appendingPathComponent("notification-sharing.json")
+func sharing() throws -> [String: Any] { try JSONSerialization.jsonObject(with: Data(contentsOf: controlURL)) as! [String: Any] }
+let initialSharing = try sharing(); check(initialSharing["id"] as? String == sharingID)
+check((try? sharing()["enabled"] as? Bool) == true)
+check((try? FileManager.default.attributesOfItem(atPath: controlURL.path)[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+allowed = false; forwarder.syncSharing(id: sharingID)
+check((try? sharing()["enabled"] as? Bool) == false)
+allowed = true; forwarder.syncSharing(id: sharingID)
+check((try? sharing()["enabled"] as? Bool) == true)
 forwarder.observe(fixture("excluded"), selected: false)
 check(FixtureProtocol.posts.isEmpty)
 forwarder.observe(fixture("excluded"), selected: true)

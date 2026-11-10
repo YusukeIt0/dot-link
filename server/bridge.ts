@@ -163,13 +163,13 @@ export class Bridge {
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
   /** Identity only: callback credentials never leave the transport owner. */
   inputDestination() { const sub = this.active(); return sub ? { id: sub.id, expiresAt: sub.expiresAt } : undefined; }
-  async sendSharingControl(input: {id: string; createdAt: string}, destinationId: string, allowed: () => boolean) {
+  async sendSharingControl(input: {id: string; createdAt: string; feature?: 'location' | 'notification'}, destinationId: string, allowed: () => boolean) {
     const sub = this.active();
     if (this.closed || !sub || sub.id !== destinationId || !allowed()) return undefined;
     const eventId = `evt_${input.id}`;
     const response = await this.sender.send(sub, eventId, {eventId, name: 'utterance.created', timestamp: input.createdAt,
       data: {session_id: SESSION, utterance_id: input.id,
-        text: '[Dot Link app control, not a spoken message] The owner enabled location sharing.'}, cursor: null});
+        text: input.feature === 'notification' ? '[Dot Link app control, not a spoken message] The owner enabled Mac notification sharing.' : '[Dot Link app control, not a spoken message] The owner enabled location sharing.'}, cursor: null});
     if (response.status === 410) await this.serial(async () => {
       if (this.state.subscription === sub) this.save({...this.state, subscription: undefined});
     });

@@ -27,10 +27,24 @@ final class NotificationForwarder {
     private let retryDelay: Double
     private var payloads: [String: Payload] = [:]
     private var tasks: [String: URLSessionDataTask] = [:]
+    private var lastSharingWrite: (id: String, enabled: Bool, at: Double)?
+    // Only permission/control metadata crosses this local file; never notification text.
+    func syncSharing(id: String, force: Bool = false) {
+        let enabled = allowed(), now = Date().timeIntervalSince1970
+        if !force, let last = lastSharingWrite, last.id == id, last.enabled == enabled, now - last.at < 4 { return }
+        do {
+            let url = runtime.appendingPathComponent("notification-sharing.json")
+            let data = try JSONSerialization.data(withJSONObject: ["version": 1, "id": id, "enabled": enabled, "updatedAt": now * 1000])
+            try data.write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+            lastSharingWrite = (id, enabled, now)
+        } catch { lastSharingWrite = nil }
+    }
     private var generation = 0
     private var statusTask: URLSessionDataTask?
     private(set) var extractionEvents: [ExtractionEvent] = []
     private(set) var subscriptionReady: Bool?
+    private(set) var receptionState: String?
     private(set) var statusAvailable = false
     private(set) var lastStatusAt: Double?
     init(runtime: URL, session: URLSession = .shared, retryDelay: Double = 5, allowed: @escaping () -> Bool, changed: @escaping () -> Void) {
@@ -153,6 +167,7 @@ final class NotificationForwarder {
                         self.statusAvailable = false; self.changed(); return
                     }
                     self.statusAvailable = true; self.subscriptionReady = subscribed
+                    self.receptionState = value["notificationReception"] as? String
                     self.lastStatusAt = Date().timeIntervalSince1970
                     for record in records {
                         guard let id = record["id"] as? String, let entry = entries.first(where: { $0.id == id }),

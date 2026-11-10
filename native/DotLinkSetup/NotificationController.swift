@@ -17,6 +17,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     let apps = NotificationSourcesStack()
     var selected = Set<String>()
     var shareAllNotifications = false
+    var sharingIntentID = UUID().uuidString.lowercased()
     var paused = true
     var relaySuspended = false
     var forwardingTasks: [String: URLSessionDataTask] = [:]
@@ -109,6 +110,8 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         }
         selected = Set(defaults.stringArray(forKey: "selectedApps") ?? ["Dot Notification Lab"])
         shareAllNotifications = defaults.bool(forKey: "shareAllMacNotifications")
+        if let stored = defaults.string(forKey: "notificationSharingIntentID"), UUID(uuidString: stored) != nil { sharingIntentID = stored }
+        else { defaults.set(sharingIntentID, forKey: "notificationSharingIntentID") }
         paused = defaults.bool(forKey: "monitoringPaused")
         try? FileManager.default.createDirectory(at: diagnosticURL.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         UNUserNotificationCenter.current().delegate = self
@@ -117,7 +120,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         observers.append(nc.addObserver(forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main) { [weak self] _ in self?.attach() })
         observers.append(nc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in self?.refresh() })
         observers.append(NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in self?.refresh() })
-        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.attach(); self?.continueMigration(); self?.lineDelivery.refreshStatus(); self?.continueDiagnosticProbe() }
+        healthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.attach(); self?.continueMigration(); self?.syncNotificationSharing(); self?.lineDelivery.refreshStatus(); self?.continueDiagnosticProbe() }
         healthTimer?.tolerance = 2
         refresh()
     }
@@ -237,6 +240,10 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     func reloadApps() { /* Common notification sharing has no per-app selection list. */ }
     @objc func toggleShareAll(_ sender: NSButton) {
         lineDelivery.cancel()
+        if sender.state == .on && !shareAllNotifications {
+            sharingIntentID = UUID().uuidString.lowercased()
+            defaults.set(sharingIntentID, forKey: "notificationSharingIntentID")
+        }
         shareAllNotifications = sender.state == .on
         defaults.set(shareAllNotifications, forKey: "shareAllMacNotifications")
         if shareAllNotifications { baselineCurrentNotifications() }
@@ -269,7 +276,9 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
             }
         }
     }
+    func syncNotificationSharing() { lineDelivery.syncSharing(id: sharingIntentID) }
     func updateState() {
+        syncNotificationSharing()
         stateLabel.stringValue = tr("mac.notification_details", [
             "access": tr(AXIsProcessTrusted() ? "mac.notification_allowed" : "mac.notification_denied"),
             "detection": tr(paused ? "mac.notification_paused" : observer == nil ? "mac.notification_waiting" : "mac.notification_watching"),
@@ -278,7 +287,9 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         var reasons = healthIssues
         if shareAllNotifications {
             if !lineDelivery.ledger.healthy { reasons.append(tr("mac.check_the_notification_ledger_notification_sharing_is_on_hold")) }
-            if lineDelivery.statusAvailable && lineDelivery.subscriptionReady == false { reasons.append(tr("mac.connect_dot_to_notification_events")) }
+            if !paused && !relaySuspended && observer != nil && AXIsProcessTrusted() && lineDelivery.statusAvailable && lineDelivery.subscriptionReady == false {
+                reasons.append(tr(lineDelivery.receptionState == "stopped" ? "mac.notification_reception_stopped" : "mac.connect_dot_to_notification_events"))
+            }
         }
         if !paused && !AXIsProcessTrusted() { reasons.append(tr("mac.notification_resume_permission")) }
         else if !paused && observer == nil { reasons.append(tr("mac.notification_reconnecting")) }
@@ -343,6 +354,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
         lineDelivery.cancel()
         if let observer { CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes) }
         observer = nil; observedPID = 0; registrations = []
+        syncNotificationSharing()
     }
     func attach() {
         guard !relaySuspended, (validating || (!legacyRunning && !paused)), AXIsProcessTrusted() else { detach(); updateState(); return }

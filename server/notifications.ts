@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { ReadResponseError } from './read-response-error.ts';
 import { SubscriptionResponseError, subscriptionArguments, subscriptionDelivery } from './subscription-response-error.ts';
@@ -28,8 +28,9 @@ const record = notificationInput.extend({
   client_response_at: z.string().datetime().optional(),
   disposition: z.enum(['later', 'silent']).optional(), decided_at: z.string().datetime().optional(),
 });
-const schema = z.object({ version: z.literal(1), subscription: subscription.optional(), notifications: z.array(record).max(100) });
+const schema = z.object({ version: z.literal(1), subscription: subscription.optional(), notifications: z.array(record).max(100), sharingManaged: z.boolean().optional(), activationStoppedFor: z.string().uuid().optional() });
 type State = z.infer<typeof schema>;
+const sharingControl = z.object({version: z.literal(1), id: z.string().uuid(), enabled: z.boolean(), updatedAt: z.number().finite()}).strict();
 
 export const notificationEvent = {
   name: eventName,
@@ -66,7 +67,13 @@ export class NotificationInbox {
   private path: string;
   private sender: WebhookSender;
   private hosts: string[];
-  constructor(path: string, sender: WebhookSender, hosts: string[]) {
+  private readonly controlPath: string;
+  private readonly now: () => number;
+  private readonly timer: ReturnType<typeof setInterval>;
+  private previousSharing = '';
+
+  constructor(path: string, sender: WebhookSender, hosts: string[], now = Date.now) {
+    this.now = now; this.controlPath = join(dirname(path), 'notification-sharing.json');
     this.path = path; this.sender = sender; this.hosts = hosts;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
     try { this.state = schema.parse(JSON.parse(readFileSync(path, 'utf8'))); }
@@ -74,7 +81,35 @@ export class NotificationInbox {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Notification state could not be loaded');
       this.state = { version: 1, notifications: [] }; this.save();
     }
+    this.refreshSharing();
+    this.timer = setInterval(() => {try {this.refreshSharing();} catch { /* Storage failure cannot crash ordinary conversation. */ }}, 5_000); this.timer.unref();
   }
+  /** The native app atomically refreshes this small, content-free lease. A missing,
+   * malformed or stale lease after migration cannot restore legacy permission. */
+  private sharingControl(activeOnly = true) {
+    if (existsSync(this.controlPath) && !this.state.sharingManaged) this.save(true, {...this.state, sharingManaged: true});
+    try {
+      if (statSync(this.controlPath).size > 1024) return undefined;
+      const value = sharingControl.parse(JSON.parse(readFileSync(this.controlPath, 'utf8')));
+      if (activeOnly && (!value.enabled || value.updatedAt > this.now() + 5_000 || value.updatedAt + 30_000 <= this.now())) return undefined;
+      return value;
+    } catch { return undefined; }
+  }
+  sharingIntent() {
+    const control = this.sharingControl();
+    return control ? {id: control.id, expiresAt: control.updatedAt + 30_000,
+      subscribed: !!this.active(), activationStopped: this.state.activationStoppedFor === control.id} : undefined;
+  }
+  private sharingAllowed() {
+    const control = this.sharingControl();
+    return !this.state.sharingManaged || !!control;
+  }
+  private refreshSharing() {
+    const intent = this.sharingIntent();
+    const snapshot = JSON.stringify(intent ? [intent.id, intent.subscribed, intent.activationStopped] : null);
+    if (snapshot !== this.previousSharing) {this.previousSharing = snapshot; this.changes.emit();}
+  }
+  close() { clearInterval(this.timer); }
   private save(emit = true, next = this.state) {
     writeFileSync(`${this.path}.tmp`, JSON.stringify(next), { mode: 0o600 });
     renameSync(`${this.path}.tmp`, this.path);
@@ -84,8 +119,13 @@ export class NotificationInbox {
   private serial<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.operation.then(fn, fn); this.operation = next.catch(() => {}); return next;
   }
-  private active() { const sub = this.state.subscription; return sub && sub.expiresAt > Date.now() ? sub : undefined; }
-  status() { return { notificationSubscribed: !!this.active(), notificationCount: this.state.notifications.length }; }
+  private active() { const sub = this.state.subscription; return sub && sub.expiresAt > this.now() ? sub : undefined; }
+  status() {
+    const intent = this.sharingIntent(), subscribed = !!this.active();
+    const reception = intent ? subscribed ? 'ready' : intent.activationStopped ? 'stopped' : 'preparing'
+      : this.state.sharingManaged ? 'off' : subscribed ? 'ready' : 'preparing';
+    return { notificationSubscribed: subscribed, notificationCount: this.state.notifications.length, notificationReception: reception };
+  }
   pending(input: unknown = {}) {
     const parsed = z.object({ include_deferred: z.boolean().optional() }).strict().safeParse(input);
     if (!parsed.success) throw new ReadResponseError();
@@ -140,15 +180,18 @@ export class NotificationInbox {
       subscriptionDelivery(p.delivery, this.hosts);
       const id = 'sub_' + createHash('sha256').update(JSON.stringify([session, eventName, p.delivery.url])).digest('hex').slice(0, 32);
       if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
-      const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: Date.now() + (p.ttlMs ?? 3_600_000) };
-      await this.sender.verify(sub); this.save(true, { ...this.state, subscription: sub });
+      const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
+      await this.sender.verify(sub); this.save(true, { ...this.state, subscription: sub, activationStoppedFor: undefined });
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
   }
   unsubscribe(input: unknown) {
     return this.serial(async () => {
       const p = subscriptionArguments(z.object({ name: z.literal(eventName), arguments: args, delivery: delivery.omit({ secret: true }) }), input);
-      if (this.state.subscription?.url === p.delivery.url) { this.save(true, { ...this.state, subscription: undefined }); }
+      if (this.state.subscription?.url === p.delivery.url) {
+        const intent = this.sharingControl(false);
+        this.save(true, { ...this.state, subscription: undefined, activationStoppedFor: intent?.id ?? this.state.activationStoppedFor });
+      }
       return {};
     });
   }
@@ -162,6 +205,11 @@ export class NotificationInbox {
         if (JSON.stringify(original) !== JSON.stringify(p)) throw new Error('Notification ID conflicts');
         return { notification_id: existing.id, status: existing.status };
       }
+      // Explicit native diagnostic probes are a separate existing owner action,
+      // including legacy migration with ordinary sharing disabled. They never
+      // create a sharing intent or activate reception by themselves.
+      const diagnostic = p.source_verification === 'synthetic-test-marker' && p.source_app === 'Dot Notification Lab' && /^DOT-LAB-[A-F0-9]{8}$/.test(p.title);
+      if (!this.sharingAllowed() && !diagnostic) throw new Error('Notification sharing is stopped; nothing sent');
       const sub = this.active();
       if (!sub) throw new Error('No notification subscription; nothing sent');
       const n: State['notifications'][number] = { ...p, status: 'pending', received_at: new Date().toISOString() };

@@ -47,9 +47,13 @@ try {
     {ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
       ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
 } catch { console.error('Weather unavailable; ordinary conversation remains available'); }
-let activation: SharingActivation | undefined;
-try { activation = new SharingActivation(resolve('.runtime/sharing-activation.json'), bridge, locations); }
+const activation: SharingActivation[] = [];
+try { activation.push(new SharingActivation(resolve('.runtime/sharing-activation.json'), bridge, locations)); }
 catch { console.error('Sharing activation unavailable; ordinary conversation remains available'); }
+if (notifications) {
+  try { activation.push(new SharingActivation(resolve('.runtime/notification-sharing-activation.json'), bridge, notifications, Date.now, 'notification')); }
+  catch { console.error('Notification activation unavailable; ordinary conversation remains available'); }
+}
 const server = bridgeServer(bridge, tokens, notifications, locations, history, weather, activation);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
