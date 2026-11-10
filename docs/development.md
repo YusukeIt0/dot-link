@@ -212,6 +212,17 @@ Use the Mac app's pause, resume, quit and update controls for normal operation; 
 
 Updates retain the data directory and paused state. Before installation, the app records a recovery journal and backs up the app and service configuration. Manual updates explicitly permit interruption; the currently disabled automatic path retains its idle checks. Backups are retained; automatic rollback of an app that cannot launch is not implemented.
 
+Recovery verifies the installed app and completes any interrupted service-path
+rebinding before starting the relay. Changed definitions are unloaded before
+replacement so launchd cannot keep running the old definition. Rollback likewise
+reloads changed originals. Startup and Retry recovery also restart pending active
+jobs, including stale loaded jobs whose on-disk definitions already match. A
+journal-free startup does not restart services, and an intentional pause stays
+paused. Neither path resets credentials or history; a failed
+health check retains the journal. Both unfinished-preparation and failed-recovery
+errors offer the existing Retry recovery action. Signature verification failures
+use the app-only replacement guidance instead of a generic command failure.
+
 For source-based diagnostics, run `node scripts/setup.mjs status --voice-only` from the installation directory. Do not start another relay on the same ports. Runtime files may contain credentials: never attach the whole `.runtime` directory to an issue. For iPhone layout investigation, see [viewport diagnostics](viewport-diagnostics.md).
 
 

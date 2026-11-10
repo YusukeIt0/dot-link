@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,realpath,symlink} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
-import {withUpdateStorage,createUpdateBackup,pruneUpdateBackups} from '../scripts/lib/update-storage.mjs';
+import {withUpdateStorage,createUpdateBackup,pruneUpdateBackups,verifyUpdateApp} from '../scripts/lib/update-storage.mjs';
+import {setupFailure} from '../scripts/lib/setup-failure.mjs';
 
 async function fixture(t){
  const home=await realpath(await mkdtemp(join(tmpdir(),'dot-update-storage-')));t.after(()=>rm(home,{recursive:true,force:true}));
@@ -62,6 +63,17 @@ test('uncertain process inventory and invalid installed app never authorize dele
  await assert.rejects(f.clean({execute:async(cmd,args)=>{if(cmd==='/bin/ps')throw new Error('DENIED');return f.execute(cmd,args);}}),/DENIED/);
  assert.equal((await readdir(f.root)).length,2);
  await writeFile(join(f.app,'Contents/Info.plist'),'foreign.app');await assert.rejects(f.clean(),/UPDATE_APP_INVALID/);assert.equal((await readdir(f.root)).length,2);
+});
+
+test('a damaged signature gives app-only replacement guidance without exposing verifier output',async t=>{
+ const f=await fixture(t);
+ await assert.rejects(verifyUpdateApp(f.app,async(cmd,args)=>{
+  if(cmd==='/usr/bin/codesign')throw Object.assign(new Error('private path and verifier detail'),{code:1,stderr:'private detail'});
+  return f.execute(cmd,args);
+ }),error=>{
+  assert.deepEqual(setupFailure(error,'runtime-prepare'),{version:1,code:'UPDATE_APP_INVALID',stage:'runtime-prepare',exitCode:1});
+  return true;
+ });
 });
 
 test('failed or interrupted copies and interrupted removals are reclaimed on retry',async t=>{

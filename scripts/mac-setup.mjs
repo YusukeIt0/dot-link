@@ -119,7 +119,7 @@ try {
   else if (action === 'update-adopt') { const found = await discoverInstallation(); await prepareUpdate(found.directory, {bootstrap:true}); await finishUpdate(found.directory); result = await inspect(); }
   else if (action === 'update-recover') {
     const found = await discoverInstallation();
-    const updateRecovery = await finishUpdate(found.directory,{backgroundCleanup:true});
+    const updateRecovery = await finishUpdate(found.directory,{backgroundCleanup:true,restart:true});
     result = await inspect();
     // A previous helper may have finished before its result reached the GUI.
     // Reuse the strict no-services/no-prior-runtime proof for initial setup;

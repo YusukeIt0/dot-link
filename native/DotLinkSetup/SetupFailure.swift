@@ -6,6 +6,10 @@ struct SetupFailurePresentation {
     var details: SetupFailureDetails?
     var copied = false
 
+    static func requiresRecovery(_ code: String) -> Bool {
+        ["UPDATE_RECOVERY_REQUIRED", "UPDATE_ALREADY_PREPARED"].contains(code)
+    }
+
     mutating func begin(_ action: String) {
         guard action != "inspect" && action != "uninstall-plan" else { return }
         details = nil
