@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { Bridge } from '../server/bridge.ts';
 import { LocationContext } from '../server/location.ts';
 import { SharingActivation } from '../server/sharing-activation.ts';
@@ -56,14 +56,25 @@ test('existing utterance-only connection: one sharing action requests actual loc
     assert.match(event.data.text, /app control, not a spoken message/);
     const result: any = await rpc(f.bridge, {jsonrpc:'2.0', id:1, method:'tools/call',
       params:{name:'get_pending_utterances', arguments:{}}}, undefined, f.locations, undefined, undefined, a);
-    assert.deepEqual(result.result.structuredContent.utterances, []);
-    const request = result.result.structuredContent.control_requests[0];
+    // Legacy receivers inspect only utterances and exit if it is empty.
+    assert.equal(result.result.structuredContent.utterances.length, 1);
+    const request = result.result.structuredContent.utterances[0];
+    assert.match(request.text, /not spoken text/);
     assert.equal(request.source, 'owner_sharing_control');
     assert.equal(request.event, 'location.updated');
     assert.equal(request.request_id, event.data.utterance_id);
     // The receiving platform supplies its own verified location callback, not a copied voice callback.
     const registered: any = await rpc(f.bridge, {jsonrpc:'2.0', id:2, method:'events/subscribe', params:f.location}, undefined, f.locations);
     assert.ok(registered.result.id);
+    // Existing handlers unconditionally reply to every input; control replies are
+    // honest acknowledgements, never a fabricated G2 conversation message.
+    for (const name of ['reply_to_g2','send_message_to_g2'] as const) {
+      const ack: any = await rpc(f.bridge, {jsonrpc:'2.0',id:3,method:'tools/call',params:{name,
+        arguments:{utterance_id:request.utterance_id,text:'Ready',...(name==='send_message_to_g2'?{message_id:randomUUID()}: {})}}},
+        undefined,f.locations,undefined,undefined,a);
+      assert.equal(ack.result.structuredContent.subscription_active,true);
+      assert.equal(ack.result.structuredContent.delivered_to_g2,false);
+    }
   });
   f.enable(); await settle(); await settle();
   assert.equal(f.events.length, 1);
@@ -78,6 +89,43 @@ test('existing utterance-only connection: one sharing action requests actual loc
   await f.bridge.reply({utterance_id:utterance,text:'Ordinary answer'});
   assert.equal(f.bridge.history()[0].reply,'Ordinary answer');
   f.stop(); assert.equal(f.locations.read().context, null);
+});
+
+test('control acknowledgement cannot claim activation before registration or after stop', async t => {
+  const f=fixture(); t.after(f.close); await f.bridge.subscribe(f.voice);
+  const a=f.activate(); f.enable(); await settle();
+  const input={utterance_id:a.pending()[0].utterance_id,text:'Ready'};
+  assert.throws(()=>a.acknowledge('reply_to_g2',input),{reason:'sharing_activation_pending'});
+  await f.locations.subscribe(f.location); await settle();
+  assert.equal(a.acknowledge('reply_to_g2',input)?.delivered_to_g2,false);
+  f.stop();
+  assert.throws(()=>a.acknowledge('reply_to_g2',input),{reason:'sharing_control_revoked'});
+  assert.deepEqual(f.bridge.history(),[]); assert.deepEqual(f.bridge.outboundHistory(),[]);
+});
+
+test('legacy input envelope stays bounded and does not mark an omitted real message as read', async t => {
+  const f=fixture(); t.after(f.close); await f.bridge.subscribe(f.voice);
+  const a=f.activate(); f.enable(); await settle();
+  for(let i=0;i<10;i++)await f.bridge.submit({id:randomUUID(),text:`Question ${i}`});
+  const result=f.bridge.pendingResult({},a.pending());
+  assert.equal(result.structuredContent.utterances.length,10);
+  assert.equal(result.structuredContent.utterances[0].source,'owner_sharing_control');
+  assert.equal(f.bridge.history()[9].readAt,undefined);
+  await f.locations.subscribe(f.location); await settle();
+  assert.equal(f.bridge.pendingResult({},a.pending()).structuredContent.utterances.length,10);
+  assert.ok(f.bridge.history()[9].readAt);
+});
+
+test('old accepted separate-list delivery migrates once without manual account changes', async t => {
+  const f=fixture(); t.after(f.close); await f.bridge.subscribe(f.voice);
+  const a=f.activate(); f.enable(); await settle(); a.close();
+  const old=JSON.parse(readFileSync(f.path,'utf8'));
+  old.key=createHash('sha256').update(JSON.stringify([f.id,f.bridge.inputDestination()!.id])).digest('hex');
+  writeFileSync(f.path,JSON.stringify(old));
+  const updated=f.activate(); await updated.sync();
+  assert.equal(f.events.length,2);assert.notEqual(f.events[0].eventId,f.events[1].eventId);
+  updated.close();const restarted=f.activate();await restarted.sync();
+  assert.equal(f.events.length,2);
 });
 
 test('sharing before connection, duplicate controls, and restart do not require additional user input or duplicate delivery', async t => {

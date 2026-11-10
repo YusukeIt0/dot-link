@@ -69,8 +69,8 @@ test('paired phone location reaches a distinct MCP context; token rotation works
   await bridge.subscribe({name:'utterance.created',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://callback.example.test/events',secret:'whsec_'+randomBytes(32).toString('base64')}});
   await activation.sync();
   const controls = await post(relayURL + '/mcp', mcpHeaders, {jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'get_pending_utterances',arguments:{}}});
-  assert.deepEqual(controls.data.result.structuredContent.utterances,[]);
-  assert.equal(controls.data.result.structuredContent.control_requests[0].event,'location.updated');
+  assert.equal(controls.data.result.structuredContent.utterances[0].source,'owner_sharing_control');
+  assert.equal(controls.data.result.structuredContent.utterances[0].event,'location.updated');
   assert.deepEqual(bridge.history(),[]);
   const registration = await post(relayURL + '/mcp',mcpHeaders,{jsonrpc:'2.0',id:5,method:'events/subscribe',params:{
     name:'location.updated',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://callback.example.test/location',secret:'whsec_'+randomBytes(32).toString('base64')}}});

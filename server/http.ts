@@ -81,8 +81,8 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
             case 'get_location_history': return history!.read(args);
             case 'respond_to_history': return history!.respond!(args);
             case 'get_mobility_context': return locations!.readMobility(args);
-            case 'send_message_to_g2': return bridge.sendMessage(args);
-            case 'reply_to_g2': return bridge.reply(args);
+            case 'send_message_to_g2': return activation?.acknowledge(name, args) ?? bridge.sendMessage(args);
+            case 'reply_to_g2': return activation?.acknowledge(name, args) ?? bridge.reply(args);
             case 'set_notification_disposition': return notifications!.decide(args);
             case 'announce_notification_to_g2': return notifications!.announce(args);
           }

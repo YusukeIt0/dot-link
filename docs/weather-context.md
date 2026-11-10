@@ -160,7 +160,11 @@ configure event subscriptions or ask Dot to enable proactive weather. The normal
 Mac setup message prepares both input and location reception. For an existing
 input-only connection, `SharingActivation` sends an explicitly identified owner
 sharing-control request through that verified input subscription. The pending
-input tool returns it separately from real utterances. ChatGPT must create its
+input tool includes it in the legacy `utterances` envelope with explicit
+`source: owner_sharing_control` provenance and text identifying the app action.
+Existing handlers that process only that list can therefore see the action without
+account-specific instruction changes. Control acknowledgements never create a
+G2 message or history entry, and succeed only after actual registration. ChatGPT must create its
 own `location.updated` subscription; the relay never fabricates one or copies a
 callback to a different event. No control request enters G2 conversation history.
 Requests are invalidated by stop, expired consent, owner revocation or shutdown;

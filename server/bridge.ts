@@ -11,9 +11,14 @@ import { photosSchema, photoDigest, photoBytes, PHOTO_RETENTION, PhotoStorageFul
 import { MAX_PHOTOS } from '../src/photo-attachments.ts';
 import { PhotoStore } from './photo-store.ts';
 import { BridgeResponseError } from './bridge-response-error.ts';
+import type { SharingActivation } from './sharing-activation.ts';
 
 const SESSION = 'personal-g2';
 const OUTBOUND_LIMIT = 1000;
+interface OwnerInput {
+  utterance_id: string; text: string; created_at: string;
+  source?: 'owner_sharing_control'; photo_count?: number; photos_expired?: boolean;
+}
 const argsSchema = z.object({ session_id: z.literal(SESSION) }).strict();
 const deliverySchema = z.object({ mode: z.literal('webhook'), url: z.string().max(2048), secret: z.string().max(100) }).strict();
 const subscribeSchema = z.object({
@@ -39,7 +44,7 @@ type State = z.infer<typeof stateSchema>;
 type Subscription = z.infer<typeof subscriptionSchema>;
 
 export const eventDefinition = {
-  name: 'utterance.created', description: 'New owner input from this personal Even G2 bridge. Read get_pending_utterances: ordinary utterances and explicitly identified sharing-control requests are separate. A sharing-control request represents an app control action, not spoken text or a question to answer.',
+  name: 'utterance.created', description: 'New owner input from this personal Even G2 bridge. Read get_pending_utterances: items with source=owner_sharing_control are app actions; other items are ordinary utterances. A sharing-control request represents an app control action, not spoken text or a question to answer.',
   delivery: ['webhook'],
   inputSchema: { type: 'object', properties: { session_id: { type: 'string', const: SESSION } }, required: ['session_id'], additionalProperties: false },
   payloadSchema: { type: 'object', properties: {
@@ -47,7 +52,7 @@ export const eventDefinition = {
   }, required: ['session_id', 'utterance_id', 'text'], additionalProperties: false },
 };
 export const replyTool = {
-  name: 'reply_to_g2', description: 'Deliver the FIRST answer to an existing utterance on the owner’s paired Even G2, paired with the question. Use its utterance_id; identical retries do not duplicate replies. For a later follow-up, use send_message_to_g2 with the SAME utterance_id and a fresh message_id. Do not send an answer as an unrelated proactive message and use this tool only for its summary. On rejection, follow error.data.reason; do not overwrite a reply or substitute a proactive message for an unavailable utterance. Receipt confirms storage, not physical display.',
+  name: 'reply_to_g2', description: 'App-control IDs acknowledge actual activation only, with delivered_to_g2=false and no message/history write. For ordinary input: deliver the FIRST answer to an existing utterance on the owner’s paired Even G2, paired with the question. Use its utterance_id; identical retries do not duplicate replies. For a later follow-up, use send_message_to_g2 with the SAME utterance_id and a fresh message_id. Do not send an answer as an unrelated proactive message and use this tool only for its summary. On rejection, follow error.data.reason; do not overwrite a reply or substitute a proactive message for an unavailable utterance. Receipt confirms storage, not physical display.',
   inputSchema: { type: 'object', properties: { utterance_id: { type: 'string', format: 'uuid' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['utterance_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -63,7 +68,7 @@ export const statusTool = {
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
 export const pendingTool = {
-  name: 'get_pending_utterances', description: 'Read owner input. control_requests are explicit app sharing actions, not spoken messages or questions: while sharing remains enabled, establish their requested location.updated subscription for personal-g2 using the normal event mechanism without asking for another setting or confirmation. Preserve the utterance subscription; do not reply to a control request on G2 or treat its ID as an utterance_id. Re-read before acting and do nothing for an absent/revoked request. Then read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
+  name: 'get_pending_utterances', description: 'Read owner input. Items with source=owner_sharing_control in the legacy utterances list are explicit app sharing actions, not spoken messages or questions: while sharing remains enabled, establish their requested location.updated subscription for personal-g2 using the normal event mechanism without asking for another setting or confirmation. Preserve the utterance subscription; do not send a control confirmation to G2. Its utterance_id is a compatibility input ID, not a spoken utterance; the bridge suppresses control acknowledgements instead of displaying them. Re-read before acting and do nothing for an absent/revoked request. Then read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -175,20 +180,20 @@ export class Bridge {
     return { ...message, ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
   }
   history() { this.expirePhotos(); return this.state.messages.map(item => this.publicMessage(item)); }
-  private pendingMessages() {
+  private pendingMessages(limit = 10) {
     let count = 0;
     const messages: State['messages'] = [];
     for (const item of this.state.messages) {
       if (item.status === 'replied') continue;
       const photos = item.photos?.length ?? 0;
-      if (messages.length === 10 || count + photos > MAX_PHOTOS) break;
+      if (messages.length === limit || count + photos > MAX_PHOTOS) break;
       messages.push(item); count += photos;
     }
     return messages;
   }
-  pending() {
+  pending(limit = 10) {
     this.expirePhotos();
-    const messages = this.pendingMessages();
+    const messages = this.pendingMessages(limit);
     const at = new Date().toISOString();
     let changed = false;
     for (const item of messages) {
@@ -203,13 +208,18 @@ export class Bridge {
         ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}),
         ...(item.photosExpired ? { photos_expired: true } : {}) })) };
   }
-  pendingResult(input: unknown = {}, controlRequests?: unknown[]) {
+  pendingResult(input: unknown = {}, controlRequests: ReturnType<SharingActivation['pending']> = []) {
     if (!z.object({}).strict().safeParse(input).success) throw new ReadResponseError();
-    const value = {...this.pending(), ...(controlRequests?.length ? {control_requests: controlRequests} : {})};
+    // Keep the existing input envelope so older handlers do not exit on an empty
+    // utterance list. Provenance explicitly identifies controls as app actions.
+    const limit = 10 - controlRequests.length;
+    const pending = this.pending(limit);
+    const utterances: OwnerInput[] = [...controlRequests, ...pending.utterances];
+    const value = {...pending, utterances};
     const content: ({ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string })[] = [
       { type: 'text', text: JSON.stringify(value) },
     ];
-    for (const item of this.pendingMessages()) for (const [index, photo] of (item.photos ?? []).entries()) {
+    for (const item of this.pendingMessages(limit)) for (const [index, photo] of (item.photos ?? []).entries()) {
       content.push({ type: 'text', text: `utterance_id: ${item.id}; photo ${index + 1} of ${item.photos!.length}` },
         { type: 'image', ...photo });
     }

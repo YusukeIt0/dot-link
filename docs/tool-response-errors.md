@@ -163,6 +163,23 @@ raw exception details. Record exact-build runtime acceptance separately from
 fixtures and actual Dot-provider observations. Complete affected-component
 formal distribution and normal update verification before closing this stage.
 
+## App sharing controls
+
+`get_pending_utterances` retains its legacy input envelope. An item with
+`source: owner_sharing_control` represents the owner's app sharing action, not a
+spoken utterance. Its compatibility `utterance_id` is not stored in conversation
+history. The action is actionable only while present in the current input read.
+
+For these IDs only, `reply_to_g2` and linked `send_message_to_g2` suppress display
+and history writes. They return `subscription_active: true` and
+`delivered_to_g2: false` only when the requested registration actually exists.
+The submitted confirmation text is neither stored nor delivered.
+
+| Reason | Meaning and recovery |
+| --- | --- |
+| `sharing_activation_pending` | Registration is not active. Re-read the app action and establish the requested subscription; do not substitute a G2 confirmation. |
+| `sharing_control_revoked` | The action's sharing session or input destination is no longer active. Do not act on it or retry it as a new message. |
+
 ## Read, subscription and routing contract (#203)
 
 The four reads (`get_status`, `get_pending_utterances`,
