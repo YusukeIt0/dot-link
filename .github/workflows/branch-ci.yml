@@ -3,6 +3,7 @@ on:
   push:
     branches-ignore: [main]
 permissions:
+  actions: read
   contents: read
 concurrency:
   group: branch-validation-${{ github.ref }}-${{ github.run_attempt > 1 && github.run_id || 'current' }}
@@ -12,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     outputs:
@@ -19,6 +21,8 @@ jobs:
       runner: ${{ steps.impact.outputs.runner }}
       base: ${{ steps.impact.outputs.base }}
       head: ${{ steps.impact.outputs.head }}
+      product: ${{ steps.impact.outputs.product }}
+      reuse: ${{ steps.impact.outputs.reuse }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,8 +34,10 @@ jobs:
         run: node scripts/branch-ci-admission.mjs
       - run: sh scripts/check-workflows.sh
       - name: Verify impact policy on Linux
-        run: node --test tests/ci-plan.test.mjs tests/ci-release-metadata.test.mjs
+        run: node --test tests/ci-plan.test.mjs tests/ci-release-metadata.test.mjs tests/ci-reuse.test.mjs
       - id: impact
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: node scripts/ci-plan.mjs --event
   branch-test:
     needs: branch-preflight
@@ -39,6 +45,7 @@ jobs:
     runs-on: ${{ needs.branch-preflight.outputs.runner || 'macos-15' }}
     timeout-minutes: 15
     permissions:
+      actions: read
       contents: read
       pull-requests: read
     steps:
@@ -61,9 +68,17 @@ jobs:
           node-version: '26.13.0'
           package-manager-cache: false
           cache: ${{ needs.branch-preflight.outputs.runner == 'macos-15' && 'npm' || '' }}
-      - name: Run impact-selected validation
-        if: steps.admission.outputs.run == 'true'
+      - name: Run full product validation
+        if: steps.admission.outputs.run == 'true' && needs.branch-preflight.outputs.product == 'true' && needs.branch-preflight.outputs.reuse == ''
         env:
+          CI_BASE: ${{ needs.branch-preflight.outputs.base }}
+          CI_HEAD: ${{ needs.branch-preflight.outputs.head }}
+        run: node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"
+      - name: Run bounded or reused validation
+        if: steps.admission.outputs.run == 'true' && (needs.branch-preflight.outputs.product != 'true' || needs.branch-preflight.outputs.reuse != '')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REUSE_RUN: ${{ needs.branch-preflight.outputs.reuse }}
           CI_BASE: ${{ needs.branch-preflight.outputs.base }}
           CI_HEAD: ${{ needs.branch-preflight.outputs.head }}
         run: node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"

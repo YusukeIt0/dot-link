@@ -2,6 +2,7 @@
 import {execFileSync} from 'node:child_process';
 import {readFileSync, appendFileSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
+import {discoverReuse, githubReader, reuseContext} from './ci-reuse.mjs';
 
 export const macPlist = 'native/DotLinkSetup/Info.plist';
 export const macFeed = 'updates/mac/appcast.xml';
@@ -89,8 +90,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
   }
   const result = plan(base, head);
+  // Keep impact classification intact. Only CI may substitute proven execution.
+  const reuse = process.argv[2] === '--event' && result.checks.includes('product')
+    ? await discoverReuse(reuseContext({...process.env, CI_HEAD: result.head}), githubReader(process.env.GH_TOKEN)) : null;
+  if (reuse) {
+    result.reuse = reuse;
+    result.runner = 'ubuntu-latest';
+  }
   console.log(JSON.stringify(result));
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `runner=${result.runner}\nbase=${result.base || ''}\nhead=${result.head || ''}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `runner=${result.runner}\nbase=${result.base || ''}\nhead=${result.head || ''}\nproduct=${result.checks.includes('product')}\nreuse=${reuse?.run || ''}\n`);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
     `### Change impact\n\n- Base: ${result.base || 'unavailable'}\n- Head: ${result.head || 'unavailable'}\n- Checks: ${result.checks.join(', ')}\n- Reason: ${result.reason}\n- Changed files: ${result.paths.length}\n`);
+  if (reuse && process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+    `- Reuse candidate: [run ${reuse.run}](${reuse.url}), tree ${reuse.tree}; consuming job must reverify.\n`);
 }
