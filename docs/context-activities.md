@@ -21,7 +21,11 @@ as reasoning evidence. Ordinary answers should not start with stock accuracy or
 model-versus-reality disclaimers. When uncertainty changes the actual choice,
 briefly explain the consequence, such as being unable to distinguish which side
 of the road a location refers to. Do not assert an unverified observation, route
-access, venue visit or personal effort as fact.
+access, venue visit or personal effort as fact. These are internal reasoning
+constraints, not a script to recite. Do not routinely say that location cannot
+prove a venue entry or visit. Answer using supported facts; ask whether a visit
+occurred only when that distinction changes the answer and the conversation
+does not already resolve it.
 
 Response guards remain unchanged. Location announcements use a fresh
 `respond_to_location` context; question answers also carry their question ID.
