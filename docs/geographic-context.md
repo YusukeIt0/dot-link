@@ -357,3 +357,6 @@ all translations, exhaustive worldwide coverage or provider-internal search step
 The earlier iPhone-host-exit observation used the documented 90-second lease
 fallback. Formal release, the selected Even Hub submission permission-screen check
 and normal update-path acceptance remain separate release steps.
+
+For source selection within existing Dot activities and concise handling of uncertainty,
+see [Context in autonomous activities](context-activities.md).
