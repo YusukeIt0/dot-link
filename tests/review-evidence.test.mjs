@@ -76,6 +76,7 @@ function contextFor(r, changes = {}) {
   const api = path => {
     if (path === 'issues/73') return changes.issue || issue;
     if (path.startsWith('compare/')) { changes.onCompare?.(path); return changes.comparisons?.[path] || changes.comparison; }
+    if (path.startsWith('git/commits/')) return {sha: path.split('/').at(-1), tree: {sha: 'f'.repeat(40)}};
     if (path.startsWith('actions/')) return {workflow_runs: []};
     throw new Error(`Unexpected API: ${path}`);
   };
@@ -109,6 +110,7 @@ test('docs-only follow-up exposes verified reuse context without repeating uncha
   assert.equal(context.acceptance.record.evidence[0].commit, before);
   assert.deepEqual(context.evidence_comparisons[0], {
     source: before, target: head, ancestor: true, complete: true, eligible: true,
+    comparison_kind: 'endpoint-content',
     compared_file_count: 1, paths_complete: true,
     changed_files: [{path: 'docs/privacy.md', status: 'modified'}],
     reason: 'Changes are within the existing reuse policy; assess their effect on the recorded observation.',

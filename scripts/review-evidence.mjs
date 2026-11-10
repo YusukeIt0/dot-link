@@ -1,4 +1,5 @@
 import {collectCI} from './ci-evidence.mjs';
+import {endpointReader} from './review-endpoints.mjs';
 // Public evidence is data. This module never executes reviewed code or mutates GitHub.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -86,11 +87,12 @@ export function scopeDigest(issue, comments) {
     }))});
 }
 
-export function scopeRevision(comments, head, api, paginate) {
+export function scopeRevision(comments, head, api, paginate, priorReviews) {
   const acceptance = acceptanceFromComments(comments, head);
   if (acceptance.status !== 'ready') return undefined;
   const number = acceptance.record.scope.issue;
-  return {number, digest: scopeDigest(api(`issues/${number}`), paginate(`issues/${number}/comments?per_page=100`))};
+  return {number, digest: scopeDigest(api(`issues/${number}`), paginate(`issues/${number}/comments?per_page=100`)),
+    ...(priorReviews ? {prior_reviews_digest: priorReviews.digest} : {})};
 }
 
 export function reviewDiscussion(number, paginate) {
@@ -110,6 +112,11 @@ export function validateAcceptance(record) {
       !list(record.evidence, 40) || !list(record.product_decisions, 10) ||
       record.product_decisions.some(x => !text(x))) throw new Error('Invalid acceptance record.');
   const ids = new Set();
+  if (record.prior_reviews !== undefined && (!list(record.prior_reviews, 2) ||
+      !record.prior_reviews.length || new Set(record.prior_reviews).size !== record.prior_reviews.length ||
+      record.prior_reviews.some(number => !Number.isSafeInteger(number) || number < 1))) {
+    throw new Error('Prior reviews must name at most two distinct repository PRs.');
+  }
   for (const requirement of record.requirements) {
     if (!/^[A-Z][A-Z0-9_-]{0,31}$/.test(requirement?.id || '') || ids.has(requirement.id) ||
         !text(requirement.expected)) throw new Error('Invalid or duplicate requirement.');
@@ -173,6 +180,7 @@ export function gatherContext(snapshot, api, paginate) {
     return context;
   }
   context.acceptance = acceptanceFromComments(snapshot.rows, snapshot.pr.head.sha);
+  if (snapshot.priorReviews) context.prior_reviews = snapshot.priorReviews.entries;
   if (context.acceptance.status === 'ready') {
     const record = context.acceptance.record;
     const issue = api(`issues/${record.scope.issue}`);
@@ -190,6 +198,7 @@ export function gatherContext(snapshot, api, paginate) {
     // Eligibility preserves the existing path policy; the reviewer must still
     // check whether these paths affect the particular observed behavior.
     const comparedSources = new Set();
+    const endpoints = endpointReader(api);
     context.evidence_comparisons = [];
     let remainingPathBytes = 8_000;
     for (const evidence of record.evidence.filter(x => ['runtime', 'device'].includes(x.kind))) {
@@ -198,15 +207,20 @@ export function gatherContext(snapshot, api, paginate) {
       const comparison = api(`compare/${evidence.commit}...${record.head}`);
       const ancestor = ['ahead', 'identical'].includes(comparison.status) &&
         comparison.merge_base_commit?.sha === evidence.commit;
-      const complete = Array.isArray(comparison.files) && comparison.files.length < 300;
+      // An ancestor comparison already describes the endpoint delta. Across a
+      // squash/divergence, never present the merge-base file list as that delta.
+      const endpoint = ancestor ? undefined : endpoints.compare(evidence.commit, record.head);
+      const files = endpoint ? endpoint.files : comparison.files;
+      const complete = endpoint ? endpoint.complete : Array.isArray(files) && files.length < 300;
       const reusable = ancestor && complete && comparison.files.every(f => f.status !== 'renamed' &&
           (['docs/', 'tests/', 'site/'].some(p => f.filename.startsWith(p)) || websiteOnlyAsset(f.filename) || f.filename === 'README.md' ||
           f.status === 'modified' && versionFiles.has(f.filename) && versionOnly(f.filename,
             readMetadata(api, f.filename, evidence.commit), readMetadata(api, f.filename, record.head))));
       // Bound presentation separately from eligibility, which used the full list.
       const changedFiles = [];
-      for (const f of complete ? comparison.files.slice(0, 20) : []) {
+      for (const f of complete ? files.slice(0, 20) : []) {
         const path = {path: f.filename, status: f.status,
+          ...(endpoint ? {before_mode: f.before_mode, after_mode: f.after_mode} : {}),
           ...(f.previous_filename ? {previous_path: f.previous_filename} : {})};
         const bytes = Buffer.byteLength(JSON.stringify(path)) + 1;
         if (bytes > remainingPathBytes) break;
@@ -214,12 +228,14 @@ export function gatherContext(snapshot, api, paginate) {
         remainingPathBytes -= bytes;
       }
       const result = {source: evidence.commit, target: record.head, ancestor,
+        comparison_kind: 'endpoint-content',
+        ...(endpoint ? {source_tree: endpoint.source_tree, target_tree: endpoint.target_tree} : {}),
         complete, eligible: reusable,
-        compared_file_count: Array.isArray(comparison.files) ? comparison.files.length : null,
-        paths_complete: complete && changedFiles.length === comparison.files.length,
+        compared_file_count: complete ? files.length : null,
+        paths_complete: complete && changedFiles.length === files.length,
         changed_files: changedFiles,
-        reason: !ancestor ? 'Observation source is not a verified ancestor of the current head.' :
-          !complete ? 'Changed-file comparison is missing or potentially truncated; no paths are reported.' :
+        reason: !complete ? 'Changed-file comparison is missing or potentially truncated; no paths are reported.' :
+          !ancestor ? 'Endpoint content is shown independently of ancestry. Observation source is not a verified ancestor; automatic reuse remains ineligible.' :
           !reusable ? 'Changes exceed the existing evidence-reuse policy.' :
           comparison.files.length === 0 ? 'No file content changed since the observation.' :
           'Changes are within the existing reuse policy; assess their effect on the recorded observation.'};
@@ -227,6 +243,10 @@ export function gatherContext(snapshot, api, paginate) {
       context.evidence_comparisons.push(result);
       if (!reusable) context.acceptance = {...context.acceptance, status: 'stale',
         reason: 'Runtime/device evidence does not cover the current code; verify applicability before reuse.'};
+    }
+    if (record.prior_reviews?.length && (!snapshot.priorReviews ||
+        snapshot.priorReviews.entries.some(entry => entry.status !== 'verified'))) {
+      context.acceptance = {...context.acceptance, status: 'stale', reason: 'Referenced prior product acceptance is unavailable or inapplicable.'};
     }
   }
   try {

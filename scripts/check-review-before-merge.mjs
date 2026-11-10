@@ -4,6 +4,7 @@ import {execFileSync} from 'node:child_process';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {hash, reviewInput, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
+import {collectPriorReviews} from './review-provenance.mjs';
 
 const repository = 'YusukeIt0/dot-link';
 export {latestReceipt} from './review-receipt.mjs';
@@ -63,7 +64,9 @@ async function main() {
     path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']));
   const ciRun = evidence.run, ciJobs = evidence.jobs, ciComparison = evidence.comparison;
   const comments = readComments();
-  const scope = scopeRevision(comments, pr.head.sha, api, path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat());
+  const pages = path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat();
+  const priorReviews = collectPriorReviews(pr, comments, api, pages, readNode, botId);
+  const scope = scopeRevision(comments, pr.head.sha, api, pages, priorReviews);
   const feedback = reviewDiscussion(pr.number, path => gh(['api', `repos/${repository}/${path}`, '--paginate', '--slurp']).flat());
   if (JSON.stringify(receipt) !== JSON.stringify(latestReceipt(comments, botId))) throw new Error('Review ownership changed during this check.');
   const currentPR = api(`pulls/${number}`);

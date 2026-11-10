@@ -209,6 +209,23 @@ jobs:
             If paths_complete is false, the displayed list is partial; never infer
             unaffected behavior from omitted paths. Eligibility still uses the full
             bounded comparison. Identify any specific applicability proof still needed.
+            comparison_kind=endpoint-content describes the actual source/target
+            file contents, not a merge-base diff. A squash can break ancestry
+            without changing content; ancestor/eligible remain separate conservative
+            automatic-merge gates and are not by themselves semantic evidence gaps.
+            context.prior_reviews may supply authenticated historical product
+            acceptance, full review rationale and independent adjudication for a
+            feed-only delivery. Use only verified entries and matched_observations;
+            unavailable references do not establish coverage. Their source_head and
+            merge_commit trees match, and observation_comparisons preserve the
+            actual runtime delta already assessed by the product reviewer.
+            Carry that reasoning forward only while its behavior and assumptions
+            still apply. A mismatched source/build, changed environment/diagnostics
+            or new defect needs targeted verification. Do not treat Beta as an
+            official-archive observation or demand a repeat solely for its label.
+            Product acceptance, archive/feed validation and post-feed-merge normal
+            updates are distinct stages. Historical evidence never waives current
+            CI, authorization, signature checks or independent review gates.
             When behavior and assumptions remain applicable, carry the evidence
             forward. A repeat check needs a concrete affected requirement and
             changed behavior, new defect or changed assumption. Do not ask for

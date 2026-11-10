@@ -8,6 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {latestReceipt, assertReady} from './check-review-before-merge.mjs';
 import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery, websiteOnlyAsset} from './review-evidence.mjs';
+import {collectPriorReviews} from './review-provenance.mjs';
 
 export const repository = 'YusukeIt0/dot-link';
 export {versionOnly};
@@ -114,9 +115,10 @@ export function collect(number, client) {
   for (const f of files.filter(x => versionFiles.has(x.filename) && x.status === 'modified')) {
     versionChanges[f.filename] = versionOnly(f.filename, readMetadata(api, f.filename, main), readMetadata(api, f.filename, pr.head.sha));
   }
-  const scope = scopeRevision(comments, pr.head.sha, api, pages);
+  const priorReviews = collectPriorReviews(pr, comments, api, pages, client.readNode, botId);
+  const scope = scopeRevision(comments, pr.head.sha, api, pages, priorReviews);
   const feedback = reviewDiscussion(pr.number, pages);
-  const context = gatherContext({pr, data: {main}, issue: {number: pr.number}, rows: comments, fingerprint: receipt.fingerprint}, api, pages);
+  const context = gatherContext({pr, data: {main}, issue: {number: pr.number}, rows: comments, priorReviews, fingerprint: receipt.fingerprint}, api, pages);
   const evidence = collectCI(pr, {ref: 'main', sha: main}, api, pages);
   const ciRun = evidence.run, ciJobs = evidence.jobs, ciComparison = evidence.comparison;
   return {pr, main, scope, feedback, comments, receipt, run, jobs, files, versionChanges, context, ciRun, ciJobs, ciComparison, grokSelection,

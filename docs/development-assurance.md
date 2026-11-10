@@ -89,6 +89,40 @@ contact-only documentation edit does not require repeating unchanged page render
 Use the comparison to establish applicability; a different observation commit
 alone is not an evidence gap. Preserve the original source/build attribution.
 
+Changed paths describe **endpoint content**, not GitHub's merge-base diff. For
+non-ancestor sources (including squash merges), the collector compares immutable
+Git trees, including file modes, without checking out or running their code.
+Trees are limited to 10,000 entries / 2 MB each and fewer than 300 changed files;
+truncation or invalid tree data yields no partial path claims. Moves are represented
+as removal/addition. Ancestry and conservative automatic reuse eligibility remain
+separate and unchanged; an ineligible comparison alone is not proof that the
+observed behavior changed.
+
+A feed-only delivery acceptance record can add `"prior_reviews": [323]` (at most
+two product PR numbers in this repository). This supplies the merged product PR's
+latest authenticated acceptance, complete Dotsweeper rationale, and, when selected,
+independent review/adjudication. The collector verifies the exact source head,
+acceptance digest, successful owning review workflow/jobs, and identical reviewed
+head/merge trees. The current head must contain that merge and differ only by a
+regular-file modification to `updates/mac/appcast.xml` (or no files).
+It matches observations by original kind, result, commit, build, steps, observed
+result and details; references and requirement IDs may be mapped to this stage.
+No observations are relabeled as a newer build. Source-to-product endpoint deltas
+and prior applicability reasoning remain visible. This is historical evidence,
+not a new approval or a relaxation of the automatic ancestry/runtime path rules.
+
+The referenced revisions and applicability result contribute to the current
+review fingerprint at intake, preparation, reporting and both merge gates.
+Edited/replaced/unauthenticated evidence, unresolved findings, changed source trees,
+changed observations or non-feed runtime deltas cannot silently inherit a previous
+assessment. API failures fail collection; oversized references are unavailable or
+stop preparation under the existing context limit. References do not recursively
+import other delivery reviews. The agent must still assess current assumptions,
+including runtime environment and diagnostic/build differences. Product acceptance,
+archive/feed checks and the post-feed-merge normal update remain separate stages.
+An unchanged Beta observation alone neither proves an official update nor requires
+another device session solely for a version/channel label.
+
 Review gaps describe unmet current-stage requirements or concrete safety or
 correctness evidence needs, with the affected behavior and reason. Checks that
 explicitly require a later merge/deployment belong in next steps for that stage,
