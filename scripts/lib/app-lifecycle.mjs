@@ -72,6 +72,8 @@ export async function suspendServices(directory, { reason = 'pause', home = home
 export async function resumeServices(directory, {home=homedir(),execute=run,wait,app=join(home,'Applications/Dot Link.app'),uid=process.getuid()}={}) {
   const jobs = await ownedJobs(directory,{home,execute,includeUI:true,app});
   if (!['bridge','device','tunnel'].every(name=>jobs.some(j=>j.name===name))) throw new Error('SERVICE_SETUP_REQUIRED');
+  try { await regularPath(app); }
+  catch(cause) { if(cause.code==='ENOENT')throw Object.assign(new Error('APP_LOCATION_MISSING',{cause}),{setupCode:'APP_LOCATION_MISSING'});throw cause; }
   const domain=`gui/${uid}`;
   for (const job of jobs) await execute('/bin/launchctl',['enable',`${domain}/${job.label}`]);
   for (const job of jobs.filter(j=>j.name!=='setup-ui')) await activateAgent(domain,job.label,job.path,{execute,wait});

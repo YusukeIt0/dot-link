@@ -1,11 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { installMenuApp, registerMenuApp } from '../scripts/lib/menu-install.mjs';
 test('menu app installation preserves an existing app and registers background login launch',async t=>{
- const home=await mkdtemp(join(tmpdir(),'dot-menu-'));t.after(()=>rm(home,{recursive:true,force:true}));
+ const home=await realpath(await mkdtemp(join(tmpdir(),'dot-menu-')));t.after(()=>rm(home,{recursive:true,force:true}));
  const source=join(home,'source.app');await mkdir(join(source,'Contents/MacOS'),{recursive:true});
  await writeFile(join(source,'Contents/Info.plist'),'fixture');await writeFile(join(source,'Contents/MacOS/DotLink'),'fixture');
  const execute=async()=> 'app.tripsurf.dotlink.mac';

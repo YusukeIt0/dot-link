@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,realpath} from 'node:fs/promises';
+import {mkdtemp,mkdir,writeFile,readFile,readdir,rm,realpath,rename} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {run} from '../scripts/lib/setup.mjs';
 import {withUpdateStorage} from '../scripts/lib/update-storage.mjs';
 import {ownedService} from '../scripts/lib/service-management.mjs';
 import {initialSetupReady,prepareUpdate,finishUpdate,updateReadiness} from '../scripts/lib/app-update.mjs';
+import {ensureAppLocation} from '../scripts/lib/app-location.mjs';
 async function fixture(t,{initialSetup=false}={}){
  const home=await realpath(await mkdtemp(join(tmpdir(),'dot-update-')));t.after(()=>rm(home,{recursive:true,force:true}));
  const directory=join(home,initialSetup?'Library/Application Support/Dot Link':'even-g2-dot'),runtime=join(directory,'.runtime'),app=join(home,'Applications/Dot Link.app'),agents=join(home,'Library/LaunchAgents');
@@ -97,6 +98,23 @@ test('recovery refuses a damaged replacement before changing services or discard
  }}),/UPDATE_APP_INVALID/);
  assert.equal(await readFile(join(f.runtime,'app-update.json'),'utf8'),journal);
  assert.ok(!f.calls.slice(before).some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','disable','bootstrap','bootout'].includes(op)));
+});
+
+for(const paused of [false,true])test(`restoring a moved app allows journal recovery while preserving paused=${paused}`,async t=>{
+ const f=await fixture(t);
+ await writeFile(join(f.runtime,'device-key'),'fixture-pairing');
+ if(paused)await writeFile(join(f.runtime,'lifecycle.json'),JSON.stringify({stopped:true,reason:'pause'}));
+ await prepareUpdate(f.directory,{...f,bootstrap:true});
+ const journal=await readFile(join(f.runtime,'app-update.json'),'utf8');
+ const source=join(f.home,'アプリケーション/Dot Link.app');await mkdir(join(source,'..'),{recursive:true});await rename(f.app,source);
+ const before=f.calls.length;
+ await assert.rejects(finishUpdate(f.directory,f),/APP_LOCATION_MISSING/);
+ assert.equal(await readFile(join(f.runtime,'app-update.json'),'utf8'),journal);
+ assert.ok(!f.calls.slice(before).some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','disable','bootstrap','bootout'].includes(op)));
+ assert.equal((await ensureAppLocation(source,f)).handoff,true);
+ assert.deepEqual(await finishUpdate(f.directory,f),{recovered:true,stopped:paused});
+ assert.equal(await readFile(join(f.runtime,'device-key'),'utf8'),'fixture-pairing');
+ if(paused)assert.deepEqual(JSON.parse(await readFile(join(f.runtime,'lifecycle.json'),'utf8')),{stopped:true,reason:'pause'});
 });
 
 test('startup recovery restarts stale loaded jobs even when their on-disk definitions already match',async t=>{

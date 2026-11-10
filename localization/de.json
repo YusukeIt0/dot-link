@@ -586,5 +586,11 @@
   "even.weather_unavailable": "Verbinde dich mit einem aktualisierten Mac, um Wetter zu verwalten.",
   "even.weather_on": "Wetterkontext ist aktiviert.",
   "even.weather_off": "Wetterkontext ist ausgeschaltet.",
-  "mac.notification_reception_stopped": "Der Empfang von Mitteilungen ist gestoppt. Schalte die Freigabe aus und wieder ein, um fortzufahren."
+  "mac.notification_reception_stopped": "Der Empfang von Mitteilungen ist gestoppt. Schalte die Freigabe aus und wieder ein, um fortzufahren.",
+  "mac.app_location_title": "Installierte App prüfen",
+  "mac.open_applications_folder": "Applications-Ordner öffnen",
+  "mac.download_dot_link": "Dot Link herunterladen",
+  "setup.codes.APP_LOCATION_MISSING": "Dot Link fehlt in ~/Applications. Beenden Sie die App, legen Sie eine offizielle Kopie von Dot Link.app dort ab und öffnen Sie sie. Behalten Sie Ihre gespeicherten Einstellungen.",
+  "setup.codes.APP_LOCATION_REPAIR": "Die installierte App lässt sich nicht sicher öffnen. Beenden Sie die App und ersetzen Sie nur ~/Applications/Dot Link.app durch einen offiziellen Download. Behalten Sie Ihre gespeicherten Einstellungen.",
+  "setup.codes.APP_LOCATION_OLDER": "Eine neuere Version ist außerhalb von ~/Applications geöffnet. Beenden Sie die App, ersetzen Sie nur ~/Applications/Dot Link.app durch diese Version und öffnen Sie sie. Behalten Sie Ihre gespeicherten Einstellungen."
 }

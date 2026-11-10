@@ -586,5 +586,11 @@
   "even.weather_unavailable": "连接已更新的Mac以管理气象信息。",
   "even.weather_on": "气象信息已启用。",
   "even.weather_off": "气象信息已关闭。",
-  "mac.notification_reception_stopped": "通知接收已停止。请关闭共享后再开启以恢复接收。"
+  "mac.notification_reception_stopped": "通知接收已停止。请关闭共享后再开启以恢复接收。",
+  "mac.app_location_title": "检查已安装的应用",
+  "mac.open_applications_folder": "打开 Applications 文件夹",
+  "mac.download_dot_link": "下载 Dot Link",
+  "setup.codes.APP_LOCATION_MISSING": "~/Applications 中没有 Dot Link。请退出应用，将官方 Dot Link.app 放入该文件夹后重新打开。请保留已保存的设置。",
+  "setup.codes.APP_LOCATION_REPAIR": "无法安全地打开已安装的应用。请退出应用，仅将 ~/Applications/Dot Link.app 替换为官方下载版本。请保留已保存的设置。",
+  "setup.codes.APP_LOCATION_OLDER": "当前从 ~/Applications 以外的位置打开了较新版本。请退出应用，仅将 ~/Applications/Dot Link.app 替换为这个较新版本后重新打开。请保留已保存的设置。"
 }

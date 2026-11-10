@@ -6,6 +6,14 @@ import { tmpdir } from 'node:os';
 import { lifecycleState, suspendServices, resumeServices, waitForRelay } from '../scripts/lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from '../scripts/lib/app-uninstall.mjs';
 const exists=p=>access(p).then(()=>true,()=>false);
+test('missing managed app blocks resume before enabling jobs or changing pause intent',async t=>{
+ const f=await fixture(t);
+ await writeFile(join(f.runtime,'lifecycle.json'),JSON.stringify({stopped:true,reason:'pause'}));
+ await rm(f.app,{recursive:true});
+ await assert.rejects(resumeServices(f.directory,f),/APP_LOCATION_MISSING/);
+ assert.ok(!f.calls.some(([cmd,op])=>cmd==='/bin/launchctl'&&['enable','bootstrap'].includes(op)));
+ assert.equal((await lifecycleState(f.directory)).lifecycleReason,'pause');
+});
 async function fixture(t,{managed=false}={}) {
  const home=await realpath(await mkdtemp(join(tmpdir(),'dot-lifecycle-')));t.after(()=>rm(home,{recursive:true,force:true}));
  const directory=managed?join(home,'Library/Application Support/Dot Link'):join(home,'even-g2-dot');
