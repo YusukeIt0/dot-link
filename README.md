@@ -27,20 +27,39 @@
   <br><sub>AI-generated illustrative scenes with simulator displays. Timing condensed.</sub>
 </p>
 
-Interact with your existing ChatGPT Dot in the way that suits the moment: say **Hey dot** (or a name you choose), hold to talk on Even G2, type on your phone, or attach photos from the phone camera or library. Read replies on your glasses, enable read-aloud, and receive proactive messages from Dot—even when speaking aloud or listening to audio is not an option. Your own Mac connects the devices; there is no developer-operated conversation server.
+Dot Link brings your existing ChatGPT Dot into everyday life through Even G2. Dot can use the context you choose to share, respond on your glasses, and reach out when something matters—or stay quiet when it doesn't. Your own Mac connects the devices.
 
 <p align="center">
   <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">
   <br><sub>Simulator example; status indicators may differ on physical glasses.</sub>
 </p>
 
-## Can I connect my ChatGPT Dot to Even Realities G2?
+<a id="can-i-connect-my-chatgpt-dot-to-even-realities-g2"></a>
 
-Yes. **Dot Link** connects your existing ChatGPT Dot to Even G2. Dot can speak up when it matters and stay quiet otherwise. Share your location and ask Dot to suggest nearby places you’d like, right on your glasses.
+## What Dot can understand
 
-You need an **Apple Silicon Mac**, **Even G2**, an **iPhone**, **Tailscale**, and an existing **ChatGPT Dot with access to OpenAI tunnels and custom MCP connections**. Your Mac acts as the relay and must stay awake and online. No Chrome browser or web scraping is required; installing Dot Link does not grant the required ChatGPT account access.
+Choose what to share in the iPhone companion's **Location sharing** settings. These features are optional; walking and terrain, recent-place history, and weather each have a separate sharing control.
 
-[Install on Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink) · [Setup guide](#quickstart)
+- **Your location and surroundings:** share your location as you move, with nearby streets, paths and places.
+- **Walking routes:** ask about a destination and get estimated walking routes and travel times.
+- **Terrain:** understand elevation and slopes, including hills along a route.
+- **Recent places:** let Dot refer to recorded movement and places, with up to seven days of history stored on your Mac.
+- **Weather:** forecasts for your shared location or another place you ask about, including temperature, humidity and precipitation. Requires a compatible Mac client and the **Weather context** option in your Even companion.
+
+See [location and history setup](docs/setup.md#location-sharing) and [weather setup](docs/setup.md#optional-weather-context) for sharing controls and compatible versions.
+
+## What you can do
+
+- **Choose how to talk:** say **Hey dot** or a custom wake name, hold to talk on G2, or [disable manual recording](docs/setup.md#conversation-and-display) in **Operation settings**.
+- **Customize the HUD:** browse conversations and adjust display timeout, wake gestures and the head-raise angle.
+- **Read or listen:** read replies on G2 or enable read-aloud through your iPhone.
+- **Speak, type or send photos:** transcribe speech with local Whisper or your own external speech-recognition service; type messages or attach photos from your iPhone camera or library. [Speech settings](docs/setup.md#speech) · [Photos](docs/setup.md#photos).
+- **Hear from Dot:** receive proactive messages without asking first. Dot decides what merits an interruption.
+- **Share Mac notifications:** optionally let Dot use readable new notifications and decide what to announce. Sharing starts off. [Notification setup](docs/setup.md#mac-notifications).
+
+<a id="make-it-yours"></a>
+
+**Seven interface languages:** English · 日本語 · 한국어 · 繁體中文 · 简体中文 · Français · Deutsch
 
 ## Requirements
 
@@ -75,29 +94,25 @@ The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyw
 
 ### 4. Start a conversation
 
-- **Hold to talk:** hold to speak on G2 and release to stop recording.
-- **Disable hold-to-record:** in **Operation settings**, enable this to ignore accidental long presses on the glasses (for example, with wet or sweaty controls). The choice is saved; the default keeps hold-to-record enabled. When enabled, use Hey XX or text input; the phone button cannot start manual recording either. Wake listening is not enabled automatically. Enabling this setting discards an ongoing manual recording.
-- **Hey dot:** in the phone companion's **Operation settings**, enable **Talk with Hey XX** (off by default). Say “Hey dot”, wait for the recording prompt on G2, then speak. A short silence ends recording. Repeat the cue for each new turn. To use another name, enable **Change the name**, enter 1–24 ASCII letters, and save. Pronounce custom names in English; Even, Siri and Meta are reserved. The wake phrase is independent of the interface language.
-- **Type:** write and send a message in the Even companion.
+Hold to speak on G2 and release to stop, or type a message in the iPhone companion. **Send after transcription** sends recognized speech automatically; turn it off to review before sending. Check that your Dot's reply appears on G2.
 
-With **Send after transcription** enabled, recognized speech is sent automatically; turn it off to review the text before sending. Check that your Dot's reply appears on G2. Keep Dot Link open on G2, the Mac awake, and both devices connected to Tailscale.
+For voice activation, enable **Talk with Hey XX** in **Operation settings** (off by default). Say “Hey dot”, wait for the recording prompt, then speak; a short silence ends recording. Repeat the cue for each turn. See [custom wake names and limitations](docs/wake-word.md).
 
-Hey dot pauses during processing and read-aloud. If you do not speak after the cue, the chat and your reading position stay in place. Detection runs locally on your phone; only speech captured after the cue goes to your Mac for transcription. See [Hey dot behavior and limitations](docs/wake-word.md).
+Keep Dot Link open on G2, the Mac awake, and both devices connected to Tailscale. See the [user guide](docs/setup.md) for display settings, sharing controls and troubleshooting.
 
-## Make it yours
+<a id="security-and-updates"></a>
 
-- **Interface languages:** English · 日本語 · 한국어 · 繁體中文 · 简体中文 · Français · Deutsch
-- **Conversation:** browse history, enable read-aloud, and adjust display timeout, wake gestures and the head-raise angle.
-- **Speech input:** use free local Whisper or your own speech-service API key. [Speech settings](docs/setup.md#speech).
-- **Context:** optionally share [Mac notifications](docs/setup.md#mac-notifications) or your [phone location](docs/setup.md#location-sharing). Both start off; Dot decides what to announce.
+## Privacy & Updates
 
-## Security and updates
+Your Mac is the relay. Conversations and shared context never pass through a server operated by the developer; messages and context you share go to your existing Dot through OpenAI.
 
-Dot Link's dependencies receive security updates, with automated checks, code review and device testing for changes that affect app behavior. This includes Node.js, which runs the Mac connection service, and Zod, which checks data while the app runs, as well as development and build tools such as Vite.
+Local Whisper transcribes speech on your Mac. Choosing an external speech-recognition service sends recordings directly to that provider under your own account and charges. Read-aloud uses your iPhone's speech engine, separately from speech recognition.
 
-For example, [Mac 0.4.11](https://github.com/YusukeIt0/dot-link/releases/tag/mac-v0.4.11-80) shipped Node.js 22.23.4 to address security issues including a [Brotli decompression vulnerability](https://nodejs.org/en/blog/vulnerability/october-2026-security-releases). [Mac 0.4.15](https://github.com/YusukeIt0/dot-link/releases/tag/mac-v0.4.15-85) also includes the Zod 4.6.7 security update. These updates are part of ongoing maintenance to improve safety and reliability.
+Your phone shares location with your Mac. Nearby map data is downloaded from Overture Maps. Optional walking, terrain and weather features use external services under their separate sharing controls. Those services receive connection information and location-related queries. Your Mac stores conversations and settings; stopping sharing does not erase information already received by Dot. See [data handling](docs/privacy.md) for what is sent, retained and deleted.
 
-Use **Check for updates** in the Mac app; automatic updates are currently paused. Updates preserve settings and pairing. See the [user guide](docs/setup.md) for manual installation, updates and troubleshooting, and [data handling](docs/privacy.md) for what is sent, stored and deleted.
+Use **Check for updates** in the Mac app; automatic updates are currently paused. Updates preserve settings, pairing and history. Update the Even companion through Even Hub separately. See [update instructions](docs/setup.md#updates), including refreshing Dot's tools when an update changes them.
+
+Dependencies receive security updates and relevant checks. See [dependencies](docs/dependencies.md) and [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
 
 Recovery after sleep, network loss and extended use is still being validated. Report problems in [Issues](https://github.com/YusukeIt0/dot-link/issues), without credentials or private conversations.
 
