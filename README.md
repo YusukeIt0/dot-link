@@ -50,7 +50,7 @@ See [location and history setup](docs/setup.md#location-sharing) and [weather se
 
 ## What you can do
 
-- **Choose how to talk:** say **Hey dot** or a custom wake name, hold to talk on G2, or disable manual recording in **Operation settings**.
+- **Choose how to talk:** say **Hey dot** or a custom wake name, hold to talk on G2, or [disable manual recording](docs/setup.md#conversation-and-display) in **Operation settings**.
 - **Customize the HUD:** browse conversations and adjust display timeout, wake gestures and the head-raise angle.
 - **Read or listen:** read replies on G2 or enable read-aloud through your iPhone.
 - **Speak, type or send photos:** transcribe speech with local Whisper or your own external speech-recognition service; type messages or attach photos from your iPhone camera or library. [Speech settings](docs/setup.md#speech) · [Photos](docs/setup.md#photos).
