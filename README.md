@@ -44,7 +44,7 @@ Choose what to share in the iPhone companion's **Location sharing** settings. Th
 - **Walking routes:** ask about a destination and get estimated walking routes and travel times.
 - **Terrain:** understand elevation and slopes, including hills along a route.
 - **Recent places:** let Dot refer to recorded movement and places, with up to seven days of history stored on your Mac.
-- **Weather:** forecasts for your shared location or another place you ask about, including temperature, humidity and precipitation. Requires Mac 0.4.34+ and Even 0.3.57+ (submitted for review November 10); check [Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink) for availability.
+- **Weather:** forecasts for your shared location or another place you ask about, including temperature, humidity and precipitation. Requires a compatible Mac client and the **Weather context** option in your Even companion.
 
 See [location and history setup](docs/setup.md#location-sharing) and [weather setup](docs/setup.md#optional-weather-context) for sharing controls and compatible versions.
 
