@@ -4,7 +4,7 @@
 
 <h1 align="center">Dot Link</h1>
 <p align="center"><strong>Your Dot, aware of the world around you.</strong></p>
-<p align="center">Dot is smart, but it doesn't know where you are or what's around you. Dot Link connects your existing ChatGPT Dot to Even G2, letting it understand more about your surroundings using the context you choose to share: your location, walking routes, terrain, recent places, and weather. Dot can reach out through your glasses when something matters, or stay quiet when it doesn't.</p>
+<p align="center">Dot is smart, but it doesn't automatically know where you are or what's around you. Dot Link connects your existing ChatGPT Dot to Even G2, letting it understand more about your surroundings using the context you choose to share: your location, walking routes, terrain, recent places, and weather. Dot can reach out through your glasses when something matters, or stay quiet when it doesn't.</p>
 <p align="center">
   <a href="https://yusukeit0.github.io/dot-link/">Website</a> ·
   <a href="#quickstart">Quickstart</a> ·
