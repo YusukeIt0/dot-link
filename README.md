@@ -3,7 +3,8 @@
 </p>
 
 <h1 align="center">Dot Link</h1>
-<p align="center"><strong>Your Dot, now on Even G2.</strong></p>
+<p align="center"><strong>Your Dot, aware of the world around you.</strong></p>
+<p align="center">Dot Link lets your existing Dot understand more about your surroundings using the context you choose to share: your location, walking routes, terrain, recent places, and weather. Dot can reach you on Even G2 when something matters, or stay quiet when it doesn't.</p>
 <p align="center">
   <a href="https://yusukeit0.github.io/dot-link/">Website</a> ·
   <a href="#quickstart">Quickstart</a> ·
@@ -27,7 +28,18 @@
   <br><sub>AI-generated illustrative scenes with simulator displays. Timing condensed.</sub>
 </p>
 
-Dot Link brings your existing ChatGPT Dot into everyday life through Even G2. Dot can use the context you choose to share, respond on your glasses, and reach out when something matters—or stay quiet when it doesn't. Your own Mac connects the devices.
+## What changes with Dot Link?
+
+| | Without Dot Link | With Dot Link |
+|---|---|---|
+| **Location** | One-time context | Updates as you move |
+| **Surroundings** | Search when needed | Nearby roads and places |
+| **Walking routes** | Separate requests | Routes from your location |
+| **Terrain** | General information | Elevation and slopes |
+| **Recent places** | Conversation and memory | 7 days of recorded history |
+| **Weather** | Forecast on request | Linked to your location |
+| **Health** | What you share | Wearable data (In development) |
+| **Proactive help** | Conversation and connected context | Real-world context too |
 
 <p align="center">
   <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">
