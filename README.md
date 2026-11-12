@@ -30,6 +30,8 @@
 
 ## What changes with Dot Link?
 
+<div align="center">
+
 | | Without Dot Link | With Dot Link |
 |---|---|---|
 | **Location** | One-time context | Updates as you move |
@@ -40,6 +42,8 @@
 | **Weather** | Forecast on request | Linked to your location |
 | **Health** | What you share | Wearable data (In development) |
 | **Proactive help** | Conversation and connected context | Real-world context too |
+
+</div>
 
 <p align="center">
   <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">
