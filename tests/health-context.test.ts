@@ -12,11 +12,12 @@ import {WebhookSender} from '../server/webhook.ts';
 import {HealthSharing} from '../src/health-sharing.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const settle=()=>new Promise(r=>setImmediate(r));
-async function fixture(t:TestContext,enabled=false,activity=false) {
+async function fixture(t:TestContext,enabled=false,activity=false,heartRate=false) {
   const dir=mkdtempSync(join(tmpdir(),'health-context-')),path=join(dir,'state.enc'),key=randomBytes(32);let now=NOW,authorized=true;
   const profile=normalizeProfile({height:171,weight:72,birthday:'1992-03-04'},now);
   const observations=normalize('recovery',{recharges:[{date:'2026-11-14',heart_rate_avg:61,breathing_rate_avg:14}]},now);
   if(activity)observations.push(...normalize('activity',[{start_time:'2026-11-14T00:00:00+00:00',daily_activity:123.45,active_duration:'PT2H5M',steps:1000}],now));
+  if(heartRate)observations.push(...normalize('heart_rate',[{date:'2026-11-14',heart_rate_samples:Array.from({length:3000},(_,i)=>({sample_time:new Date(i*28*1000).toISOString().slice(11,19),heart_rate:i===2999?150:65}))}],now));
   new HealthVault(path).write(key,{version:1,connection:{clientId:'fixture',clientSecret:'fixture-secret',accessToken:'fixture-token',userId:123,expiresAt:NOW+86400_000},owner:'owner',enabled,deletedBefore:0,profileDeleted:false,profile,observations});
   let collect=async()=>({observations,profile});let sent=0,profileCalls=0;const texts:string[]=[];
   const api=new PolarAPI();api.collect=async()=>collect();api.profile=async()=>{profileCalls++;return profile;};api.disconnect=async()=>{};
@@ -31,6 +32,30 @@ test('OFF is authoritative, consent cannot cross owners, reads expire and revoca
   await f.control('enable');await settle();const r=f.h.read({categories:['recovery']});assert.equal(r.status,'available');assert.ok('read_id' in r);
   await f.control('disable');await assert.rejects(f.h.respond({read_id:r.read_id,disposition:'announce',text:'test'}));
   await f.control('enable');await settle();const r2=f.h.read({});assert.ok('read_id' in r2);f.revoke();assert.equal(f.h.read({}).status,'unavailable');await assert.rejects(f.h.respond({read_id:r2.read_id,disposition:'announce',text:'test'}));assert.equal(f.sent(),0);
+});
+
+test('heart-rate context exposes full-response summaries with bounded detail, legacy scope and existing access guards',async t=>{
+ const f=await fixture(t,true,false,true);
+ const r=f.h.read({categories:['heart_rate'],hours:168});assert.ok('observations' in r);
+ const row=r.observations[0];assert.ok('heart_rate_summary' in row);
+ assert.equal(row.heart_rate_summary!.sample_count,3000);assert.equal(row.heart_rate_summary!.max_bpm,150);
+ assert.equal(row.samples!.length,96);assert.equal(row.samples!.at(-1)!.value,150);
+ assert.equal(row.samples_total,3000);assert.equal(row.samples_reduced,true);assert.deepEqual(row.values,{});
+ assert.equal(r.heart_rate_metrics!.utc_offset_minutes,null);assert.equal(r.heart_rate_metrics!.time_basis,'source_device_clock');
+ const activity=f.h.read({categories:['activity']});assert.ok('observations' in activity);assert.equal(activity.heart_rate_metrics,undefined);
+ // At this time, the date's UTC+14 retention anchor is already 26 hours old.
+ // A last-24h read must still include the potentially overlapping device day.
+ const recent=f.h.read({categories:['heart_rate'],hours:24});assert.ok('observations' in recent);
+ assert.equal(recent.observations.length,1);assert.equal(recent.heart_rate_metrics!.requested_hours,24);
+ await f.control('disable');assert.equal(f.h.read({categories:['heart_rate']}).status,'unavailable');
+ await assert.rejects(f.h.respond({read_id:r.read_id,disposition:'announce',text:'old data'}));
+ const legacy=f.observations.find(x=>x.category==='heart_rate')!;legacy.values={};legacy.samples=[{time:'00:01:00',value:65},{time:'03:00:00',value:85}];
+ await f.control('enable');await settle();
+ const old=f.h.read({categories:['heart_rate'],hours:168});assert.ok('observations' in old);
+ const oldRow=old.observations[0];assert.ok('heart_rate_summary' in oldRow);
+ assert.equal(oldRow.heart_rate_summary!.basis,'legacy_stored_samples');assert.equal(oldRow.heart_rate_summary!.sample_count,2);
+ await f.control('delete');assert.equal(f.h.read({categories:['heart_rate']}).status,'unavailable');
+ assert.deepEqual((new HealthVault(f.path).read(f.key) as any).observations,[]);
 });
 test('delete cancels an in-flight fetch; re-enable cannot restore earlier measurements or profile',async t=>{
   const f=await fixture(t);let finish!:(v:{observations:typeof f.observations;profile:typeof f.profile})=>void;

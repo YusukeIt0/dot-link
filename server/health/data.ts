@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { normalizeHeartRates, storeHeartRateSummary } from './heart-rate.ts';
 
 export const RETENTION = 168 * 60 * 60 * 1000;
 export const categories = ['sleep','activity','heart_rate','recovery','exercise'] as const;
@@ -69,9 +70,9 @@ export function normalize(category:Category,raw:unknown,now:number): Observation
       for(const s of zones) {const zone=object(s).zone;if(typeof zone==='string'&&['SEDENTARY','LIGHT','MODERATE','VIGOROUS','NON_WEAR','SLEEP'].includes(zone)) counts[zone]=(counts[zone]??0)+1;}
       for(const [k,v] of Object.entries(counts))values[`zone_samples_${k.toLowerCase()}`]=v;
     } else if(category==='heart_rate') {
-      samples=(Array.isArray(r.heart_rate_samples)?r.heart_rate_samples.slice(0,2500):[]).map(s=>object(s)).filter(s=>typeof s.heart_rate==='number'&&s.heart_rate>0&&s.heart_rate<300&&typeof s.sample_time==='string'&&/^\d{2}:\d{2}:\d{2}$/.test(s.sample_time))
-        .map(s=>({time:String(s.sample_time),value:Number(s.heart_rate)}));
-      if(!samples.length)continue;
+      const heartRate=normalizeHeartRates(r.heart_rate_samples);
+      if(!heartRate)continue;
+      samples=heartRate.samples;Object.assign(values,storeHeartRateSummary(heartRate.summary));
     } else if(category==='recovery') {
       numbers(['heart_rate_avg','heart_rate_variability_avg','breathing_rate_avg','nightly_recharge_status','ans_charge','ans_charge_status']);
     } else {

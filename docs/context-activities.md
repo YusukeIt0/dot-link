@@ -123,6 +123,27 @@ with an explicit percent unit and daily-goal meaning (100 means the goal is met)
 Values above 100 are preserved. The read projection also covers existing encrypted
 records; it does not reinterpret the value as a health or recovery score.
 
+Heart-rate context provides `heart_rate_summary` for each source date, including
+hourly observations. Summaries cover all valid samples in the returned API day,
+before selecting at most 96 detail points across the time-ordered span. The first
+and last points are retained. Ranges and unweighted sample means describe those
+samples, not live readings, resting heart rate or guaranteed whole-day extrema.
+Polar documents these as period-average samples in device time; missing offsets
+remain unknown. `hours` selects potentially overlapping device dates rather than
+clipping samples to an invented UTC interval. Conservative measurement retention
+is unchanged. Gaps and absent hours are not interpolated.
+
+The encrypted v1 scalar-value shape remains compatible with earlier builds.
+Existing records without full-response summaries are labeled `legacy_stored_samples`;
+their old first-2,500 cap is not retroactively treated as complete input. A later
+normal acquisition replaces that record with an all-valid-returned-sample summary.
+The AI uses coverage and time uncertainty internally, mentioning them only when
+they materially change the answer. A heart-rate change alone does not establish
+stress, fatigue, emotion or illness. Neither a new reading nor an available summary
+requires a notification. Use comparable observed periods when comparing days.
+
+Source semantics: [Polar continuous-heart-rate schema](https://www.polar.com/accesslink-api/#continuous-heartrate).
+
 Explicit Keychain authorization allows up to five minutes for the owner to answer
 the macOS prompt; background reads remain noninteractive and bounded to 15 seconds.
 The Mac settings request waits for that authorization result before reporting it.

@@ -8,6 +8,7 @@ import { contextActivityGuidance, decisionFactorTool } from '../context-guidance
 import type { WebhookSender } from '../webhook.ts';
 import { HealthVault } from './vault.ts';
 import { categories, observationSchema, profileSchema, RETENTION, type Observation } from './data.ts';
+import { heartRateGuidance, readHeartRateSummary, summarizeHeartRates, type HeartRateSummary } from './heart-rate.ts';
 import { connectionSchema, PolarAPI, POLAR_REDIRECT, PolarError, type PolarConnection } from './polar.ts';
 
 const EVENT='health.updated', SESSION='personal-g2';
@@ -17,6 +18,7 @@ const stateSchema=z.object({version:z.literal(1),connection:connectionSchema.opt
   observations:z.array(observationSchema).max(4000),subscription:subSchema.optional(),activationStopped:z.boolean().default(false),
   disconnectPending:z.boolean().default(false)}).strict();
 type State=z.infer<typeof stateSchema>;
+type ContextObservation=Observation & {heart_rate_summary?:HeartRateSummary;samples_total?:number;samples_reduced?:boolean};
 const empty=():State=>({version:1,enabled:false,deletedBefore:0,profileDeleted:false,observations:[],activationStopped:false,disconnectPending:false});
 const eventArgs=z.object({session_id:z.literal(SESSION)}).strict();
 const delivery=z.object({mode:z.literal('webhook'),url:z.string().max(2048),secret:z.string().max(100)}).strict();
@@ -114,9 +116,24 @@ export class HealthContext {
   read(raw:unknown) {
     this.maintain();const args=z.object({categories:z.array(z.enum(categories)).max(5).default(['sleep','activity','recovery']),hours:z.number().min(1).max(168).default(24),profile:z.boolean().default(false)}).strict().parse(raw??{});
     if(!this.usable())return {status:'unavailable',activity_guidance:contextActivityGuidance};
-    const matching=this.state.observations.filter(x=>args.categories.includes(x.category)&&x.retention_anchor>this.now()-args.hours*3600_000);
+    const cutoff=this.now()-args.hours*3600_000;
+    const matching=this.state.observations.filter(x=>args.categories.includes(x.category)&&(
+      // Offset-free heart-rate days may overlap the requested window even if
+      // their conservative retention anchor predates it. Do not invent UTC.
+      x.category==='heart_rate'&&x.source_local_date
+        ?Date.parse(`${x.source_local_date}T00:00:00Z`)+36*3600_000>cutoff
+        :x.retention_anchor>cutoff));
     // Bound model context independently of encrypted storage size.
-    const observations=matching.slice(0,80).map(x=>{
+    const observations=matching.slice(0,80).map<ContextObservation>(x=>{
+      if(x.category==='heart_rate') {
+        // Old encrypted records remain readable, but cannot claim that their
+        // original first-2500 sample cap covered the full provider response.
+        const stored=readHeartRateSummary(x.values);
+        const legacy=stored?undefined:summarizeHeartRates(x.samples??[],'legacy_stored_samples',null);
+        const summary=stored??legacy?.summary;
+        const samples=legacy?.samples??x.samples??[];
+        return {...x,values:{},samples,...(summary?{heart_rate_summary:summary,samples_total:summary.sample_count,samples_reduced:samples.length<summary.sample_count}:{} )};
+      }
       if(x.category!=='activity')return x;
       const {daily_activity,...values}=x.values;
       // Translate the provider field on read, including already encrypted records.
@@ -126,6 +143,7 @@ export class HealthContext {
     this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires});while(this.reads.size>40)this.reads.delete(this.reads.keys().next().value!);
     return {status:'available',read_id,source:'Polar',observations,omitted_observations:Math.max(0,matching.length-observations.length),...(args.profile?{profile:this.state.profile??null}:{}),
       ...(observations.some(x=>x.category==='activity')?{activity_metrics:{activity_goal_completion_percent:{unit:'%',meaning:'Percentage of the daily activity goal achieved; 100 means the goal is met. This is not a health or recovery score.'},active_duration:{format:'ISO 8601 duration'},inactive_duration:{format:'ISO 8601 duration'}}}:{}),
+      ...(observations.some(x=>x.category==='heart_rate')?{heart_rate_metrics:{...heartRateGuidance,requested_hours:args.hours}}:{}),
       timestamp_note:'Local-date-only records retain the original date; their UTC measurement time is unknown. profile_modified_at is a profile edit time, not a weight measurement time. retrieved_at is not device synchronization time.',
       activity_guidance:contextActivityGuidance,response_tool:'respond_to_health',attribution:healthAttributionGuidance};
   }

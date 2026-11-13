@@ -35,6 +35,13 @@ offset-free dates use the earliest possible UTC boundary, which can shorten rete
 The latest profile is retained until deletion/disconnection, without historical
 versions. A profile edit timestamp is not a weight measurement timestamp.
 
+For synced heart rate, the Mac calculates day/hour summaries from all valid samples
+in each returned day, then retains at most 96 time-spread detail samples. Summaries
+include observed clock spans, sample counts, ranges, sample means and the largest
+gap between samples. They do not establish complete-day coverage or infer a health
+condition. Original device clock times are retained without inventing a UTC offset.
+Older saved records are identified as partial until replaced by a new acquisition.
+
 The complete health snapshot, including profile, timestamps, credentials and
 subscription metadata, uses AES-256-GCM authenticated encryption. A separate random
 256-bit key is held by macOS Keychain through the app. Atomic temporary snapshots
