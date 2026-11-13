@@ -67,6 +67,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var messageRecord: LocalizedMessage?
     var message: String { messageRecord.map { Localization.shared.text($0, language: language) } ?? "" }
     var setupFailure = SetupFailurePresentation()
+    var quitFailure: QuitFailurePresentation?
+    var notificationSuspensionBeforeStop: Bool?
     var progressLabel: NSTextField?
     var progress: NSProgressIndicator?
     var tunnelID = ""
@@ -235,8 +237,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func updateMenu() {
         guard statusItem != nil else { return }
         let ready = step == "pair"
-        let status = yes("lifecycleStopped") ? tr("mac.paused") : ready ? tr("mac.connected_to_dot") : step == "start" ? tr("mac.relay_stopped") : tr("mac.setup_or_attention_needed")
-        let icon: DotStatus = yes("lifecycleStopped") ? .paused : ready ? .ready : step == "start" ? .paused : step == "checking" ? .checking : .attention
+        let status = quitFailure != nil ? tr("mac.quit_stop_unconfirmed") : yes("lifecycleStopped") ? tr("mac.paused") : ready ? tr("mac.connected_to_dot") : step == "start" ? tr("mac.relay_stopped") : tr("mac.setup_or_attention_needed")
+        let icon: DotStatus = quitFailure != nil ? .attention : yes("lifecycleStopped") ? .paused : ready ? .ready : step == "start" ? .paused : step == "checking" ? .checking : .attention
         statusItem.button?.image = appUpdater?.working == true ? DotStatus.ready.image(rotation: orbitAngle) : icon.image()
         statusItem.button?.setAccessibilityLabel("Dot Link: " + (appUpdater?.working == true ? appUpdater!.message : status))
         let menu = NSMenu()
@@ -281,7 +283,6 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             return .terminateCancel
         }
         quitting = true
-        notifications?.setRelaySuspended(true)
         perform("shutdown")
         return .terminateLater
     }
@@ -411,6 +412,19 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let topSpace = NSView(); topSpace.setContentHuggingPriority(.defaultLow, for: .horizontal); top.addArrangedSubview(topSpace)
         let languages = NSPopUpButton(); languages.addItems(withTitles: Localization.shared.languages.map { Localization.shared.metadata[$0]!.name }); languages.selectItem(at: Localization.shared.languages.firstIndex(of: language) ?? 0); languages.target = self; languages.action = #selector(changeLanguage(_:)); languages.isEnabled = !busy; languages.setAccessibilityLabel(tr("mac.language")); top.addArrangedSubview(languages); stack.addArrangedSubview(top)
         top.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+        if let failure = quitFailure, !busy, !showingDetails, !showingSpeech, !showingSpeechOutput, !showingNotifications, !showingPairing {
+            add(tr("mac.quit_still_open"), size: 23, bold: true)
+            add(tr(failure.helperStarted ? "mac.quit_stop_failed" : "mac.quit_helper_not_started"))
+            if failure.restoreApp {
+                let path = payload.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path
+                let guidance = label(tr("mac.quit_restore_app", ["path": path]))
+                guidance.isSelectable = true; stack.addArrangedSubview(guidance)
+                guidance.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
+            }
+            add(failure.code, size: 12)
+            button(tr("mac.quit_retry"), primary: true) { NSApp.terminate(nil) }
+            return
+        }
         if showingSpeech { renderSpeech(); return }
         if showingSpeechOutput { renderSpeechOutput(); return }
         if showingDetails && !busy {
@@ -656,14 +670,19 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !busy, action == "app-locate" || appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; messageRecord = nil
         pairingRefreshGeneration += 1
         setupFailure.begin(action)
-        if ["pause", "shutdown", "uninstall"].contains(action) { notifications?.setRelaySuspended(true) }
+        if action == "shutdown" { quitFailure = nil }
+        notificationSuspensionBeforeStop = nil
+        if ["pause", "shutdown", "uninstall"].contains(action) {
+            notificationSuspensionBeforeStop = notifications?.relaySuspended
+            notifications?.setRelaySuspended(true)
+        }
         render()
         let task = Process(); task.executableURL = payload.appendingPathComponent(".runtime/bin/node"); task.arguments = [payload.appendingPathComponent("scripts/mac-setup.mjs").path, action]; task.currentDirectoryURL = payload
         let out = Pipe(), stdin = Pipe(); task.standardOutput = out; task.standardInput = stdin; task.standardError = FileHandle.nullDevice
         helper = task
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
-            var buffer = Data(); var completed = false
+            var buffer = Data(); var completed = false; var started = false
             func consume(_ data: Data) {
                 buffer.append(data)
                 while let range = buffer.range(of: Data([10])) {
@@ -674,12 +693,19 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 }
             }
             do {
+                guard QuitFailurePresentation.helperFilesAvailable(at: self.payload) else {
+                    DispatchQueue.main.async { self.receive(["kind": "error", "code": "HELPER_LAUNCH_FAILED", "helperStarted": false]) }; return
+                }
                 try task.run()
+                started = true
                 var data = try JSONSerialization.data(withJSONObject: input); data.append(10); stdin.fileHandleForWriting.write(data); try? stdin.fileHandleForWriting.close()
                 while true { let chunk = out.fileHandleForReading.availableData; if chunk.isEmpty { break }; consume(chunk) }
                 task.waitUntilExit()
-                if !completed { DispatchQueue.main.async { self.receive(["kind": "error", "code": "HELPER_FAILED"]) } }
-            } catch { DispatchQueue.main.async { self.receive(["kind": "error", "code": "HELPER_FAILED"]) } }
+                if !completed { DispatchQueue.main.async { self.receive(["kind": "error", "code": "HELPER_NO_RESULT", "helperStarted": true]) } }
+            } catch {
+                let failure: [String: Any] = ["kind": "error", "code": started ? "HELPER_IO_FAILED" : "HELPER_LAUNCH_FAILED", "helperStarted": started]
+                DispatchQueue.main.async { self.receive(failure) }
+            }
         }
     }
     func receive(_ value: [String: Any]) {
@@ -728,6 +754,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
             state = value; lastChecked = Date()
+            if ["pause", "resume", "activate"].contains(currentAction) { quitFailure = nil }
             var showAfterUpdate = false
             if currentAction == "update-recover" {
                 showAfterUpdate = appUpdater?.startupRecoveryFinished(success: AppUpdater.recoveredStateIsReady(value)) ?? false
@@ -771,6 +798,18 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
             if migratingNotifications { migratingNotifications = false; notifications?.migrationFailed() }
             let code = value["code"] as? String ?? "SETUP_FAILED"
+            // Only a locally confirmed launch failure proves that this attempt
+            // could not change service state. A started helper may have partly stopped it.
+            if value["helperStarted"] as? Bool == false, let previous = notificationSuspensionBeforeStop {
+                notifications?.setRelaySuspended(previous)
+            }
+            notificationSuspensionBeforeStop = nil
+            if currentAction == "shutdown" {
+                quitFailure = QuitFailurePresentation(code: code, helperStarted: value["helperStarted"] as? Bool != false,
+                    restoreApp: !QuitFailurePresentation.helperFilesAvailable(at: payload))
+                showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = false
+                render(); showWindow(); return
+            }
             if currentAction == "app-locate" || ["APP_LOCATION_MISSING", "APP_LOCATION_REPAIR", "APP_LOCATION_OLDER"].contains(code) {
                 appLocationReady = false; state = ["step": "appLocation"]
                 showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = false

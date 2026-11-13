@@ -61,6 +61,13 @@ The Microsoft endpoint is stored in local Mac settings. Review the official pric
 
 Stopping services alone does not delete history. Manage or delete information already sent to OpenAI or other services separately with those services.
 
+If Quit cannot confirm that services stopped, the Mac app remains open and sharing
+may continue. A missing app copy must be restored before retrying Quit. A helper
+that never starts leaves notification forwarding in its previous state; a failed
+stop after the helper starts leaves notification forwarding paused. See
+[quit recovery](setup.md#pause-quit-and-uninstall). Closing or force-quitting the
+window alone does not confirm that background sharing stopped.
+
 ## Location sharing
 
 Location sharing starts off. When enabled in the Even app, the phone location, measurement time and accuracy (and speed/heading when available) are sent to your connected Mac. Your existing Dot can read the latest location and decide whether to offer useful information. Turning sharing off stops new location uploads and requests that the Mac clear its current location and block location-based announcements. If the stop cannot reach the Mac, that remote state is not cleared immediately: sharing expires 90 seconds after the last accepted relay update, and old measurements cannot be used as fresh location. Pending stop requests are saved and retried. A confirmed glasses-app exit also ends the live sharing session while retaining the saved choice for the next launch. Hiding the phone page alone does not stop sharing. You control the OS and Even app location permissions.

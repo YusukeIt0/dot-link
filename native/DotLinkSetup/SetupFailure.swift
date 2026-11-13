@@ -1,5 +1,19 @@
 import Foundation
 
+// A failed Quit never grants termination. Restoration uses the original bundle
+// path; do not search for or execute an arbitrary alternate copy of the helper.
+struct QuitFailurePresentation {
+    let code: String
+    let helperStarted: Bool
+    let restoreApp: Bool
+
+    static func helperFilesAvailable(at payload: URL) -> Bool {
+        let files = FileManager.default
+        return files.isExecutableFile(atPath: payload.appendingPathComponent(".runtime/bin/node").path)
+            && files.isReadableFile(atPath: payload.appendingPathComponent("scripts/mac-setup.mjs").path)
+    }
+}
+
 // Status refreshes cannot resolve an activation failure. Keep its diagnostics
 // until the user starts another setup/lifecycle operation (or retries).
 struct SetupFailurePresentation {

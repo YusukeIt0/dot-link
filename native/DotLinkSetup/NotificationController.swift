@@ -90,7 +90,7 @@ final class NotificationController: NSObject, UNUserNotificationCenterDelegate {
     var localize: (String, [String: String]) -> String = { key, parameters in Localization.shared.text(key, language: "en", parameters) }
     func tr(_ key: String, _ parameters: [String: String] = [:]) -> String { localize(key, parameters) }
     var notificationSummary: String {
-        if relaySuspended { return tr("mac.dot_link_is_paused") }
+        if relaySuspended { return tr("mac.notifications_paused") }
         if legacyRunning { return tr("mac.waiting_to_move_notifications") }
         if paused { return tr("mac.notifications_paused") }
         if !AXIsProcessTrusted() { return tr("mac.notification_access_needed") }

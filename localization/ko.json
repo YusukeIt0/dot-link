@@ -592,5 +592,11 @@
   "mac.download_dot_link": "Dot Link 다운로드",
   "setup.codes.APP_LOCATION_MISSING": "~/Applications에 Dot Link가 없습니다. 앱을 종료한 후 공식 Dot Link.app을 해당 폴더에 넣고 다시 여세요. 저장된 설정은 유지하세요.",
   "setup.codes.APP_LOCATION_REPAIR": "Dot Link를 종료하세요. 일반 ~/Applications 폴더와 공식 Dot Link.app 전체 복사본을 사용하고, 해당 경로의 링크는 교체하세요. 저장된 설정은 유지한 채 다시 여세요.",
-  "setup.codes.APP_LOCATION_OLDER": "~/Applications 외부에서 더 최신 버전을 열었습니다. 앱을 종료하고 ~/Applications/Dot Link.app만 이 최신 버전으로 교체한 후 다시 여세요. 저장된 설정은 유지하세요."
+  "setup.codes.APP_LOCATION_OLDER": "~/Applications 외부에서 더 최신 버전을 열었습니다. 앱을 종료하고 ~/Applications/Dot Link.app만 이 최신 버전으로 교체한 후 다시 여세요. 저장된 설정은 유지하세요.",
+  "mac.quit_stop_unconfirmed": "중지 확인 안 됨",
+  "mac.quit_still_open": "Dot Link가 아직 열려 있습니다",
+  "mac.quit_helper_not_started": "중지 도우미를 시작하지 못했습니다. 공유가 계속되고 있을 수 있습니다.",
+  "mac.quit_stop_failed": "중지를 확인하지 못했습니다. Mac 알림 전달은 일시 정지되었지만 다른 공유는 계속되고 있을 수 있습니다.",
+  "mac.quit_restore_app": "완전한 Dot Link.app을 다음 위치에 복원하세요.\n{path}\n저장된 설정은 유지하고 종료를 다시 시도하세요.",
+  "mac.quit_retry": "종료 다시 시도"
 }
