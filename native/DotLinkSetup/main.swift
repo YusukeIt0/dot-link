@@ -46,6 +46,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var showingDetails = false
     var showingSpeech = false
     var showingSpeechOutput = false
+    var showingHealthcare = false
+    var healthState: [String: Any] = [:]
+    var healthClientField: NSTextField?
+    var healthSecretField: NSSecureTextField?
+    var healthClientDraft = ""
+    var healthPoll: Timer?
     var speechChoice = "whisper"
     var speechEndpointField: NSTextField?
     var speechEndpointDraft = ""
@@ -207,11 +213,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func showWindow() { window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func showHome() {
-        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false; showingSpeechOutput = false; pairingCode = nil; pairingExpiry = 0
+        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; pairingCode = nil; pairingExpiry = 0
         render(); showWindow(); inspect()
     }
-    @objc func menuPair() { showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
-    @objc func menuNotifications() { showingSpeech = false; showingSpeechOutput = false; showingNotifications = true; render(); showWindow() }
+    @objc func menuPair() { showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; showingNotifications = false; showingPairing = true; render(); showWindow(); inspect() }
+    @objc func menuNotifications() { showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; showingNotifications = true; render(); showWindow() }
     @objc func menuNotificationPause() { notifications?.togglePause() }
     func connectNotifications() {
         guard notifications == nil, let directory = state["directory"] as? String, state["installed"] as? Bool == true else { return }
@@ -427,6 +433,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(tr("mac.quit_retry"), primary: true) { NSApp.terminate(nil) }
             return
         }
+        if showingHealthcare { renderHealthcare(); return }
         if showingSpeech { renderSpeech(); return }
         if showingSpeechOutput { renderSpeechOutput(); return }
         if showingDetails && !busy {
@@ -535,7 +542,21 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let outputSettings = ActionButton(tr("mac.speech_output")) { [weak self] in self?.menuSpeechOutput() }
             outputSettings.controlSize = .large; outputSettings.image = NSImage(systemSymbolName: "speaker.wave.2", accessibilityDescription: nil); outputSettings.imagePosition = .imageLeading
             actions.addArrangedSubview(outputSettings)
-            stack.addArrangedSubview(actions)
+            let healthSettings = ActionButton(tr("mac.health_settings")) { [weak self] in self?.menuHealthcare() }
+            healthSettings.controlSize = .large; healthSettings.image = NSImage(systemSymbolName: "heart", accessibilityDescription: nil); healthSettings.imagePosition = .imageLeading
+            actions.addArrangedSubview(healthSettings)
+            // Wrap at the minimum supported content width, including long translations.
+            let rows = NSStackView(); rows.orientation = .vertical; rows.alignment = .leading; rows.spacing = 10
+            var row = NSStackView(); row.orientation = .horizontal; row.spacing = 12
+            var used: CGFloat = 0
+            let controls = actions.arrangedSubviews
+            for control in controls {
+                actions.removeArrangedSubview(control); control.removeFromSuperview()
+                let width = control.fittingSize.width
+                if used > 0 && used + 12 + width > 516 { rows.addArrangedSubview(row); row = NSStackView(); row.orientation = .horizontal; row.spacing = 12; used = 0 }
+                row.addArrangedSubview(control); used += (used > 0 ? 12 : 0) + width
+            }
+            rows.addArrangedSubview(row); stack.addArrangedSubview(rows)
         case "appLocation":
             add(tr("mac.app_location_title"), size: 23, bold: true)
             button(tr("mac.check_again"), primary: true) { [weak self] in self?.locateApp() }
@@ -718,6 +739,20 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             progress?.isIndeterminate = false; progress?.doubleValue = Double(pct)
         case "result":
             busy = false; helper = nil
+            if currentAction == "health" {
+                healthState = value
+                if let url = value["authorizationURL"] as? String,
+                   let parts = URLComponents(string: url), parts.scheme == "https", parts.host == "flow.polar.com", parts.path == "/oauth2/authorization" { open(url) }
+                render()
+                healthPoll?.invalidate()
+                if showingHealthcare && value["status"] as? String == "connecting" {
+                    healthPoll = Timer.scheduledTimer(withTimeInterval: 3, repeats: false) { [weak self] _ in
+                        guard let self, self.showingHealthcare, !self.busy else { return }
+                        self.perform("health", input: ["action":"status"])
+                    }
+                }
+                return
+            }
             if currentAction == "app-locate" {
                 if value["appHandoff"] as? Bool == true {
                     restartingUpdateHost = true; NSApp.terminate(nil); return
@@ -796,6 +831,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
             }
         case "error":
+            if currentAction == "health" { busy = false; helper = nil; healthState["status"] = "unavailable"; render(); return }
             busy = false; helper = nil; automaticResumePending = false
             if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: false); appUpdater?.resumeAfterHostRestart(ready: false) }
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
@@ -810,12 +846,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             if currentAction == "shutdown" {
                 quitFailure = QuitFailurePresentation(code: code, helperStarted: value["helperStarted"] as? Bool != false,
                     restoreApp: !QuitFailurePresentation.helperFilesAvailable(at: payload))
-                showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = false
+                showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; showingNotifications = false; showingPairing = false
                 render(); showWindow(); return
             }
             if currentAction == "app-locate" || ["APP_LOCATION_MISSING", "APP_LOCATION_REPAIR", "APP_LOCATION_OLDER"].contains(code) {
                 appLocationReady = false; state = ["step": "appLocation"]
-                showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingNotifications = false; showingPairing = false
+                showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; showingNotifications = false; showingPairing = false
                 let locationCode = ["APP_LOCATION_MISSING", "APP_LOCATION_OLDER"].contains(code) ? code : "APP_LOCATION_REPAIR"
                 messageRecord = LocalizedMessage("setup.codes." + locationCode)
                 updateMenu(); render(); showWindow(); return
@@ -847,6 +883,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 }
+if CommandLine.arguments.contains("--health-credential") { runHealthCredentialHelper() }
 if CommandLine.arguments.contains("--stt-credential") { runSTTCredentialHelper() }
 if NSRunningApplication.runningApplications(withBundleIdentifier: "app.tripsurf.dotlink.mac").contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) { exit(0) }
 let app = NSApplication.shared

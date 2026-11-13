@@ -140,6 +140,18 @@ try {
   }
   else if (action === 'update-abort') { const found = await discoverInstallation(); result = await finishUpdate(found.directory, {rollback:true}); }
   else if (action === 'inspect') result = await inspect();
+  else if (action === 'health') {
+    const found = await discoverInstallation();
+    if (!found.installed) throw new Error('INSTALL_FIRST');
+    const token = (await readFile(join(found.directory, '.runtime/health-admin-key'), 'utf8')).trim();
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('HEALTH_UNAVAILABLE');
+    const response = await fetch('http://127.0.0.1:3460/api/health/setup', {
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(35000),
+      headers: {'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(input),
+    });
+    if (!response.ok) throw new Error('HEALTH_UNAVAILABLE');
+    result = await response.json();
+  }
   else if (action === 'stt-select') {
     const found = await discoverInstallation();
     if (!found.installed) throw new Error('INSTALL_FIRST');

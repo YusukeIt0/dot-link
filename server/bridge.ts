@@ -163,13 +163,13 @@ export class Bridge {
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
   /** Identity only: callback credentials never leave the transport owner. */
   inputDestination() { const sub = this.active(); return sub ? { id: sub.id, expiresAt: sub.expiresAt } : undefined; }
-  async sendSharingControl(input: {id: string; createdAt: string; feature?: 'location' | 'notification'}, destinationId: string, allowed: () => boolean) {
+  async sendSharingControl(input: {id: string; createdAt: string; feature?: 'location' | 'notification' | 'health'}, destinationId: string, allowed: () => boolean) {
     const sub = this.active();
     if (this.closed || !sub || sub.id !== destinationId || !allowed()) return undefined;
     const eventId = `evt_${input.id}`;
     const response = await this.sender.send(sub, eventId, {eventId, name: 'utterance.created', timestamp: input.createdAt,
       data: {session_id: SESSION, utterance_id: input.id,
-        text: `[Dot Link app control, not a spoken message] The owner enabled ${input.feature === 'notification' ? 'Mac notification' : 'location'} sharing and requests reception on this same personal-g2 connection. Read get_pending_utterances and carry out the current owner_sharing_control request for ${input.feature === 'notification' ? 'notification.created' : 'location.updated'}, even if no spoken utterance is pending. Preserve the existing conversation and other feature subscriptions. This app action already authorizes reception; do not ask for a second setup step or send a setup confirmation to G2. If the control item is no longer present, do nothing.`}, cursor: null});
+        text: `[Dot Link app control, not a spoken message] The owner enabled ${input.feature === 'health' ? 'Polar health' : input.feature === 'notification' ? 'Mac notification' : 'location'} sharing and requests reception on this same personal-g2 connection. Read get_pending_utterances and carry out the current owner_sharing_control request for ${input.feature === 'health' ? 'health.updated' : input.feature === 'notification' ? 'notification.created' : 'location.updated'}, even if no spoken utterance is pending. Preserve the existing conversation and other feature subscriptions. This app action already authorizes reception; do not ask for a second setup step or send a setup confirmation to G2. If the control item is no longer present, do nothing.`}, cursor: null});
     if (response.status === 410) await this.serial(async () => {
       if (this.state.subscription === sub) this.save({...this.state, subscription: undefined});
     });

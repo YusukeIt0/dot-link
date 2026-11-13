@@ -2,6 +2,11 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Added optional Polar health context sharing with your Dot.
+- Added health-data deletion and profile refresh in Sharing settings.
+
 ## 0.3.59
 
 - Added connection guidance for phone connectivity, Mac connection errors and unreachable Macs, with automatic reconnection.

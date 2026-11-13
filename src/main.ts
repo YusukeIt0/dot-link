@@ -1,3 +1,4 @@
+import { HealthSharing, type HealthStatus } from './health-sharing.ts';
 import { connectionFailure, connectionFailureCaption, connectionFailureHint } from './connection-failure.ts';
 import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
@@ -231,6 +232,26 @@ el<HTMLInputElement>('weather-share').onchange = () => {
   void weatherSharing.control(enabled);
 };
 renderWeatherStatus();
+const healthSharing = new HealthSharing({
+  target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
+  api: input => session.location('/api/health', input), changed: () => renderHealthStatus(),
+});
+function renderHealthStatus() {
+  if (exited) return;
+  const s = healthSharing.status();
+  const toggle = el<HTMLInputElement>('health-share'); toggle.checked = s.healthEnabled === true;
+  toggle.disabled = !s.supported || !s.healthConfigured || s.pending;
+  el<HTMLButtonElement>('health-delete').disabled = !s.supported || !s.healthConfigured || s.pending;
+  el<HTMLButtonElement>('health-refresh').disabled = !s.supported || !s.healthEnabled || s.pending || s.healthPending === true;
+  el('health-status').textContent = t(s.failed ? 'even.health_failed' : !s.supported ? 'even.health_unavailable' :
+    s.healthStatus === 'locked' ? 'even.health_locked' : !s.healthConfigured ? 'even.health_setup' :
+    s.healthStatus?.startsWith('HEALTH_') || s.healthStatus === 'disconnect_pending' ? 'even.health_error' :
+    s.pending || s.healthPending ? 'even.health_pending' : s.refreshed ? 'even.health_refreshed' : s.healthEnabled ? 'even.health_on' : 'even.health_off');
+}
+el<HTMLInputElement>('health-share').onchange = () => { void healthSharing.control(el<HTMLInputElement>('health-share').checked ? 'enable' : 'disable'); };
+el<HTMLButtonElement>('health-delete').onclick = () => { if (confirm(t('even.health_delete_confirm'))) void healthSharing.control('delete'); };
+el<HTMLButtonElement>('health-refresh').onclick = () => { void healthSharing.control('refresh'); };
+renderHealthStatus();
 const locationSharing = new LocationSharing({
   historyUpload: () => historySharing.upload(),
   storage: () => localStorage,
@@ -274,7 +295,7 @@ el<HTMLInputElement>('mobility-share').onchange = () => locationSharing.setMobil
 const connectionTransitions = new ConnectionTransitions({
   session,
   stopUpdates: () => updates.stop(), cancelPlayback: () => playback.cancel(),
-  stopLocation: () => { historySharing.reset(); weatherSharing.reset(); locationSharing.setEnabled(false); }, clearLegacyPairing: () => pairing.forget(),
+  stopLocation: () => { historySharing.reset(); weatherSharing.reset(); healthSharing.reset(); locationSharing.setEnabled(false); }, clearLegacyPairing: () => pairing.forget(),
   resetInteraction: (pairing, newIdentity) => {
     transcriptionController?.abort(); transcriptionController = undefined;
     photoRevision++; photoSelecting = false;
@@ -407,10 +428,10 @@ function showMessage(): void {
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
-interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus; messages: Message[]; }
+interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false): void {
   if (exited) return;
-  historySharing.receive(snapshot.status); weatherSharing.receive(snapshot.status);
+  historySharing.receive(snapshot.status); weatherSharing.receive(snapshot.status); healthSharing.receive(snapshot.status);
   locationSharing.receive(snapshot.status);
   subscribed = snapshot.status.subscribed;
   photosSupported = snapshot.status.photoAttachments === 1;
@@ -754,7 +775,7 @@ function applyLanguage(): void {
   setLanguage(next); document.documentElement.lang = next;
   renderLanguageOptions();
   renderStaticAccessibility();
-  renderLocationStatus(); renderHistoryStatus(); renderWeatherStatus();
+  renderLocationStatus(); renderHistoryStatus(); renderWeatherStatus(); renderHealthStatus();
   for (const { element, key } of staticLabels) {
     // Runtime status/controls may have replaced the initial label.
     if (supportedLanguages.some(locale => element.textContent === message(key, locale))) element.textContent = t(key);

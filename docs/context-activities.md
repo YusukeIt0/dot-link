@@ -86,3 +86,25 @@ history and combined-factor conversation. Record source/build and actual selecti
 reply or silence separately from policy delivery. Reuse unchanged acquisition and
 transport evidence; brief relevant caveats remain acceptable. Do not paste the new
 policy into the test prompt or alter a personal activity to make the test pass.
+
+## Polar health context
+
+`get_health_context` selects categories and a time window of 1–168 hours; the latest
+registered profile is separately opt-in per read. Use it within the current activity
+when sleep, activity, recovery or physiology helps the person's question or situation.
+Combine useful evidence with conversation, current place, weather or mobility; do not
+fetch every factor or force a report. Missing data, source dates and provider-derived
+scores are reasoning inputs, not a routine disclaimer. Silence remains valid.
+
+Enabling health sharing in Even requests `health.updated` reception from the existing
+Dot through the same owner-control mechanism as other sharing choices. The event
+contains an opaque update identifier, not health values. Acquisition only notifies
+normalized changes. No second user-managed subscription switch is introduced.
+
+Health-derived G2 output uses `respond_to_health` and the returned short-lived read
+receipt. The response rechecks consent, owner authorization, revision and expiry.
+Question answers include `utterance_id`. OFF/deletion/account change invalidates
+receipts. Identical retries are idempotent; silence cannot be changed to speech using
+the same receipt. The existing history-answer restriction still applies when recent
+places contribute. A brief Polar credit is required for displayed Polar-derived data;
+this specific provider term takes precedence over generic source-on-request guidance.

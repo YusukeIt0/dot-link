@@ -208,3 +208,30 @@ Turning weather off stops all weather use after the Mac acknowledges it. Turning
 location sharing off only stops current-location weather. If a setting change
 cannot be confirmed, reconnect and check it. See the [source/privacy details](../public/weather-sources.html)
 for the coarse-coordinate cache and request intervals.
+
+## Polar health context
+
+1. Open **Healthcare settings** in the Mac app, then **Open Polar registration**.
+   Register an AccessLink client with redirect address
+   `http://localhost:3464/polar/callback`.
+2. Enter its **Client ID** and **Client Secret**, choose **Connect Polar**, and complete
+   Polar login and consent in the browser. The callback stays on this Mac.
+3. In the Even companion, open **Sharing settings → Health context** to enable sharing.
+   The same Dot can use relevant health context with your conversation and other
+   permitted information; there is no separate health agent or notification switch.
+
+Keep Polar Flow synchronized. Acquisition runs about every 30 minutes while sharing
+is on; missing categories can be normal. Profile values are registered information,
+not measurements made by Loop. **Fetch profile again** updates height, weight and
+date of birth after a successful Polar read. Sharing OFF also blocks profile refresh.
+
+**Delete health data** stops sharing and removes the local profile and measurements.
+Earlier measurements will not return if you enable sharing again. The profile can
+be fetched again explicitly. Offline changes are not shown as completed: reconnect
+to the Mac and retry. Local deletion does not erase context already delivered to Dot.
+
+Use **Reconnect Polar** after authorization expires or is revoked. Saved application
+credentials are reused. **Disconnect Polar** removes local health data and deregisters
+the connection at Polar. A pending disconnect needs retrying or revocation in your
+Polar account; local reset alone cannot confirm remote revocation. Encrypted data
+cannot be recovered without its Keychain key. See [data handling](privacy.md#optional-polar-health-context).
