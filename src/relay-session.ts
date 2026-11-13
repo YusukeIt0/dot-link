@@ -1,5 +1,6 @@
 import { apiAddress, type RelayCredentials, type RelaySettings } from './relay-connection.ts';
 import type { PairingInvite } from './relay-origin.ts';
+import { RelayResponseError } from './connection-failure.ts';
 import { RUNTIME_RECOVERY_PROTOCOL, RUNTIME_SUPERSEDED, runtimeGeneration, type RuntimeRecoveryRequest } from './runtime-recovery.ts';
 type Ownership = { stage: 'unknown' | 'legacy' } | { stage: 'claim'; expectedGeneration: number } | { stage: 'owned'; generation: number };
 interface Options {
@@ -83,7 +84,7 @@ export class RelaySession {
         if (response.status === 400 && result?.error === 'Invalid pairing request' && Object.keys(result).length === 1) {
           this.ownership = {stage: 'legacy'};
         } else {
-          if (!response.ok || result?.protocol !== RUNTIME_RECOVERY_PROTOCOL || !runtimeGeneration(result.generation)) throw new Error('Recovery unavailable');
+          if (!response.ok || result?.protocol !== RUNTIME_RECOVERY_PROTOCOL || !runtimeGeneration(result.generation)) throw new RelayResponseError('Recovery unavailable');
           // Retain the CAS even if the claim reply is lost or the loop restarts.
           this.ownership = {stage: 'claim', expectedGeneration: result.generation};
         }
@@ -94,11 +95,11 @@ export class RelaySession {
         ? {action: 'claim', id: this.runtimeId, expectedGeneration: owner.expectedGeneration}
         : owner.stage === 'owned' ? {action: 'renew', id: this.runtimeId, generation: owner.generation} : undefined;
       const response = await this.recover(saved, version, runtime);
-      if (!response.ok) throw new Error('Recovery unavailable');
-      const result = await response.json(); this.check(version);
+      if (!response.ok) throw new RelayResponseError('Recovery unavailable');
+      const result = await response.json().catch(() => { throw new RelayResponseError('Invalid recovery response'); }); this.check(version);
       if (runtime && (result.protocol !== RUNTIME_RECOVERY_PROTOCOL ||
           result.generation !== (owner.stage === 'claim' ? owner.expectedGeneration + 1 : owner.stage === 'owned' ? owner.generation : -1) ||
-          result.resumeToken !== saved.resumeToken)) throw new Error('Invalid recovery response');
+          result.resumeToken !== saved.resumeToken)) throw new RelayResponseError('Invalid recovery response');
       const renewed: RelayCredentials = {...result, origin: saved.origin, appOrigin: this.options.appOrigin};
       this.save(renewed);
       if (runtime) this.ownership = {stage: 'owned', generation: result.generation};
@@ -141,8 +142,8 @@ export class RelaySession {
         if (!recovered) return this.updates<T>(revision, signal, true);
       } else this.options.rejected('invalid');
     }
-    if (!response.ok) throw new Error('Update connection failed');
-    const result = await response.json(); this.check(version); return result;
+    if (!response.ok) throw new RelayResponseError('Update connection failed');
+    const result = await response.json().catch(() => { throw new RelayResponseError('Invalid update response'); }); this.check(version); return result;
   }
   async pair(invite: PairingInvite): Promise<RelayCredentials> {
     const version = this.epoch; this.check(version);

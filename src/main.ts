@@ -1,3 +1,4 @@
+import { connectionFailure, connectionFailureCaption, connectionFailureHint } from './connection-failure.ts';
 import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
 import { RuntimeNative } from './runtime-native.ts';
@@ -448,9 +449,9 @@ function flushPendingDisplay(): void {
   updateRuntime();
 }
 
-const updates = new LiveUpdates<Snapshot>((revision, signal) => session.updates<Snapshot>(revision, signal), receiveUpdate, () => {
+const updates = new LiveUpdates<Snapshot>((revision, signal) => session.updates<Snapshot>(revision, signal), receiveUpdate, error => {
+  progress.connectionFailure = connectionFailure(error, navigator.onLine);
   progress.connection = 'offline'; updateRuntime();
-  el('dot-status').textContent = `${hostName} · ${t('even.reconnecting')}`;
 });
 
 function offerInvite(raw: string): void {
@@ -491,6 +492,7 @@ el('pair').onclick = async () => {
   } catch (error) {
     if (version !== session.version || exited) return;
     if (!accepted) explicitConnection = false;
+    progress.connectionFailure = connectionFailure(error, navigator.onLine);
     progress.connection = session.token ? 'offline' : 'unpaired'; updateRuntime();
     setupPanel.open = true;
     pairingNotice.textContent = t('even.your_mac_must_be_awake_and_online');
@@ -610,11 +612,19 @@ let renderG2Text: () => string = () => withoutMessageUrls(renderDisplayText());
 
 function syncRuntimeEffects(): void {
   runtimeEffects.sync();
+  renderConnectionHint();
   const disabled = exited || busy || recorder.state !== 'idle' || !bridge || !session.token || !relayRestored;
   el<HTMLButtonElement>('camera').disabled = disabled;
   el<HTMLButtonElement>('photos').disabled = disabled;
   sendButton.disabled = exited || busy || recorder.state !== 'idle' || (!transcript.value.trim() && !photos.length);
   for (const button of el('photo-previews').querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy || exited;
+}
+function renderConnectionHint(): void {
+  const offline = !exited && !!session.token && progress.connection === 'offline';
+  const hint = el('reconnect-hint');
+  hint.hidden = !offline;
+  hint.textContent = offline ? connectionFailureHint(progress.connectionFailure) : '';
+  if (offline) el('dot-status').textContent = `${hostName} · ${connectionFailureCaption(progress.connectionFailure)}`;
 }
 function updateRuntime(sendToG2 = true): void {
   syncRuntimeEffects(); refreshStatus(sendToG2);
@@ -757,6 +767,7 @@ function applyLanguage(): void {
   renderReadAloudControl();
   if (!namedHost) hostName = t('even.relay');
   el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('even.dot_connected') : t('even.dot_disconnected')) : progress.connection === 'unpaired' ? t('even.pair_with_your_mac') : t('even.reconnecting')}`;
+  renderConnectionHint();
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
   el('hud-content').textContent = lastDisplayText;
   g2Display.invalidate();
@@ -1238,8 +1249,14 @@ showSetup(!session.token);
 if (session.token && !session.credentials?.resumeToken) updates.start(true);
 updateRuntime(false);
 window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token && relayRestored) updates.start(); });
-window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); } if (session.token && relayRestored && !exited) updates.start(); });
-window.addEventListener('offline', () => { if (exited) return; progress.connection = 'offline'; updateRuntime(); el('dot-status').textContent = `${hostName} · ${t('even.disconnected')}`; });
+window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); } if (session.token && relayRestored && !exited) {
+  if (progress.connection === 'offline') { progress.connectionFailure = 'unreachable'; updateRuntime(); }
+  updates.start();
+} });
+window.addEventListener('offline', () => {
+  if (exited || !session.token) return;
+  progress.connectionFailure = 'phone'; progress.connection = 'offline'; updateRuntime();
+});
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });
 
 void connect().catch(() => {

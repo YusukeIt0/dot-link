@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "중지 도우미를 시작하지 못했습니다. 공유가 계속되고 있을 수 있습니다.",
   "mac.quit_stop_failed": "중지를 확인하지 못했습니다. Mac 알림 전달은 일시 정지되었지만 다른 공유는 계속되고 있을 수 있습니다.",
   "mac.quit_restore_app": "완전한 Dot Link.app을 다음 위치에 복원하세요.\n{path}\n저장된 설정은 유지하고 종료를 다시 시도하세요.",
-  "mac.quit_retry": "종료 다시 시도"
+  "mac.quit_retry": "종료 다시 시도",
+  "even.phone_offline": "휴대폰 오프라인",
+  "even.mac_connection_error": "Mac 연결 오류",
+  "even.mac_unreachable": "Mac에 연결할 수 없음",
+  "even.check_phone_connection": "이 휴대폰의 인터넷 연결을 확인하세요. 자동으로 다시 연결합니다.",
+  "even.check_mac_dot_link": "Mac의 Dot Link를 확인하세요. 자동으로 다시 연결합니다.",
+  "even.check_phone_vpn_and_mac": "원인을 알 수 없습니다. 이 휴대폰의 Tailscale과 Mac을 확인하세요. 자동으로 다시 연결합니다."
 }

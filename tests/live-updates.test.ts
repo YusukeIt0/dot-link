@@ -81,3 +81,28 @@ test('initial failure is immediate; foreground restarts cannot extend the grace 
   f.calls.at(-1)!.reject(new Error('cancelled outage')); await microtasks();
   f.loop.stop(); t.mock.timers.tick(10000); assert.equal(f.failures(), 2);
 });
+
+test('outage guidance follows the latest failure after grace, clears on recovery and ignores cancelled failures', async t => {
+  t.mock.timers.enable({apis: ['setTimeout', 'Date'], now: 10000});
+  const calls: {resolve(value: {revision: string}): void; reject(error: Error): void}[] = [];
+  const shown: unknown[] = [];
+  const loop = new LiveUpdates<{revision: string}>(() => new Promise((resolve, reject) => calls.push({resolve, reject})), () => {}, error => shown.push(error));
+  t.after(() => loop.stop());
+  loop.start(); calls[0].resolve({revision: 'connected'}); await microtasks();
+  const network = new TypeError('network'), response = new Error('response');
+  calls[1].reject(network); await microtasks();
+  t.mock.timers.tick(1000); await microtasks();
+  calls[2].reject(response); await microtasks();
+  t.mock.timers.tick(1000); await microtasks();
+  assert.deepEqual(shown, [response]);
+  t.mock.timers.tick(1000); await microtasks();
+  calls[3].reject(network); await microtasks();
+  assert.deepEqual(shown, [response, network]);
+  loop.start(); calls[4].resolve({revision: 'recovered'}); await microtasks();
+  loop.start(); calls[5].reject(response); await microtasks();
+  assert.deepEqual(shown, [response, network]);
+  calls[6].reject(network); await microtasks();
+  assert.equal(shown.length, 2);
+  loop.stop(); t.mock.timers.tick(10000); await microtasks();
+  assert.equal(shown.length, 2);
+});

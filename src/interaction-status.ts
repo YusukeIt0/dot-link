@@ -1,4 +1,5 @@
 import { t, seconds } from './i18n.ts';
+import { connectionFailureCaption, type ConnectionFailure } from './connection-failure.ts';
 export type InteractionPhase = 'idle' | 'microphone' | 'recording' | 'recognizing' | 'sending' | 'waiting' | 'review' | 'error';
 export type ConnectionState = 'connecting' | 'online' | 'offline' | 'unpaired';
 interface Measurement { started: number; paused?: number; pausedMs: number; waitingStarted?: number; completedMs?: number; }
@@ -7,6 +8,7 @@ interface Measurement { started: number; paused?: number; pausedMs: number; wait
 export class InteractionStatus {
   phase: InteractionPhase = 'idle';
   connection: ConnectionState = 'connecting';
+  connectionFailure: ConnectionFailure = 'unreachable';
   dotConnected = false;
   private activeId?: string;
   private measurements = new Map<string, Measurement>();
@@ -74,7 +76,7 @@ export class InteractionStatus {
     if (this.phase === 'microphone') return t('even.starting_microphone');
     if (this.phase === 'recording') return t('even.recording');
     if (this.connection === 'unpaired') return t('even.pair_with_your_mac');
-    if (this.connection === 'offline') return t('even.disconnected_reconnecting');
+    if (this.connection === 'offline') return connectionFailureCaption(this.connectionFailure);
     if (this.connection === 'connecting') return t('even.connecting');
     if (!this.dotConnected && ['idle', 'waiting'].includes(this.phase)) return t('even.dot_disconnected');
     const label = { recognizing: t('even.transcribing'), sending: t('even.sending'), waiting: t('even.waiting_for_name', { name: assistantName }) }[this.phase as 'recognizing' | 'sending' | 'waiting'];

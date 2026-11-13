@@ -11,8 +11,9 @@ export class LiveUpdates<T extends Revisioned> {
   private recoveryGraceMs: number;
   private fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>;
   private receive: (value: T, initial: boolean) => void;
-  private failed: () => void;
-  constructor(fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>, receive: (value: T, initial: boolean) => void, failed: () => void, recoveryGraceMs = 2000) {
+  private failure: unknown;
+  private failed: (error: unknown) => void;
+  constructor(fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>, receive: (value: T, initial: boolean) => void, failed: (error: unknown) => void, recoveryGraceMs = 2000) {
     this.recoveryGraceMs = recoveryGraceMs;
     this.fetchUpdate = fetchUpdate; this.receive = receive; this.failed = failed;
   }
@@ -23,7 +24,7 @@ export class LiveUpdates<T extends Revisioned> {
   stop(): void { this.cancel(); this.clearFailure(); this.connected = false; }
   private clearFailure(): void {
     clearTimeout(this.failureTimer); this.failureTimer = undefined;
-    this.failureAt = undefined; this.failureShown = false;
+    this.failureAt = undefined; this.failureShown = false; this.failure = undefined;
   }
   private revealFailure(signal: AbortSignal): void {
     if (signal.aborted || this.failureShown) return;
@@ -32,7 +33,7 @@ export class LiveUpdates<T extends Revisioned> {
       if (this.failureTimer === undefined) this.failureTimer = setTimeout(() => {
         this.failureTimer = undefined; this.revealFailure(signal);
       }, remaining);
-    } else { this.failureShown = true; this.failed(); }
+    } else { this.failureShown = true; this.failed(this.failure); }
   }
   start(initial = false, revision?: string): void {
     // A foreground/network restart must not turn an unfinished history restore
@@ -53,9 +54,12 @@ export class LiveUpdates<T extends Revisioned> {
         this.receive(update, this.initialPending);
         if (signal.aborted) return;
         this.initialPending = false; revision = update.revision; retryMs = 1000;
-      } catch {
+      } catch (error) {
         if (signal.aborted) return;
-        this.failureAt ??= Date.now(); this.revealFailure(signal); revision = undefined;
+        this.failure = error;
+        this.failureAt ??= Date.now();
+        if (this.failureShown) this.failed(error); else this.revealFailure(signal);
+        revision = undefined;
         await new Promise<void>(resolve => {
           const finish = () => { clearTimeout(timer); signal.removeEventListener('abort', finish); resolve(); };
           const timer = setTimeout(finish, retryMs); signal.addEventListener('abort', finish, { once: true });

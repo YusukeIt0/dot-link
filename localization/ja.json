@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "停止処理を開始できませんでした。共有が続いている可能性があります。",
   "mac.quit_stop_failed": "停止を確認できませんでした。Macの通知転送は一時停止していますが、ほかの共有は続いている可能性があります。",
   "mac.quit_restore_app": "完全なDot Link.appを次の場所に戻してください。\n{path}\n保存済みの設定は残したまま、もう一度終了してください。",
-  "mac.quit_retry": "終了を再試行"
+  "mac.quit_retry": "終了を再試行",
+  "even.phone_offline": "電話がオフライン",
+  "even.mac_connection_error": "Mac接続エラー",
+  "even.mac_unreachable": "Macに接続できません",
+  "even.check_phone_connection": "この電話のネット接続を確認してください。自動で再接続します。",
+  "even.check_mac_dot_link": "MacのDot Linkを確認してください。自動で再接続します。",
+  "even.check_phone_vpn_and_mac": "原因は不明です。この電話のTailscaleとMacを確認してください。自動で再接続します。"
 }

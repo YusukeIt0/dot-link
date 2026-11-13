@@ -26,7 +26,7 @@ test('disconnect has its own state, then resumes the observed wait without reset
   state.connection = 'online'; state.dotConnected = true;
   state.begin('text', 'sending'); state.waiting('text');
   now = 2000; state.connection = 'offline';
-  assert.equal(state.caption(''), '切断 · 再接続中');
+  assert.equal(state.caption(''), 'Macに接続できません');
   assert.equal(state.ticking, false);
   now = 7000; state.connection = 'online';
   assert.equal(state.caption(''), 'Dotの返信待ち (7秒)');

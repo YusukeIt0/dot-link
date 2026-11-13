@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "The stop helper could not start. Sharing may still be running.",
   "mac.quit_stop_failed": "Stopping could not be confirmed. Mac notifications are paused; other sharing may still be running.",
   "mac.quit_restore_app": "Restore a complete Dot Link.app to:\n{path}\nThen try Quit again. Keep your saved settings.",
-  "mac.quit_retry": "Retry Quit"
+  "mac.quit_retry": "Retry Quit",
+  "even.phone_offline": "Phone offline",
+  "even.mac_connection_error": "Mac connection error",
+  "even.mac_unreachable": "Mac unreachable",
+  "even.check_phone_connection": "Check this phone’s internet connection. Reconnecting automatically.",
+  "even.check_mac_dot_link": "Check Dot Link on your Mac. Reconnecting automatically.",
+  "even.check_phone_vpn_and_mac": "Check Tailscale on this phone and your Mac. The cause is unknown. Reconnecting automatically."
 }
