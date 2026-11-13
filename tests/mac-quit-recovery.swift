@@ -98,6 +98,11 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
             precondition(sut.quitFailure?.helperStarted == true && sut.quitFailure?.restoreApp == false)
             precondition(sut.notifications?.relaySuspended == true)
             precondition(sut.notifications?.notificationSummary == sut.tr("mac.notifications_paused"))
+            sut.currentAction = "inspect"
+            sut.receive(sut.state.merging(["kind": "result", "bridge": true, "lifecycleStopped": false]) { _, new in new })
+            precondition(sut.notifications?.relaySuspended == true,
+                "Refreshing a running bridge must preserve suspension after an unconfirmed stop")
+            precondition(sut.quitFailure != nil)
             #endif
             try! "stop-error".write(to: root.appendingPathComponent("mode"), atomically: true, encoding: .utf8)
             phase = 3; requestQuit()

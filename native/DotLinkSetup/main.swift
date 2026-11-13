@@ -779,7 +779,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             if currentAction == "inspect" { messageRecord = nil } // The timestamp and cards show the refreshed result.
             connectNotifications()
-            notifications?.setRelaySuspended(yes("lifecycleStopped") || !yes("bridge"))
+            let retainFailedStopSuspension = quitFailure != nil && notifications?.relaySuspended == true
+            notifications?.setRelaySuspended(retainFailedStopSuspension || yes("lifecycleStopped") || !yes("bridge"))
             notifications?.healthChecked = true
             notifications?.healthReady = yes("bridge") && yes("subscribed")
             notifications?.updateState()
