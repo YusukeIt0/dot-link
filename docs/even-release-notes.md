@@ -2,6 +2,14 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.59
+
+- Added connection guidance for phone connectivity, Mac connection errors and unreachable Macs, with automatic reconnection.
+- Added optional weather context for your shared location or another place you ask about.
+- Added a separate weather sharing choice with service terms and source details.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.3.58
 
 - Added connection guidance for phone connectivity, Mac connection errors and unreachable Macs, with automatic reconnection.
