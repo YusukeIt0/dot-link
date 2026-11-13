@@ -1,3 +1,4 @@
+import {checksFailureOutput} from './check-output.mjs';
 import {collectCI, ciTarget, assertCI} from './ci-evidence.mjs';
 import {automaticSelection, selected, authenticateGrokComments, grokBlockers, closingIssuesQuery, closingIssues} from './grok-review.mjs';
 // Fail-closed coordinator. Default is read-only; never execute reviewed code.
@@ -307,9 +308,8 @@ function githubClient(env) {
     try { output = execFileSync('gh', args, {encoding: 'utf8', maxBuffer: 8_000_000, timeout: 45_000, ...options}); }
     catch (error) {
       // gh pr checks uses nonzero exits for valid pending/failed check results.
-      if (args[0] === 'pr' && args[1] === 'checks' && [1, 8].includes(error.status)
-          && error.stdout?.trim().startsWith('[')) output = error.stdout;
-      else throw commandFailure(error);
+      output = args[0] === 'pr' && args[1] === 'checks' ? checksFailureOutput(error) : undefined;
+      if (output === undefined) throw commandFailure(error);
     }
     try { return JSON.parse(output); }
     catch { throw new AssessmentError('GitHub returned invalid JSON.'); }

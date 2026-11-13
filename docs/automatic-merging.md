@@ -102,6 +102,12 @@ keeps the overall workflow failed. Global enumeration/main failures, incomplete
 scans, setup failures and cancellation do not authorize that continuation. Missing App
 setup also fails rather than reporting a successful assessment.
 
+The recognized `gh pr checks` no-checks-reported response is treated as an empty
+check list by both automatic assessment and the manual pre-merge check. On main,
+this holds the PR until required checks are reported and pass; it is not an
+API failure and does not spend the recovery allowance. Other command failures
+retain their existing error handling. Later CI events re-evaluate all gates.
+
 Valid holds (pending/failed CI, missing/stale review, invalid acceptance, revoked
 scope, protection or other eligibility failures) do not consume the recovery
 allowance. Authentication/permission failures and configuration errors fail
