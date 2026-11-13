@@ -33,6 +33,16 @@ type GeographicContext={status:GeographyState}&Partial<GeographicEvidence>;
 interface FixRecord { id: string; contextSequence:number; fix: LocationFix; receivedAt: number; geography?:GeographicContext; geographyRevision?:string; weather?:WeatherEvidence; weatherRevision?:string; weatherEpoch?:string; }
 interface Pending { id: string; contextSequence:number; anchor: LocationFix; createdAt: number; status: 'sending' | 'accepted' | 'failed'; attempts: number; geographyRevision?:string; weatherRevision?:string; }
 
+/** Stable retry identity shared by the outcome store and outbound bridge. */
+function responseId(contextId: string, utteranceId?: string) {
+  if (!utteranceId) return contextId;
+  const bytes = createHash('sha256').update(JSON.stringify(['dot-link:location-answer:v1', contextId, utteranceId])).digest().subarray(0, 16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x80; // Custom UUIDv8, distinct from random context UUIDv4s.
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
 export const locationEvent = {
   name: EVENT,
   description: 'The owner has enabled phone location sharing and their fresh location, geographic references or optional weather evidence has changed meaningfully. Coordinates are context, not a request to speak on every update. Read get_location_context and its activity_guidance to select useful permitted weather, walking/terrain or history within this activity, use the owner’s existing preferences and instructions to decide whether nearby information is useful, and remain silent when it is not. No continuous camera view or visit is implied.',
@@ -48,7 +58,7 @@ export const locationContextTool = {
 };
 export const locationResponseTool = {
   name: 'respond_to_location',
-  description: 'Act on a fresh context_id returned by get_location_context. When answering a question, ALWAYS include its utterance_id: the first answer is paired with the question, later answers remain follow-up pages. Do not send the actual answer as an unrelated location announcement and then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive announcement. Choose silent when nothing useful merits interrupting the owner and omit both text and utterance_id; announce requires concise, verified and personally relevant text. Check recent announcements to avoid repetition. Sharing, freshness and movement are checked again before storage. On rejection, follow error.data.reason: re-read expired, unknown or moved context; wait if sharing is inactive. Do not overwrite a conflicting decision or omit a question reference to bypass rejection. Use this for location-based answers and announcements instead of send_message_to_g2. Identical retries are idempotent. No reply goes to a venue. Stored is not proof of physical display.',
+  description: 'Act on a fresh context_id returned by get_location_context. When answering a question, ALWAYS include its utterance_id: the first answer is paired with the question, later answers remain follow-up pages. Do not send the actual answer as an unrelated location announcement and then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive announcement. Choose silent when nothing useful merits interrupting the owner and omit both text and utterance_id; announce requires concise, verified and personally relevant text. Check recent announcements to avoid repetition. Sharing, freshness and movement are checked again before storage. On rejection, follow error.data.reason: re-read expired, unknown or moved context; wait if sharing is inactive. Do not overwrite a conflicting decision or omit a question reference to bypass rejection. Use this for location-based answers and announcements instead of send_message_to_g2. One proactive decision and one answer per distinct utterance may share a valid context; proactive silence does not block question answers. Retry with the same context, question reference and text. A different answer to the same question requires a genuinely new context, not fabricated IDs. Identical retries are idempotent. No reply goes to a venue. Stored is not proof of physical display.',
   inputSchema: { type: 'object', properties: { context_id: { type: 'string', format: 'uuid' }, disposition: { type: 'string', enum: ['silent', 'announce'] }, utterance_id: {type:'string',format:'uuid',description:'Include for an answer or follow-up to a question; omit for independent proactive announcements and silent decisions.'}, text: { type: 'string', minLength: 1, maxLength: 2000 } }, required: ['context_id', 'disposition'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -248,8 +258,9 @@ export class LocationContext {
     if (p.disposition === 'silent' && p.text !== undefined) throw new LocationResponseError('text_not_allowed_for_silent');
     if (p.disposition === 'silent' && p.utterance_id !== undefined) throw new LocationResponseError('invalid_arguments');
     if (p.disposition === 'announce' && p.text === undefined) throw new LocationResponseError('text_required_for_announcement');
+    const id = responseId(p.context_id, p.utterance_id);
     const operation = this.announceTail.then(async () => {
-      const previous = this.outcomes.get(p.context_id);
+      const previous = this.outcomes.get(id);
       if (previous) {
         if (previous.disposition !== p.disposition || previous.text !== p.text || previous.utterance_id !== p.utterance_id) throw new LocationResponseError('conflicting_decision');
         return previous.result;
@@ -263,7 +274,7 @@ export class LocationContext {
       let result: unknown = { stored_for_g2: false };
       if (p.disposition === 'announce') {
         try {
-          result = await this.announce({ message_id: p.context_id, text: p.text!, ...(p.utterance_id ? {utterance_id:p.utterance_id} : {}) }, stillAllowed,
+          result = await this.announce({ message_id: id, text: p.text!, ...(p.utterance_id ? {utterance_id:p.utterance_id} : {}) }, stillAllowed,
             {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()});
         } catch (error) {
           if (error instanceof BridgeResponseError && error.reason === 'utterance_unknown') throw new LocationResponseError('utterance_unknown');
@@ -272,16 +283,19 @@ export class LocationContext {
         }
       }
       if (generation !== this.generation) return result;
-      this.outcomes.set(p.context_id, { disposition: p.disposition, text: p.text, utterance_id: p.utterance_id, result });
+      this.outcomes.set(id, { disposition: p.disposition, text: p.text, utterance_id: p.utterance_id, result });
       while (this.outcomes.size > 30) this.outcomes.delete(this.outcomes.keys().next().value!);
       this.lastDecisionAt = new Date(this.now()).toISOString();
       if (p.disposition === 'announce') { this.lastAnnouncementAt = this.lastDecisionAt; this.sent++; }
-      this.lastAnchor = read.fix;
-      if(this.geographyDirty===read.geographyRevision)this.geographyDirty=undefined;
-      if(this.weatherDirty===read.weatherRevision)this.weatherDirty=undefined;
-      // A response to an older read must not consume a later geography event.
-      if(!this.pending||read.contextSequence>=this.pending.contextSequence) {
-        this.pending=undefined;if(this.retry)clearTimeout(this.retry);
+      // Answering a question must not acknowledge an independent proactive event.
+      if (!p.utterance_id) {
+        this.lastAnchor = read.fix;
+        if(this.geographyDirty===read.geographyRevision)this.geographyDirty=undefined;
+        if(this.weatherDirty===read.weatherRevision)this.weatherDirty=undefined;
+        // A response to an older read must not consume a later geography event.
+        if(!this.pending||read.contextSequence>=this.pending.contextSequence) {
+          this.pending=undefined;if(this.retry)clearTimeout(this.retry);
+        }
       }
       this.scheduleContextEvent();
       this.changes.emit();

@@ -48,6 +48,37 @@ announcements omit the question reference. The stored answer retains its sharing
 identity and expiry so the phone can suppress display and speech after sharing
 stops or the measurement expires.
 
+### Decision and answer identity
+
+A context has one proactive decision (silent or an independent announcement).
+Each `(context_id, utterance_id)` pair has its own answer. A proactive silent
+decision does not consume a question's answer, and two distinct questions can
+each receive an answer using the same still-valid context, in either queue order.
+An answer does not acknowledge or cancel a pending proactive context event.
+
+Proactive outbound messages retain `context_id` as their UUID. Linked answers use
+a deterministic UUIDv8: the first 16 bytes of SHA-256 over the UTF-8 JSON array
+`["dot-link:location-answer:v1", context_id, utterance_id]`, with UUID version 8
+and RFC variant bits set. The outcome store and outbound bridge use the same ID.
+Text and disposition are checked content, never inputs used to obtain a new ID.
+No new caller-supplied identifier is required.
+
+Retry an operation with the same context, question reference, disposition and
+trimmed text. Changing or dropping the question reference selects a different
+operation; it does not revise the original answer and must not be used to bypass
+a rejection. A genuine follow-up uses a new, actually returned context and keeps
+the original question reference; do not fabricate context IDs. Re-reading
+unchanged context does not create another answer slot for the same question.
+
+The in-memory outcome store retains the latest 30 accepted operations; identical
+retained retries do not refresh their order. The bridge independently retains the
+latest 1,000 outbound IDs, including linked first replies. If an outcome was
+evicted, a new attempt must still pass context validation and the bridge's retained
+ID/content check. Neither store promises unlimited retry retention. Recent
+announcements remain the last five accepted outputs in the outcome store, including
+question answers, so the AI can avoid repeating information; silent decisions
+do not appear there.
+
 This is the complete location-response reason list. Expected rejections use
 JSON-RPC `-32602`; unexpected failures use `-32603` and `internal_error`. Messages
 are fixed English protocol guidance for the connected AI, not localized UI.
@@ -65,7 +96,7 @@ envelope in `server/http.ts`.
 | `context_unknown` | The read context is unavailable or evicted, there is no latest measurement, or the sharing session changed before storage. Read a current context and reconsider the answer. |
 | `context_expired` | The read measurement or latest measurement is stale. Read again when fresh data is available. |
 | `moved_too_far` | The read and latest positions differ by more than 100 metres. Read again and reconsider. This does not distinguish movement from measurement noise. |
-| `conflicting_decision` | A retained decision for this context has different disposition, trimmed text or question reference (including a removed reference), or the relay rejects the context-derived outbound ID as `message_id_conflict`. Do not overwrite the decision or change identifiers to bypass the conflict. Identical retained retries remain idempotent. |
+| `conflicting_decision` | The same proactive decision or the same `(context_id, utterance_id)` answer already has different disposition or trimmed text, or the relay rejects that operation's outbound ID as `message_id_conflict`. Retry only the original content and identifiers. A prior proactive decision does not block answering a distinct question with the same valid context. Do not change/drop identifiers to bypass a conflict. |
 | `internal_error` | An unexpected execution or callback failure occurred. The outcome is unconfirmed; do not assume delivery or change identifiers/content to force a retry. Raw exception details are not returned. |
 
 Schema validation precedes the semantic checks in the table. If several

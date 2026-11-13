@@ -57,6 +57,7 @@ test('location answers pair with the question, follow-ups stay after it, and ret
   await f.bridge.subscribe({...request,name:'utterance.created'});
   const utterance_id=randomUUID(); await f.bridge.submit({id:utterance_id,text:'Synthetic nearby-place question'});
   const first={context_id:f.context.read().context!.context_id,utterance_id,disposition:'announce',text:'First location answer'};
+  await respond(f,{context_id:first.context_id,disposition:'silent'});
   assert.equal((await respond(f,first)).result.structuredContent.stored_for_g2,true);
   assert.equal(f.bridge.history()[0].reply,first.text);
   assert.equal(f.bridge.history()[0].location_sharing_id,f.sharing);
@@ -65,13 +66,101 @@ test('location answers pair with the question, follow-ups stay after it, and ret
   assert.equal(f.bridge.pending().utterances.length,0);
   await respond(f,first);
   rejection(await respond(f,{...first,utterance_id:undefined}),'conflicting_decision');
-  rejection(await respond(f,{...first,utterance_id:randomUUID()}),'conflicting_decision');
+  rejection(await respond(f,{...first,utterance_id:randomUUID()}),'utterance_unknown');
   f.advance(1000);f.update();
   const followup={context_id:f.context.read().context!.context_id,utterance_id,disposition:'announce',text:'Location follow-up'};
   await respond(f,followup);
   const pages=reconcileHistory([], [...f.bridge.history(),...f.bridge.outboundHistory()],true,()=>true).messages;
   assert.deepEqual(pages.map(p=>[p.text,p.reply]),[['Synthetic nearby-place question','First location answer'],['','Location follow-up']]);
   await assert.rejects(f.bridge.reply({utterance_id,text:'Summary'}),/different reply/);
+});
+
+test('one unchanged context answers distinct questions independently after proactive silence', async t => {
+  const f=fixture(t); f.enable(); f.update();
+  await f.bridge.subscribe({...request,name:'utterance.created'});
+  const context_id=f.context.read().context!.context_id;
+  const silent={context_id,disposition:'silent'};
+  const silence=await respond(f,silent);
+  const answers=[];
+  for (const text of ['First question', 'Second question']) {
+    const utterance_id=randomUUID(); await f.bridge.submit({id:utterance_id,text});
+    assert.equal(f.context.read().context!.context_id,context_id);
+    const input={context_id,utterance_id,disposition:'announce',text:`Answer to ${text}`};
+    const receipt=await respond(f,input);
+    assert.equal(receipt.result.structuredContent.stored_for_g2,true);
+    assert.notEqual(receipt.result.structuredContent.message_id,context_id);
+    assert.deepEqual(await respond(f,input),receipt);
+    rejection(await respond(f,{...input,text:'Changed answer'}),'conflicting_decision');
+    answers.push({input,receipt});
+  }
+  assert.notEqual(answers[0].receipt.result.structuredContent.message_id,answers[1].receipt.result.structuredContent.message_id);
+  assert.deepEqual(await respond(f,silent),silence);
+  assert.deepEqual(f.bridge.history().map(q=>[q.id,q.reply]),answers.map(a=>[a.input.utterance_id,a.input.text]));
+  assert.equal(f.bridge.pending().utterances.length,0);
+  assert.equal(f.bridge.outboundHistory().length,0);
+  assert.deepEqual(f.context.read().recent_announcements,answers.map(a=>a.input.text));
+});
+
+test('proactive decisions and linked answers remain independent in both concurrent queue orders', async t => {
+  for (const proactiveFirst of [true,false]) for (const disposition of ['silent','announce']) {
+    const f=fixture(t); f.enable(); f.update();
+    await f.bridge.subscribe({...request,name:'utterance.created'});
+    const utterance_id=randomUUID(); await f.bridge.submit({id:utterance_id,text:'Question'});
+    const context_id=f.context.read().context!.context_id;
+    const proactive={context_id,disposition,...(disposition==='announce'?{text:'Independent update'}:{})};
+    const answer={context_id,utterance_id,disposition:'announce',text:'Question answer'};
+    const operations=proactiveFirst?[proactive,answer]:[answer,proactive];
+    const results=await Promise.all(operations.map(input=>respond(f,input)));
+    for(let i=0;i<operations.length;i++) {
+      assert.ok(results[i].result);
+      assert.deepEqual(await respond(f,operations[i]),results[i]);
+    }
+    assert.equal(f.bridge.history()[0].reply,answer.text);
+    assert.deepEqual(f.bridge.outboundHistory().map(m=>m.reply),disposition==='announce'?['Independent update']:[]);
+    assert.deepEqual(f.context.read().recent_announcements,operations.filter(p=>p.disposition==='announce').map(p=>p.text));
+    assert.equal(f.context.status().locationAnnouncementCount,disposition==='announce'?2:1);
+  }
+});
+
+test('an explicit answer does not consume the pending proactive location event', async t => {
+  const f=fixture(t); await f.context.subscribe(request);
+  await f.bridge.subscribe({...request,name:'utterance.created'});
+  f.enable(); f.update(); await flush();
+  const read=f.context.read().context!;
+  assert.ok(read.update_id);
+  const utterance_id=randomUUID(); await f.bridge.submit({id:utterance_id,text:'Question'});
+  assert.equal((await respond(f,{context_id:read.context_id,utterance_id,disposition:'announce',text:'Answer'})).result.structuredContent.stored_for_g2,true);
+  assert.equal(f.context.read().context!.update_id,read.update_id);
+  assert.equal(f.events.filter(e=>e.name==='location.updated').length,1);
+  await respond(f,{context_id:read.context_id,disposition:'silent'});
+  assert.equal(f.context.read().context!.update_id,null);
+  assert.deepEqual(f.context.read().recent_announcements,['Answer']);
+});
+
+test('bridge retry identity survives outcome eviction without duplicate answers or overwritten content', async t => {
+  const f=fixture(t); f.enable(); f.update();
+  await f.bridge.subscribe({...request,name:'utterance.created'});
+  const context_id=f.context.read().context!.context_id;
+  const inputs=[];
+  let firstReceipt:any;
+  for(let i=0;i<31;i++) {
+    const utterance_id=randomUUID(); await f.bridge.submit({id:utterance_id,text:`Question ${i}`});
+    const input={context_id,utterance_id,disposition:'announce',text:`Answer ${i}`};
+    inputs.push(input);
+    const receipt=await respond(f,input);
+    assert.equal(receipt.result.structuredContent.stored_for_g2,true);
+    if(i===0)firstReceipt=receipt;
+  }
+  assert.deepEqual(f.context.read().recent_announcements,inputs.slice(-5).map(p=>p.text));
+  let bridgeAttempts=0; f.beforeAnnouncement(async()=>{bridgeAttempts++;});
+  const before=f.bridge.history();
+  rejection(await respond(f,{...inputs[0],text:'Conflicting retry after eviction'}),'conflicting_decision');
+  assert.equal(bridgeAttempts,1,'conflict must come from the bridge after outcome eviction');
+  assert.deepEqual(await respond(f,inputs[0]),firstReceipt);
+  assert.equal(bridgeAttempts,2);
+  assert.deepEqual(f.bridge.history(),before);
+  assert.equal(f.bridge.outboundHistory().length,0);
+  assert.equal(f.bridge.pending().utterances.length,0);
 });
 
 test('unknown question and failed linked location persistence cannot consume the decision', async t=>{
@@ -186,7 +275,7 @@ test('conflicting decisions return a reason and never overwrite the original ann
 });
 
 test('announcement revalidation reports the reason when context changes before storage', async t => {
-  for (const change of ['off', 'move', 'expire', 'replace'] as const) {
+  for (const linked of [false,true]) for (const change of ['off', 'move', 'expire', 'replace', 'pairing'] as const) {
     const f = fixture(t); f.enable(); f.update();
     await f.bridge.subscribe({...request,name:'utterance.created'});
     const utterance_id=randomUUID();await f.bridge.submit({id:utterance_id,text:'Question'});
@@ -195,13 +284,14 @@ test('announcement revalidation reports the reason when context changes before s
       if (change === 'off') f.disable();
       if (change === 'move') f.update(10.01);
       if (change === 'expire') { f.advance(90_001); f.update(); }
+      if (change === 'pairing') f.revokeOwner();
       if (change === 'replace') {
         const sharing_id = randomUUID(); f.context.control({sharing_id, enabled: true}, owner);
         f.context.update({sharing_id, sequence: 1, fix: f.fix()}, owner);
       }
     });
-    rejection(await respond(f, {context_id: id, utterance_id, disposition: 'announce', text: 'Must not be stored'}),
-      {off: 'sharing_inactive', move: 'moved_too_far', expire: 'context_expired', replace: 'context_unknown'}[change]);
+    rejection(await respond(f, {context_id: id, ...(linked?{utterance_id}:{}), disposition: 'announce', text: 'Must not be stored'}),
+      {off: 'sharing_inactive', move: 'moved_too_far', expire: 'context_expired', replace: 'context_unknown', pairing:'sharing_inactive'}[change]);
     assert.equal(f.bridge.outboundHistory().length, 0);
     assert.equal(f.bridge.history()[0].reply,undefined);
     assert.equal(f.context.status().locationDecisionAt, null);
