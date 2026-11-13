@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "Le programme d’arrêt n’a pas pu démarrer. Le partage peut encore être actif.",
   "mac.quit_stop_failed": "L’arrêt n’a pas pu être confirmé. Le transfert des notifications Mac est en pause ; les autres partages peuvent encore être actifs.",
   "mac.quit_restore_app": "Remettez une copie complète de Dot Link.app à cet emplacement :\n{path}\nConservez vos réglages enregistrés, puis réessayez de quitter.",
-  "mac.quit_retry": "Réessayer de quitter"
+  "mac.quit_retry": "Réessayer de quitter",
+  "even.phone_offline": "Téléphone hors ligne",
+  "even.mac_connection_error": "Erreur de connexion Mac",
+  "even.mac_unreachable": "Mac injoignable",
+  "even.check_phone_connection": "Vérifiez la connexion Internet de ce téléphone. Reconnexion automatique.",
+  "even.check_mac_dot_link": "Vérifiez Dot Link sur votre Mac. Reconnexion automatique.",
+  "even.check_phone_vpn_and_mac": "Cause inconnue. Vérifiez Tailscale sur ce téléphone et votre Mac. Reconnexion automatique."
 }

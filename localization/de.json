@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "Das Hilfsprogramm zum Beenden konnte nicht starten. Die Freigabe ist möglicherweise noch aktiv.",
   "mac.quit_stop_failed": "Der Stopp konnte nicht bestätigt werden. Die Weiterleitung von Mac-Mitteilungen ist pausiert; andere Freigaben sind möglicherweise noch aktiv.",
   "mac.quit_restore_app": "Legen Sie eine vollständige Kopie von Dot Link.app wieder hier ab:\n{path}\nBehalten Sie Ihre gespeicherten Einstellungen und versuchen Sie erneut, die App zu beenden.",
-  "mac.quit_retry": "Beenden erneut versuchen"
+  "mac.quit_retry": "Beenden erneut versuchen",
+  "even.phone_offline": "Telefon offline",
+  "even.mac_connection_error": "Mac-Verbindungsfehler",
+  "even.mac_unreachable": "Mac nicht erreichbar",
+  "even.check_phone_connection": "Internetverbindung dieses Telefons prüfen. Verbindung wird automatisch wiederhergestellt.",
+  "even.check_mac_dot_link": "Dot Link auf dem Mac prüfen. Verbindung wird automatisch wiederhergestellt.",
+  "even.check_phone_vpn_and_mac": "Ursache unbekannt. Tailscale auf diesem Telefon und den Mac prüfen. Verbindung wird automatisch wiederhergestellt."
 }

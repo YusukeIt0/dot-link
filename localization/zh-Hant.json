@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "無法啟動停止程序。分享可能仍在繼續。",
   "mac.quit_stop_failed": "無法確認是否已停止。Mac通知轉送已暫停，但其他分享可能仍在繼續。",
   "mac.quit_restore_app": "請將完整的Dot Link.app放回以下位置：\n{path}\n保留已儲存的設定，然後再次嘗試結束。",
-  "mac.quit_retry": "重試結束"
+  "mac.quit_retry": "重試結束",
+  "even.phone_offline": "手機離線",
+  "even.mac_connection_error": "Mac 連線錯誤",
+  "even.mac_unreachable": "無法連接 Mac",
+  "even.check_phone_connection": "請檢查這支手機的網路連線。將自動重新連線。",
+  "even.check_mac_dot_link": "請檢查 Mac 上的 Dot Link。將自動重新連線。",
+  "even.check_phone_vpn_and_mac": "原因不明。請檢查這支手機的 Tailscale 和 Mac。將自動重新連線。"
 }

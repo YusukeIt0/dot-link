@@ -2,6 +2,10 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.3.58
+
+- Added connection guidance for phone connectivity, Mac connection errors and unreachable Macs, with automatic reconnection.
+
 ## 0.3.57
 
 - Added optional weather context for your shared location or another place you ask about.

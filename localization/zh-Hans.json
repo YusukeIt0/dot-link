@@ -598,5 +598,11 @@
   "mac.quit_helper_not_started": "无法启动停止程序。共享可能仍在继续。",
   "mac.quit_stop_failed": "无法确认是否已停止。Mac通知转发已暂停，但其他共享可能仍在继续。",
   "mac.quit_restore_app": "请将完整的Dot Link.app放回以下位置：\n{path}\n保留已保存的设置，然后再次尝试退出。",
-  "mac.quit_retry": "重试退出"
+  "mac.quit_retry": "重试退出",
+  "even.phone_offline": "手机离线",
+  "even.mac_connection_error": "Mac 连接错误",
+  "even.mac_unreachable": "无法连接 Mac",
+  "even.check_phone_connection": "请检查这部手机的网络连接。将自动重新连接。",
+  "even.check_mac_dot_link": "请检查 Mac 上的 Dot Link。将自动重新连接。",
+  "even.check_phone_vpn_and_mac": "原因不明。请检查这部手机的 Tailscale 和 Mac。将自动重新连接。"
 }
