@@ -642,5 +642,12 @@
   "mac.health_reset": "Delete local connection data",
   "mac.health_reset_confirm": "Delete local health data and connection settings? Also revoke this client in your Polar account; this action cannot confirm remote revocation.",
   "mac.health_continue": "Continue",
-  "even.health_refreshed": "Profile updated"
+  "even.health_refreshed": "Profile updated",
+  "mac.health_authorization_error": "Polar authorization failed or expired. Check your client credentials and reconnect.",
+  "mac.health_credentials_error": "Enter a valid Polar Client ID and Client Secret.",
+  "mac.health_callback_error": "The browser callback port is busy. Close the other connection attempt and retry.",
+  "mac.health_rate_limit": "Polar is limiting requests. Wait and retry later.",
+  "mac.health_network_error": "Cannot reach Polar. Check your internet connection and retry.",
+  "mac.health_storage_error": "Could not save health data. Check available disk space and access, then retry.",
+  "mac.health_request_error": "Polar could not complete the request. Retry later."
 }

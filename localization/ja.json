@@ -642,5 +642,12 @@
   "mac.health_reset": "Macの接続データを削除",
   "mac.health_reset_confirm": "Macの健康情報と接続設定を削除しますか？Polarアカウント側でも連携を解除してください。この操作ではPolar側の解除を確認できません。",
   "mac.health_continue": "続ける",
-  "even.health_refreshed": "プロフィールを更新しました"
+  "even.health_refreshed": "プロフィールを更新しました",
+  "mac.health_authorization_error": "Polarの認証に失敗したか期限が切れました。登録情報を確認して再接続してください。",
+  "mac.health_credentials_error": "有効なPolarのClient IDとClient Secretを入力してください。",
+  "mac.health_callback_error": "認証用のポートが使用中です。他の接続処理を終了して再試行してください。",
+  "mac.health_rate_limit": "Polarがリクエストを制限しています。時間をおいて再試行してください。",
+  "mac.health_network_error": "Polarに接続できません。インターネット接続を確認して再試行してください。",
+  "mac.health_storage_error": "健康データを保存できません。空き容量とアクセス権を確認して再試行してください。",
+  "mac.health_request_error": "Polarの処理に失敗しました。時間をおいて再試行してください。"
 }

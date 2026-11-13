@@ -26,6 +26,18 @@ test('health setup is separate from device/MCP credentials; discovery and paired
  const epoch=h.status(owner).healthEpoch;
  assert.equal((await post('/api/health','device',{protocol:1,epoch,action:'delete'})).status,400);
  assert.equal((await post('/api/health','device',{protocol:1,epoch,action:'delete'},{'x-g2-location-owner':owner})).status,200);
+ // Setup preserves only known actionable codes, never raw exception contents.
+ const originalSetup=h.setup.bind(h);
+ for(const code of ['HEALTH_CALLBACK_UNAVAILABLE','HEALTH_KEY_UNAVAILABLE','HEALTH_RATE_LIMITED','HEALTH_NETWORK_UNAVAILABLE','HEALTH_RECONNECT_REQUIRED','HEALTH_CREDENTIALS_REQUIRED']) {
+   h.setup=async()=>{throw new Error(code);};
+   const response=await post('/api/health/setup','admin',{action:'connect'});
+   assert.equal(response.status,400);assert.deepEqual(await response.json(),{code});
+ }
+ h.setup=async()=>{throw new Error('private client secret and filesystem path');};
+ assert.deepEqual(await (await post('/api/health/setup','admin',{action:'connect'})).json(),{code:'HEALTH_REQUEST_FAILED'});
+ h.setup=originalSetup;
+ assert.deepEqual(await (await post('/api/health/setup','admin',{action:'connect',clientId:' '})).json(),{code:'HEALTH_CREDENTIALS_REQUIRED'});
+
 });
 
 test('loopback OAuth rejects wrong state/Host, consumes the code once and leaves sharing OFF',async t=>{
@@ -36,7 +48,7 @@ test('loopback OAuth rejects wrong state/Host, consumes the code once and leaves
  t.after(()=>{h.close();rmSync(dir,{recursive:true,force:true});});
  const setup=await h.setup({action:'connect',clientId:'fixture',clientSecret:'fixture-secret'});assert.ok('authorizationURL' in setup);
  const state=new URL(setup.authorizationURL).searchParams.get('state');
- const callback=(state:string,host='localhost:3464')=>fetch(`http://localhost:3464/polar/callback?code=fixture-code&state=${state}`,{headers:{Host:host}});
+ const callback=(state:string,host='localhost:3464')=>fetch(`http://localhost:3464/polar/callback?code=fixture-code&state=${state}`,{headers:{Host:host,Connection:"close"}});
  assert.equal((await callback('wrong')).status,400);assert.equal(exchanges,0);
  // Host spoofing is rejected independently of OAuth state.
  const {request}=await import('node:http');
@@ -45,4 +57,12 @@ test('loopback OAuth rejects wrong state/Host, consumes the code once and leaves
  assert.equal((await callback(state!)).status,200);assert.equal(exchanges,1);
  assert.equal(h.setupStatus().configured,true);assert.equal(h.setupStatus().sharing,false);assert.equal(h.read({}).status,'unavailable');
  try{await callback(state!);}catch{}assert.equal(exchanges,1);
+ const {PolarError}=await import('../server/health/polar.ts');
+ for(const code of ['HEALTH_RATE_LIMITED','HEALTH_NETWORK_UNAVAILABLE','HEALTH_RECONNECT_REQUIRED']) {
+   api.exchange=async()=>{throw new PolarError(code);};
+   const retry=await h.setup({action:'connect'});assert.ok('authorizationURL' in retry);
+   assert.equal((await callback(new URL(retry.authorizationURL).searchParams.get('state')!)).status,400);
+   assert.equal(h.setupStatus().status,code);
+ }
+
 });

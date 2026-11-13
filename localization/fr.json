@@ -642,5 +642,12 @@
   "mac.health_reset": "Supprimer la connexion locale",
   "mac.health_reset_confirm": "Supprimer les données santé et la connexion locales ? Révoquez aussi ce client dans votre compte Polar ; cette action ne confirme pas la révocation distante.",
   "mac.health_continue": "Continuer",
-  "even.health_refreshed": "Profil mis à jour"
+  "even.health_refreshed": "Profil mis à jour",
+  "mac.health_authorization_error": "Autorisation Polar refusée ou expirée. Vérifiez les identifiants du client et reconnectez-vous.",
+  "mac.health_credentials_error": "Saisissez un Client ID et un Client Secret Polar valides.",
+  "mac.health_callback_error": "Le port de retour est occupé. Fermez l’autre tentative de connexion et réessayez.",
+  "mac.health_rate_limit": "Polar limite les requêtes. Réessayez plus tard.",
+  "mac.health_network_error": "Polar est injoignable. Vérifiez votre connexion Internet et réessayez.",
+  "mac.health_storage_error": "Enregistrement impossible. Vérifiez l’espace disque et les droits d’accès, puis réessayez.",
+  "mac.health_request_error": "Polar n’a pas pu traiter la demande. Réessayez plus tard."
 }

@@ -642,5 +642,12 @@
   "mac.health_reset": "删除 Mac 的连接数据",
   "mac.health_reset_confirm": "删除 Mac 的健康信息与连接设置？请同时在 Polar 账号撤销授权；此操作无法确认 Polar 端已撤销。",
   "mac.health_continue": "继续",
-  "even.health_refreshed": "个人资料已更新"
+  "even.health_refreshed": "个人资料已更新",
+  "mac.health_authorization_error": "Polar 授权失败或已过期。请检查客户端凭据并重新连接。",
+  "mac.health_credentials_error": "请输入有效的 Polar Client ID 和 Client Secret。",
+  "mac.health_callback_error": "授权端口正被占用。请结束其他连接操作后重试。",
+  "mac.health_rate_limit": "Polar 正在限制请求。请稍后重试。",
+  "mac.health_network_error": "无法连接 Polar。请检查网络连接后重试。",
+  "mac.health_storage_error": "无法保存健康数据。请检查可用空间和访问权限后重试。",
+  "mac.health_request_error": "Polar 无法完成请求。请稍后重试。"
 }

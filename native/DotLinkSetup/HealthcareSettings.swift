@@ -17,12 +17,28 @@ extension SetupApp {
         body.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
         let heading = NSStackView(); heading.orientation = .horizontal; heading.spacing = 10
         heading.addArrangedSubview(symbol("heart", size: 24)); heading.addArrangedSubview(label("Polar", size: 20, bold: true)); body.addArrangedSubview(heading)
-        let statusKey = status == "locked" ? "mac.health_locked" : status == "connecting" ? "mac.health_connecting" : status == "disconnect_pending" ? "mac.health_disconnect_pending" : status == "loading" ? "mac.health_loading" : status == "ready" ? (configured ? "mac.health_connected" : "mac.health_not_connected") : "mac.health_error"
+        let statusKey: String
+        switch status {
+        case "locked", "HEALTH_KEY_UNAVAILABLE": statusKey = "mac.health_locked"
+        case "connecting": statusKey = "mac.health_connecting"
+        case "disconnect_pending": statusKey = "mac.health_disconnect_pending"
+        case "loading": statusKey = "mac.health_loading"
+        case "ready": statusKey = configured ? "mac.health_connected" : "mac.health_not_connected"
+        case "HEALTH_RECONNECT_REQUIRED": statusKey = "mac.health_authorization_error"
+        case "HEALTH_CREDENTIALS_REQUIRED": statusKey = "mac.health_credentials_error"
+        case "HEALTH_CALLBACK_UNAVAILABLE": statusKey = "mac.health_callback_error"
+        case "HEALTH_RATE_LIMITED": statusKey = "mac.health_rate_limit"
+        case "HEALTH_NETWORK_UNAVAILABLE": statusKey = "mac.health_network_error"
+        case "HEALTH_STORAGE_UNAVAILABLE": statusKey = "mac.health_storage_error"
+        case "HEALTH_REQUEST_FAILED", "HEALTH_INVALID_RESPONSE": statusKey = "mac.health_request_error"
+        default: statusKey = "mac.health_error"
+        }
+        let locked = status == "locked" || status == "HEALTH_KEY_UNAVAILABLE"
         body.addArrangedSubview(label(tr(statusKey), size: 13))
         func action(_ key: String, _ handler: @escaping () -> Void) {
             let control = ActionButton(tr(key), handler); control.controlSize = .large; control.isEnabled = !busy; body.addArrangedSubview(control)
         }
-        if !configured && status != "locked" && status != "disconnect_pending" {
+        if !configured && !locked && status != "disconnect_pending" {
             body.addArrangedSubview(label(tr("mac.health_step1"), size: 14, bold: true))
             action("mac.health_register") { [weak self] in self?.open("https://admin.polaraccesslink.com/") }
             body.addArrangedSubview(label(tr("mac.health_redirect"), size: 12))
@@ -37,22 +53,22 @@ extension SetupApp {
                 self.healthClientDraft = id; self.healthSecretField?.stringValue = ""
                 self.perform("health", input: ["action":"connect", "clientId":id, "clientSecret":secret])
             }
-        } else if configured && status != "locked" && status != "disconnect_pending" {
+        } else if configured && !locked && status != "disconnect_pending" {
             action("mac.health_reconnect") { [weak self] in self?.perform("health", input: ["action":"connect"]) }
             action("mac.health_disconnect") { [weak self] in self?.confirmHealthAction("disconnect", key:"mac.health_disconnect_confirm") }
         }
         body.addArrangedSubview(label(tr("mac.health_step3"), size: 14, bold: true))
         body.addArrangedSubview(label(tr("mac.health_even"), size: 13))
         body.addArrangedSubview(label(tr("mac.health_encrypted"), size: 12))
-        if status == "locked" { action("mac.check_access") { [weak self] in self?.perform("health", input: ["action":"unlock"]) } }
+        if locked { action("mac.check_access") { [weak self] in self?.perform("health", input: ["action":"unlock"]) } }
         if status == "disconnect_pending" {
             action("mac.health_retry") { [weak self] in self?.perform("health", input: ["action":"disconnect"]) }
         }
-        if status == "locked" || status == "disconnect_pending" {
+        if locked || status == "disconnect_pending" {
             action("mac.health_polar_account") { [weak self] in self?.open("https://flow.polar.com/") }
             action("mac.health_reset") { [weak self] in self?.confirmHealthAction("reset", key:"mac.health_reset_confirm") }
         }
-        if status == "unavailable" { action("mac.health_retry") { [weak self] in self?.perform("health", input: ["action":"status"]) } }
+        if status != "ready" && status != "loading" && status != "connecting" && !locked && status != "disconnect_pending" { action("mac.health_retry") { [weak self] in self?.perform("health", input: ["action":"status"]) } }
         for case let text as NSTextField in body.arrangedSubviews where !text.isEditable {
             text.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -36).isActive = true
         }

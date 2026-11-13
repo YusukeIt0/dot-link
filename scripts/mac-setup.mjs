@@ -149,7 +149,11 @@ try {
       method: 'POST', redirect: 'error', signal: AbortSignal.timeout(35000),
       headers: {'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(input),
     });
-    if (!response.ok) throw new Error('HEALTH_UNAVAILABLE');
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({}));
+      const known = ['HEALTH_RECONNECT_REQUIRED','HEALTH_CALLBACK_UNAVAILABLE','HEALTH_RATE_LIMITED','HEALTH_NETWORK_UNAVAILABLE','HEALTH_KEY_UNAVAILABLE','HEALTH_CREDENTIALS_REQUIRED','HEALTH_STORAGE_UNAVAILABLE','HEALTH_REQUEST_FAILED'];
+      throw new Error(known.includes(failure?.code) ? failure.code : 'HEALTH_UNAVAILABLE');
+    }
     result = await response.json();
   }
   else if (action === 'stt-select') {

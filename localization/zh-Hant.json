@@ -642,5 +642,12 @@
   "mac.health_reset": "刪除 Mac 的連接資料",
   "mac.health_reset_confirm": "刪除 Mac 的健康資訊與連接設定？請同時在 Polar 帳號撤銷授權；此操作無法確認 Polar 端已撤銷。",
   "mac.health_continue": "繼續",
-  "even.health_refreshed": "個人資料已更新"
+  "even.health_refreshed": "個人資料已更新",
+  "mac.health_authorization_error": "Polar 授權失敗或已過期。請檢查用戶端憑證並重新連接。",
+  "mac.health_credentials_error": "請輸入有效的 Polar Client ID 和 Client Secret。",
+  "mac.health_callback_error": "授權連接埠使用中。請結束其他連接程序後重試。",
+  "mac.health_rate_limit": "Polar 正在限制請求。請稍後重試。",
+  "mac.health_network_error": "無法連接 Polar。請檢查網路連線後重試。",
+  "mac.health_storage_error": "無法儲存健康資料。請檢查可用空間與存取權限後重試。",
+  "mac.health_request_error": "Polar 無法完成請求。請稍後重試。"
 }

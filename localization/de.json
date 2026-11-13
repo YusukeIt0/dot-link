@@ -642,5 +642,12 @@
   "mac.health_reset": "Lokale Verbindungsdaten löschen",
   "mac.health_reset_confirm": "Lokale Gesundheitsdaten und Verbindung löschen? Den Client auch im Polar-Konto widerrufen; diese Aktion bestätigt keinen Widerruf bei Polar.",
   "mac.health_continue": "Fortfahren",
-  "even.health_refreshed": "Profil aktualisiert"
+  "even.health_refreshed": "Profil aktualisiert",
+  "mac.health_authorization_error": "Polar-Autorisierung fehlgeschlagen oder abgelaufen. Client-Zugangsdaten prüfen und erneut verbinden.",
+  "mac.health_credentials_error": "Gültige Polar Client ID und Client Secret eingeben.",
+  "mac.health_callback_error": "Der Rückleitungsport ist belegt. Anderen Verbindungsversuch beenden und erneut versuchen.",
+  "mac.health_rate_limit": "Polar begrenzt die Anfragen. Später erneut versuchen.",
+  "mac.health_network_error": "Polar nicht erreichbar. Internetverbindung prüfen und erneut versuchen.",
+  "mac.health_storage_error": "Gesundheitsdaten konnten nicht gespeichert werden. Speicherplatz und Zugriffsrechte prüfen und erneut versuchen.",
+  "mac.health_request_error": "Polar konnte die Anfrage nicht abschließen. Später erneut versuchen."
 }

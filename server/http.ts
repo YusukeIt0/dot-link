@@ -243,7 +243,11 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       if (request.url === '/mcp') { response.setHeader('Allow', 'POST'); send(405, { error: 'Method not allowed' }); return; }
       send(404, { error: 'Not found' });
     } catch (error) {
-      if (error instanceof PhotoStorageFullError) send(422, { code: 'PHOTO_STORAGE_FULL' });
+      if (request.url === '/api/health/setup') {
+        const known = ['HEALTH_RECONNECT_REQUIRED','HEALTH_CALLBACK_UNAVAILABLE','HEALTH_RATE_LIMITED','HEALTH_NETWORK_UNAVAILABLE','HEALTH_KEY_UNAVAILABLE','HEALTH_CREDENTIALS_REQUIRED','HEALTH_STORAGE_UNAVAILABLE'];
+        const code = error instanceof z.ZodError ? 'HEALTH_CREDENTIALS_REQUIRED' : error instanceof Error && known.includes(error.message) ? error.message : 'HEALTH_REQUEST_FAILED';
+        send(400, {code});
+      } else if (error instanceof PhotoStorageFullError) send(422, { code: 'PHOTO_STORAGE_FULL' });
       else send(400, { error: 'Request rejected; no successful delivery is implied' });
     }
   });
