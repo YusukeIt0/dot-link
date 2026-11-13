@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.37</title><sparkle:version>117</sparkle:version><sparkle:shortVersionString>0.4.37</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Fixed startup when the installed Mac app has been moved or is missing. Dot Link now restores a verified copy and opens it from Applications.
-- Added clearer recovery guidance for older or damaged installed copies while preserving saved settings and connections.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.37-117/Dot-Link-0.4.37-117-arm64.zip" sparkle:installationType="application" sparkle:edSignature="tomDIILVoCFYs1EzRsdDGuTV4eEWs4Z7Cy0huN+r5UvyT2r0Llyr8EdQnIU8pgWsR73VQnEyQuazNHjSnPp3Aw==" length="68464639" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: xTn7RhGIR0RKI5L7uCjS7d02T5pWG2nwh88TSPm4CCUjdZ1m8q/m5M69XKQKvkYIBg4zCdBdEyNy1ZoAVsSUCw==
-length: 1297
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.38</title><sparkle:version>118</sparkle:version><sparkle:shortVersionString>0.4.38</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved recovery when Dot Link is moved or removed while running, with clear instructions for safely quitting.
+- Fixed location-based answers being blocked after a silent proactive decision or an earlier question using the same location.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.38-118/Dot-Link-0.4.38-118-arm64.zip" sparkle:installationType="application" sparkle:edSignature="3tEgFFTM7V/BVqZZyjm1hHYz5vybptjN4NgzIIOsYPzTD1AOZuPXPdaRpYal2KnORwblKjqYxEEAUxhrXJRkBQ==" length="68475299" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: sA9ZfCJhjV1Bz4/TKVbLtTD3RDmps3t8a8AI1rGxcu2q+SKHQ7eZ+s0lmOGYeLfnP2WIxb7Jtd+rFoDHBGOyCw==
+length: 1274
 -->
