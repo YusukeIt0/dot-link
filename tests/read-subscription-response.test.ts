@@ -4,13 +4,14 @@ import { mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { rpc } from '../server/http.ts';
+import { conversationGuidance } from '../server/context-guidance.ts';
 import { CallbackVerificationError } from '../server/webhook.ts';
 import { toolFixture } from './tool-response-fixture.ts';
 
 const privateValue = 'PRIVATE https://private.invalid/token /private/state.json';
-function rejection(response: any, reason: string) {
+function rejection(response: any, reason: string, factor = false) {
   assert.equal(response.error?.code, reason === 'internal_error' ? -32603 : reason === 'challenge_failed' ? -32015 : -32602);
-  assert.deepEqual(response.error.data, { reason });
+  assert.deepEqual(response.error.data, { reason, ...(factor ? {conversation_guidance: conversationGuidance} : {}) });
   assert.equal(response.result, undefined);
   assert(!JSON.stringify(response).includes('PRIVATE'));
   assert(!JSON.stringify(response).includes('private.invalid'));
@@ -22,7 +23,7 @@ test('reads preserve omitted arguments and empty results, reject malformed argum
   for (const name of ['get_status', 'get_pending_utterances', 'get_pending_notifications', 'get_location_context']) {
     assert((await f.call(name)).result);
     assert((await f.call(name, {})).result);
-    for (const args of [null, [], privateValue, { extra: privateValue }]) rejection(await f.call(name, args), 'invalid_arguments');
+    for (const args of [null, [], privateValue, { extra: privateValue }]) rejection(await f.call(name, args), 'invalid_arguments', name === 'get_location_context');
   }
   rejection(await f.call('get_pending_notifications', { include_deferred: privateValue }), 'invalid_arguments');
   assert.deepEqual((await f.call('get_pending_notifications', { include_deferred: true })).result.structuredContent.notifications, []);
@@ -41,7 +42,7 @@ test('execution errors including internal validation errors are not caller argum
     const original = object[method];
     for (const failure of [() => { throw new Error(privateValue); }, () => z.number().parse(privateValue)]) {
       object[method] = failure;
-      rejection(await f.call(name), 'internal_error');
+      rejection(await f.call(name), 'internal_error', name === 'get_location_context');
     }
     object[method] = original;
   }
@@ -60,7 +61,7 @@ test('routing distinguishes malformed, unknown and unavailable operations before
     for (const name of method === 'tools/call'
       ? ['get_pending_notifications', 'announce_notification_to_g2', 'set_notification_disposition', 'get_location_context', 'respond_to_location']
       : ['notification.created', 'location.updated']) {
-      rejection(await call({ name, arguments: null }), method === 'tools/call' ? 'tool_unavailable' : 'event_unavailable');
+      rejection(await call({ name, arguments: null }), method === 'tools/call' ? 'tool_unavailable' : 'event_unavailable', name === 'get_location_context');
     }
   }
 });
