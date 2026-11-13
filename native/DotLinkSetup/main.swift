@@ -415,13 +415,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let failure = quitFailure, !busy, !showingDetails, !showingSpeech, !showingSpeechOutput, !showingNotifications, !showingPairing {
             add(tr("mac.quit_still_open"), size: 23, bold: true)
             add(tr(failure.helperStarted ? "mac.quit_stop_failed" : "mac.quit_helper_not_started"))
-            if failure.restoreApp {
+            if failure.restoreApp && !QuitFailurePresentation.helperFilesAvailable(at: payload) {
                 let path = payload.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().path
                 let guidance = label(tr("mac.quit_restore_app", ["path": path]))
                 guidance.isSelectable = true; stack.addArrangedSubview(guidance)
                 guidance.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
             }
             add(failure.code, size: 12)
+            if !message.isEmpty { add(message) }
+            if let details = setupFailure.details { add(details.message(language: language)) }
             button(tr("mac.quit_retry"), primary: true) { NSApp.terminate(nil) }
             return
         }

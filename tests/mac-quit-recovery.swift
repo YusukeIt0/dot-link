@@ -73,6 +73,16 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
             #endif
             if phase == 0 { phase = 1; requestQuit(); return }
             try! FileManager.default.moveItem(at: displaced, to: original)
+            #if !BASELINE
+            sut.currentAction = "pause"
+            sut.receive(["kind": "error", "code": "SERVICE_STILL_STOPPING"])
+            precondition(labels(sut.stack).contains(where: { $0.contains("SERVICE_STILL_STOPPING") }),
+                "A later Pause failure must be visible during Quit recovery")
+            precondition(!labels(sut.stack).contains(where: { $0.contains(original.path) }),
+                "Restoring the bundle must remove obsolete restoration guidance")
+            precondition(sut.quitFailure != nil && !sut.allowTermination,
+                "Showing a later error must not claim a confirmed stop")
+            #endif
             if baseline {
                 print("BASELINE reproduced: two failed quits leave GUI open and notification relay suspended; bundle restored")
                 phase = 5
