@@ -22,3 +22,17 @@ test('collection excludes routes and can skip a deleted profile; singular heart-
   const result=await api.collect({clientId:'id',clientSecret:'secret',accessToken:'token',userId:123,expiresAt:NOW+3600_000},signal(),false);
   assert.equal(result.observations.length,1);assert.equal(result.observations[0].category,'heart_rate');assert.equal(result.profile,undefined);assert.equal(urls.some(x=>x.includes('physical-info')),false);assert.ok(urls.some(x=>x.includes('route=false')));
 });
+
+test('optional profile failures preserve collected measurements; revoked consent still rejects',async()=>{
+ const c={clientId:'id',clientSecret:'secret',accessToken:'token',userId:123,expiresAt:NOW+3600_000};
+ for(const status of [200,204,404,500,401]) {
+  const api=new PolarAPI({now:()=>NOW,fetch:async url=>{
+   if(String(url).includes('physical-info'))return new Response(status===204?null:'{}',{status});
+   if(String(url).includes('continuous-heart-rate'))return new Response(JSON.stringify({date:'2026-11-14',heart_rate_samples:[{sample_time:'08:00:00',heart_rate:60}]}));
+   return new Response(null,{status:204});
+  }});
+  if(status===401){await assert.rejects(api.collect(c,signal()),/HEALTH_RECONNECT_REQUIRED/);continue;}
+  const result=await api.collect(c,signal());assert.equal(result.observations.length,1);assert.equal(result.profile,undefined);
+  await assert.rejects(api.profile(c,signal()));
+ }
+});

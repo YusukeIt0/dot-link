@@ -57,12 +57,12 @@ export class HealthContext {
   private async load() {
     if(!this.vault.exists())return;
     try {const key=await this.options.key('read');if(!key)throw new Error();if(this.closed){key.fill(0);return;}this.state=stateSchema.parse(this.vault.read(key));this.key=key;this.maintain();}
-    catch {this.healthy=false;this.fault='HEALTH_KEY_UNAVAILABLE';}
+    catch {this.healthy=false;if(this.fault!=='HEALTH_STORAGE_UNAVAILABLE')this.fault='HEALTH_KEY_UNAVAILABLE';}
   }
   private save(next:State) {
     if(!this.key||!this.healthy)throw rejected();
     try {this.vault.write(this.key,stateSchema.parse(next));this.state=next;}
-    catch {this.healthy=false;this.fault='HEALTH_STORAGE_UNAVAILABLE';this.invalidate();throw rejected();}
+    catch {this.healthy=false;this.fault='HEALTH_STORAGE_UNAVAILABLE';this.invalidate();throw new Error('HEALTH_STORAGE_UNAVAILABLE');}
   }
   private invalidate() {this.generation++;this.epoch=randomUUID();this.revision=randomUUID();this.reads.clear();this.decisions.clear();this.abort?.abort();clearTimeout(this.eventTimer);this.lastEvent=undefined;this.changes.emit();}
   private usable() {const s=this.state;return !this.closed&&this.healthy&&s.enabled&&!s.disconnectPending&&!!s.owner&&this.options.ownerAuthorized(s.owner)&&!!s.connection?.accessToken&&!!s.connection.expiresAt&&s.connection.expiresAt>this.now();}
@@ -76,7 +76,7 @@ export class HealthContext {
     try {this.maintain();}catch{}
     const owns=!!owner&&this.options.ownerAuthorized(owner)&&(!this.state.owner||owner===this.state.owner);
     return {healthProtocol:1,healthEpoch:owns?this.epoch:null,healthEnabled:owns&&this.usable(),healthConfigured:owns&&!!this.state.connection?.accessToken,
-      healthPending:owns&&this.busy,healthStatus:!owns?'unavailable':!this.healthy?'locked':this.state.disconnectPending?'disconnect_pending':this.connectionFault()||(!this.state.connection?.accessToken?'not_connected':this.usable()?'sharing':'off'),
+      healthPending:owns&&this.busy,healthStatus:!owns?'unavailable':!this.healthy?(this.fault==='HEALTH_STORAGE_UNAVAILABLE'?this.fault:'locked'):this.state.disconnectPending?'disconnect_pending':this.connectionFault()||(!this.state.connection?.accessToken?'not_connected':this.usable()?'sharing':'off'),
       healthLastSync:owns?this.syncAt??null:null,healthProfileRefreshAt:owns?this.profileRefreshAt??null:null,healthHasProfile:owns&&!!this.state.profile};
   }
   private async tick() {await this.ready;if(this.closed)return;try {this.maintain();if(this.usable()&&!this.busy&&this.now()>=this.nextPoll)await this.acquire(false);}catch{/* Sanitized state only; never log health/API values. */}}
@@ -103,7 +103,7 @@ export class HealthContext {
       const map=new Map(this.state.observations.map(x=>[x.id,x]));
       for(const x of fetched.observations)if(x.retention_anchor>Math.max(this.state.deletedBefore,this.now()-RETENTION))map.set(x.id,x);
       const observations=[...map.values()].filter(x=>x.retention_anchor>this.now()-RETENTION).sort((a,b)=>b.retention_anchor-a.retention_anchor).slice(0,4000);
-      const next={...this.state,observations,profile:profileOnly||!this.state.profileDeleted?fetched.profile:this.state.profile,profileDeleted:profileOnly?false:this.state.profileDeleted};
+      const next={...this.state,observations,profile:profileOnly||!this.state.profileDeleted?(fetched.profile??this.state.profile):this.state.profile,profileDeleted:profileOnly?false:this.state.profileDeleted};
       const signature=(s:State)=>JSON.stringify([s.observations.map(({retrieved_at,...rest})=>rest),s.profile?(({retrieved_at,...rest})=>rest)(s.profile):null]);
       const changed=signature(next)!==signature(this.state);
       this.save(next);this.syncAt=new Date(this.now()).toISOString();if(profileOnly)this.profileRefreshAt=this.syncAt;this.fault='';
@@ -169,15 +169,21 @@ export class HealthContext {
     void send(1).catch(()=>{});
   }
   private connectionFault() {return this.state.connection?.accessToken&&(!this.state.connection.expiresAt||this.state.connection.expiresAt<=this.now())?'HEALTH_RECONNECT_REQUIRED':this.fault;}
-  setupStatus() {return {configured:!!this.state.connection?.accessToken,status:!this.healthy?'locked':this.state.disconnectPending?'disconnect_pending':this.oauth?'connecting':this.connectionFault()||'ready',redirect:POLAR_REDIRECT,sharing:this.usable()};}
+  setupStatus() {return {configured:!!this.state.connection?.accessToken,status:!this.healthy?(this.fault==='HEALTH_STORAGE_UNAVAILABLE'?this.fault:'locked'):this.state.disconnectPending?'disconnect_pending':this.oauth?'connecting':this.connectionFault()||'ready',redirect:POLAR_REDIRECT,sharing:this.usable()};}
   setup(raw:unknown) {
     const task=this.setupTail.then(()=>this.performSetup(raw));
     this.setupTail=task.catch(()=>{});return task;
   }
   private async performSetup(raw:unknown) {
     await this.ready;
-    const p=z.object({action:z.enum(['status','connect','disconnect','reset','unlock']),clientId:z.string().trim().regex(/^[A-Za-z0-9_-]{1,256}$/).optional(),clientSecret:z.string().trim().regex(/^[\x21-\x7e]{1,512}$/).optional()}).strict().parse(raw);
+    const p=z.object({action:z.enum(['status','connect','disconnect','reset','unlock','retry_storage']),clientId:z.string().trim().regex(/^[A-Za-z0-9_-]{1,256}$/).optional(),clientSecret:z.string().trim().regex(/^[\x21-\x7e]{1,512}$/).optional()}).strict().parse(raw);
     if(p.action==='status')return this.setupStatus();
+    if(p.action==='retry_storage'){
+      if(this.fault!=='HEALTH_STORAGE_UNAVAILABLE'||!this.key)return this.setupStatus();
+      this.healthy=true;
+      // Recovery validates the write path but never silently resumes sharing.
+      this.save({...this.state,enabled:false});this.fault='';this.maintain();this.changes.emit();return this.setupStatus();
+    }
     if(p.action==='unlock'){try{await this.options.key('authorize');}catch{throw new Error('HEALTH_KEY_UNAVAILABLE');}this.healthy=true;this.fault='';await this.load();this.changes.emit();return this.setupStatus();}
     if(p.action==='reset'){this.stopOAuth();this.invalidate();this.vault.remove();await this.options.key('delete');this.key?.fill(0);this.key=undefined;this.state=empty();this.healthy=true;this.fault='';return this.setupStatus();}
     if(p.action==='disconnect'&&!this.state.connection){return this.setupStatus();}
@@ -187,7 +193,7 @@ export class HealthContext {
       try{if(c)await this.api.disconnect(c,new AbortController().signal);this.save(empty());this.fault='';}catch{this.fault='HEALTH_DISCONNECT_PENDING';}
       this.changes.emit();return this.setupStatus();
     }
-    if(!this.healthy)throw new Error('HEALTH_KEY_UNAVAILABLE');
+    if(!this.healthy)throw new Error(this.fault==='HEALTH_STORAGE_UNAVAILABLE'?this.fault:'HEALTH_KEY_UNAVAILABLE');
     if(!this.key){try{this.key=await this.options.key('create');}catch{throw new Error('HEALTH_KEY_UNAVAILABLE');}if(!this.key)throw new Error('HEALTH_KEY_UNAVAILABLE');}
     const client=p.clientId&&p.clientSecret?{clientId:p.clientId,clientSecret:p.clientSecret}:this.state.connection;
     if(!client)throw new Error('HEALTH_CREDENTIALS_REQUIRED');

@@ -1,6 +1,6 @@
 import {test, type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, rmSync, readFileSync} from 'node:fs';
+import {mkdtempSync, rmSync, readFileSync, renameSync, mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
@@ -81,4 +81,22 @@ test('health response preserves conversational attribution without an automatic 
  const unused=f.h.read({});assert.ok('read_id' in unused);
  await f.h.respond({read_id:unused.read_id,disposition:'silent'});
  assert.deepEqual(f.texts,[text]);
+});
+
+test('storage faults remain distinct and recovery leaves sharing off',async t=>{
+ const f=await fixture(t,true);
+ renameSync(f.path,f.path+'.previous');mkdirSync(f.path);
+ await assert.rejects(f.control('disable'),/HEALTH_STORAGE_UNAVAILABLE/);
+ assert.equal(f.h.setupStatus().status,'HEALTH_STORAGE_UNAVAILABLE');
+ assert.equal(f.h.status('owner').healthStatus,'HEALTH_STORAGE_UNAVAILABLE');
+ assert.equal(f.h.read({}).status,'unavailable');
+ await assert.rejects(f.h.setup({action:'retry_storage'}),/HEALTH_STORAGE_UNAVAILABLE/);
+ rmSync(f.path,{recursive:true});renameSync(f.path+'.previous',f.path);
+ assert.equal((await f.h.setup({action:'retry_storage'})).status,'ready');
+ assert.equal(f.h.setupStatus().sharing,false);
+});
+test('routine collection without a profile preserves the latest saved profile',async t=>{
+ const f=await fixture(t);f.collect(async()=>({observations:f.observations,profile:undefined as any}));
+ await f.control('enable');await settle();
+ assert.deepEqual((f.h.read({profile:true}) as any).profile,f.profile);
 });

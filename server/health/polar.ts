@@ -61,7 +61,13 @@ export class PolarAPI {
       ['heart_rate',`/users/continuous-heart-rate?from=${from}&to=${to}`],
       ['recovery','/users/nightly-recharge'],['exercise','/exercises?samples=false&zones=false&route=false'],
     ] as const) {const raw=await this.call(c,path,{},signal,true);if(raw)observations.push(...normalize(category,raw,now));}
-    return {observations,profile:includeProfile?await this.profile(c,signal):undefined};
+    let profile:Profile|undefined;
+    if(includeProfile)try{profile=await this.profile(c,signal);}catch(error){
+      // Optional profile gaps must not discard already fetched measurements.
+      // Revoked authorization and cancellation still fence the entire read.
+      if(signal.aborted||(error instanceof PolarError&&error.code==='HEALTH_RECONNECT_REQUIRED'))throw error;
+    }
+    return {observations,profile};
   }
   async disconnect(c:PolarConnection,signal:AbortSignal) {if(c.userId&&c.accessToken)await this.call(c,`/users/${c.userId}`,{method:'DELETE'},signal,true);}
 }

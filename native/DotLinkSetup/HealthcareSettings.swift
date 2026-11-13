@@ -68,7 +68,7 @@ extension SetupApp {
             action("mac.health_polar_account") { [weak self] in self?.open("https://flow.polar.com/") }
             action("mac.health_reset") { [weak self] in self?.confirmHealthAction("reset", key:"mac.health_reset_confirm") }
         }
-        if status != "ready" && status != "loading" && status != "connecting" && !locked && status != "disconnect_pending" { action("mac.health_retry") { [weak self] in self?.perform("health", input: ["action":"status"]) } }
+        if status != "ready" && status != "loading" && status != "connecting" && !locked && status != "disconnect_pending" { action("mac.health_retry") { [weak self] in self?.perform("health", input: ["action":status == "HEALTH_STORAGE_UNAVAILABLE" ? "retry_storage" : "status"]) } }
         for case let text as NSTextField in body.arrangedSubviews where !text.isEditable {
             text.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -36).isActive = true
         }
