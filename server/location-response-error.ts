@@ -8,7 +8,7 @@ const messages = {
   context_unknown: 'Location context is no longer available; read context again and reconsider.',
   context_expired: 'Location is stale; read context again and reconsider when fresh data is available.',
   moved_too_far: 'The latest position differs by more than 100 metres; read context again and reconsider.',
-  conflicting_decision: 'This context already has a different decision; do not overwrite it. Identical retries are allowed.',
+  conflicting_decision: 'This proactive decision or this context/question answer already has different content. Retry only the original content and identifiers; do not change or omit the question reference to bypass a conflict. A separate question can use the same valid context.',
   internal_error: 'Location response could not be completed; an internal error occurred.',
 } as const;
 
