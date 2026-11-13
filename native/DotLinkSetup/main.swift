@@ -545,15 +545,16 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let healthSettings = ActionButton(tr("mac.health_settings")) { [weak self] in self?.menuHealthcare() }
             healthSettings.controlSize = .large; healthSettings.image = NSImage(systemSymbolName: "heart", accessibilityDescription: nil); healthSettings.imagePosition = .imageLeading
             actions.addArrangedSubview(healthSettings)
-            // Wrap at the minimum supported content width, including long translations.
+            // Use the current content width before wrapping long translations.
             let rows = NSStackView(); rows.orientation = .vertical; rows.alignment = .leading; rows.spacing = 10
             var row = NSStackView(); row.orientation = .horizontal; row.spacing = 12
             var used: CGFloat = 0
+            let availableWidth = max(580, contentScroll.contentSize.width) - 64
             let controls = actions.arrangedSubviews
             for control in controls {
                 actions.removeArrangedSubview(control); control.removeFromSuperview()
                 let width = control.fittingSize.width
-                if used > 0 && used + 12 + width > 516 { rows.addArrangedSubview(row); row = NSStackView(); row.orientation = .horizontal; row.spacing = 12; used = 0 }
+                if used > 0 && used + 12 + width > availableWidth { rows.addArrangedSubview(row); row = NSStackView(); row.orientation = .horizontal; row.spacing = 12; used = 0 }
                 row.addArrangedSubview(control); used += (used > 0 ? 12 : 0) + width
             }
             rows.addArrangedSubview(row); stack.addArrangedSubview(rows)

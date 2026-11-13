@@ -34,7 +34,14 @@ extension SetupApp {
         default: statusKey = "mac.health_error"
         }
         let locked = status == "locked" || status == "HEALTH_KEY_UNAVAILABLE"
-        body.addArrangedSubview(label(tr(statusKey), size: 13))
+        let connected = status == "ready" && configured
+        let checking = status == "loading" || status == "connecting"
+        let statusIcon = connected ? "checkmark.circle.fill" : checking ? "arrow.triangle.2.circlepath" : "exclamationmark.circle"
+        let statusColor: NSColor = connected ? .systemGreen : checking ? .secondaryLabelColor : .systemOrange
+        let statusRow = NSStackView(views: [symbol(statusIcon, size: 13, color: statusColor), label(tr(statusKey), size: 12, bold: true)])
+        statusRow.orientation = .horizontal; statusRow.alignment = .centerY; statusRow.spacing = 4
+        body.addArrangedSubview(statusRow)
+        statusRow.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -36).isActive = true
         func action(_ key: String, _ handler: @escaping () -> Void) {
             let control = ActionButton(tr(key), handler); control.controlSize = .large; control.isEnabled = !busy; body.addArrangedSubview(control)
         }
