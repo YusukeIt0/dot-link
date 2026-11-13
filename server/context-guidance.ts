@@ -1,3 +1,5 @@
+import { toolResponse } from './tool-response.ts';
+
 /** Product guidance, separate from untrusted map/provider labels and observations. */
 export const evidencePresentation = 'Keep accuracy, source, timestamps, missing values and model limitations in your reasoning. Mention uncertainty only when it materially changes the answer, choice or action, and describe that concrete consequence briefly. A generic possibility of error is not a material consequence: do not append hypothetical local-weather, map-accuracy or venue-inference caveats when the available evidence gives no specific reason they affect this answer. Give the useful answer and stop; do not add routine verification chores such as checking the sky solely because forecasts are models. Do not routinely preface answers with numerical accuracy or model-versus-reality disclaimers. Treat limits on inferring a venue entry, visit, gaze or road membership as internal reasoning constraints, not recurring disclaimers. Do not volunteer that location cannot prove a visit. Usually answer using only supported facts; ask whether a visit occurred only when that distinction materially changes the answer and cannot be resolved from the conversation. Never turn uncertain evidence into a verified fact.';
 
@@ -6,3 +8,26 @@ export const contextActivityGuidance = {
   presentation: evidencePresentation,
   response: 'Keep each tool’s consent, freshness and response rules. Current-location announcements use respond_to_location with a fresh context_id; question answers also need the utterance_id. History-derived G2 answers require respond_to_history and an existing question so deletion, access and expiry are rechecked. History may inform activity reasoning, but this does not authorize proactive historical claims through a location or generic-send tool. Do not bypass a rejected response through another tool.',
 } as const;
+
+/** Short cross-factor contract delivered even when a host caches old descriptions. */
+export const conversationGuidance = {
+  version: 1,
+  presentation: 'Use permitted evidence with the person’s purpose, conversation and preferences to decide what helps them understand, choose or act. Keep the same natural conversation across decision factors. Choose useful numbers (including temperature, humidity, time and distance), explanations or suggestions at the level of detail the request needs; neither recite all fields nor suppress numbers. Keep provider names, attribution and acquisition details as evidence; explain them when asked or when they matter to the answer, rather than routinely reading them aloud. Preserve consequential uncertainty and never invent missing facts. Missing optional data is normal. Do not fetch every factor, force advice or interrupt without value. Keep all consent, freshness and response guards.',
+} as const;
+
+export function decisionFactorTool<T extends {description: string}>(tool: T): T {
+  return {...tool, description: `${tool.description} ${conversationGuidance.presentation} ${evidencePresentation}`};
+}
+
+/** Decorate only selected factor reads, without changing acquisition or rejection semantics. */
+export async function decisionFactorResponse(action: () => unknown | Promise<unknown>) {
+  const response = await toolResponse(async () => {
+    const value = await action();
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid factor result');
+    return {...value, conversation_guidance: conversationGuidance};
+  });
+  if (response.error) {
+    return {error: {...response.error, data: {...response.error.data, conversation_guidance: conversationGuidance}}};
+  }
+  return response;
+}

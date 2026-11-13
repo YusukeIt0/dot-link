@@ -92,7 +92,7 @@ Request walking and terrain together when slope or effort matters to the current
 question; omit terrain for a distance-only question. This is a low-traffic bound,
 not a queued follow-up or a promise of immediate second acquisition. Identical
 fresh requests may reuse the result. Busy results do not trigger automatic retries;
-Dot can answer using available evidence and state uncertainty. Other conversation
+Dot can answer using available evidence and mention limitations only when they materially affect the answer. Other conversation
 tools remain usable while sources are pending. Tool results never send a G2 response;
 Dot uses the existing `respond_to_location` contract, retaining a question's
 `utterance_id` when applicable. See [tool response reasons](tool-response-errors.md#walking-and-terrain-read-contract).
