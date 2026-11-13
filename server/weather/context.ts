@@ -1,4 +1,4 @@
-import { evidencePresentation } from '../context-guidance.ts';
+import { decisionFactorTool } from '../context-guidance.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync, lstatSync, chmodSync } from 'node:fs';
 import { dirname } from 'node:path';
@@ -16,15 +16,15 @@ const args = z.discriminatedUnion('mode', [
   z.object({mode: z.literal('specified'), place: weatherPointSchema.extend({label: z.string().trim().min(1).max(160),
     source: z.enum(['user_provided', 'search_result', 'map_reference']), reference: z.string().trim().min(1).max(400)}).strict()}).strict(),
 ]);
-export const weatherContextTool = {
+export const weatherContextTool = decisionFactorTool({
   name: 'get_weather_context',
-  description: 'Optional source-attributed weather evidence for the current conversation or autonomous activity; a separate weather question is not required. Use mode current for the owner’s fresh shared phone position; do not ask them to repeat an available location. Use specified only for a place explicitly requested in conversation, with known coordinates and provenance; never infer the owner’s current position from a specified place. Separate weather consent is required. This is model forecast evidence, not a live sensor: preserve valid/update/retrieval times, units, null missing values and source limitations. Temperature, humidity, wind and interval precipitation are decision evidence, not automatic advice. Current results include a context_id for respond_to_location and a pending question still requires its utterance_id. For specified places answer through the ordinary conversation path. If disabled, stale, unavailable or busy, continue with other authorized context and do not repeatedly prompt for settings or poll. No tool can enable consent. Source attribution is included; the app provides source/license details. ' + evidencePresentation,
+  description: 'Optional source-attributed weather evidence for the current conversation or autonomous activity; a separate weather question is not required. Use mode current for the owner’s fresh shared phone position; do not ask them to repeat an available location. Use specified only for a place explicitly requested in conversation, with known coordinates and provenance; never infer the owner’s current position from a specified place. Separate weather consent is required. This is model forecast evidence, not a live sensor: retain valid/update/retrieval times, units, null missing values and source limitations as reasoning evidence. Temperature, humidity, wind and interval precipitation are decision evidence, not automatic advice. Current results include a context_id for respond_to_location and a pending question still requires its utterance_id. For specified places answer through the ordinary conversation path. If disabled, stale, unavailable or busy, continue with other authorized context and do not repeatedly prompt for settings or poll. No tool can enable consent. Source attribution is included; the app provides source/license details. ',
   inputSchema: {type: 'object', properties: {mode: {type: 'string', enum: ['current', 'specified']}, place: {type: 'object', properties: {
     latitude: {type: 'number', minimum: -90, maximum: 90}, longitude: {type: 'number', minimum: -180, maximum: 180},
     label: {type: 'string', minLength: 1, maxLength: 160}, source: {type: 'string', enum: ['user_provided', 'search_result', 'map_reference']},
     reference: {type: 'string', minLength: 1, maxLength: 400}}, required: ['latitude', 'longitude', 'label', 'source', 'reference'], additionalProperties: false}}, required: ['mode'], additionalProperties: false},
   annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true},
-};
+});
 const denied = () => new ToolRejection('weather_disabled', 'Weather sharing is not enabled or its access changed. Continue with available context; do not repeatedly prompt for settings.');
 
 /** Consent belongs to the selected Mac/device, independently of phone-location sharing. */

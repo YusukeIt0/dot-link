@@ -1,3 +1,4 @@
+import { decisionFactorResponse } from './context-guidance.ts';
 import { WeatherContext, weatherContextTool } from './weather/context.ts';
 import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
@@ -24,6 +25,13 @@ const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
 
 export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[]): Promise<unknown> {
+  // Register factor definition and reader together: catalog and calls use this path.
+  const factors = [
+    {tool: weatherContextTool, read: weather ? (args: unknown) => weather.read(args) : undefined},
+    {tool: locationContextTool, read: locations ? (args: unknown) => locations.read(args) : undefined},
+    {tool: mobilityContextTool, read: locations ? (args: unknown) => locations.readMobility(args) : undefined},
+    {tool: locationHistoryTool, read: history ? (args: unknown) => history.read(args) : undefined},
+  ];
   const activations = activation ? (Array.isArray(activation) ? activation : [activation]) : [];
   const acknowledge = (name: 'reply_to_g2' | 'send_message_to_g2', args: unknown) => {
     for (const item of activations) {const result = item.acknowledge(name, args); if (result) return result;}
@@ -52,18 +60,25 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [...(weather ? [weatherContextTool] : []), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationContextTool, mobilityContextTool, locationResponseTool] : []), ...(history ? [locationHistoryTool, ...(history.respond ? [historyResponseTool] : [])] : [])] }; break;
+      case 'tools/list': result = { tools: [...factors.filter(factor => factor.read).map(factor => factor.tool), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationResponseTool] : []), ...(history?.respond ? [historyResponseTool] : [])] }; break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
         if (!parsedCall.success) throw new ToolRejection('invalid_arguments', 'Specify a tool name from tools/list.');
         const { name, arguments: args } = parsedCall.data;
+        const factor = factors.find(factor => factor.tool.name === name);
+        if (factor) {
+          return {jsonrpc: '2.0', id, ...await decisionFactorResponse(() => {
+            if (!factor.read) throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
+            return factor.read(args);
+          })};
+        }
         const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
-        const locationNames = ['get_location_context', 'get_mobility_context', 'respond_to_location'];
-        if (![...notificationNames, ...locationNames, 'get_weather_context', 'get_location_history', 'respond_to_history', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
+        const locationNames = ['respond_to_location'];
+        if (![...notificationNames, ...locationNames, 'respond_to_history', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
           throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
         }
-        if ((name === 'get_weather_context' && !weather) || (!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (!history && ['get_location_history', 'respond_to_history'].includes(name)) || (name === 'respond_to_history' && !history?.respond)) {
+        if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (name === 'respond_to_history' && !history?.respond)) {
           throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
         }
         if (name === 'respond_to_location') {
@@ -80,11 +95,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
               return { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
             }
             case 'get_pending_notifications': return notifications!.pending(args);
-            case 'get_weather_context': return weather!.read(args);
-            case 'get_location_context': return locations!.read(args);
-            case 'get_location_history': return history!.read(args);
             case 'respond_to_history': return history!.respond!(args);
-            case 'get_mobility_context': return locations!.readMobility(args);
             case 'send_message_to_g2': return acknowledge(name, args) ?? bridge.sendMessage(args);
             case 'reply_to_g2': return acknowledge(name, args) ?? bridge.reply(args);
             case 'set_notification_disposition': return notifications!.decide(args);

@@ -2,9 +2,12 @@
 
 The same Dot can select optional context within its existing activity, using the
 owner's current purpose, conversation and permissions. A separate question or task
-for each source is not required. `get_location_context` returns product-owned
-`activity_guidance` alongside the evidence, so an existing activity that already
-reads context receives the guidance even if its cached tool description is older.
+for each source is not required. All decision-factor reads return product-owned
+`conversation_guidance` through the shared MCP dispatcher, including partial or
+unavailable evidence and rejected reads (in error data). Direct weather queries
+and existing activities therefore receive the current contract even when their
+cached tool descriptions are older. Fresh location results additionally retain
+`activity_guidance` for source selection and guarded response routing.
 This is distinct from untrusted map labels and provider data. Host behavior still
 requires validation; returning guidance does not prove that Dot followed it.
 
@@ -44,3 +47,42 @@ guidance delivery distinct from evidence of a particular tool choice or reply.
 Provider acquisition and unchanged device transport need not be repeated solely
 to validate wording. Never edit one person's activity as a substitute for this
 product behavior.
+
+## Shared decision-factor contract
+
+Start from the human decision: external environment, personal state, intent and
+existing memory/preferences are perspectives for choosing useful evidence, not
+requirements to build four collectors. Dot Link acquires and structures permitted
+evidence. The existing Dot chooses relevant factors and how much to say, or whether
+to remain silent. This applies to current and future factors.
+
+Use numbers such as temperature, humidity, time and distance when they help the
+current request. Do not require a numeric report, hide numbers, force a suggestion,
+or impose a fixed phrase. Provider names, acquisition details and attribution stay
+available as evidence; explain them when requested or when they matter to the
+answer. Their presence in a result is not an instruction to read them aloud.
+Preserve source/license surfaces and material limitations.
+
+### Adding a factor
+
+- Define its tool with `decisionFactorTool` in `server/context-guidance.ts`; keep
+  factor-specific consent, acquisition and response constraints in its description.
+  The helper supplies the common conversation and evidence-presentation policy.
+- Register its definition and reader together in the `factors` list in `rpc`
+  (`server/http.ts`). Catalog availability and calls share this registration;
+  `decisionFactorResponse` adds the short versioned contract once at the result
+  boundary. Do not duplicate the full location activity instructions, inject policy
+  into provider data, or create a separate dispatch branch that bypasses this path.
+- Extend `tests/context-guidance.test.ts` with the new factor. Check catalog and
+  result delivery, missing data, rejection semantics and unchanged evidence, not
+  copied phrases or a fixed AI answer. Keep acquisition/response-guard tests.
+- Verify the deployed relay, registered connector and existing consumer. A policy
+  version or fixture pass proves delivery structure, not model behavior. Use browser
+  Dot for conversational checks; reserve device checks for affected device behavior.
+
+For weather, check ordinary conditions, walk timing, explicit temperature/humidity,
+and an explicit source question. Then check relevant location/geography, mobility,
+history and combined-factor conversation. Record source/build and actual selection,
+reply or silence separately from policy delivery. Reuse unchanged acquisition and
+transport evidence; brief relevant caveats remain acceptable. Do not paste the new
+policy into the test prompt or alter a personal activity to make the test pass.
