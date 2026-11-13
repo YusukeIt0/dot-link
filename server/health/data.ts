@@ -43,7 +43,10 @@ export function normalizeProfile(raw:unknown,now:number): Profile {
 /** Allowlist only agreed fields. Never persist raw API envelopes or provider IDs. */
 export function normalize(category:Category,raw:unknown,now:number): Observation[] {
   const envelope=object(raw);
-  const rows=list(category==='sleep' ? envelope.nights : category==='recovery' ? envelope.recharges : category==='heart_rate' && !Array.isArray(raw) ? [raw] : raw);
+  // The range endpoint wraps days in heart_rates; the single-day response is
+  // a day object. Preserve both forms and the existing array compatibility.
+  const heartRateRows=Array.isArray(raw)?raw:Object.hasOwn(envelope,'heart_rates')?envelope.heart_rates:[raw];
+  const rows=list(category==='sleep' ? envelope.nights : category==='recovery' ? envelope.recharges : category==='heart_rate' ? heartRateRows : raw);
   const result:Observation[]=[];
   for (const item of rows) {
     const r=object(item), values:Record<string,string|number|boolean>={};

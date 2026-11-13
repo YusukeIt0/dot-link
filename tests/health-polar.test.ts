@@ -36,3 +36,17 @@ test('optional profile failures preserve collected measurements; revoked consent
   await assert.rejects(api.profile(c,signal()));
  }
 });
+
+test('range heart-rate envelope preserves multiple days and filters invalid or expired measurements',async()=>{
+ const day=(date:string)=>({date,polar_user:'private-provider-id',heart_rate_samples:[
+  {sample_time:'08:00:00',heart_rate:60},{sample_time:'08:05:00',heart_rate:300},
+ ]});
+ const api=new PolarAPI({now:()=>NOW,fetch:async url=>String(url).includes('continuous-heart-rate')
+  ?new Response(JSON.stringify({heart_rates:[day('2026-11-13'),day('2026-11-14'),day('2026-10-01')]}))
+  :new Response(null,{status:204})});
+ const result=await api.collect({clientId:'id',clientSecret:'secret',accessToken:'token',expiresAt:NOW+3600_000},signal(),false);
+ assert.equal(result.observations.length,2);
+ assert.deepEqual(result.observations.map(x=>x.source_local_date),['2026-11-13','2026-11-14']);
+ for(const row of result.observations){assert.equal(row.category,'heart_rate');assert.deepEqual(row.samples,[{time:'08:00:00',value:60}]);assert.equal(row.measured_at,null);}
+ assert.equal(JSON.stringify(result).includes('private-provider-id'),false);
+});
