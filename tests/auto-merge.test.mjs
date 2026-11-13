@@ -1,3 +1,4 @@
+import {macPlist} from '../scripts/ci-plan.mjs';
 import {checksFailureOutput} from '../scripts/check-output.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -152,6 +153,82 @@ test('protected paths cover unknown files, renames and version metadata exceptio
   assert.equal(deviceAffected([{filename: 'assets/brand/orbit/mark.svg'}]), false);
   assert.equal(deviceAffected([{filename: 'assets/brand/orbit/DotLink.icns'}]), true);
   assert.equal(deviceAffected([{filename: 'assets/brand/future-unknown.svg'}]), true);
+});
+
+const plistBefore = `<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+<key>CFBundleShortVersionString</key><string>0.4.37</string>
+<key>CFBundleVersion</key><string>117</string>
+<key>CFBundleIdentifier</key><string>app.dotlink.setup</string>
+<key>LSMinimumSystemVersion</key><string>13.0</string>
+<key>NSMicrophoneUsageDescription</key><string>Voice input</string>
+</dict></plist>`;
+const plistAfter = plistBefore.replace('0.4.37', '0.4.38').replace('117', '118');
+function metadataClient(s, after = plistAfter, before = plistBefore) {
+  const client = clientFor(s), api = client.api;
+  client.metadataReads = [];
+  client.api = path => {
+    if (!path.startsWith('contents/')) return api(path);
+    client.metadataReads.push(path);
+    assert.ok([`contents/${macPlist}?ref=${main}`, `contents/${macPlist}?ref=${head}`].includes(path));
+    const content = path.endsWith(main) ? before : after;
+    return {encoding: 'base64', size: Buffer.byteLength(content), content: Buffer.from(content).toString('base64')};
+  };
+  return client;
+}
+function macFixture() {
+  const s = fixture();
+  s.files = [{filename: macPlist, status: 'modified'}];
+  return s;
+}
+test('immutable version-only Mac metadata passes physical classification without waiving other gates', () => {
+  const s = macFixture(), client = metadataClient(s);
+  const snapshot = collect(74, client);
+  assert.deepEqual(client.metadataReads, [`contents/${macPlist}?ref=${main}`, `contents/${macPlist}?ref=${head}`]);
+  assert.equal(snapshot.versionChanges[macPlist], true);
+  assert.equal(evaluate(snapshot).eligible, true);
+  assert.equal(deviceAffected(s.files), true); // No content proof fails closed.
+  for (const change of [x => x.ciRun.conclusion = 'failure', x => x.receipt.quality.findings = 1,
+    x => x.context.acceptance.status = 'stale', x => x.protection.enforce_admins.enabled = false,
+    x => { x.files.push({filename: 'scripts/auto-merge.mjs', status: 'modified'}); x.pr.changed_files++; }]) {
+    const copy = structuredClone(snapshot); change(copy);
+    assert.equal(evaluate(copy).eligible, false, change.toString());
+  }
+  assert.deepEqual(client.merges, []);
+});
+test('non-version, invalid and decreasing plist comparisons retain physical acceptance', () => {
+  for (const after of [
+    plistAfter.replace('app.dotlink.setup', 'app.other'),
+    plistAfter.replace('13.0', '14.0'), plistAfter.replace('Voice input', 'Background input'),
+    plistAfter.replace('118', '117'), plistAfter.replace('118', '116'),
+    plistAfter.replace('0.4.38', '0.4.36'), plistAfter.replace('118', 'invalid'),
+    plistAfter.replace('</dict>', '<key>CFBundleVersion</key><string>118</string></dict>'),
+    plistAfter + '\n', '<invalid>',
+  ]) {
+    const snapshot = collect(74, metadataClient(macFixture(), after));
+    assert.equal(snapshot.versionChanges[macPlist], false);
+    assert.ok(evaluate(snapshot).reasons.some(r => r.includes('recorded physical acceptance')));
+  }
+  const client = metadataClient(macFixture(), plistAfter, '<invalid>');
+  assert.equal(evaluate(collect(74, client)).eligible, false);
+  client.api = path => { if (path.startsWith('contents/')) throw new Error('Contents unavailable'); return clientFor(macFixture()).api(path); };
+  assert.throws(() => collect(74, client), /Contents unavailable/);
+});
+test('renamed, deleted, unknown and mixed runtime paths never inherit the plist exception', () => {
+  const proof = {[macPlist]: true};
+  for (const file of [
+    {filename: macPlist, status: 'removed'}, {filename: macPlist, status: 'added'},
+    {filename: macPlist, status: 'renamed', previous_filename: 'docs/old.plist'},
+    {filename: macPlist, status: 'modified', previous_filename: 'native/Other.plist'},
+    {filename: 'docs/moved.plist', status: 'renamed', previous_filename: macPlist},
+    {filename: 'native/Other.plist', status: 'modified'},
+  ]) assert.equal(deviceAffected([file], proof), true);
+  for (const path of ['native/DotLinkSetup/App.swift', 'src/main.ts', 'server/main.ts', 'public/runtime.js']) {
+    const s = macFixture(); s.files.push({filename: path, status: 'modified'}); s.pr.changed_files++;
+    const snapshot = collect(74, metadataClient(s));
+    assert.equal(snapshot.versionChanges[macPlist], true);
+    assert.ok(evaluate(snapshot).reasons.some(r => r.includes('recorded physical acceptance')));
+  }
 });
 
 test('transient metadata change is re-read after a delay and merges only once', async () => {
