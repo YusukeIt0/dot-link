@@ -12,10 +12,11 @@ import {WebhookSender} from '../server/webhook.ts';
 import {HealthSharing} from '../src/health-sharing.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const settle=()=>new Promise(r=>setImmediate(r));
-async function fixture(t:TestContext,enabled=false) {
+async function fixture(t:TestContext,enabled=false,activity=false) {
   const dir=mkdtempSync(join(tmpdir(),'health-context-')),path=join(dir,'state.enc'),key=randomBytes(32);let now=NOW,authorized=true;
   const profile=normalizeProfile({height:171,weight:72,birthday:'1992-03-04'},now);
   const observations=normalize('recovery',{recharges:[{date:'2026-11-14',heart_rate_avg:61,breathing_rate_avg:14}]},now);
+  if(activity)observations.push(...normalize('activity',[{start_time:'2026-11-14T00:00:00+00:00',daily_activity:123.45,active_duration:'PT2H5M',steps:1000}],now));
   new HealthVault(path).write(key,{version:1,connection:{clientId:'fixture',clientSecret:'fixture-secret',accessToken:'fixture-token',userId:123,expiresAt:NOW+86400_000},owner:'owner',enabled,deletedBefore:0,profileDeleted:false,profile,observations});
   let collect=async()=>({observations,profile});let sent=0,profileCalls=0;const texts:string[]=[];
   const api=new PolarAPI();api.collect=async()=>collect();api.profile=async()=>{profileCalls++;return profile;};api.disconnect=async()=>{};
@@ -99,4 +100,18 @@ test('routine collection without a profile preserves the latest saved profile',a
  const f=await fixture(t);f.collect(async()=>({observations:f.observations,profile:undefined as any}));
  await f.control('enable');await settle();
  assert.deepEqual((f.h.read({profile:true}) as any).profile,f.profile);
+});
+
+ test('activity context explains goal percentage for existing encrypted provider fields without clamping',async t=>{
+ const f=await fixture(t,true,true);
+ const r=f.h.read({categories:['activity']});assert.ok('observations' in r);
+ assert.equal(r.observations.length,1);
+ assert.equal(r.observations[0].values.activity_goal_completion_percent,123.45);
+ assert.equal('daily_activity' in r.observations[0].values,false);
+ assert.equal(r.observations[0].values.active_duration,'PT2H5M');
+ assert.equal(r.activity_metrics?.activity_goal_completion_percent.unit,'%');
+ assert.match(r.activity_metrics!.activity_goal_completion_percent.meaning,/daily activity goal/);
+ assert.equal((new HealthVault(f.path).read(f.key) as any).observations.find((x:any)=>x.category==='activity').values.daily_activity,123.45);
+ const recovery=f.h.read({categories:['recovery']});assert.ok('observations' in recovery);
+ assert.equal(recovery.activity_metrics,undefined);
 });

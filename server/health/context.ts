@@ -116,10 +116,16 @@ export class HealthContext {
     if(!this.usable())return {status:'unavailable',activity_guidance:contextActivityGuidance};
     const matching=this.state.observations.filter(x=>args.categories.includes(x.category)&&x.retention_anchor>this.now()-args.hours*3600_000);
     // Bound model context independently of encrypted storage size.
-    const observations=matching.slice(0,80).map(x=>x.samples&&x.samples.length>96?{...x,samples:x.samples.filter((_,i)=>i%Math.ceil(x.samples!.length/96)===0),samples_total:x.samples.length,samples_reduced:true}:x);
+    const observations=matching.slice(0,80).map(x=>{
+      if(x.category!=='activity')return x;
+      const {daily_activity,...values}=x.values;
+      // Translate the provider field on read, including already encrypted records.
+      return {...x,values:{...values,...(typeof daily_activity==='number'?{activity_goal_completion_percent:daily_activity}:{})}};
+    }).map(x=>x.samples&&x.samples.length>96?{...x,samples:x.samples.filter((_,i)=>i%Math.ceil(x.samples!.length/96)===0),samples_total:x.samples.length,samples_reduced:true}:x);
     const read_id=randomUUID();const expires=Math.min(this.now()+5*60_000,...observations.map(x=>x.retention_anchor+RETENTION));
     this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires});while(this.reads.size>40)this.reads.delete(this.reads.keys().next().value!);
     return {status:'available',read_id,source:'Polar',observations,omitted_observations:Math.max(0,matching.length-observations.length),...(args.profile?{profile:this.state.profile??null}:{}),
+      ...(observations.some(x=>x.category==='activity')?{activity_metrics:{activity_goal_completion_percent:{unit:'%',meaning:'Percentage of the daily activity goal achieved; 100 means the goal is met. This is not a health or recovery score.'},active_duration:{format:'ISO 8601 duration'},inactive_duration:{format:'ISO 8601 duration'}}}:{}),
       timestamp_note:'Local-date-only records retain the original date; their UTC measurement time is unknown. profile_modified_at is a profile edit time, not a weight measurement time. retrieved_at is not device synchronization time.',
       activity_guidance:contextActivityGuidance,response_tool:'respond_to_health',attribution:healthAttributionGuidance};
   }

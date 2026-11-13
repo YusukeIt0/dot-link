@@ -117,3 +117,8 @@ source mention is spoken as part of the answer.
 This is the selected conversational UX, not a verified determination of compliance
 with Polar's detailed Brand Guidelines. Exact attribution requirements and actual
 existing-Dot behavior remain to be verified before final acceptance.
+
+Activity context exposes Polar daily activity as `activity_goal_completion_percent`,
+with an explicit percent unit and daily-goal meaning (100 means the goal is met).
+Values above 100 are preserved. The read projection also covers existing encrypted
+records; it does not reinterpret the value as a health or recovery score.
