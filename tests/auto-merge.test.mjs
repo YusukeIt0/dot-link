@@ -1,3 +1,4 @@
+import {checksFailureOutput} from '../scripts/check-output.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
@@ -669,4 +670,42 @@ test('automatic assessment enforces v2 current-base inclusion as well as fresh r
   assert.throws(() => assertProductCI(s.pr, s.main, s.ciRun, s.ciJobs));
   const collected = collect(74, clientFor(s));
   assert.deepEqual(collected.ciComparison, s.ciComparison);
+});
+
+
+test('recognized unreported, pending and failed checks hold merging until fresh passing checks', async () => {
+  for (const error of [
+    {status: 1, stderr: "no required checks reported on the 'work' branch\n"},
+    {status: 1, stderr: "no checks reported on the 'work' branch\n"},
+    {status: 1, stderr: 'no required checks reported'},
+    {status: 8, stdout: JSON.stringify([{name: 'test', bucket: 'pending'}])},
+    {status: 1, stdout: JSON.stringify([{name: 'test', bucket: 'fail'}])},
+  ]) {
+    const s = fixture();
+    s.checks = JSON.parse(checksFailureOutput(error));
+    const client = clientFor(s);
+    const assessment = evaluate(collect(74, client));
+    assert.equal(assessment.eligible, false);
+    assert.ok(assessment.reasons.some(r => r.includes('Required checks are missing, pending, or unsuccessful.')));
+    await mergeEligible(74, client, env);
+    assert.deepEqual(client.merges, []);
+    s.checks = [{name: 'test', bucket: 'pass'}];
+    assert.equal(evaluate(collect(74, client)).eligible, true);
+    s.ciJobs[0].conclusion = 'failure';
+    assert.equal(evaluate(collect(74, client)).eligible, false);
+  }
+});
+
+test('check classifier preserves real API failures and rejects mixed or unrecognized no-check output', () => {
+  for (const error of [
+    {status: 1, stderr: 'HTTP 403: Forbidden'},
+    {status: 1, stderr: 'HTTP 502: Bad Gateway'},
+    {status: 1, stderr: 'error connecting to api.github.com'},
+    {code: 'ETIMEDOUT'},
+    {status: 2, stderr: 'no required checks reported'},
+    {status: 1, stderr: 'no required checks reported\nHTTP 403: Forbidden'},
+    {status: 1, stdout: 'unexpected output', stderr: 'no required checks reported'},
+  ]) assert.equal(checksFailureOutput(error), undefined);
+  assert.equal(commandFailure({status: 1, stderr: 'HTTP 403: Forbidden'}).retryable, false);
+  assert.equal(commandFailure({status: 1, stderr: 'HTTP 502: Bad Gateway'}).retryable, true);
 });

@@ -1,3 +1,4 @@
+import {checksFailureOutput} from './check-output.mjs';
 import {collectCI, ciTarget, assertCI} from './ci-evidence.mjs';
 // Read-only maintainer gate. Does not approve, merge, rerun, or change branch rules.
 import {execFileSync} from 'node:child_process';
@@ -42,9 +43,8 @@ async function main() {
   const gh = (args, pendingAllowed = false) => {
     try { return JSON.parse(execFileSync('gh', args, {encoding:'utf8', maxBuffer:5_000_000})); }
     catch (error) {
-      if (pendingAllowed && [1,8].includes(error.status) && error.stdout?.trim().startsWith('[')) return JSON.parse(error.stdout);
-      if (pendingAllowed && expectedBase !== 'main' && error.status === 1 &&
-          /no required checks reported/.test(String(error.stderr))) return [];
+      const output = pendingAllowed ? checksFailureOutput(error) : undefined;
+      if (output !== undefined) return JSON.parse(output);
       throw error;
     }
   };
