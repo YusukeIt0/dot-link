@@ -151,8 +151,9 @@ export class RelaySession {
       method: 'POST', redirect: 'error', credentials: 'omit', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({code: invite.code}), signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(15000)]),
     });
-    if (!response.ok) throw new Error('Pairing failed');
-    const result = {...await response.json(), origin: invite.origin, appOrigin: this.options.appOrigin};
+    if (!response.ok) throw new RelayResponseError('Pairing failed');
+    const payload = await response.json().catch(() => { throw new RelayResponseError('Invalid pairing response'); });
+    const result = {...payload, origin: invite.origin, appOrigin: this.options.appOrigin};
     this.check(version); return result;
   }
   async location(path: string, body: unknown): Promise<unknown> {

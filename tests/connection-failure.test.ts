@@ -72,3 +72,15 @@ test('all languages distinguish three captions, preserve active recording and cl
     }
   } finally { setLanguage('ja'); }
 });
+
+test('re-pair HTTP rejection or unreadable response is not presented as an unreachable Mac', async () => {
+  for (const response of [new Response('expired', {status: 400}), new Response('not json')]) {
+    const relay = session(async () => response);
+    const saved = relay.credentials;
+    await assert.rejects(relay.pair({version: 1, origin: 'https://fixture.example-tail.ts.net', code: 'fixture', expiresAt: Date.now() + 120000}), error => {
+      assert.equal(connectionFailure(error, true), 'relay'); return true;
+    });
+    assert.equal(relay.credentials, saved);
+    relay.stop();
+  }
+});

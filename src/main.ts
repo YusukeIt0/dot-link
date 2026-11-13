@@ -481,7 +481,7 @@ el('pair').onclick = async () => {
     if (version !== session.version || exited) return;
     if (bridge) relaySettings.connectNative(runtimeNative.storage(bridge));
     const retained = connectionTransitions.paired(credentials); accepted = true; relayRestored = true;
-    const snapshot = await api<Snapshot>('/api/updates'); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
+    const snapshot = await session.updates<Snapshot>(undefined, new AbortController().signal); receiveUpdate(snapshot, true); updates.start(false, snapshot.revision);
     pairingInput.value = ''; offeredInvite = undefined;
     const nativeRetained = await relaySettings.nativeSaved();
     if (version !== session.version || exited) return;
