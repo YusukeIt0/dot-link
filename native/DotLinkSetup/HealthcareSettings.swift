@@ -53,6 +53,9 @@ extension SetupApp {
             action("mac.health_reset") { [weak self] in self?.confirmHealthAction("reset", key:"mac.health_reset_confirm") }
         }
         if status == "unavailable" { action("mac.health_retry") { [weak self] in self?.perform("health", input: ["action":"status"]) } }
+        for case let text as NSTextField in body.arrangedSubviews where !text.isEditable {
+            text.widthAnchor.constraint(equalTo: body.widthAnchor, constant: -36).isActive = true
+        }
         let card = NSBox(); card.boxType = .custom; card.borderColor = .separatorColor; card.borderWidth = 0.5; card.cornerRadius = 12
         card.fillColor = .controlBackgroundColor; card.contentViewMargins = .zero; card.contentView = body
         stack.addArrangedSubview(card); card.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
