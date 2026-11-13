@@ -592,5 +592,11 @@
   "mac.download_dot_link": "Dot Linkをダウンロード",
   "setup.codes.APP_LOCATION_MISSING": "~/ApplicationsにDot Linkがありません。終了して公式のDot Link.appを配置し、開き直してください。保存済み設定は残してください。",
   "setup.codes.APP_LOCATION_REPAIR": "Dot Linkを終了し、通常の~/Applicationsフォルダと公式のDot Link.app本体を使用してください。これらがリンクの場合は置き換えてください。保存済み設定は残して開き直してください。",
-  "setup.codes.APP_LOCATION_OLDER": "~/Applications以外から新しい版を開いています。終了して~/Applications/Dot Link.appだけをこの新しい版に入れ替え、開き直してください。保存済み設定は残してください。"
+  "setup.codes.APP_LOCATION_OLDER": "~/Applications以外から新しい版を開いています。終了して~/Applications/Dot Link.appだけをこの新しい版に入れ替え、開き直してください。保存済み設定は残してください。",
+  "mac.quit_stop_unconfirmed": "停止を確認できません",
+  "mac.quit_still_open": "Dot Linkはまだ開いています",
+  "mac.quit_helper_not_started": "停止処理を開始できませんでした。共有が続いている可能性があります。",
+  "mac.quit_stop_failed": "停止を確認できませんでした。Macの通知転送は一時停止していますが、ほかの共有は続いている可能性があります。",
+  "mac.quit_restore_app": "完全なDot Link.appを次の場所に戻してください。\n{path}\n保存済みの設定は残したまま、もう一度終了してください。",
+  "mac.quit_retry": "終了を再試行"
 }

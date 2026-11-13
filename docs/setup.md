@@ -166,6 +166,15 @@ Mac 0.4.7 may show only `SETUP_FAILED` and does not provide this diagnostic reco
 
 Closing the Mac window keeps Dot Link running. **Pause** stops the relay and notification collection; **Quit** stops the app and its services. Reopen the app to resume with saved settings. Stopping services does not delete history.
 
+If the running app is moved or removed, Quit may be unable to start its stop
+helper. Dot Link stays open and shows the original app location. Restore the
+complete app there, keeping your saved settings, then choose **Retry Quit**.
+Sharing is not confirmed stopped until Quit succeeds. If the helper never
+started, notification forwarding returns to its previous state. If a stop began
+but could not be confirmed, notification forwarding stays paused while other
+sharing may still be running. Force-quitting the window does not confirm that
+the background services stopped.
+
 **Uninstall Dot Link…** moves the app, runtime, speech model, connection settings and conversation history to Trash and removes speech-service keys from Keychain. There is no option to retain settings; setup is required to use the app again. See [data handling](privacy.md#disconnecting-and-deleting) for removal limits and external-service data.
 
 ### Application language

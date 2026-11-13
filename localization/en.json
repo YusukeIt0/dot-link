@@ -592,5 +592,11 @@
   "mac.download_dot_link": "Download Dot Link",
   "setup.codes.APP_LOCATION_MISSING": "Dot Link is missing from ~/Applications. Quit and place an official Dot Link.app there, then open it. Keep your saved settings.",
   "setup.codes.APP_LOCATION_REPAIR": "Quit Dot Link. Use a regular ~/Applications folder containing a full official copy of Dot Link.app; replace any links at these paths. Keep your saved settings, then reopen Dot Link.",
-  "setup.codes.APP_LOCATION_OLDER": "A newer copy is open outside ~/Applications. Quit and replace only ~/Applications/Dot Link.app with this newer copy, then open it. Keep your saved settings."
+  "setup.codes.APP_LOCATION_OLDER": "A newer copy is open outside ~/Applications. Quit and replace only ~/Applications/Dot Link.app with this newer copy, then open it. Keep your saved settings.",
+  "mac.quit_stop_unconfirmed": "Stop not confirmed",
+  "mac.quit_still_open": "Dot Link is still open",
+  "mac.quit_helper_not_started": "The stop helper could not start. Sharing may still be running.",
+  "mac.quit_stop_failed": "Stopping could not be confirmed. Mac notifications are paused; other sharing may still be running.",
+  "mac.quit_restore_app": "Restore a complete Dot Link.app to:\n{path}\nThen try Quit again. Keep your saved settings.",
+  "mac.quit_retry": "Retry Quit"
 }

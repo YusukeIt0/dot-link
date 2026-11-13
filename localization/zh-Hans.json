@@ -592,5 +592,11 @@
   "mac.download_dot_link": "下载 Dot Link",
   "setup.codes.APP_LOCATION_MISSING": "~/Applications 中没有 Dot Link。请退出应用，将官方 Dot Link.app 放入该文件夹后重新打开。请保留已保存的设置。",
   "setup.codes.APP_LOCATION_REPAIR": "请退出 Dot Link，使用普通的 ~/Applications 文件夹和完整的官方 Dot Link.app 副本；如果这些路径是链接，请替换链接。保留已保存的设置，然后重新打开。",
-  "setup.codes.APP_LOCATION_OLDER": "当前从 ~/Applications 以外的位置打开了较新版本。请退出应用，仅将 ~/Applications/Dot Link.app 替换为这个较新版本后重新打开。请保留已保存的设置。"
+  "setup.codes.APP_LOCATION_OLDER": "当前从 ~/Applications 以外的位置打开了较新版本。请退出应用，仅将 ~/Applications/Dot Link.app 替换为这个较新版本后重新打开。请保留已保存的设置。",
+  "mac.quit_stop_unconfirmed": "尚未确认停止",
+  "mac.quit_still_open": "Dot Link仍然开启",
+  "mac.quit_helper_not_started": "无法启动停止程序。共享可能仍在继续。",
+  "mac.quit_stop_failed": "无法确认是否已停止。Mac通知转发已暂停，但其他共享可能仍在继续。",
+  "mac.quit_restore_app": "请将完整的Dot Link.app放回以下位置：\n{path}\n保留已保存的设置，然后再次尝试退出。",
+  "mac.quit_retry": "重试退出"
 }

@@ -592,5 +592,11 @@
   "mac.download_dot_link": "Télécharger Dot Link",
   "setup.codes.APP_LOCATION_MISSING": "Dot Link est absent de ~/Applications. Quittez l’app, placez-y une copie officielle de Dot Link.app, puis ouvrez-la. Conservez vos réglages enregistrés.",
   "setup.codes.APP_LOCATION_REPAIR": "Quittez Dot Link. Utilisez un dossier ~/Applications ordinaire contenant une copie complète de l’app officielle Dot Link.app ; remplacez les liens à ces emplacements. Conservez vos réglages, puis rouvrez l’app.",
-  "setup.codes.APP_LOCATION_OLDER": "Une version plus récente est ouverte en dehors de ~/Applications. Quittez l’app, remplacez uniquement ~/Applications/Dot Link.app par cette version, puis ouvrez-la. Conservez vos réglages enregistrés."
+  "setup.codes.APP_LOCATION_OLDER": "Une version plus récente est ouverte en dehors de ~/Applications. Quittez l’app, remplacez uniquement ~/Applications/Dot Link.app par cette version, puis ouvrez-la. Conservez vos réglages enregistrés.",
+  "mac.quit_stop_unconfirmed": "Arrêt non confirmé",
+  "mac.quit_still_open": "Dot Link est toujours ouvert",
+  "mac.quit_helper_not_started": "Le programme d’arrêt n’a pas pu démarrer. Le partage peut encore être actif.",
+  "mac.quit_stop_failed": "L’arrêt n’a pas pu être confirmé. Le transfert des notifications Mac est en pause ; les autres partages peuvent encore être actifs.",
+  "mac.quit_restore_app": "Remettez une copie complète de Dot Link.app à cet emplacement :\n{path}\nConservez vos réglages enregistrés, puis réessayez de quitter.",
+  "mac.quit_retry": "Réessayer de quitter"
 }

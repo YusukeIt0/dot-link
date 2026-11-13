@@ -7,3 +7,4 @@ xcrun swiftc -module-cache-path .runtime/swift-module-cache native/DotLinkSetup/
 .runtime/setup-failure-test/localization
 xcrun swiftc -module-cache-path .runtime/swift-module-cache -framework AppKit native/DotLinkSetup/WindowLayout.swift tests/window-layout.swift -o .runtime/setup-failure-test/window-layout
 .runtime/setup-failure-test/window-layout
+node tests/mac-quit-recovery.mjs

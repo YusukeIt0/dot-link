@@ -592,5 +592,11 @@
   "mac.download_dot_link": "Dot Link herunterladen",
   "setup.codes.APP_LOCATION_MISSING": "Dot Link fehlt in ~/Applications. Beenden Sie die App, legen Sie eine offizielle Kopie von Dot Link.app dort ab und öffnen Sie sie. Behalten Sie Ihre gespeicherten Einstellungen.",
   "setup.codes.APP_LOCATION_REPAIR": "Beenden Sie Dot Link. Verwenden Sie einen normalen Ordner ~/Applications mit einer vollständigen offiziellen Kopie von Dot Link.app; ersetzen Sie Verknüpfungen an diesen Pfaden. Behalten Sie Ihre Einstellungen und öffnen Sie die App erneut.",
-  "setup.codes.APP_LOCATION_OLDER": "Eine neuere Version ist außerhalb von ~/Applications geöffnet. Beenden Sie die App, ersetzen Sie nur ~/Applications/Dot Link.app durch diese Version und öffnen Sie sie. Behalten Sie Ihre gespeicherten Einstellungen."
+  "setup.codes.APP_LOCATION_OLDER": "Eine neuere Version ist außerhalb von ~/Applications geöffnet. Beenden Sie die App, ersetzen Sie nur ~/Applications/Dot Link.app durch diese Version und öffnen Sie sie. Behalten Sie Ihre gespeicherten Einstellungen.",
+  "mac.quit_stop_unconfirmed": "Stopp nicht bestätigt",
+  "mac.quit_still_open": "Dot Link ist noch geöffnet",
+  "mac.quit_helper_not_started": "Das Hilfsprogramm zum Beenden konnte nicht starten. Die Freigabe ist möglicherweise noch aktiv.",
+  "mac.quit_stop_failed": "Der Stopp konnte nicht bestätigt werden. Die Weiterleitung von Mac-Mitteilungen ist pausiert; andere Freigaben sind möglicherweise noch aktiv.",
+  "mac.quit_restore_app": "Legen Sie eine vollständige Kopie von Dot Link.app wieder hier ab:\n{path}\nBehalten Sie Ihre gespeicherten Einstellungen und versuchen Sie erneut, die App zu beenden.",
+  "mac.quit_retry": "Beenden erneut versuchen"
 }
