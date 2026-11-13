@@ -55,3 +55,18 @@ test('Even does not claim an offline change succeeded or accept replies from a p
   const p=ui.control('disable');target='b';ui.reset();finish({healthProtocol:1,healthEpoch:'epoch',healthEnabled:false});await p;assert.equal(ui.status().supported,false);
   target='a';ui.receive({healthProtocol:1,healthEpoch:'epoch',healthEnabled:true});now=50_000;await ui.control('delete');assert.equal(ui.status().failed,true);assert.equal(ui.status().healthEnabled,undefined);
 });
+
+test('unavailable Keychain fails closed without replacing ciphertext; explicit access retry restores it',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'health-locked-')),path=join(dir,'health.enc'),key=randomBytes(32);let locked=true;
+ new HealthVault(path).write(key,{version:1,enabled:false,deletedBefore:0,profileDeleted:false,observations:[],profile:normalizeProfile({weight:70,birthday:'1990-02-03'},NOW)});
+ const before=readFileSync(path);
+ const h=new HealthContext(path,{key:async operation=>{if(operation==='authorize'){locked=false;return;}if(locked)throw new Error('key locked');return Buffer.from(key);},now:()=>NOW,ownerAuthorized:()=>true,ownerRevoked:()=>false,announce:async()=>({}),sender:new WebhookSender(async()=>({status:204,body:''})),hosts:[]});
+ t.after(()=>{h.close();rmSync(dir,{recursive:true,force:true});});
+ assert.equal((await h.setup({action:'status'})).status,'locked');assert.equal(h.read({profile:true}).status,'unavailable');assert.deepEqual(readFileSync(path),before);
+ assert.equal((await h.setup({action:'unlock'})).status,'ready');assert.equal(h.status('owner').healthHasProfile,true);assert.equal(h.read({}).status,'unavailable');
+});
+test('guard is checked again while a health-derived message waits for delivery',async t=>{
+ const f=await fixture(t,true),r=f.h.read({});assert.ok('read_id' in r);
+ const response=f.h.respond({read_id:r.read_id,disposition:'announce',text:'A useful answer'});
+ const rejection=assert.rejects(response);await f.control('disable');await rejection;assert.equal(f.sent(),0);
+});

@@ -27,3 +27,22 @@ test('health setup is separate from device/MCP credentials; discovery and paired
  assert.equal((await post('/api/health','device',{protocol:1,epoch,action:'delete'})).status,400);
  assert.equal((await post('/api/health','device',{protocol:1,epoch,action:'delete'},{'x-g2-location-owner':owner})).status,200);
 });
+
+test('loopback OAuth rejects wrong state/Host, consumes the code once and leaves sharing OFF',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'health-oauth-')),key=randomBytes(32),sender=new WebhookSender(async()=>({status:204,body:''}));
+ const {PolarAPI}=await import('../server/health/polar.ts');const api=new PolarAPI();let exchanges=0;
+ api.exchange=async client=>{exchanges++;return {...client,accessToken:'fixture-token',userId:12,expiresAt:Date.now()+3600_000};};
+ const h=new HealthContext(join(dir,'health.enc'),{key:async()=>Buffer.from(key),api,ownerAuthorized:()=>true,ownerRevoked:()=>false,announce:async()=>({}),sender,hosts:[]});
+ t.after(()=>{h.close();rmSync(dir,{recursive:true,force:true});});
+ const setup=await h.setup({action:'connect',clientId:'fixture',clientSecret:'fixture-secret'});assert.ok('authorizationURL' in setup);
+ const state=new URL(setup.authorizationURL).searchParams.get('state');
+ const callback=(state:string,host='localhost:3464')=>fetch(`http://localhost:3464/polar/callback?code=fixture-code&state=${state}`,{headers:{Host:host}});
+ assert.equal((await callback('wrong')).status,400);assert.equal(exchanges,0);
+ // Host spoofing is rejected independently of OAuth state.
+ const {request}=await import('node:http');
+ const badHost=await new Promise<number>(resolve=>{const r=request(`http://127.0.0.1:3464/polar/callback?code=fixture-code&state=${state}`,{headers:{Host:'evil.example'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode!));});r.end();});
+ assert.equal(badHost,400);assert.equal(exchanges,0);
+ assert.equal((await callback(state!)).status,200);assert.equal(exchanges,1);
+ assert.equal(h.setupStatus().configured,true);assert.equal(h.setupStatus().sharing,false);assert.equal(h.read({}).status,'unavailable');
+ try{await callback(state!);}catch{}assert.equal(exchanges,1);
+});
