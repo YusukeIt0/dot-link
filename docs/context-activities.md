@@ -106,5 +106,14 @@ receipt. The response rechecks consent, owner authorization, revision and expiry
 Question answers include `utterance_id`. OFF/deletion/account change invalidates
 receipts. Identical retries are idempotent; silence cannot be changed to speech using
 the same receipt. The existing history-answer restriction still applies when recent
-places contribute. A brief Polar credit is required for displayed Polar-derived data;
-this specific provider term takes precedence over generic source-on-request guidance.
+places contribute. When Polar information actually contributes to an answer or
+suggestion, Dot is instructed to identify Polar naturally once in the conversational
+text, using the conversation language. A context read alone does not trigger a credit
+on an unrelated reply. There is no fixed introductory formula or automatic footer;
+Dot Link forwards the text unchanged. This health-specific instruction does not change
+weather/location attribution guidance. If read-aloud is enabled, the conversational
+source mention is spoken as part of the answer.
+
+This is the selected conversational UX, not a verified determination of compliance
+with Polar's detailed Brand Guidelines. Exact attribution requirements and actual
+existing-Dot behavior remain to be verified before final acceptance.

@@ -17,12 +17,12 @@ async function fixture(t:TestContext,enabled=false) {
   const profile=normalizeProfile({height:171,weight:72,birthday:'1992-03-04'},now);
   const observations=normalize('recovery',{recharges:[{date:'2026-11-14',heart_rate_avg:61,breathing_rate_avg:14}]},now);
   new HealthVault(path).write(key,{version:1,connection:{clientId:'fixture',clientSecret:'fixture-secret',accessToken:'fixture-token',userId:123,expiresAt:NOW+86400_000},owner:'owner',enabled,deletedBefore:0,profileDeleted:false,profile,observations});
-  let collect=async()=>({observations,profile});let sent=0,profileCalls=0;
+  let collect=async()=>({observations,profile});let sent=0,profileCalls=0;const texts:string[]=[];
   const api=new PolarAPI();api.collect=async()=>collect();api.profile=async()=>{profileCalls++;return profile;};api.disconnect=async()=>{};
   const h=new HealthContext(path,{key:async()=>Buffer.from(key),now:()=>now,ownerAuthorized:o=>authorized&&o==='owner',ownerRevoked:()=>!authorized,
-    announce:async(_,guard)=>{await settle();if(!guard())throw new Error('revoked');sent++;return {stored:true};},api,hosts:['example.com'],sender:new WebhookSender(async()=>({status:204,body:''}))});
+    announce:async(message,guard)=>{await settle();if(!guard())throw new Error('revoked');sent++;texts.push(message.text);return {stored:true};},api,hosts:['example.com'],sender:new WebhookSender(async()=>({status:204,body:''}))});
   t.after(()=>{h.close();rmSync(dir,{recursive:true,force:true});});await h.setup({action:'status'});
-  return {h,path,key,profile,observations,sent:()=>sent,profileCalls:()=>profileCalls,advance:(ms:number)=>{now+=ms;},revoke:()=>{authorized=false;},collect:(f:typeof collect)=>{collect=f;},control:(action:string)=>h.control({protocol:1,epoch:h.status('owner').healthEpoch,action},'owner')};
+  return {h,path,key,profile,observations,texts,sent:()=>sent,profileCalls:()=>profileCalls,advance:(ms:number)=>{now+=ms;},revoke:()=>{authorized=false;},collect:(f:typeof collect)=>{collect=f;},control:(action:string)=>h.control({protocol:1,epoch:h.status('owner').healthEpoch,action},'owner')};
 }
 test('OFF is authoritative, consent cannot cross owners, reads expire and revocation blocks responses',async t=>{
   const f=await fixture(t);assert.equal(f.h.read({}).status,'unavailable');
@@ -69,4 +69,16 @@ test('guard is checked again while a health-derived message waits for delivery',
  const f=await fixture(t,true),r=f.h.read({});assert.ok('read_id' in r);
  const response=f.h.respond({read_id:r.read_id,disposition:'announce',text:'A useful answer'});
  const rejection=assert.rejects(response);await f.control('disable');await rejection;assert.equal(f.sent(),0);
+});
+
+
+test('health response preserves conversational attribution without an automatic footer; unused reads can stay silent',async t=>{
+ const f=await fixture(t,true),r=f.h.read({categories:['recovery']});assert.ok('read_id' in r);
+ const text='Polarのデータでは回復が遅めのようだし、今日は予定に余裕を持たせようか。';
+ const response={read_id:r.read_id,disposition:'announce',text};
+ await f.h.respond(response);await f.h.respond(response);
+ assert.deepEqual(f.texts,[text]);
+ const unused=f.h.read({});assert.ok('read_id' in unused);
+ await f.h.respond({read_id:unused.read_id,disposition:'silent'});
+ assert.deepEqual(f.texts,[text]);
 });

@@ -58,8 +58,11 @@ Already delivered context remains subject to the connected AI's own storage and
 policies. Health-based conversation replies follow ordinary conversation storage
 on the Mac and presentation on the phone; the encrypted health snapshot is separate
 from that conversation history. Local health deletion does not erase previously
-shared conversations. A short Polar credit accompanies displayed health-derived
-responses. See the [Polar API agreement](https://www.polar.com/en/legal/polar-api-agreement).
+shared conversations. Dot is instructed to identify Polar naturally within an answer
+when Polar information contributes to that answer. Dot Link does not append a fixed
+credit. A source mention in the answer is also spoken when read-aloud is enabled.
+Actual model behavior and conformity with the detailed brand requirements remain
+pending verification. See the [Polar API agreement](https://www.polar.com/en/legal/polar-api-agreement).
 
 ## Photos
 
