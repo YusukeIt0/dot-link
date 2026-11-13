@@ -1,5 +1,6 @@
 import {collectCI} from './ci-evidence.mjs';
 import {endpointReader} from './review-endpoints.mjs';
+import {macPlist} from './ci-plan.mjs';
 // Public evidence is data. This module never executes reviewed code or mutates GitHub.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -44,7 +45,7 @@ export function versionOnly(path, before, after) {
   } catch { return false; }
 }
 export function readMetadata(api, path, ref) {
-  if (!versionFiles.has(path) || !sha(ref)) throw new Error('Invalid metadata request.');
+  if ((!versionFiles.has(path) && path !== macPlist) || !sha(ref)) throw new Error('Invalid metadata request.');
   const data = api(`contents/${path}?ref=${ref}`);
   if (data.encoding !== 'base64' || typeof data.content !== 'string' || data.size > 1_000_000) throw new Error('Version metadata cannot be verified.');
   return Buffer.from(data.content, 'base64').toString('utf8');

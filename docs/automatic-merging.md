@@ -36,6 +36,13 @@ It checks:
 - No technical findings, changes-requested review, missing evidence, unverified
   requirement, stale scope, or unresolved product decision. Runtime-affecting
   paths require applicable physical evidence independently of model wording.
+  The sole native-path exception is a modified `native/DotLinkSetup/Info.plist`
+  whose immutable current-main/head contents pass the shared CI version-only
+  classifier: build increases, version does not decrease, and every other byte
+  stays unchanged. Missing/invalid contents, renames, deletions, identity,
+  permissions, minimum OS or mixed runtime changes retain the physical gate.
+  This exception does not waive CI, independent acceptance review, protected-path
+  approval, or release/distribution authorization.
 - An independently assessed current acceptance record. Non-blocking architecture
   advice is not a defect and does not veto merging by itself.
 

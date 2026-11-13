@@ -10,6 +10,7 @@ import {setTimeout as delay} from 'node:timers/promises';
 import {latestReceipt, assertReady} from './check-review-before-merge.mjs';
 import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery, websiteOnlyAsset} from './review-evidence.mjs';
 import {collectPriorReviews} from './review-provenance.mjs';
+import {macPlist, versionOnly as macVersionOnly} from './ci-plan.mjs';
 
 export const repository = 'YusukeIt0/dot-link';
 export {versionOnly};
@@ -24,8 +25,10 @@ export class AssessmentError extends Error {
   }
 }
 
-export function deviceAffected(files) {
-  return files.some(f => [f.filename, f.previous_filename].filter(Boolean).some(path =>
+export function deviceAffected(files, versionChanges = {}) {
+  return files.some(f => !(f.filename === macPlist && f.status === 'modified' &&
+    !f.previous_filename && versionChanges[macPlist] === true) &&
+    [f.filename, f.previous_filename].filter(Boolean).some(path =>
     ['src/', 'server/', 'native/', 'public/'].some(root => path.startsWith(root)) ||
     path.startsWith('assets/') && !websiteOnlyAsset(path)));
 }
@@ -82,7 +85,7 @@ export function evaluate(snapshot) {
     try {
       const assessment = validateAssessment(quality.assessment, context);
       reasons.push(...acceptanceBlockers(acceptance, assessment));
-      if (deviceAffected(files) && assessment.device !== 'recorded') reasons.push('Runtime-affecting changes require applicable recorded physical acceptance.');
+      if (deviceAffected(files, versionChanges) && assessment.device !== 'recorded') reasons.push('Runtime-affecting changes require applicable recorded physical acceptance.');
     } catch { reasons.push('Independent acceptance assessment is invalid or missing.'); }
   }
   return {eligible: reasons.length === 0, number: pr.number, head: pr.head.sha, main,
@@ -115,6 +118,9 @@ export function collect(number, client) {
   const versionChanges = {};
   for (const f of files.filter(x => versionFiles.has(x.filename) && x.status === 'modified')) {
     versionChanges[f.filename] = versionOnly(f.filename, readMetadata(api, f.filename, main), readMetadata(api, f.filename, pr.head.sha));
+  }
+  if (files.some(f => f.filename === macPlist && f.status === 'modified' && !f.previous_filename)) {
+    versionChanges[macPlist] = macVersionOnly(readMetadata(api, macPlist, main), readMetadata(api, macPlist, pr.head.sha));
   }
   const priorReviews = collectPriorReviews(pr, comments, api, pages, client.readNode, botId);
   const scope = scopeRevision(comments, pr.head.sha, api, pages, priorReviews);
