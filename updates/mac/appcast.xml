@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.38</title><sparkle:version>118</sparkle:version><sparkle:shortVersionString>0.4.38</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved recovery when Dot Link is moved or removed while running, with clear instructions for safely quitting.
-- Fixed location-based answers being blocked after a silent proactive decision or an earlier question using the same location.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.38-118/Dot-Link-0.4.38-118-arm64.zip" sparkle:installationType="application" sparkle:edSignature="3tEgFFTM7V/BVqZZyjm1hHYz5vybptjN4NgzIIOsYPzTD1AOZuPXPdaRpYal2KnORwblKjqYxEEAUxhrXJRkBQ==" length="68475299" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: sA9ZfCJhjV1Bz4/TKVbLtTD3RDmps3t8a8AI1rGxcu2q+SKHQ7eZ+s0lmOGYeLfnP2WIxb7Jtd+rFoDHBGOyCw==
-length: 1274
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.39</title><sparkle:version>119</sparkle:version><sparkle:shortVersionString>0.4.39</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved how Dot chooses useful details across weather, location, walking and recent places.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.39-119/Dot-Link-0.4.39-119-arm64.zip" sparkle:installationType="application" sparkle:edSignature="vH5M9ig7UpofNlbmSw/sDKIH8Fu3T55wlUDiCShvl2Yr77eahtN22aifmZTJNHU1r6UnWAd8sIW5PhLY83PuCQ==" length="68476155" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: TM/B7aABWtU6uqL0B/s9f4+MaYv+kxdF1nsaIjGSno2176MHxIRLLoMCOSqZNbZZ/cRaPRD0uoFd9lLEFCTVAw==
+length: 1128
 -->
