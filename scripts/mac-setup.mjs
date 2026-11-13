@@ -146,7 +146,7 @@ try {
     const token = (await readFile(join(found.directory, '.runtime/health-admin-key'), 'utf8')).trim();
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error('HEALTH_UNAVAILABLE');
     const response = await fetch('http://127.0.0.1:3460/api/health/setup', {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(35000),
+      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(['unlock','connect','reset','disconnect'].includes(input.action) ? 330000 : 35000),
       headers: {'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(input),
     });
     if (!response.ok) {

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync, readdirSync, rmSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { HealthVault } from '../server/health/vault.ts';
+import { HealthVault, healthKeychain } from '../server/health/vault.ts';
 import { normalize, normalizeProfile, RETENTION } from '../server/health/data.ts';
 
 test('encrypted snapshot roundtrip, restart, tampering and wrong key; no plaintext sidecar',()=>{
@@ -33,3 +33,10 @@ test('offset-free source dates never inherit the machine timezone',()=>{
   const [r]=normalize('heart_rate',[{date:'2026-11-14',heart_rate_samples:[{sample_time:'02:00:00',heart_rate:62}]}],now);
   assert.equal(r.measured_at,null);assert.equal(r.time_basis,'local_date_earliest_bound');assert.equal(r.retention_anchor,Date.parse('2026-11-13T10:00:00Z'));
 });
+
+ test('interactive Keychain authorization survives a normal human response delay',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'health-key-wait-'));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const helper=join(dir,'helper');
+ writeFileSync(helper,'#!'+process.execPath+'\nsetTimeout(()=>process.stdout.write(JSON.stringify({status:"ok"})),16000);\n',{mode:0o700});
+ assert.equal(await healthKeychain(helper)('authorize'),undefined);
+ });

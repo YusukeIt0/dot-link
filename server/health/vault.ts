@@ -50,7 +50,8 @@ export class HealthVault {
 export function healthKeychain(executable?: string) {
   return (operation: 'read' | 'create' | 'delete' | 'authorize'): Promise<Buffer | undefined> => new Promise((resolve,reject) => {
     if (!executable) { reject(new Error('HEALTH_KEY_UNAVAILABLE')); return; }
-    execFile(executable,['--health-credential',operation],{timeout:15_000,killSignal:'SIGKILL',maxBuffer:2048},(error,stdout) => {
+    // User-driven prompts need time for authentication; unattended reads stay short.
+    execFile(executable,['--health-credential',operation],{timeout:operation==='read'?15_000:300_000,killSignal:'SIGKILL',maxBuffer:2048},(error,stdout) => {
       if (error) { reject(new Error('HEALTH_KEY_UNAVAILABLE')); return; }
       try {
         const result = JSON.parse(stdout);

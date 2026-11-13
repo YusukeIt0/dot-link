@@ -122,3 +122,7 @@ Activity context exposes Polar daily activity as `activity_goal_completion_perce
 with an explicit percent unit and daily-goal meaning (100 means the goal is met).
 Values above 100 are preserved. The read projection also covers existing encrypted
 records; it does not reinterpret the value as a health or recovery score.
+
+Explicit Keychain authorization allows up to five minutes for the owner to answer
+the macOS prompt; background reads remain noninteractive and bounded to 15 seconds.
+The Mac settings request waits for that authorization result before reporting it.
