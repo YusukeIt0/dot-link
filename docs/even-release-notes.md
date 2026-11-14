@@ -2,12 +2,13 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.3.63
 
-- Renamed Location sharing to Sharing settings to include health sharing.
+- Added optional Polar health sharing, data deletion and profile refresh in Sharing settings.
+- Added optional weather context with a separate sharing choice.
+- Improved connection guidance and automatic reconnection for phone and Mac connection problems.
 
-- Added optional Polar health context sharing with your Dot.
-- Added health-data deletion and profile refresh in Sharing settings.
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
 
 ## 0.3.59
 
