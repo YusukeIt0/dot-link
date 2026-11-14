@@ -606,7 +606,7 @@
   "even.check_mac_dot_link": "请检查 Mac 上的 Dot Link。将自动重新连接。",
   "even.check_phone_vpn_and_mac": "原因不明。请检查这部手机的 Tailscale 和 Mac。将自动重新连接。",
   "even.health": "健康信息",
-  "even.health_consent": "让 Dot 适时使用 Polar 睡眠、活动与恢复信息。测量值在 Mac 保留 7 天；最新个人资料保留至删除。",
+  "even.health_consent": "分享 Polar 睡眠、心率、活动、运动和恢复信息，让 Dot 推测疲劳、紧张和精力状态并用于回应。测量值在 Mac 保留 7 天；最新个人资料保留至删除。",
   "even.health_failed": "无法确认更改。请重新连接 Mac 后重试。",
   "even.health_unavailable": "请连接已更新的 Mac 以更改共享设置。",
   "even.health_setup": "请在 Mac 的健康设置中连接 Polar。",

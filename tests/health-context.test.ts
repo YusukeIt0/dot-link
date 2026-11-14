@@ -12,6 +12,8 @@ import {PolarAPI} from '../server/health/polar.ts';
 import {normalize, normalizeProfile, RETENTION} from '../server/health/data.ts';
 import {WebhookSender} from '../server/webhook.ts';
 import {HealthSharing} from '../src/health-sharing.ts';
+import {Bridge} from '../server/bridge.ts';
+import {SharingActivation} from '../server/sharing-activation.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const settle=()=>new Promise(r=>setImmediate(r));
 async function fixture(t:TestContext,enabled=false,activity=false,heartRate=false,phoneTime?:HealthOptions['phoneTime']) {
@@ -47,6 +49,22 @@ test('interpretation travels through discovery and selected reads without fabric
  const absent=f.h.read({categories:['sleep']});assert.ok('observations' in absent);
  assert.deepEqual(absent.observations,[]);assert.deepEqual(absent.interpretation_guidance,healthInterpretationGuidance);
  await f.control('disable');assert.equal(f.h.read({}).status,'unavailable');
+});
+
+test('health events and activation direct combined evidence through the combined response guard',async t=>{
+ const f=await fixture(t,true);
+ const sender=new WebhookSender(async(_url,raw)=>{
+  const event=JSON.parse(raw);return {status:200,body:event.type==='verification'?JSON.stringify({challenge:event.challenge}):'{}'};
+ });
+ const bridge=new Bridge(f.path+'.bridge',sender,['example.com']);t.after(()=>bridge.close());
+ await bridge.subscribe({name:'utterance.created',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://example.com/input',secret:'whsec_'+Buffer.alloc(32,1).toString('base64')}});
+ const activation=new SharingActivation(f.path+'.activation',bridge,f.h,()=>NOW,'health');t.after(()=>activation.close());
+ await settle();await settle();
+ const pending=activation.pending();assert.equal(pending.length,1);
+ for(const text of [healthEvent.description,pending[0].text]) {
+  assert.match(text,/respond_to_context when other sources contribute/);
+  assert.match(text,/respond_to_health only for health-only/);
+ }
 });
 
 test('heart-rate context exposes full-response summaries with bounded detail, legacy scope and existing access guards',async t=>{

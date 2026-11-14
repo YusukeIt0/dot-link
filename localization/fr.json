@@ -606,7 +606,7 @@
   "even.check_mac_dot_link": "Vérifiez Dot Link sur votre Mac. Reconnexion automatique.",
   "even.check_phone_vpn_and_mac": "Cause inconnue. Vérifiez Tailscale sur ce téléphone et votre Mac. Reconnexion automatique.",
   "even.health": "Contexte santé",
-  "even.health_consent": "Dot peut utiliser le sommeil, l’activité et la récupération Polar. Mesures conservées 7 jours sur le Mac ; dernier profil conservé jusqu’à sa suppression.",
+  "even.health_consent": "Partagez le sommeil, la fréquence cardiaque, l’activité, les exercices et la récupération Polar pour que Dot tienne compte de la fatigue, de la tension et de l’énergie possibles dans ses réponses. Mesures sur le Mac pendant 7 jours ; dernier profil conservé jusqu’à sa suppression.",
   "even.health_failed": "Modification non confirmée. Reconnectez le Mac et réessayez.",
   "even.health_unavailable": "Connectez un Mac à jour pour modifier le partage.",
   "even.health_setup": "Connectez Polar dans les réglages Santé du Mac.",

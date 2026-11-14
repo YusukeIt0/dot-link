@@ -606,7 +606,7 @@
   "even.check_mac_dot_link": "MacのDot Linkを確認してください。自動で再接続します。",
   "even.check_phone_vpn_and_mac": "スマホのTailscaleやMacの状態を確認してください。自動で再接続します。",
   "even.health": "健康情報",
-  "even.health_consent": "Polarの睡眠・活動・回復情報をDotに共有します。測定値はMacに7日間、最新プロフィールは削除するまで保存します。",
+  "even.health_consent": "Polarの睡眠・心拍・活動・運動・回復情報を共有し、Dotが疲れ・緊張・元気さを推測して応対に生かします。測定値はMacに7日間、最新プロフィールは削除するまで保存します。",
   "even.health_failed": "変更を確認できません。Macに再接続してお試しください。",
   "even.health_unavailable": "共有の変更には更新済みのMacに接続してください。",
   "even.health_setup": "Macのヘルスケア設定でPolarを接続してください。",

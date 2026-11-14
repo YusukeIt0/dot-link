@@ -606,7 +606,7 @@
   "even.check_mac_dot_link": "Check Dot Link on your Mac. Reconnecting automatically.",
   "even.check_phone_vpn_and_mac": "Check Tailscale on this phone and your Mac. The cause is unknown. Reconnecting automatically.",
   "even.health": "Health context",
-  "even.health_consent": "Let Dot use Polar sleep, activity and recovery when helpful. Measurements stay on your Mac for 7 days; your latest profile stays until deleted.",
+  "even.health_consent": "Share Polar sleep, heart rate, activity, exercise and recovery so Dot can consider fatigue, tension and energy in its responses. Measurements stay on your Mac for 7 days; your latest profile stays until deleted.",
   "even.health_failed": "Change not confirmed. Reconnect to your Mac and retry.",
   "even.health_unavailable": "Connect to an updated Mac to change sharing.",
   "even.health_setup": "Connect Polar in Mac Healthcare settings.",

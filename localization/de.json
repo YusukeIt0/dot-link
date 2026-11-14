@@ -606,7 +606,7 @@
   "even.check_mac_dot_link": "Dot Link auf dem Mac prüfen. Verbindung wird automatisch wiederhergestellt.",
   "even.check_phone_vpn_and_mac": "Ursache unbekannt. Tailscale auf diesem Telefon und den Mac prüfen. Verbindung wird automatisch wiederhergestellt.",
   "even.health": "Gesundheitsdaten",
-  "even.health_consent": "Dot darf Polar-Daten zu Schlaf, Aktivität und Erholung nutzen. Messwerte bleiben 7 Tage auf dem Mac, das aktuelle Profil bis zur Löschung.",
+  "even.health_consent": "Teile Polar-Daten zu Schlaf, Puls, Aktivität, Training und Erholung, damit Dot mögliche Müdigkeit, Anspannung und Energie beim Antworten berücksichtigt. Messwerte bleiben 7 Tage auf dem Mac, das aktuelle Profil bis zur Löschung.",
   "even.health_failed": "Änderung nicht bestätigt. Mac erneut verbinden und wiederholen.",
   "even.health_unavailable": "Zum Ändern der Freigabe einen aktualisierten Mac verbinden.",
   "even.health_setup": "Polar in den Gesundheitseinstellungen am Mac verbinden.",
