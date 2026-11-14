@@ -88,6 +88,7 @@ export function readHeartRateSummary(values:Values):HeartRateSummary|undefined {
 
 export const heartRateGuidance = {
   unit:'bpm', time_basis:'source_device_clock', utc_offset_minutes:null,
+  phone_time:'phone_time_evidence in this same result projects existing consented phone-history uploads for the returned source dates. Use its dated timezone/offset spans as candidate correspondence when useful, preserving gaps and multiple candidates. This is phone runtime evidence, not a verified Polar offset. Unavailable or empty evidence is normal; do not request new sharing merely to fill it.',
   samples:'Polar continuous-heart-rate samples are period averages, not instantaneous readings. Samples are spread across the available time-ordered record; summaries are computed before reduction.',
   summary:'all_valid_returned_samples covers every valid sample in that API day response, not necessarily the entire day. legacy_stored_samples may omit later measurements. Hourly entries cover only their first/last samples; absent hours and gaps are not interpolated. sample_mean_bpm is an unweighted sample mean, not a time-weighted or resting heart rate.',
   time:'Use source_local_date and device clock times as supplied. The API supplies no UTC offset here; do not infer it from the Mac, phone location or retrieval time. Do not describe the latest recorded point as current heart rate.',

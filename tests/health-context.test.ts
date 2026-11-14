@@ -4,7 +4,8 @@ import {mkdtempSync, rmSync, readFileSync, renameSync, mkdirSync} from 'node:fs'
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
-import {HealthContext} from '../server/health/context.ts';
+import {HealthContext, type HealthOptions} from '../server/health/context.ts';
+import {LocationHistoryStore} from '../server/history/store.ts';
 import {HealthVault} from '../server/health/vault.ts';
 import {PolarAPI} from '../server/health/polar.ts';
 import {normalize, normalizeProfile, RETENTION} from '../server/health/data.ts';
@@ -12,7 +13,7 @@ import {WebhookSender} from '../server/webhook.ts';
 import {HealthSharing} from '../src/health-sharing.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const settle=()=>new Promise(r=>setImmediate(r));
-async function fixture(t:TestContext,enabled=false,activity=false,heartRate=false) {
+async function fixture(t:TestContext,enabled=false,activity=false,heartRate=false,phoneTime?:HealthOptions['phoneTime']) {
   const dir=mkdtempSync(join(tmpdir(),'health-context-')),path=join(dir,'state.enc'),key=randomBytes(32);let now=NOW,authorized=true;
   const profile=normalizeProfile({height:171,weight:72,birthday:'1992-03-04'},now);
   const observations=normalize('recovery',{recharges:[{date:'2026-11-14',heart_rate_avg:61,breathing_rate_avg:14}]},now);
@@ -21,7 +22,7 @@ async function fixture(t:TestContext,enabled=false,activity=false,heartRate=fals
   new HealthVault(path).write(key,{version:1,connection:{clientId:'fixture',clientSecret:'fixture-secret',accessToken:'fixture-token',userId:123,expiresAt:NOW+86400_000},owner:'owner',enabled,deletedBefore:0,profileDeleted:false,profile,observations});
   let collect=async()=>({observations,profile});let sent=0,profileCalls=0;const texts:string[]=[];
   const api=new PolarAPI();api.collect=async()=>collect();api.profile=async()=>{profileCalls++;return profile;};api.disconnect=async()=>{};
-  const h=new HealthContext(path,{key:async()=>Buffer.from(key),now:()=>now,ownerAuthorized:o=>authorized&&o==='owner',ownerRevoked:()=>!authorized,
+  const h=new HealthContext(path,{phoneTime,key:async()=>Buffer.from(key),now:()=>now,ownerAuthorized:o=>authorized&&o==='owner',ownerRevoked:()=>!authorized,
     announce:async(message,guard)=>{await settle();if(!guard())throw new Error('revoked');sent++;texts.push(message.text);return {stored:true};},api,hosts:['example.com'],sender:new WebhookSender(async()=>({status:204,body:''}))});
   t.after(()=>{h.close();rmSync(dir,{recursive:true,force:true});});await h.setup({action:'status'});
   return {h,path,key,profile,observations,texts,sent:()=>sent,profileCalls:()=>profileCalls,advance:(ms:number)=>{now+=ms;},revoke:()=>{authorized=false;},collect:(f:typeof collect)=>{collect=f;},control:(action:string)=>h.control({protocol:1,epoch:h.status('owner').healthEpoch,action},'owner')};
@@ -153,4 +154,34 @@ test('routine collection without a profile preserves the latest saved profile',a
  assert.equal((new HealthVault(f.path).read(f.key) as any).observations.find((x:any)=>x.category==='activity').values.daily_activity,123.45);
  const recovery=f.h.read({categories:['recovery']});assert.ok('observations' in recovery);
  assert.equal(recovery.activity_metrics,undefined);
+});
+
+test('combined phone clock evidence respects history consent and fences pending health replies',async t=>{
+ const dir=mkdtempSync(join(tmpdir(),'health-phone-clock-')),owner='a'.repeat(64);
+ let clock=NOW-60_000;
+ const history=new LocationHistoryStore(dir,{now:()=>clock,ownerAuthorized:o=>o===owner,announce:async()=>({})});
+ t.after(()=>{history.close();rmSync(dir,{recursive:true,force:true});});
+ const control=(action:string)=>history.control({protocol:1,epoch:history.status(owner).historyEpoch,action},owner);
+ const f=await fixture(t,true,false,true,(dates)=>history.readPhoneTime(dates,owner));
+ const off=f.h.read({categories:['heart_rate']});assert.ok('phone_time_evidence' in off);
+ assert.equal(off.phone_time_evidence?.status,'unavailable');
+ control('enable');clock+=1000;
+ history.ingest({latitude:10,longitude:10,accuracy:8,measured_at:new Date(clock).toISOString()},'one',
+   {protocol:1,epoch:history.status(owner).historyEpoch,timezone:'Asia/Tokyo',utc_offset_minutes:540},owner);
+ const read=f.h.read({categories:['heart_rate']});assert.ok('phone_time_evidence' in read);
+ assert.equal(read.phone_time_evidence?.status,'available');
+ assert.equal(read.heart_rate_metrics?.utc_offset_minutes,null);
+ assert.equal(read.observations[0].measured_at,null);
+ assert.equal(read.observations[0].heart_rate_summary?.first.time,'00:00:00');
+ const pending=f.h.respond({read_id:read.read_id,disposition:'announce',text:'Qualified association'});
+ const rejected=assert.rejects(pending);await settle();control('disable');await rejected;
+ assert.equal(f.sent(),0);
+ // Health remains usable without history, and old combined receipts stay invalid
+ // even after consent is restored.
+ control('enable');await assert.rejects(f.h.respond({read_id:read.read_id,disposition:'announce',text:'stale'}));
+ const again=f.h.read({categories:['heart_rate']});assert.ok('read_id' in again);
+ control('delete');await assert.rejects(f.h.respond({read_id:again.read_id,disposition:'announce',text:'deleted'}));
+ const fresh=f.h.read({categories:['heart_rate']});assert.ok('read_id' in fresh);
+ await f.h.respond({read_id:fresh.read_id,disposition:'announce',text:'Source clock only'});
+ assert.equal(f.sent(),1);
 });

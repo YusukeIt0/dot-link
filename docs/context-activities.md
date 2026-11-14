@@ -144,6 +144,19 @@ that inference from an established correspondence, especially across travel or
 clock changes. No additional timezone collection or history-sharing requirement
 is introduced; unavailable optional evidence does not require a setup prompt.
 
+The same heart-rate result includes `phone_time_evidence`, projected from existing
+recent-place history only when its owner matches and its sharing consent is active.
+It includes no coordinates or places. Bounded spans preserve reported phone timezone
+IDs/offsets, accompanying location-fix timestamps, server receipt timestamps,
+recording boundaries, gaps and omitted-span counts. The phone samples its runtime
+clock metadata while preparing uploads; server receipt is not the exact clock
+observation time. Multiple spans are candidate evidence, never a verified Polar
+offset or a continuous timezone timeline. Empty/unavailable evidence remains explicit.
+Combined health response receipts recheck history access, deletion and expiry before
+delivery. A new read after history stops can still support a health-only response.
+This clock projection does not authorize historical place claims or change the
+existing question-linked history response requirement.
+
 The encrypted v1 scalar-value shape remains compatible with earlier builds.
 Existing records without full-response summaries are labeled `legacy_stored_samples`;
 their old first-2,500 cap is not retroactively treated as complete input. A later

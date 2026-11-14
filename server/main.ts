@@ -55,6 +55,7 @@ try {
       ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
 } catch { console.error('Weather unavailable; ordinary conversation remains available'); }
 const health = new HealthContext(resolve('.runtime/health/state.enc'), {
+  phoneTime: (dates,owner) => history?.readPhoneTime(dates,owner) ?? {evidence:{status:'unavailable'}},
   key: healthKeychain(process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../../../MacOS/DotLink',import.meta.url)) : undefined),
   ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
   ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',

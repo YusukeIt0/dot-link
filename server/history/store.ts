@@ -8,6 +8,7 @@ import { ToolRejection } from '../tool-response.ts';
 import type { LocationFix } from '../../src/location-fix.ts';
 import type { GeographicEvidence } from '../geography/types.ts';
 import { HISTORY_RETENTION_MS, LocationHistoryIndex, historyObservationSchema, type HistoryEntry } from './replay.ts';
+import { phoneTimeEvidence, type PhoneTimeRead } from './phone-time.ts';
 
 const MAXIMUM = 50_000;
 const consentSchema = z.object({ version: z.literal(1), owner: z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -155,6 +156,20 @@ export class LocationHistoryStore {
     if (updated.changes) this.geography.set(this.key(fix), bounded);
   }
   revokeOwner(owner: string) { if (this.consent.owner === owner) { this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.reload(); this.changed(); } }
+  readPhoneTime(dates: string[], owner: string): PhoneTimeRead {
+    try {
+      this.maintain();
+      if (!this.authorized() || this.consent.owner !== owner || !dates.length) return {evidence:{status:'unavailable'}};
+      const {evidence, earliestMeasurement} = phoneTimeEvidence(this.index.snapshot(), dates);
+      if (earliestMeasurement === undefined) return {evidence};
+      const epoch = this.epoch;
+      const expires = Math.min(this.now() + 5 * 60_000, earliestMeasurement + HISTORY_RETENTION_MS);
+      return {evidence, allowed: () => {
+        try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() < expires; }
+        catch { this.fail(); return false; }
+      }};
+    } catch { this.fail(); return {evidence:{status:'unavailable'}}; }
+  }
   read(raw: unknown = {}) {
     this.maintain();
     if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};

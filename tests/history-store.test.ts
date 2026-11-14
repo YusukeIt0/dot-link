@@ -194,3 +194,19 @@ test('bounded pages survive later live fixes and map attachment but not changes 
   h.advance(1000); h.ingest(); assert.throws(() => h.store.read({cursor: future.next_cursor}), /page is no longer available/);
   h.control('delete'); assert.equal(h.store.read({cursor: second.next_cursor}).status, 'unavailable');
 });
+
+test('phone time projection is owner bound, omits location and expires with its source', t=>{
+ const h=setup(t),dates=['2026-11-02'];
+ assert.equal(h.store.readPhoneTime(dates,owner).evidence.status,'unavailable');
+ h.control('enable');assert.equal(h.store.readPhoneTime(dates,owner).evidence.status,'empty');
+ h.advance(1000);h.ingest();
+ assert.equal(h.store.readPhoneTime(dates,other).evidence.status,'unavailable');
+ const read=h.store.readPhoneTime(dates,owner);assert.equal(read.evidence.status,'available');
+ assert.equal(read.allowed?.(),true);
+ const raw=JSON.stringify(read.evidence);assert.ok(!raw.includes('latitude'));assert.ok(!raw.includes('longitude'));assert.ok(!raw.includes('geography'));
+ h.setAuthorization(false);assert.equal(read.allowed?.(),false);h.setAuthorization(true);
+ h.advance(5*60_000);assert.equal(read.allowed?.(),false);
+ const retained=h.store.readPhoneTime(dates,owner);assert.equal(retained.allowed?.(),true);
+ h.revoke();assert.equal(retained.allowed?.(),false);
+ assert.equal(h.store.readPhoneTime(dates,owner).evidence.status,'unavailable');
+});

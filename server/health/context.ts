@@ -10,6 +10,7 @@ import { HealthVault } from './vault.ts';
 import { categories, observationSchema, profileSchema, RETENTION, type Observation } from './data.ts';
 import { heartRateGuidance, readHeartRateSummary, summarizeHeartRates, type HeartRateSummary } from './heart-rate.ts';
 import { connectionSchema, PolarAPI, POLAR_REDIRECT, PolarError, type PolarConnection } from './polar.ts';
+import type { PhoneTimeRead } from '../history/phone-time.ts';
 
 const EVENT='health.updated', SESSION='personal-g2';
 const subSchema=z.object({id:z.string(),url:z.string(),secret:z.string(),expiresAt:z.number()});
@@ -34,6 +35,7 @@ export const healthResponseTool={name:'respond_to_health',description:'Respond u
   inputSchema:{type:'object',properties:{read_id:{type:'string',format:'uuid'},disposition:{type:'string',enum:['silent','announce']},utterance_id:{type:'string',format:'uuid'},text:{type:'string',minLength:1,maxLength:1800}},required:['read_id','disposition'],additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}};
 
 export interface HealthOptions {
+  phoneTime?:(dates:string[],owner:string)=>PhoneTimeRead;
   key:(operation:'read'|'create'|'delete'|'authorize')=>Promise<Buffer|undefined>;
   ownerAuthorized:(owner:string)=>boolean; ownerRevoked:(owner:string)=>boolean;
   announce:(input:{message_id:string;text:string;utterance_id?:string},guard:()=>boolean)=>Promise<unknown>;
@@ -46,7 +48,7 @@ export class HealthContext {
   private ready:Promise<void>;private closed=false;private healthy=true;private fault='';private busy=false;
   private abort?:AbortController;private oauth?:{state:string;client:PolarConnection;expires:number;generation:number;server:Server;timer:ReturnType<typeof setTimeout>};
   private timer:ReturnType<typeof setInterval>;private nextPoll=0;private syncAt?:string;private profileRefreshAt?:string;
-  private reads=new Map<string,{generation:number;revision:string;expires:number}>();
+  private reads=new Map<string,{generation:number;revision:string;expires:number;phoneTimeAllowed?:()=>boolean}>();
   private decisions=new Map<string,{signature:string;result:unknown}>();
   private responseTail:Promise<unknown>=Promise.resolve();private subscriptionTail:Promise<unknown>=Promise.resolve();
   private setupTail:Promise<unknown>=Promise.resolve();
@@ -139,12 +141,15 @@ export class HealthContext {
       // Translate the provider field on read, including already encrypted records.
       return {...x,values:{...values,...(typeof daily_activity==='number'?{activity_goal_completion_percent:daily_activity}:{})}};
     }).map(x=>x.samples&&x.samples.length>96?{...x,samples:x.samples.filter((_,i)=>i%Math.ceil(x.samples!.length/96)===0),samples_total:x.samples.length,samples_reduced:true}:x);
+    const dates=observations.filter(x=>x.category==='heart_rate'&&x.source_local_date).map(x=>x.source_local_date!);
+    const phoneTime=dates.length?(this.options.phoneTime?.(dates,this.state.owner!)??{evidence:{status:'unavailable' as const}}):undefined;
     const read_id=randomUUID();const expires=Math.min(this.now()+5*60_000,...observations.map(x=>x.retention_anchor+RETENTION));
-    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires});while(this.reads.size>40)this.reads.delete(this.reads.keys().next().value!);
+    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed});while(this.reads.size>40)this.reads.delete(this.reads.keys().next().value!);
     return {status:'available',read_id,source:'Polar',reference_time:new Date(referenceTime).toISOString(),
       requested_window:{start_at:new Date(cutoff).toISOString(),end_at:new Date(referenceTime).toISOString(),
         heart_rate_selection:'potentially_overlapping_device_dates',exact_heart_rate_utc_filter:false},
       observations,omitted_observations:Math.max(0,matching.length-observations.length),...(args.profile?{profile:this.state.profile??null}:{}),
+      ...(phoneTime?{phone_time_evidence:phoneTime.evidence}:{}),
       ...(observations.some(x=>x.category==='activity')?{activity_metrics:{activity_goal_completion_percent:{unit:'%',meaning:'Percentage of the daily activity goal achieved; 100 means the goal is met. This is not a health or recovery score.'},active_duration:{format:'ISO 8601 duration'},inactive_duration:{format:'ISO 8601 duration'}}}:{}),
       ...(observations.some(x=>x.category==='heart_rate')?{heart_rate_metrics:{...heartRateGuidance,requested_hours:args.hours}}:{}),
       timestamp_note:'Local-date-only records retain the original date; their UTC measurement time is unknown. profile_modified_at is a profile edit time, not a weight measurement time. retrieved_at is not device synchronization time.',
@@ -156,7 +161,7 @@ export class HealthContext {
   }
   private async performResponse(raw:unknown) {
     const p=z.object({read_id:z.string().uuid(),disposition:z.enum(['silent','announce']),utterance_id:z.string().uuid().optional(),text:z.string().trim().min(1).max(1800).optional()}).strict().parse(raw);
-    const read=this.reads.get(p.read_id),allowed=()=>{this.maintain();return this.usable()&&!!read&&read.generation===this.generation&&read.revision===this.revision&&read.expires>this.now();};
+    const read=this.reads.get(p.read_id),allowed=()=>{this.maintain();return this.usable()&&!!read&&read.generation===this.generation&&read.revision===this.revision&&read.expires>this.now()&&(!read.phoneTimeAllowed||read.phoneTimeAllowed());};
     if(!allowed())throw rejected();
     const signature=JSON.stringify([p.disposition,p.utterance_id,p.text]);
     const prior=this.decisions.get(p.read_id);if(prior){if(prior.signature!==signature)throw rejected();return prior.result;}
