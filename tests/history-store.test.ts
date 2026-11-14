@@ -6,7 +6,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import { LocationHistoryStore } from '../server/history/store.ts';
-import { HISTORY_RETENTION_MS } from '../server/history/replay.ts';
+import { HISTORY_RETENTION_MS, type HistoryEntry } from '../server/history/replay.ts';
+import {phoneTimeEvidence} from '../server/history/phone-time.ts';
 import { Bridge } from '../server/bridge.ts';
 import { WebhookSender } from '../server/webhook.ts';
 import { historyGeography, historyFixture } from './fixtures/location-history.ts';
@@ -193,4 +194,63 @@ test('bounded pages survive later live fixes and map attachment but not changes 
   const future = h.store.read({start_at: new Date(Date.parse(h.fix().measured_at) - 60_000).toISOString(), end_at: new Date(Date.parse(h.fix().measured_at) + 60_000).toISOString(), detail: 'observations', limit: 1}) as any;
   h.advance(1000); h.ingest(); assert.throws(() => h.store.read({cursor: future.next_cursor}), /page is no longer available/);
   h.control('delete'); assert.equal(h.store.read({cursor: second.next_cursor}).status, 'unavailable');
+});
+
+test('phone time projection is owner bound, omits location and expires with its source', t=>{
+ const h=setup(t),dates=['2026-11-02'];
+ assert.equal(h.store.readPhoneTime(dates,owner).evidence.status,'unavailable');
+ h.control('enable');assert.equal(h.store.readPhoneTime(dates,owner).evidence.status,'empty');
+ h.advance(1000);h.ingest();
+ assert.equal(h.store.readPhoneTime(dates,other).evidence.status,'unavailable');
+ const read=h.store.readPhoneTime(dates,owner);assert.equal(read.evidence.status,'available');
+ assert.equal(read.allowed?.(),true);
+ const raw=JSON.stringify(read.evidence);assert.ok(!raw.includes('latitude'));assert.ok(!raw.includes('longitude'));assert.ok(!raw.includes('geography'));
+ h.setAuthorization(false);assert.equal(read.allowed?.(),false);h.setAuthorization(true);
+ h.advance(5*60_000);assert.equal(read.allowed?.(),false);
+ const retained=h.store.readPhoneTime(dates,owner);assert.equal(retained.allowed?.(),true);
+ h.revoke();assert.equal(retained.allowed?.(),false);
+ assert.equal(h.store.readPhoneTime(dates,owner).evidence.status,'unavailable');
+});
+
+// Phone-clock evidence projected from recorded location history.
+const base=Date.parse('2026-11-14T00:00:00Z');
+function row(minutes:number, timezone:string|undefined='Asia/Tokyo', offset:number|undefined=540, epoch=1):HistoryEntry {
+ return {id:String(minutes),source:'phone_location',latitude:10,longitude:10,accuracy:8,
+  measured_at:new Date(base+minutes*60_000-5000).toISOString(),received_at:new Date(base+minutes*60_000).toISOString(),
+  timezone,utc_offset_minutes:offset,recording_epoch:epoch};
+}
+test('dated phone spans retain alternative offsets, upload times, gaps and recording boundaries',()=>{
+ const entries=[row(0),row(1),row(10),row(11,'Asia/Bangkok',420),row(12,'Asia/Bangkok',420,2),
+  {...row(13),timezone:undefined,utc_offset_minutes:undefined},row(3000)];
+ const result=phoneTimeEvidence(entries,['2026-11-14']);
+ const evidence=result.evidence.by_source_date[0];
+ assert.equal(evidence.observation_count,6);assert.equal(evidence.spans.length,5);
+ assert.equal(evidence.spans[0].observation_count,2);
+ assert.equal(evidence.spans[0].first.received_at,'2026-11-14T00:00:00.000Z');
+ assert.equal(evidence.spans[0].first.location_measured_at,'2026-11-13T23:59:55.000Z');
+ assert.equal(evidence.spans[1].preceding_gap_seconds,540);
+ assert.equal(evidence.spans[2].utc_offset_minutes,420);assert.equal(evidence.spans[3].recording_boundary,true);
+ assert.equal(evidence.spans[4].timezone,null);assert.equal(evidence.spans[4].utc_offset_minutes,null);
+});
+test('phone evidence is bounded with explicit omissions and never fills absent history',()=>{
+ const result=phoneTimeEvidence(Array.from({length:100},(_,i)=>row(i*3)),['2026-11-14']);
+ assert.equal(result.evidence.by_source_date[0].spans.length,96);assert.equal(result.evidence.by_source_date[0].omitted_spans,4);
+ assert.equal(result.earliestMeasurement,base-5000);
+ const empty=phoneTimeEvidence([] ,['2026-11-14']);assert.equal(empty.evidence.status,'empty');assert.deepEqual(empty.evidence.by_source_date[0].spans,[]);
+});
+
+ test('sparse multi-day reads retain each date and a brief alternate clock within the bound',()=>{
+ const entries=Array.from({length:7*480},(_,i)=>row(i*3));
+ entries[1700]={...entries[1700],timezone:'Asia/Bangkok',utc_offset_minutes:420};
+ const dates=Array.from({length:7},(_,i)=>`2026-11-${14+i}`);
+ const result=phoneTimeEvidence(entries,dates).evidence;
+ assert.equal(result.by_source_date.length,7);
+ assert.ok(result.by_source_date.reduce((n,d)=>n+d.spans.length,0)<=96);
+ for(const day of result.by_source_date){
+  assert.ok(day.spans.length>0);assert.ok(day.omitted_spans>0);
+  assert.equal(day.omitted_clock_candidates,0);
+  assert.ok(Date.parse(day.spans[0].first.received_at)<Date.parse(day.spans.at(-1)!.last.received_at));
+ }
+ assert.ok(result.by_source_date[0].spans.some(s=>s.first.received_at.startsWith('2026-11-14')));
+ assert.ok(result.by_source_date.some(d=>d.spans.some(s=>s.utc_offset_minutes===420)));
 });

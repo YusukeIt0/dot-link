@@ -34,12 +34,45 @@ prove a venue entry or visit. Answer using supported facts; ask whether a visit
 occurred only when that distinction changes the answer and the conversation
 does not already resolve it.
 
-Response guards remain unchanged. Location announcements use a fresh
-`respond_to_location` context; question answers also carry their question ID.
-History-derived G2 answers use `respond_to_history` with an existing question so
-deletion, access and expiry are checked again. The current implementation does
-not provide guarded proactive historical announcements. Reading history within
-an activity must not bypass that boundary through location or generic sends.
+For a response using more than one factor, `respond_to_context` composes the
+existing source guards and stores one message through the normal bridge queue.
+Each available result includes `response_context` with its argument mapping and
+`expires_no_later_than`; revocation or source changes may invalidate it sooner.
+Use only receipts that materially influenced the reasoning or answer, including
+unspoken evidence behind a recommendation. Do not fetch or attach unused sources.
+A current location `context_id` covers its attached geography/weather. Explicit
+weather and finished mobility reads also return `weather_read_id` and
+`mobility_read_id`; include these in their respective plural arrays. Current-weather
+and mobility receipts must accompany their returned `context_id`. Specified-place
+weather can be used without current-location sharing. Health and recent-place
+reads supply `health_read_ids` and `history_context_ids`. Each array is bounded to
+eight receipts; duplicates/order do not change retry identity.
+
+All selected guards run again inside the bridge's commit queue, immediately before
+storage. Revocation/deletion, expiry, movement and attached phone-clock history
+fences therefore reject the entire response. Source-specific errors guide a new
+read and reconsideration; never send the old text through another route. A newly
+considered answer can omit an unavailable source if the remaining evidence supports
+it. The bridge retains current-location client expiry and associates a question
+answer with its original `utterance_id`. Identical retries use one deterministic
+message identity; conflicting decisions are rejected. With a current location,
+both response routes share the location/question decision identity and serialize
+their commits. Changing receipts or switching routes cannot create a second
+decision for that location/question. Retry through the original route with the
+original receipts; a new location or distinct question remains independent. Each
+health read retains its existing one-decision rule across both routes, including
+when several health reads contribute. A later question can use a fresh health read;
+a silent decision does not consume the question itself. No extra user setting,
+collection or AI reasoning engine is introduced.
+
+`silent` writes no message and omits text/question ID. It can acknowledge an
+independent location activity without consuming a question answer. A user's
+question should still receive an answer from available evidence. Recent-place
+history announcements continue to require an existing question; combined replies
+do not enable proactive historical claims. Individual-source response tools remain
+compatible. Conversation preferences and already-available AI memory need no new
+Dot Link receipt. Notifications retain their separate disposition/announcement
+contract and are not receipts for this operation.
 
 Verify ordinary nearby guidance, useful walking/weather selection, relevant
 history reasoning and silence with the actual existing Dot. Keep evidence of
@@ -86,3 +119,103 @@ history and combined-factor conversation. Record source/build and actual selecti
 reply or silence separately from policy delivery. Reuse unchanged acquisition and
 transport evidence; brief relevant caveats remain acceptable. Do not paste the new
 policy into the test prompt or alter a personal activity to make the test pass.
+
+## Polar health context
+
+`get_health_context` selects categories and a time window of 1–168 hours; the latest
+registered profile is separately opt-in per read. Use it within the current activity
+when sleep, activity, recovery or physiology helps the person's question or situation.
+Combine useful evidence with conversation, current place, weather or mobility; do not
+fetch every factor or force a report. Missing data, source dates and provider-derived
+scores are reasoning inputs, not a routine disclaimer. Silence remains valid.
+
+Enabling health sharing in Even requests `health.updated` reception from the existing
+Dot through the same owner-control mechanism as other sharing choices. The event
+contains an opaque update identifier, not health values. Acquisition only notifies
+normalized changes. No second user-managed subscription switch is introduced.
+
+Health-derived G2 output uses `respond_to_health` and the returned short-lived read
+receipt. The response rechecks consent, owner authorization, revision and expiry.
+Question answers include `utterance_id`. OFF/deletion/account change invalidates
+receipts. Identical retries are idempotent; silence cannot be changed to speech using
+the same receipt. The existing history-answer restriction still applies when recent
+places contribute. When Polar information actually contributes to an answer or
+suggestion, Dot is instructed to identify Polar naturally once in the conversational
+text, using the conversation language. A context read alone does not trigger a credit
+on an unrelated reply. There is no fixed introductory formula or automatic footer;
+Dot Link forwards the text unchanged. This health-specific instruction does not change
+weather/location attribution guidance. If read-aloud is enabled, the conversational
+source mention is spoken as part of the answer.
+
+This is the selected conversational UX, not a verified determination of compliance
+with Polar's detailed Brand Guidelines. Exact attribution requirements and actual
+existing-Dot behavior remain to be verified before final acceptance.
+
+Activity context exposes Polar daily activity as `activity_goal_completion_percent`,
+with an explicit percent unit and daily-goal meaning (100 means the goal is met).
+Values above 100 are preserved. The read projection also covers existing encrypted
+records; it does not reinterpret the value as a health or recovery score.
+
+Heart-rate context provides `heart_rate_summary` for each source date, including
+hourly observations. Summaries cover all valid samples in the returned API day,
+before selecting at most 96 detail points across the time-ordered span. The first
+and last points are retained. Ranges and unweighted sample means describe those
+samples, not live readings, resting heart rate or guaranteed whole-day extrema.
+Polar documents these as period-average samples in device time; missing offsets
+remain unknown. `hours` selects potentially overlapping device dates rather than
+clipping samples to an invented UTC interval. Conservative measurement retention
+is unchanged. Gaps and absent hours are not interpolated.
+
+Health reads expose `reference_time` and `requested_window` in UTC so the AI can
+distinguish the conversation's reference interval from acquisition and measurement
+times. Heart-rate days can overlap that interval without being exactly clipped to
+it. These fields do not establish the device's UTC offset. Source-local hour
+questions can use the preserved device clock. Dated, already-permitted timezone
+evidence or clear same-local-clock conversation may support a qualified association
+with an event, but does not prove exact clock alignment. The AI must distinguish
+that inference from an established correspondence, especially across travel or
+clock changes. No additional timezone collection or history-sharing requirement
+is introduced; unavailable optional evidence does not require a setup prompt.
+
+The same heart-rate result includes `phone_time_evidence`, projected from existing
+recent-place history only when its owner matches and its sharing consent is active.
+It includes no coordinates or places. Bounded spans preserve reported phone timezone
+IDs/offsets, accompanying location-fix timestamps, server receipt timestamps,
+recording boundaries, gaps and omitted-span counts. The phone samples its runtime
+clock metadata while preparing uploads; server receipt is not the exact clock
+observation time. Multiple spans are candidate evidence, never a verified Polar
+offset or a continuous timezone timeline. Empty/unavailable evidence remains explicit.
+Combined health response receipts recheck history access, deletion and expiry before
+delivery. A new read after history stops can still support a health-only response.
+This clock projection does not authorize historical place claims or change the
+existing question-linked history response requirement.
+
+The encrypted v1 scalar-value shape remains compatible with earlier builds.
+Existing records without full-response summaries are labeled `legacy_stored_samples`;
+their old first-2,500 cap is not retroactively treated as complete input. A later
+normal acquisition replaces that record with an all-valid-returned-sample summary.
+The AI uses coverage and time uncertainty internally, mentioning them only when
+they materially change the answer. A heart-rate change alone does not establish
+stress, fatigue, emotion or illness. Neither a new reading nor an available summary
+requires a notification. Use comparable observed periods when comparing days.
+
+Health tool discovery and update events explain the purpose of interpreting possible
+fatigue, tension and energy without requiring an explicit self-report. Every available
+health read includes `interpretation_guidance`: sleep/recovery and accumulated activity
+can inform fatigue hypotheses; contextual heart-rate changes can inform tension
+hypotheses; positive sleep/recovery and conversational evidence can inform energy.
+These are examples, not fixed labels, thresholds or validated detection. States can
+coexist; physical capacity, mood and motivation are distinct. Missing evidence is not
+normality, low activity is not spare capacity, and nightly recovery is not live tension.
+The guidance connects these tentative meanings to tone, pacing, suggestion effort
+and timing, while preserving requested detail, choices and immediate correction.
+It does not require state announcements, mood checks, shorter replies or rest advice.
+The instructions travel with the product, rather than relying on a setup conversation
+or persistent AI memory. Collection, retention, attribution and response guards are
+unchanged. Actual conversational effectiveness requires runtime acceptance.
+
+Source semantics: [Polar continuous-heart-rate schema](https://www.polar.com/accesslink-api/#continuous-heartrate).
+
+Explicit Keychain authorization allows up to five minutes for the owner to answer
+the macOS prompt; background reads remain noninteractive and bounded to 15 seconds.
+The Mac settings request waits for that authorization result before reporting it.

@@ -3,6 +3,7 @@ import { decisionFactorTool } from '../context-guidance.ts';
 export interface HistoryReader {
   read(input?: unknown): unknown;
   respond?(input: unknown): unknown;
+  responseGuard?(contextId: string): () => boolean;
 }
 
 export const locationHistoryTool = decisionFactorTool({
@@ -22,7 +23,7 @@ export const locationHistoryTool = decisionFactorTool({
 
 export const historyResponseTool = {
   name: 'respond_to_history',
-  description: 'Answer an existing G2 question using a history_context_id from get_location_history. Includes the utterance_id on the first answer and follow-ups. Historical permission, deletion and expiry are rechecked immediately before storing through the normal question/reply path. Current-location sharing need not be enabled. Do not bypass rejection by sending the same stale historical answer through another tool. No proactive announcement or venue reply is sent.',
+  description: 'For combined sources use respond_to_context instead. Answer an existing G2 question using a history_context_id from get_location_history. Includes the utterance_id on the first answer and follow-ups. Historical permission, deletion and expiry are rechecked immediately before storing through the normal question/reply path. Current-location sharing need not be enabled. Do not bypass rejection by sending the same stale historical answer through another tool. No proactive announcement or venue reply is sent.',
   inputSchema: {type: 'object', properties: {history_context_id: {type: 'string', format: 'uuid'}, utterance_id: {type: 'string', format: 'uuid'}, text: {type: 'string', minLength: 1, maxLength: 2000}}, required: ['history_context_id', 'utterance_id', 'text'], additionalProperties: false},
   annotations: {readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false},
 };

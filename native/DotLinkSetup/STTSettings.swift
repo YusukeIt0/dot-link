@@ -2,14 +2,14 @@ import AppKit
 
 extension SetupApp {
     @objc func menuSpeech() {
-        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeechOutput = false
+        showingHealthcare = false; showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeechOutput = false
         showingSpeech = true; let active = state["sttProvider"] as? String ?? "whisper"
         speechChoice = STTProviderInfo.order.contains(active) ? active : "whisper"
         speechEndpointDraft = state["sttMicrosoftEndpoint"] as? String ?? ""
         messageRecord = nil; speechMetadata = [:]; render(); showWindow(); refreshSpeechMetadata()
     }
     @objc func menuSpeechOutput() {
-        showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false
+        showingHealthcare = false; showingNotifications = false; showingPairing = false; showingDetails = false; showingSpeech = false
         showingSpeechOutput = true; speechKeyField?.stringValue = ""; messageRecord = nil
         render(); showWindow()
     }

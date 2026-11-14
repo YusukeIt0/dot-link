@@ -100,9 +100,9 @@ Sharing starts off. When enabled, readable new notifications—including sender 
 
 Requires Mac 0.4.0 or later and Even 0.2.23 or later.
 
-In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context`, `get_mobility_context` and `respond_to_location`, with the `location.updated` event.
+In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools include `get_location_context`, `get_mobility_context`, `respond_to_location` and `respond_to_context`, with the `location.updated` event. The combined response tool lets Dot use relevant shared sources in one answer; no additional sharing switch is needed.
 
-For automatic context reception, update to Mac 0.4.34 or later. Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Dot Link connects that choice to your existing Dot's context reception. There is no separate monitoring switch or follow-up setup request. Dot decides whether useful information warrants an announcement, and can remain silent. The status shows when Dot is ready. With **Weather context** enabled, weather for the shared current location joins those same decisions.
+For automatic context reception, update to Mac 0.4.34 or later. Turn on **Share my location** under **Sharing settings** in the Even companion and grant the phone's location permission. Dot Link connects that choice to your existing Dot's context reception. There is no separate monitoring switch or follow-up setup request. Dot decides whether useful information warrants an announcement, and can remain silent. The status shows when Dot is ready. With **Weather context** enabled, weather for the shared current location joins those same decisions.
 
 With Mac 0.4.23 or later, nearby streets, paths, areas and terrain references are added automatically while Dot is subscribed. Coordinates remain available during map loading or failure; a first area can take several minutes, while cached areas are faster. No region-download step is needed. References are not navigation or evidence that you entered a venue.
 
@@ -122,7 +122,7 @@ bundled English disclosure, support contact and full attribution.
 
 ### Remember recent places
 
-With Mac 0.4.30 or later and Even 0.3.53 or later, open **Location sharing** and turn
+With Mac 0.4.30 or later and Even 0.3.53 or later, open **Sharing settings** and turn
 on **Remember recent places** separately from **Share my location**. This lets Dot
 refer to up to seven days of recorded places and movement. Collection needs both
 options; old companions keep ordinary location sharing and do not upload history.
@@ -208,3 +208,34 @@ Turning weather off stops all weather use after the Mac acknowledges it. Turning
 location sharing off only stops current-location weather. If a setting change
 cannot be confirmed, reconnect and check it. See the [source/privacy details](../public/weather-sources.html)
 for the coarse-coordinate cache and request intervals.
+
+## Polar health context
+
+1. Open **Healthcare settings** in the Mac app, then **Open Polar registration**.
+   Register an AccessLink client with redirect address
+   `http://localhost:3464/polar/callback`.
+2. Enter its **Client ID** and **Client Secret**, choose **Connect Polar**, and complete
+   Polar login and consent in the browser. The callback stays on this Mac.
+3. In the Even companion, open **Sharing settings → Health context** to enable sharing.
+   The same Dot can use relevant health context with your conversation and other
+   permitted information; there is no separate health agent or notification switch.
+   Tool descriptions and health results include guidance for interpreting possible
+   fatigue, tension and energy and adapting conversation or suggestions. No setup
+   chat is required to teach this guidance. These are tentative interpretations,
+   not measured state labels or guaranteed detection.
+
+Keep Polar Flow synchronized. Acquisition runs about every 30 minutes while sharing
+is on; missing categories can be normal. Profile values are registered information,
+not measurements made by Loop. **Fetch profile again** updates height, weight and
+date of birth after a successful Polar read. Sharing OFF also blocks profile refresh.
+
+**Delete health data** stops sharing and removes the local profile and measurements.
+Earlier measurements will not return if you enable sharing again. The profile can
+be fetched again explicitly. Offline changes are not shown as completed: reconnect
+to the Mac and retry. Local deletion does not erase context already delivered to Dot.
+
+Use **Reconnect Polar** after authorization expires or is revoked. Saved application
+credentials are reused. **Disconnect Polar** removes local health data and deregisters
+the connection at Polar. A pending disconnect needs retrying or revocation in your
+Polar account; local reset alone cannot confirm remote revocation. Encrypted data
+cannot be recovered without its Keychain key. See [data handling](privacy.md#optional-polar-health-context).

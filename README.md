@@ -54,7 +54,7 @@
 
 ## What Dot can understand
 
-Choose what to share in the iPhone companion's **Location sharing** settings. These features are optional; walking and terrain, recent-place history, and weather each have a separate sharing control.
+Choose what to share in the iPhone companion's **Sharing settings**. These features are optional; walking and terrain, recent-place history, and weather each have a separate sharing control.
 
 - **Your location and surroundings:** share your location as you move, with nearby streets, paths and places.
 - **Walking routes:** ask about a destination and get estimated walking routes and travel times.

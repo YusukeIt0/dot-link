@@ -6,18 +6,19 @@ import Security
 final class STTCredentials {
     let keychain: SecKeychain?
     let service: String
-    init(keychain: SecKeychain? = nil, service: String = "app.tripsurf.dotlink.stt") {
-        self.keychain = keychain; self.service = service
+    let accounts: [String]
+    init(keychain: SecKeychain? = nil, service: String = "app.tripsurf.dotlink.stt", accounts: [String] = ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"]) {
+        self.keychain = keychain; self.service = service; self.accounts = accounts
     }
     func perform(_ operation: String, key: String = "", interactive: Bool = false, provider: String = "soniox") -> [String: String] {
         if operation == "delete-all" {
-            for account in ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"] {
+            for account in accounts {
                 let deleted = perform("delete", interactive: interactive, provider: account)
                 if deleted["status"] != "ok" { return deleted }
             }
             return ["status": "ok"]
         }
-        guard ["soniox", "elevenlabs", "microsoft", "openai", "assemblyai"].contains(provider) else { return ["status": "invalid"] }
+        guard accounts.contains(provider) else { return ["status": "invalid"] }
         guard ["read", "authorize", "save", "delete", "metadata"].contains(operation) else { return ["status": "invalid"] }
         if operation == "save" && (key.isEmpty || key.utf8.count > 4096 || key.unicodeScalars.contains(where: { $0.value < 0x21 || $0.value > 0x7e })) { return ["status": "invalid"] }
         var selected = keychain
@@ -102,6 +103,29 @@ func runSTTCredentialHelper() -> Never {
     }
     let result = STTCredentials().perform(operation, key: key, interactive: ["save", "authorize", "delete", "delete-all"].contains(operation), provider: provider)
     key = ""
+    if let data = try? JSONSerialization.data(withJSONObject: result) { FileHandle.standardOutput.write(data) }
+    exit(0)
+}
+
+
+// Separate Keychain namespace; the random data key never enters argv or logs.
+func runHealthCredentialHelper() -> Never {
+    let operation = CommandLine.arguments.count == 3 ? CommandLine.arguments[2] : "invalid"
+    let vault = STTCredentials(service: "app.tripsurf.dotlink.health", accounts: ["storage"])
+    var result: [String: String] = ["status": "invalid"]
+    if ["read", "delete", "authorize"].contains(operation) {
+        result = vault.perform(operation, interactive: operation != "read", provider: "storage")
+    } else if operation == "create" {
+        result = vault.perform("read", interactive: true, provider: "storage")
+        if result["status"] == "missing" {
+            var bytes = [UInt8](repeating: 0, count: 32)
+            if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess {
+                let key = Data(bytes).base64EncodedString()
+                result = vault.perform("save", key: key, interactive: true, provider: "storage")
+                if result["status"] == "ok" { result["key"] = key }
+            }
+        }
+    }
     if let data = try? JSONSerialization.data(withJSONObject: result) { FileHandle.standardOutput.write(data) }
     exit(0)
 }

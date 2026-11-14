@@ -8,6 +8,7 @@ import { ToolRejection } from '../tool-response.ts';
 import type { LocationFix } from '../../src/location-fix.ts';
 import type { GeographicEvidence } from '../geography/types.ts';
 import { HISTORY_RETENTION_MS, LocationHistoryIndex, historyObservationSchema, type HistoryEntry } from './replay.ts';
+import { phoneTimeEvidence, type PhoneTimeRead } from './phone-time.ts';
 
 const MAXIMUM = 50_000;
 const consentSchema = z.object({ version: z.literal(1), owner: z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -155,6 +156,20 @@ export class LocationHistoryStore {
     if (updated.changes) this.geography.set(this.key(fix), bounded);
   }
   revokeOwner(owner: string) { if (this.consent.owner === owner) { this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.reload(); this.changed(); } }
+  readPhoneTime(dates: string[], owner: string): PhoneTimeRead {
+    try {
+      this.maintain();
+      if (!this.authorized() || this.consent.owner !== owner || !dates.length) return {evidence:{status:'unavailable'}};
+      const {evidence, earliestMeasurement} = phoneTimeEvidence(this.index.snapshot(), dates);
+      if (earliestMeasurement === undefined) return {evidence};
+      const epoch = this.epoch;
+      const expires = Math.min(this.now() + 5 * 60_000, earliestMeasurement + HISTORY_RETENTION_MS);
+      return {evidence, allowed: () => {
+        try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() < expires; }
+        catch { this.fail(); return false; }
+      }};
+    } catch { this.fail(); return {evidence:{status:'unavailable'}}; }
+  }
   read(raw: unknown = {}) {
     this.maintain();
     if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};
@@ -163,12 +178,15 @@ export class LocationHistoryStore {
     const expires = Math.min(this.now() + 5 * 60_000, first ? Date.parse(first) + HISTORY_RETENTION_MS : Infinity);
     const id = randomUUID(); this.reads.set(id, {epoch: this.epoch, expires});
     while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
-    return {...result, history_context_id: id};
+    return {...result, history_context_id: id, response_context: {tool: 'respond_to_context', arguments: {history_context_ids: [id]}, expires_no_later_than: new Date(expires).toISOString()}};
+  }
+  responseGuard(contextId: string) {
+    const record = this.reads.get(contextId);
+    return () => { this.maintain(); if (!record || !this.authorized() || record.epoch !== this.epoch || record.expires <= this.now()) throw failure(); return true; };
   }
   respond(raw: unknown) {
     const input = z.object({history_context_id: z.string().uuid(), utterance_id: z.string().uuid(), text: z.string().trim().min(1).max(2000)}).strict().parse(raw);
-    const record = this.reads.get(input.history_context_id);
-    const guard = () => { this.maintain(); if (!record || !this.authorized() || record.epoch !== this.epoch || record.expires <= this.now()) throw failure(); return true; };
+    const guard = this.responseGuard(input.history_context_id);
     guard();
     // A context may support several question-linked replies; identical retries
     // retain one ID. UUIDv8 carries a bounded deterministic SHA-256 identity.
