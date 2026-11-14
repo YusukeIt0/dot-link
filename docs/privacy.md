@@ -53,13 +53,16 @@ gap between samples. They do not establish complete-day coverage or infer a heal
 condition. Original device clock times are retained without inventing a UTC offset.
 Older saved records are identified as partial until replaced by a new acquisition.
 
-When recent-place history is also shared by the same paired owner, heart-rate reads
+When recent-place history is also shared by the same paired owner, heart-rate and activity reads
 include dated phone timezone/UTC-offset evidence from those existing uploads, without
 coordinates or place labels. This adds no collection or storage. The original phone
 metadata remains in the existing history store under its retention and deletion rules;
 it is not copied into the encrypted health snapshot. History OFF, deletion, revocation
 and evidence expiry also fence pending combined health responses. Health remains usable
-without history. Phone clock evidence does not establish the Polar device's offset.
+without history. A resolved record-date phone reference is the default interpretation
+for offset-free health times; original Polar timestamps remain intact. This convention
+does not certify the Polar clock. Conflicting or missing historical references remain
+explicit, and the current timezone is not silently applied to older records.
 
 The complete health snapshot, including profile, timestamps, credentials and
 subscription metadata, uses AES-256-GCM authenticated encryption. A separate random

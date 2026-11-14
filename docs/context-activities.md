@@ -169,22 +169,25 @@ is unchanged. Gaps and absent hours are not interpolated.
 Health reads expose `reference_time` and `requested_window` in UTC so the AI can
 distinguish the conversation's reference interval from acquisition and measurement
 times. Heart-rate days can overlap that interval without being exactly clipped to
-it. These fields do not establish the device's UTC offset. Source-local hour
-questions can use the preserved device clock. Dated, already-permitted timezone
-evidence or clear same-local-clock conversation may support a qualified association
-with an event, but does not prove exact clock alignment. The AI must distinguish
-that inference from an established correspondence, especially across travel or
-clock changes. No additional timezone collection or history-sharing requirement
-is introduced; unavailable optional evidence does not require a setup prompt.
+it. Original Polar timestamps remain unchanged. For offset-free heart-rate and
+activity times, use the record-date phone timezone as the normal interpretation
+basis, including comparisons with conversational events. Do not repeat timezone
+caveats or ask users to maintain clock correspondence during ordinary use.
 
-The same heart-rate result includes `phone_time_evidence`, projected from existing
-recent-place history only when its owner matches and its sharing consent is active.
-It includes no coordinates or places. Bounded spans preserve reported phone timezone
-IDs/offsets, accompanying location-fix timestamps, server receipt timestamps,
-recording boundaries, gaps and omitted-span counts. The phone samples its runtime
-clock metadata while preparing uploads; server receipt is not the exact clock
-observation time. Multiple spans are candidate evidence, never a verified Polar
-offset or a continuous timezone timeline. Empty/unavailable evidence remains explicit.
+Heart-rate and activity results include `phone_time_evidence`, projected from
+existing recent-place history only when its owner matches and consent is active.
+It includes no coordinates or places. Each source date includes a `reference`:
+`resolved` adopts the single offset reported in uploads whose phone-local receipt
+date matches the source date; `ambiguous` preserves multiple offsets; `unavailable`
+means no matching offset or incomplete clock metadata. Resolution uses all selected
+uploads before detail reduction. It never applies today's timezone to an older day.
+Bounded spans retain timezone IDs, location-fix and receipt times, recording
+boundaries, gaps and omissions. Receipt time approximates upload time, not the exact
+phone clock observation. The reference is an explicit product convention, not
+certified Polar synchronization, continuous coverage or a maximum error guarantee.
+Across travel/clock changes, use distinguishable dated spans only for the relevant
+period. Missing historical evidence or samples remain unknown; explain or clarify
+only when that changes the answer. Do not require additional sharing to fill gaps.
 Combined health response receipts recheck history access, deletion and expiry before
 delivery. A new read after history stops can still support a health-only response.
 This clock projection does not authorize historical place claims or change the

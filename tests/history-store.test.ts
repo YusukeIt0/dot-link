@@ -254,3 +254,23 @@ test('phone evidence is bounded with explicit omissions and never fills absent h
  assert.ok(result.by_source_date[0].spans.some(s=>s.first.received_at.startsWith('2026-11-14')));
  assert.ok(result.by_source_date.some(d=>d.spans.some(s=>s.utc_offset_minutes===420)));
 });
+
+
+test('phone reference adopts the recorded local day, not the current or adjacent day',()=>{
+ const entries=[row(-600,'Asia/Bangkok',420),row(0,'Asia/Tokyo',540),row(20,'Asia/Tokyo',540),row(1500,'Asia/Bangkok',420)];
+ const days=phoneTimeEvidence(entries,['2026-11-13','2026-11-14','2026-11-15','2026-11-16']).evidence.by_source_date;
+ assert.equal(days[0].reference.utc_offset_minutes,420);
+ assert.equal(days[1].reference.status,'resolved');assert.equal(days[1].reference.utc_offset_minutes,540);
+ assert.equal(days[1].reference.observation_count,2);
+ assert.equal(days[2].reference.utc_offset_minutes,420);
+ assert.equal(days[3].reference.status,'unavailable');assert.equal(days[3].reference.utc_offset_minutes,null);
+});
+test('phone reference preserves transitions before detail reduction and missing metadata',()=>{
+ const entries=Array.from({length:200},(_,i)=>row(i*3));
+ entries[100]=row(300,'Asia/Bangkok',420);
+ const day=phoneTimeEvidence(entries,['2026-11-14']).evidence.by_source_date[0];
+ assert.equal(day.reference.status,'ambiguous');assert.equal(day.reference.utc_offset_minutes,null);
+ assert.ok(day.omitted_spans>0);
+ const missing=phoneTimeEvidence([row(0),{...row(1),utc_offset_minutes:undefined}],['2026-11-14']).evidence.by_source_date[0];
+ assert.equal(missing.reference.status,'unavailable');
+});

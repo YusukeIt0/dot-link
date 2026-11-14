@@ -284,3 +284,12 @@ test('multi-day intensity reads share one detail budget without reducing daily c
  assert.equal(r.observations.reduce((n,o)=>n+(o.activity_zone_samples?.length??0),0),96);
  for(const row of r.observations){assert.equal(row.values.zone_samples_light,120);assert.equal(row.values.activity_zone_samples_reduced,true);assert.equal(row.activity_zone_samples![0].time.slice(11),'00:00:00');assert.equal(row.activity_zone_samples!.at(-1)!.time.slice(11),'19:50:00');}
 });
+
+
+test('activity-only reads include phone reference access guards without rewriting source times',async t=>{
+ let allowed=true,calls=0;
+ const f=await fixture(t,true,true,false,(dates,owner)=>{calls++;assert.equal(owner,'owner');assert.ok(dates.includes('2026-11-14'));return {evidence:{status:'unavailable'},allowed:()=>allowed};});
+ const read=f.h.read({categories:['activity']});assert.equal(calls,1);
+ assert.ok('phone_time_evidence' in read);assert.equal(read.observations?.[0].measured_at,f.observations.find(x=>x.category==='activity')?.measured_at);
+ allowed=false;assert.throws(f.h.responseGuard(read.read_id!),/phone-clock evidence/);
+});
