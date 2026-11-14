@@ -219,6 +219,10 @@ for the coarse-coordinate cache and request intervals.
 3. In the Even companion, open **Sharing settings → Health context** to enable sharing.
    The same Dot can use relevant health context with your conversation and other
    permitted information; there is no separate health agent or notification switch.
+   Tool descriptions and health results include guidance for interpreting possible
+   fatigue, tension and energy and adapting conversation or suggestions. No setup
+   chat is required to teach this guidance. These are tentative interpretations,
+   not measured state labels or guaranteed detection.
 
 Keep Polar Flow synchronized. Acquisition runs about every 30 minutes while sharing
 is on; missing categories can be normal. Profile values are registered information,

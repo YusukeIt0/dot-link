@@ -199,6 +199,21 @@ they materially change the answer. A heart-rate change alone does not establish
 stress, fatigue, emotion or illness. Neither a new reading nor an available summary
 requires a notification. Use comparable observed periods when comparing days.
 
+Health tool discovery and update events explain the purpose of interpreting possible
+fatigue, tension and energy without requiring an explicit self-report. Every available
+health read includes `interpretation_guidance`: sleep/recovery and accumulated activity
+can inform fatigue hypotheses; contextual heart-rate changes can inform tension
+hypotheses; positive sleep/recovery and conversational evidence can inform energy.
+These are examples, not fixed labels, thresholds or validated detection. States can
+coexist; physical capacity, mood and motivation are distinct. Missing evidence is not
+normality, low activity is not spare capacity, and nightly recovery is not live tension.
+The guidance connects these tentative meanings to tone, pacing, suggestion effort
+and timing, while preserving requested detail, choices and immediate correction.
+It does not require state announcements, mood checks, shorter replies or rest advice.
+The instructions travel with the product, rather than relying on a setup conversation
+or persistent AI memory. Collection, retention, attribution and response guards are
+unchanged. Actual conversational effectiveness requires runtime acceptance.
+
 Source semantics: [Polar continuous-heart-rate schema](https://www.polar.com/accesslink-api/#continuous-heartrate).
 
 Explicit Keychain authorization allows up to five minutes for the owner to answer

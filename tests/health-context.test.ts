@@ -4,7 +4,8 @@ import {mkdtempSync, rmSync, readFileSync, renameSync, mkdirSync} from 'node:fs'
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
-import {HealthContext, type HealthOptions} from '../server/health/context.ts';
+import {HealthContext, healthTool, healthEvent, type HealthOptions} from '../server/health/context.ts';
+import {healthInterpretationPurpose, healthInterpretationGuidance} from '../server/health/interpretation.ts';
 import {LocationHistoryStore} from '../server/history/store.ts';
 import {HealthVault} from '../server/health/vault.ts';
 import {PolarAPI} from '../server/health/polar.ts';
@@ -33,6 +34,19 @@ test('OFF is authoritative, consent cannot cross owners, reads expire and revoca
   await f.control('enable');await settle();const r=f.h.read({categories:['recovery']});assert.equal(r.status,'available');assert.ok('read_id' in r);
   await f.control('disable');await assert.rejects(f.h.respond({read_id:r.read_id,disposition:'announce',text:'test'}));
   await f.control('enable');await settle();const r2=f.h.read({});assert.ok('read_id' in r2);f.revoke();assert.equal(f.h.read({}).status,'unavailable');await assert.rejects(f.h.respond({read_id:r2.read_id,disposition:'announce',text:'test'}));assert.equal(f.sent(),0);
+});
+
+test('interpretation travels through discovery and selected reads without fabricating state or requiring extra categories',async t=>{
+ assert.ok(healthTool.description.includes(healthInterpretationPurpose));
+ assert.ok(healthEvent.description.includes(healthInterpretationPurpose));
+ const f=await fixture(t,true);
+ const r=f.h.read({categories:['recovery'],hours:168});assert.ok('observations' in r);
+ assert.deepEqual(r.interpretation_guidance,healthInterpretationGuidance);
+ assert.deepEqual(r.observations,f.observations);
+ assert.equal('inferred_state' in r,false);assert.equal(f.sent(),0);
+ const absent=f.h.read({categories:['sleep']});assert.ok('observations' in absent);
+ assert.deepEqual(absent.observations,[]);assert.deepEqual(absent.interpretation_guidance,healthInterpretationGuidance);
+ await f.control('disable');assert.equal(f.h.read({}).status,'unavailable');
 });
 
 test('heart-rate context exposes full-response summaries with bounded detail, legacy scope and existing access guards',async t=>{

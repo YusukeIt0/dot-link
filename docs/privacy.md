@@ -26,6 +26,11 @@ Mac acquisition and access by the existing connected AI. The Mac polls about eve
 30 minutes while sharing is on; Polar Flow synchronization and API availability
 can add delay. The data is not live physiology.
 
+Product instructions invite the connected AI to interpret possible fatigue, tension
+and energy from relevant shared evidence and conversation, and adapt its engagement.
+Dot Link does not calculate or store inferred state labels or a new fatigue score;
+the instructions do not add collection, permissions or retention.
+
 The Mac allowlists sleep, steps/activity intensity, synced heart rate, nighttime
 HRV/recovery/breathing, exercise summaries without routes, and the latest registered
 height, weight and date of birth. Names, gender, calories, raw GPS routes and arbitrary
