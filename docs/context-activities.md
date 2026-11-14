@@ -34,12 +34,38 @@ prove a venue entry or visit. Answer using supported facts; ask whether a visit
 occurred only when that distinction changes the answer and the conversation
 does not already resolve it.
 
-Response guards remain unchanged. Location announcements use a fresh
-`respond_to_location` context; question answers also carry their question ID.
-History-derived G2 answers use `respond_to_history` with an existing question so
-deletion, access and expiry are checked again. The current implementation does
-not provide guarded proactive historical announcements. Reading history within
-an activity must not bypass that boundary through location or generic sends.
+For a response using more than one factor, `respond_to_context` composes the
+existing source guards and stores one message through the normal bridge queue.
+Each available result includes `response_context` with its argument mapping and
+`expires_no_later_than`; revocation or source changes may invalidate it sooner.
+Use only receipts that materially influenced the reasoning or answer, including
+unspoken evidence behind a recommendation. Do not fetch or attach unused sources.
+A current location `context_id` covers its attached geography/weather. Explicit
+weather and finished mobility reads also return `weather_read_id` and
+`mobility_read_id`; include these in their respective plural arrays. Current-weather
+and mobility receipts must accompany their returned `context_id`. Specified-place
+weather can be used without current-location sharing. Health and recent-place
+reads supply `health_read_ids` and `history_context_ids`. Each array is bounded to
+eight receipts; duplicates/order do not change retry identity.
+
+All selected guards run again inside the bridge's commit queue, immediately before
+storage. Revocation/deletion, expiry, movement and attached phone-clock history
+fences therefore reject the entire response. Source-specific errors guide a new
+read and reconsideration; never send the old text through another route. A newly
+considered answer can omit an unavailable source if the remaining evidence supports
+it. The bridge retains current-location client expiry and associates a question
+answer with its original `utterance_id`. Identical retries use one deterministic
+message identity; conflicting decisions are rejected. No extra user setting,
+collection or AI reasoning engine is introduced.
+
+`silent` writes no message and omits text/question ID. It can acknowledge an
+independent location activity without consuming a question answer. A user's
+question should still receive an answer from available evidence. Recent-place
+history announcements continue to require an existing question; combined replies
+do not enable proactive historical claims. Individual-source response tools remain
+compatible. Conversation preferences and already-available AI memory need no new
+Dot Link receipt. Notifications retain their separate disposition/announcement
+contract and are not receipts for this operation.
 
 Verify ordinary nearby guidance, useful walking/weather selection, relevant
 history reasoning and silence with the actual existing Dot. Keep evidence of

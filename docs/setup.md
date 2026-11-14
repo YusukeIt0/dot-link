@@ -100,7 +100,7 @@ Sharing starts off. When enabled, readable new notifications—including sender 
 
 Requires Mac 0.4.0 or later and Even 0.2.23 or later.
 
-In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools are `get_location_context`, `get_mobility_context` and `respond_to_location`, with the `location.updated` event.
+In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools include `get_location_context`, `get_mobility_context`, `respond_to_location` and `respond_to_context`, with the `location.updated` event. The combined response tool lets Dot use relevant shared sources in one answer; no additional sharing switch is needed.
 
 For automatic context reception, update to Mac 0.4.34 or later. Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Dot Link connects that choice to your existing Dot's context reception. There is no separate monitoring switch or follow-up setup request. Dot decides whether useful information warrants an announcement, and can remain silent. The status shows when Dot is ready. With **Weather context** enabled, weather for the shared current location joins those same decisions.
 

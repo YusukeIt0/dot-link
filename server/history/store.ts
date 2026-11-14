@@ -178,12 +178,15 @@ export class LocationHistoryStore {
     const expires = Math.min(this.now() + 5 * 60_000, first ? Date.parse(first) + HISTORY_RETENTION_MS : Infinity);
     const id = randomUUID(); this.reads.set(id, {epoch: this.epoch, expires});
     while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
-    return {...result, history_context_id: id};
+    return {...result, history_context_id: id, response_context: {tool: 'respond_to_context', arguments: {history_context_ids: [id]}, expires_no_later_than: new Date(expires).toISOString()}};
+  }
+  responseGuard(contextId: string) {
+    const record = this.reads.get(contextId);
+    return () => { this.maintain(); if (!record || !this.authorized() || record.epoch !== this.epoch || record.expires <= this.now()) throw failure(); return true; };
   }
   respond(raw: unknown) {
     const input = z.object({history_context_id: z.string().uuid(), utterance_id: z.string().uuid(), text: z.string().trim().min(1).max(2000)}).strict().parse(raw);
-    const record = this.reads.get(input.history_context_id);
-    const guard = () => { this.maintain(); if (!record || !this.authorized() || record.epoch !== this.epoch || record.expires <= this.now()) throw failure(); return true; };
+    const guard = this.responseGuard(input.history_context_id);
     guard();
     // A context may support several question-linked replies; identical retries
     // retain one ID. UUIDv8 carries a bounded deterministic SHA-256 identity.

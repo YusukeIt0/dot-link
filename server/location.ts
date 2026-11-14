@@ -58,7 +58,7 @@ export const locationContextTool = decisionFactorTool({
 });
 export const locationResponseTool = {
   name: 'respond_to_location',
-  description: 'Act on a fresh context_id returned by get_location_context. When answering a question, ALWAYS include its utterance_id: the first answer is paired with the question, later answers remain follow-up pages. Do not send the actual answer as an unrelated location announcement and then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive announcement. Choose silent when nothing useful merits interrupting the owner and omit both text and utterance_id; announce requires concise, verified and personally relevant text. Check recent announcements to avoid repetition. Sharing, freshness and movement are checked again before storage. On rejection, follow error.data.reason: re-read expired, unknown or moved context; wait if sharing is inactive. Do not overwrite a conflicting decision or omit a question reference to bypass rejection. Use this for location-based answers and announcements instead of send_message_to_g2. One proactive decision and one answer per distinct utterance may share a valid context; proactive silence does not block question answers. Retry with the same context, question reference and text. A different answer to the same question requires a genuinely new context, not fabricated IDs. Identical retries are idempotent. No reply goes to a venue. Stored is not proof of physical display.',
+  description: 'For combined sources use respond_to_context instead. Act on a fresh context_id returned by get_location_context. When answering a question, ALWAYS include its utterance_id: the first answer is paired with the question, later answers remain follow-up pages. Do not send the actual answer as an unrelated location announcement and then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive announcement. Choose silent when nothing useful merits interrupting the owner and omit both text and utterance_id; announce requires concise, verified and personally relevant text. Check recent announcements to avoid repetition. Sharing, freshness and movement are checked again before storage. On rejection, follow error.data.reason: re-read expired, unknown or moved context; wait if sharing is inactive. Do not overwrite a conflicting decision or omit a question reference to bypass rejection. Use this for location-based answers and announcements instead of send_message_to_g2. One proactive decision and one answer per distinct utterance may share a valid context; proactive silence does not block question answers. Retry with the same context, question reference and text. A different answer to the same question requires a genuinely new context, not fabricated IDs. Identical retries are idempotent. No reply goes to a venue. Stored is not proof of physical display.',
   inputSchema: { type: 'object', properties: { context_id: { type: 'string', format: 'uuid' }, disposition: { type: 'string', enum: ['silent', 'announce'] }, utterance_id: {type:'string',format:'uuid',description:'Include for an answer or follow-up to a question; omit for independent proactive announcements and silent decisions.'}, text: { type: 'string', minLength: 1, maxLength: 2000 } }, required: ['context_id', 'disposition'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -75,6 +75,7 @@ export class LocationContext {
   private sequence = -1;
   private latest?: FixRecord;
   private reads = new Map<string, FixRecord>();
+  private mobilityReads = new Map<string, {contextId: string; guard: () => boolean; evidence: object; expires: number}>();
   private outcomes = new Map<string, { disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; result: unknown }>();
   private pending?: Pending;
   private lastAnchor?: LocationFix;
@@ -197,7 +198,7 @@ export class LocationContext {
     this.reads.set(current.id, current);
     while (this.reads.size > 20) this.reads.delete(this.reads.keys().next().value!);
     this.lastReadAt = new Date(this.now()).toISOString(); this.changes.emit();
-    return { ...status, activity_guidance: contextActivityGuidance, context: { context_id: current.id, ...current.fix, received_at: new Date(current.receivedAt).toISOString(),
+    return { ...status, response_context: {tool: 'respond_to_context', arguments: {context_id: current.id}, expires_no_later_than: new Date(Math.min(this.leaseUntil, Date.parse(current.fix.measured_at) + LOCATION_FRESH_MS)).toISOString()}, activity_guidance: contextActivityGuidance, context: { context_id: current.id, ...current.fix, received_at: new Date(current.receivedAt).toISOString(),
       source: 'phone_location', update_id: this.pending?.id ?? null, ...(current.geography?{geography:current.geography}:{}), ...(current.weather?{weather:current.weather}:{}) },
       recent_announcements: [...this.outcomes.values()].filter(o => o.disposition === 'announce').slice(-5).map(o => o.text) };
   }
@@ -247,8 +248,56 @@ export class LocationContext {
     const validUntil=Math.min(this.leaseUntil,Date.parse(read!.fix.measured_at)+LOCATION_FRESH_MS,Date.parse(this.latest!.fix.measured_at)+LOCATION_FRESH_MS);
     try {
       const result=await this.mobility!.query(input,{...read!.fix},validUntil,guard);
-      guard();return result;
+      guard();
+      if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'finished') return result;
+      const existing = [...this.mobilityReads].find(([, read]) => read.evidence === result);
+      if (existing) return this.mobilityResult(result, existing[0], existing[1]);
+      const mobility_read_id = randomUUID();
+      this.mobilityReads.set(mobility_read_id, {contextId: input.context_id, evidence: result, expires: validUntil, guard: () => {
+        guard();
+        if (this.now() >= validUntil) throw new ToolRejection('mobility_context_expired', 'Walking/terrain evidence expired. Re-read useful context and reconsider.');
+        return true;
+      }});
+      while (this.mobilityReads.size > 20) this.mobilityReads.delete(this.mobilityReads.keys().next().value!);
+      return this.mobilityResult(result, mobility_read_id, this.mobilityReads.get(mobility_read_id)!);
     }catch(error){guard();throw error;}
+  }
+  private mobilityResult(result: object, id: string, read: {contextId: string; expires: number}) {
+    return {...result, mobility_read_id: id, response_context: {tool: 'respond_to_context',
+      arguments: {context_id: read.contextId, mobility_read_ids: [id]}, expires_no_later_than: new Date(read.expires).toISOString()}};
+  }
+  mobilityResponse(readId: string) {
+    const read = this.mobilityReads.get(readId);
+    if (!read) throw new ToolRejection('mobility_context_unknown', 'Walking/terrain evidence is unavailable. Re-read useful context and reconsider.');
+    return read;
+  }
+  /** Capture the same location guard and client expiry used by individual replies. */
+  responseContext(contextId: string) {
+    const read = this.reads.get(contextId), generation = this.generation;
+    this.requireResponseContext(read, generation);
+    const guard = () => { this.requireResponseContext(read, generation); return true; };
+    return {guard, location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
+      complete: (id: string, decision: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string}, result: unknown) => {
+        this.recordResponse(id, read, generation, decision, result);
+      }};
+  }
+  private recordResponse(id: string, read: FixRecord, generation: number,
+    p: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string}, result: unknown) {
+    if (generation !== this.generation) return;
+    this.outcomes.set(id, {...p, result});
+    while (this.outcomes.size > 30) this.outcomes.delete(this.outcomes.keys().next().value!);
+    this.lastDecisionAt = new Date(this.now()).toISOString();
+    if (p.disposition === 'announce') { this.lastAnnouncementAt = this.lastDecisionAt; this.sent++; }
+    // Question answers never acknowledge an independent proactive event.
+    if (!p.utterance_id) {
+      this.lastAnchor = read.fix;
+      if (this.geographyDirty === read.geographyRevision) this.geographyDirty = undefined;
+      if (this.weatherDirty === read.weatherRevision) this.weatherDirty = undefined;
+      if (!this.pending || read.contextSequence >= this.pending.contextSequence) {
+        this.pending = undefined; if (this.retry) clearTimeout(this.retry);
+      }
+    }
+    this.scheduleContextEvent(); this.changes.emit();
   }
   private syncMobility(){this.mobility?.revalidate();}
   respond(raw: unknown) {
@@ -282,24 +331,7 @@ export class LocationContext {
           throw error;
         }
       }
-      if (generation !== this.generation) return result;
-      this.outcomes.set(id, { disposition: p.disposition, text: p.text, utterance_id: p.utterance_id, result });
-      while (this.outcomes.size > 30) this.outcomes.delete(this.outcomes.keys().next().value!);
-      this.lastDecisionAt = new Date(this.now()).toISOString();
-      if (p.disposition === 'announce') { this.lastAnnouncementAt = this.lastDecisionAt; this.sent++; }
-      // Answering a question must not acknowledge an independent proactive event.
-      if (!p.utterance_id) {
-        this.lastAnchor = read.fix;
-        if(this.geographyDirty===read.geographyRevision)this.geographyDirty=undefined;
-        if(this.weatherDirty===read.weatherRevision)this.weatherDirty=undefined;
-        // A response to an older read must not consume a later geography event.
-        if(!this.pending||read.contextSequence>=this.pending.contextSequence) {
-          this.pending=undefined;if(this.retry)clearTimeout(this.retry);
-        }
-      }
-      this.scheduleContextEvent();
-      this.changes.emit();
-      // New movement during reasoning can be considered on the next phone update.
+      this.recordResponse(id, read, generation, p, result);
       return result;
     });
     this.announceTail = operation.catch(() => {}); return operation;
@@ -315,7 +347,7 @@ export class LocationContext {
   private clear() {
     this.mobility?.clear();this.mobilityAllowed=false;this.weatherDirty=undefined;this.weatherEpoch=undefined;
     this.stopGeography();this.generation++; this.sharingId = undefined; this.owner = undefined; this.leaseUntil = 0; this.sequence = -1;
-    this.latest = undefined; this.reads.clear(); this.outcomes.clear(); this.pending = undefined; this.lastAnchor = undefined; this.lastEventAt = -Infinity;
+    this.latest = undefined; this.reads.clear(); this.mobilityReads.clear(); this.outcomes.clear(); this.pending = undefined; this.lastAnchor = undefined; this.lastEventAt = -Infinity;
     if (this.retry) clearTimeout(this.retry); this.retry = undefined;
     this.changes.emit();
   }

@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects Mac 0.4.30 and Even 0.3.53 source, reviewed November 2, 2026. Optional weather context and sharing-based context reception additionally reflect Mac 0.4.34 and Even 0.3.57 source, reviewed November 10, 2026. Sharing-based Mac notification reception and stop controls additionally reflect Mac 0.4.35 source, reviewed November 10, 2026. Optional Polar health context additionally reflects the current integration source, reviewed November 14, 2026; live API and device acceptance remain pending. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects Mac 0.4.30 and Even 0.3.53 source, reviewed November 2, 2026. Optional weather context and sharing-based context reception additionally reflect Mac 0.4.34 and Even 0.3.57 source, reviewed November 10, 2026. Sharing-based Mac notification reception and stop controls additionally reflect Mac 0.4.35 source, reviewed November 10, 2026. Optional Polar health context and combined guarded responses additionally reflect the current integration source, reviewed November 14, 2026; acceptance evidence and remaining device checks are tracked in the associated development records. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
@@ -78,6 +78,19 @@ when Polar information contributes to that answer. Dot Link does not append a fi
 credit. A source mention in the answer is also spoken when read-aloud is enabled.
 Actual model behavior and conformity with the detailed brand requirements remain
 pending verification. See the [Polar API agreement](https://www.polar.com/en/legal/polar-api-agreement).
+
+## Responses using several context sources
+
+The connected AI can select relevant permitted location, weather, walking/terrain,
+recent-place and health evidence for one answer. The Mac rechecks every submitted
+source receipt before saving that message, including sharing stops, deletion,
+revocation and expiry. Recent-place announcements still require an existing
+question. Silent decisions save no conversation message. Receipts and their bounded
+retry decisions stay in memory and do not create a combined sensor history or new
+data collection. Accepted answers use the ordinary conversation storage described
+above; stopping a source does not erase previously shared conversations. These
+checks depend on the AI submitting every source used in its reasoning or text;
+they do not infer provenance by inspecting generated prose.
 
 ## Photos
 

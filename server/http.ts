@@ -1,3 +1,4 @@
+import { ContextResponder, contextResponseTool } from './context-response.ts';
 import { HealthContext, healthEvent, healthTool, healthResponseTool } from './health/context.ts';
 import { decisionFactorResponse } from './context-guidance.ts';
 import { WeatherContext, weatherContextTool } from './weather/context.ts';
@@ -24,6 +25,8 @@ import type { SharingActivation } from './sharing-activation.ts';
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
 const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(), z.number()]).optional(), method: z.string(), params: z.unknown().optional() }).strict();
+
+const contextResponders = new WeakMap<Bridge, ContextResponder>();
 
 export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext): Promise<unknown> {
   // Register factor definition and reader together: catalog and calls use this path.
@@ -62,7 +65,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [...factors.filter(factor => factor.read).map(factor => factor.tool), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationResponseTool] : []), ...(history?.respond ? [historyResponseTool] : []), ...(health ? [healthResponseTool] : [])] }; break;
+      case 'tools/list': result = { tools: [...factors.filter(factor => factor.read).map(factor => factor.tool), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationResponseTool] : []), ...(history?.respond ? [historyResponseTool] : []), ...(health ? [healthResponseTool] : []), ...(locations || health || history?.responseGuard || weather ? [contextResponseTool] : [])] }; break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
@@ -77,7 +80,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         }
         const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
         const locationNames = ['respond_to_location'];
-        if (![...notificationNames, ...locationNames, 'respond_to_history', 'respond_to_health', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
+        if (![...notificationNames, ...locationNames, 'respond_to_history', 'respond_to_health', 'respond_to_context', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
           throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
         }
         if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (name === 'respond_to_history' && !history?.respond) || (name === 'respond_to_health' && !health)) {
@@ -99,6 +102,11 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
             case 'get_pending_notifications': return notifications!.pending(args);
             case 'respond_to_history': return history!.respond!(args);
             case 'respond_to_health': return health!.respond(args);
+            case 'respond_to_context': {
+              let responder = contextResponders.get(bridge);
+              if (!responder) { responder = new ContextResponder(bridge.sendMessage.bind(bridge)); contextResponders.set(bridge, responder); }
+              return responder.respond(args, {locations, health, history, weather});
+            }
             case 'send_message_to_g2': return acknowledge(name, args) ?? bridge.sendMessage(args);
             case 'reply_to_g2': return acknowledge(name, args) ?? bridge.reply(args);
             case 'set_notification_disposition': return notifications!.decide(args);
