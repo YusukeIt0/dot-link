@@ -67,6 +67,24 @@ test('health events and activation direct combined evidence through the combined
  }
 });
 
+test('health decisions follow bounded read retention without losing active retry identity',async t=>{
+ const f=await fixture(t,true);let first='',last='';
+ for(let i=0;i<45;i++) {
+  const r=f.h.read({categories:['recovery'],hours:168});assert.ok('read_id' in r);
+  first ||= r.read_id;last=r.read_id;
+  await f.h.respond({read_id:r.read_id,disposition:'silent'});
+ }
+ const decisions=(f.h as unknown as {decisions:Map<string,unknown>}).decisions;
+ assert.equal(decisions.size,40);assert.equal(f.h.responseContext(first).previous,undefined);
+ f.h.responseContext(first).complete('late',{stored:true});assert.equal(decisions.size,40);
+ await assert.rejects(f.h.respond({read_id:first,disposition:'silent'}));
+ assert.deepEqual(await f.h.respond({read_id:last,disposition:'silent'}),{disposition:'silent'});
+ await assert.rejects(f.h.respond({read_id:last,disposition:'announce',text:'conflicting'}));
+ f.advance(5*60_000);f.h.status('owner');assert.equal(decisions.size,0);
+ await assert.rejects(f.h.respond({read_id:last,disposition:'silent'}));
+ assert.equal(f.sent(),0);
+});
+
 test('heart-rate context exposes full-response summaries with bounded detail, legacy scope and existing access guards',async t=>{
  const f=await fixture(t,true,false,true);
  const r=f.h.read({categories:['heart_rate'],hours:168});assert.ok('observations' in r);

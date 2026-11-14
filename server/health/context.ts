@@ -83,9 +83,10 @@ export class HealthContext {
   private usable() {const s=this.state;return !this.closed&&this.healthy&&s.enabled&&!s.disconnectPending&&!!s.owner&&this.options.ownerAuthorized(s.owner)&&!!s.connection?.accessToken&&!!s.connection.expiresAt&&s.connection.expiresAt>this.now();}
   private maintain() {
     if(!this.healthy||!this.key)return;
+    for(const [id,read] of this.reads)if(read.expires<=this.now()){this.reads.delete(id);this.decisions.delete(id);}
     if(this.state.owner&&this.options.ownerRevoked(this.state.owner)) {this.save({...this.state,owner:undefined,enabled:false,observations:[],profile:undefined,profileDeleted:true,deletedBefore:this.now()});this.invalidate();return;}
     const observations=this.state.observations.filter(x=>x.retention_anchor>this.now()-RETENTION&&x.retention_anchor<=this.now());
-    if(observations.length!==this.state.observations.length){this.save({...this.state,observations});this.revision=randomUUID();this.reads.clear();this.changes.emit();}
+    if(observations.length!==this.state.observations.length){this.save({...this.state,observations});this.revision=randomUUID();this.reads.clear();this.decisions.clear();this.changes.emit();}
   }
   status(owner?:string) {
     try {this.maintain();}catch{}
@@ -122,7 +123,7 @@ export class HealthContext {
       const signature=(s:State)=>JSON.stringify([s.observations.map(({retrieved_at,...rest})=>rest),s.profile?(({retrieved_at,...rest})=>rest)(s.profile):null]);
       const changed=signature(next)!==signature(this.state);
       this.save(next);this.syncAt=new Date(this.now()).toISOString();if(profileOnly)this.profileRefreshAt=this.syncAt;this.fault='';
-      if(changed){this.revision=randomUUID();this.reads.clear();this.maybeEvent();}
+      if(changed){this.revision=randomUUID();this.reads.clear();this.decisions.clear();this.maybeEvent();}
     }catch(e){if(generation===this.generation){this.fault=e instanceof PolarError?e.code:'HEALTH_REQUEST_FAILED';if(this.fault==='HEALTH_RECONNECT_REQUIRED'){this.invalidate();this.save({...this.state,enabled:false});}}}
     finally {this.busy=false;if(this.abort===abort)this.abort=undefined;this.changes.emit();}
   }
@@ -155,7 +156,7 @@ export class HealthContext {
     const dates=observations.filter(x=>x.category==='heart_rate'&&x.source_local_date).map(x=>x.source_local_date!);
     const phoneTime=dates.length?(this.options.phoneTime?.(dates,this.state.owner!)??{evidence:{status:'unavailable' as const}}):undefined;
     const read_id=randomUUID();const expires=Math.min(this.now()+5*60_000,...observations.map(x=>x.retention_anchor+RETENTION));
-    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed});while(this.reads.size>40)this.reads.delete(this.reads.keys().next().value!);
+    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed});while(this.reads.size>40){const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
     return {status:'available',read_id,response_context:{tool:'respond_to_context',arguments:{health_read_ids:[read_id]},expires_no_later_than:new Date(expires).toISOString()},source:'Polar',reference_time:new Date(referenceTime).toISOString(),
       requested_window:{start_at:new Date(cutoff).toISOString(),end_at:new Date(referenceTime).toISOString(),
         heart_rate_selection:'potentially_overlapping_device_dates',exact_heart_rate_utc_filter:false},
@@ -181,9 +182,13 @@ export class HealthContext {
     const task=this.responseTail.then(action);
     this.responseTail=task.catch(()=>{});return task;
   }
+  private rememberDecision(readId:string,signature:string,result:unknown) {
+    const read=this.reads.get(readId);
+    if(read&&read.expires>this.now()&&read.generation===this.generation&&read.revision===this.revision)this.decisions.set(readId,{signature,result});
+  }
   responseContext(readId:string) {
     return {guard:this.responseGuard(readId),previous:this.decisions.get(readId),
-      complete:(signature:string,result:unknown)=>{this.decisions.set(readId,{signature,result});}};
+      complete:(signature:string,result:unknown)=>{this.rememberDecision(readId,signature,result);}};
   }
   respond(raw:unknown) {
     return this.withResponseLock(()=>this.performResponse(raw));
@@ -194,12 +199,12 @@ export class HealthContext {
     if(!allowed())throw rejected();
     const signature=JSON.stringify([p.disposition,p.utterance_id,p.text]);
     const prior=this.decisions.get(p.read_id);if(prior){if(prior.signature!==signature)throw rejected();return prior.result;}
-    if(p.disposition==='silent'){if(p.text||p.utterance_id)throw rejected();const result={disposition:'silent'};this.decisions.set(p.read_id,{signature,result});return result;}
+    if(p.disposition==='silent'){if(p.text||p.utterance_id)throw rejected();const result={disposition:'silent'};this.rememberDecision(p.read_id,signature,result);return result;}
     if(!p.text)throw rejected();
     const id=createHash('sha256').update(`${p.read_id}:${p.utterance_id??'proactive'}`).digest('hex');
     const message_id=`${id.slice(0,8)}-${id.slice(8,12)}-4${id.slice(13,16)}-8${id.slice(17,20)}-${id.slice(20,32)}`;
     const result=await this.options.announce({message_id,text:p.text,...(p.utterance_id?{utterance_id:p.utterance_id}:{})},allowed);
-    this.decisions.set(p.read_id,{signature,result});return result;
+    this.rememberDecision(p.read_id,signature,result);return result;
   }
   sharingIntent() {return this.usable()?{id:this.epoch,expiresAt:this.state.connection!.expiresAt!,subscribed:!!this.active(),activationStopped:this.state.activationStopped}:undefined;}
   private active() {const s=this.state.subscription;return s&&s.expiresAt>this.now()?s:undefined;}

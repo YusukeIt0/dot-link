@@ -4,6 +4,8 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 ## Unreleased
 
+- Renamed Location sharing to Sharing settings to include health sharing.
+
 - Added optional Polar health context sharing with your Dot.
 - Added health-data deletion and profile refresh in Sharing settings.
 

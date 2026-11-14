@@ -102,7 +102,7 @@ Requires Mac 0.4.0 or later and Even 0.2.23 or later.
 
 In ChatGPT **Settings → Plugins → your Dot Link connection**, choose **Update tools** if location tools are missing. The connection may still have the name you chose when creating it. The tools include `get_location_context`, `get_mobility_context`, `respond_to_location` and `respond_to_context`, with the `location.updated` event. The combined response tool lets Dot use relevant shared sources in one answer; no additional sharing switch is needed.
 
-For automatic context reception, update to Mac 0.4.34 or later. Turn on **Share my location** under **Location sharing** in the Even companion and grant the phone's location permission. Dot Link connects that choice to your existing Dot's context reception. There is no separate monitoring switch or follow-up setup request. Dot decides whether useful information warrants an announcement, and can remain silent. The status shows when Dot is ready. With **Weather context** enabled, weather for the shared current location joins those same decisions.
+For automatic context reception, update to Mac 0.4.34 or later. Turn on **Share my location** under **Sharing settings** in the Even companion and grant the phone's location permission. Dot Link connects that choice to your existing Dot's context reception. There is no separate monitoring switch or follow-up setup request. Dot decides whether useful information warrants an announcement, and can remain silent. The status shows when Dot is ready. With **Weather context** enabled, weather for the shared current location joins those same decisions.
 
 With Mac 0.4.23 or later, nearby streets, paths, areas and terrain references are added automatically while Dot is subscribed. Coordinates remain available during map loading or failure; a first area can take several minutes, while cached areas are faster. No region-download step is needed. References are not navigation or evidence that you entered a venue.
 
@@ -122,7 +122,7 @@ bundled English disclosure, support contact and full attribution.
 
 ### Remember recent places
 
-With Mac 0.4.30 or later and Even 0.3.53 or later, open **Location sharing** and turn
+With Mac 0.4.30 or later and Even 0.3.53 or later, open **Sharing settings** and turn
 on **Remember recent places** separately from **Share my location**. This lets Dot
 refer to up to seven days of recorded places and movement. Collection needs both
 options; old companions keep ordinary location sharing and do not upload history.
