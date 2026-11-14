@@ -132,10 +132,10 @@ export class HealthContext {
     if(!this.usable())return {status:'unavailable',activity_guidance:contextActivityGuidance};
     const referenceTime=this.now(),cutoff=referenceTime-args.hours*3600_000;
     const matching=this.state.observations.filter(x=>args.categories.includes(x.category)&&(
-      // Offset-free heart-rate days may overlap the requested window even if
-      // their conservative retention anchor predates it. Do not invent UTC.
-      x.category==='heart_rate'&&x.source_local_date
-        ?Date.parse(`${x.source_local_date}T00:00:00Z`)+36*3600_000>cutoff
+      // All offset-free dates may overlap the requested window even when the
+      // conservative retention anchor predates it. This is not a UTC instant.
+      x.time_basis==='local_date_earliest_bound'&&x.source_local_date
+        ?Date.parse(`${x.source_local_date}T00:00:00Z`)+36*3600_000>cutoff&&x.retention_anchor<=referenceTime
         :x.retention_anchor>cutoff));
     // Bound model context independently of encrypted storage size.
     const observations=matching.slice(0,80).map<ContextObservation>(x=>{
@@ -159,7 +159,9 @@ export class HealthContext {
     this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed});while(this.reads.size>40){const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
     return {status:'available',read_id,response_context:{tool:'respond_to_context',arguments:{health_read_ids:[read_id]},expires_no_later_than:new Date(expires).toISOString()},source:'Polar',reference_time:new Date(referenceTime).toISOString(),
       requested_window:{start_at:new Date(cutoff).toISOString(),end_at:new Date(referenceTime).toISOString(),
-        heart_rate_selection:'potentially_overlapping_device_dates',exact_heart_rate_utc_filter:false},
+        heart_rate_selection:'potentially_overlapping_device_dates',exact_heart_rate_utc_filter:false,
+        local_date_selection:'potentially_overlapping_source_dates',exact_local_date_utc_filter:false,
+        local_date_note:'Date-only observations describe their whole source day, not a rolling-window aggregate. Partial overlap is possible; retention_anchor is only a storage-expiry bound.'},
       observations,omitted_observations:Math.max(0,matching.length-observations.length),...(args.profile?{profile:this.state.profile??null}:{}),
       ...(phoneTime?{phone_time_evidence:phoneTime.evidence}:{}),
       ...(observations.some(x=>x.category==='activity')?{activity_metrics:{activity_goal_completion_percent:{unit:'%',meaning:'Percentage of the daily activity goal achieved; 100 means the goal is met. This is not a health or recovery score.'},active_duration:{format:'ISO 8601 duration'},inactive_duration:{format:'ISO 8601 duration'}}}:{}),

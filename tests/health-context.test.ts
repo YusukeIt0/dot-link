@@ -51,6 +51,25 @@ test('interpretation travels through discovery and selected reads without fabric
  await f.control('disable');assert.equal(f.h.read({}).status,'unavailable');
 });
 
+test('date-only activity and recovery overlap 24h without using the retention anchor as measurement time',async t=>{
+ const f=await fixture(t,true);
+ const activity=normalize('activity',[{start_time:'2026-11-14T00:00:00',steps:1000}],NOW);
+ f.collect(async()=>({observations:[...f.observations,...activity],profile:f.profile}));
+ await f.control('enable');await settle();
+ for(const hours of [24,48]) {
+  const r=f.h.read({categories:['activity','recovery'],hours});assert.ok('observations' in r);
+  assert.deepEqual(r.observations.map(x=>x.category).sort(),['activity','recovery']);
+  for(const row of r.observations) {
+   assert.equal(row.source_local_date,'2026-11-14');assert.equal(row.measured_at,null);
+   assert.equal(row.retention_anchor,Date.parse('2026-11-13T10:00:00Z'));
+  }
+ }
+ const exact=await fixture(t,true,true);
+ const short=exact.h.read({categories:['activity'],hours:1});assert.ok('observations' in short);
+ assert.deepEqual(short.observations,[]); // Explicit offset keeps instant filtering.
+ assert.deepEqual(normalize('activity',[{start_time:'2026-11-07T00:00:00',steps:1}],NOW),[]);
+});
+
 test('health events and activation direct combined evidence through the combined response guard',async t=>{
  const f=await fixture(t,true);
  const sender=new WebhookSender(async(_url,raw)=>{
