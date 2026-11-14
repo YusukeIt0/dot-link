@@ -5,11 +5,14 @@ import { normalizeHeartRates, storeHeartRateSummary } from './heart-rate.ts';
 export const RETENTION = 168 * 60 * 60 * 1000;
 export const categories = ['sleep','activity','heart_rate','recovery','exercise'] as const;
 export type Category = typeof categories[number];
+export const activityZones=['SLEEP','SEDENTARY','LIGHT','MODERATE','VIGOROUS'] as const;
+const activityZoneSample=z.object({time:z.string().max(40),zone:z.enum(activityZones)}).strict();
 const scalar = z.union([z.string().max(100),z.number().finite(),z.boolean()]);
 export const observationSchema = z.object({id:z.string().length(64),category:z.enum(categories),
   source:z.literal('Polar'), measured_at:z.string().nullable(), source_local_date:z.string().optional(),
   retention_anchor:z.number().finite(), time_basis:z.enum(['source_offset','local_date_earliest_bound']),
   retrieved_at:z.string(), values:z.record(z.string().max(50),scalar),
+  activity_zone_samples:z.array(activityZoneSample).max(2500).optional(),
   samples:z.array(z.object({time:z.string().max(40),value:z.number().finite()})).max(2500).optional()}).strict();
 export type Observation = z.infer<typeof observationSchema>;
 export const profileSchema = z.object({source:z.literal('Polar'),kind:z.literal('registered_profile'),
@@ -51,7 +54,7 @@ export function normalize(category:Category,raw:unknown,now:number): Observation
   const result:Observation[]=[];
   for (const item of rows) {
     const r=object(item), values:Record<string,string|number|boolean>={};
-    let at:number|undefined, day=date(r.date), samples:Observation['samples'];
+    let at:number|undefined, day=date(r.date), samples:Observation['samples'],activitySamples:Observation['activity_zone_samples'];
     const numbers=(keys:string[])=>{for(const k of keys)if(typeof r[k]==='number' && Number.isFinite(r[k]) && Math.abs(r[k] as number)<1e8) values[k]=r[k] as number;};
     const strings=(keys:string[])=>{for(const k of keys)if(typeof r[k]==='string' && /^[\w:.+\- ]{1,80}$/.test(r[k] as string)) values[k]=r[k] as string;};
     if(category==='sleep') {
@@ -65,10 +68,22 @@ export function normalize(category:Category,raw:unknown,now:number): Observation
       day=date(typeof r.start_time==='string' ? r.start_time.slice(0,10) : undefined);
       at=instant(r.start_time); strings(['active_duration','inactive_duration']); numbers(['steps','daily_activity']);
       const rawZones=object(object(r.samples).activity_zones).samples;
-      const zones=Array.isArray(rawZones)?rawZones.slice(0,2500):[];
-      const counts:Record<string,number>={};
-      for(const s of zones) {const zone=object(s).zone;if(typeof zone==='string'&&['SEDENTARY','LIGHT','MODERATE','VIGOROUS','NON_WEAR','SLEEP'].includes(zone)) counts[zone]=(counts[zone]??0)+1;}
-      for(const [k,v] of Object.entries(counts))values[`zone_samples_${k.toLowerCase()}`]=v;
+      if(Array.isArray(rawZones)) {
+        const valid:NonNullable<Observation['activity_zone_samples']>=[];
+        for(const s of rawZones) {
+          const row=object(s),time=row.timestamp,zone=row.zone;
+          if(typeof zone!=='string'||!activityZones.includes(zone as typeof activityZones[number])||typeof time!=='string')continue;
+          const match=/^(\d{4}-\d{2}-\d{2})T([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:0\d|1[0-4]):[0-5]\d)?$/.exec(time);
+          if(!match||!date(match[1])||match[1]!==day)continue;
+          valid.push({time,zone:zone as typeof activityZones[number]});
+        }
+        valid.sort((a,b)=>a.time.localeCompare(b.time)||a.zone.localeCompare(b.zone));
+        const unique=valid.filter((x,i)=>i===0||x.time!==valid[i-1].time||x.zone!==valid[i-1].zone);
+        for(const zone of activityZones)values[`zone_samples_${zone.toLowerCase()}`]=unique.filter(x=>x.zone===zone).length;
+        values.activity_zone_sample_count=unique.length;
+        values.activity_zone_samples_reduced=unique.length>2500;
+        activitySamples=unique.length<=2500?unique:Array.from({length:2500},(_,i)=>unique[Math.floor(i*(unique.length-1)/2499)]);
+      }
     } else if(category==='heart_rate') {
       const heartRate=normalizeHeartRates(r.heart_rate_samples);
       if(!heartRate)continue;
@@ -91,7 +106,7 @@ export function normalize(category:Category,raw:unknown,now:number): Observation
     const id=createHash('sha256').update(`${category}:${identity}`).digest('hex');
     result.push(observationSchema.parse({id,category,source:'Polar',measured_at:at===undefined?null:new Date(at).toISOString(),
       ...(day?{source_local_date:day}:{}),retention_anchor:anchor,time_basis:at===undefined?'local_date_earliest_bound':'source_offset',
-      retrieved_at:new Date(now).toISOString(),values,...(samples?{samples}:{})}));
+      retrieved_at:new Date(now).toISOString(),values,...(samples?{samples}:{}),...(activitySamples?{activity_zone_samples:activitySamples}:{})}));
   }
   return result;
 }

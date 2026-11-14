@@ -219,3 +219,23 @@ Source semantics: [Polar continuous-heart-rate schema](https://www.polar.com/acc
 Explicit Keychain authorization allows up to five minutes for the owner to answer
 the macOS prompt; background reads remain noninteractive and bounded to 15 seconds.
 The Mac settings request waits for that authorization result before reporting it.
+
+### Daily health windows and activity intensity
+
+Offset-free daily activity and recovery records, like heart-rate days, are selected
+when their possible source-day interval overlaps the requested window. Their
+conservative storage-expiry anchor is not a measurement time. A returned daily
+value is not a rolling-window total; source dates and offset uncertainty remain.
+
+Activity reads preserve Polar's five classifications (SLEEP, SEDENTARY, LIGHT,
+MODERATE and VIGOROUS), with resting/sitting/low/medium/high explanations. All
+valid distinct dated samples are counted before bounded detail is selected across
+the full returned sequence. Encrypted storage keeps up to 2,500 samples per day;
+tool detail keeps up to 96, including endpoints. Reduction is explicit. These are
+sample counts, not durations; missing intervals are not inferred as inactivity.
+Source timestamps without offsets cannot establish UTC alignment with an event
+or a different device clock. Older count-only records have no recoverable timing
+and may reflect only an initial subset. A subsequent normal collection can replace
+them with richer evidence; no extra collection permission is introduced.
+
+Source: [Polar activity samples](https://www.polar.com/accesslink-api/#activity-zone-sample2).

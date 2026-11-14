@@ -40,6 +40,12 @@ offset-free dates use the earliest possible UTC boundary, which can shorten rete
 The latest profile is retained until deletion/disconnection, without historical
 versions. A profile edit timestamp is not a weight measurement timestamp.
 
+For activity intensity, the Mac retains provider classifications and source sample
+timestamps (up to 2,500 per day), plus counts across all valid distinct returned
+samples. Tool responses limit detail to 96 samples across the sequence and mark
+reduction. Counts do not establish durations; old count-only records cannot
+recover timestamps. The same health sharing, encryption and expiry rules apply.
+
 For synced heart rate, the Mac calculates day/hour summaries from all valid samples
 in each returned day, then retains at most 96 time-spread detail samples. Summaries
 include observed clock spans, sample counts, ranges, sample means and the largest

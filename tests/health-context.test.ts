@@ -254,3 +254,23 @@ test('combined phone clock evidence respects history consent and fences pending 
  await f.h.respond({read_id:fresh.read_id,disposition:'announce',text:'Source clock only'});
  assert.equal(f.sent(),1);
 });
+
+test('activity intensity preserves all five source classes and bounded dated evidence without invented durations',async t=>{
+ const f=await fixture(t,true);
+ const zones=['SLEEP','SEDENTARY','LIGHT','MODERATE','VIGOROUS'];
+ const input=Array.from({length:3000},(_,i)=>({zone:zones[i%5],timestamp:'2026-11-14T'+new Date(i*28_000).toISOString().slice(11,19)}));
+ const rows=normalize('activity',[{start_time:'2026-11-14T00:00:00',steps:1000,samples:{activity_zones:{samples:[...input,input[0],{zone:'UNKNOWN',timestamp:input[0].timestamp},{zone:'SLEEP',timestamp:'untrusted string'},{zone:'SLEEP',timestamp:'2026-11-13T12:00:00'}]}}}],NOW);
+ assert.equal(rows.length,1);assert.equal(rows[0].values.activity_zone_sample_count,3000);
+ for(const zone of zones)assert.equal(rows[0].values['zone_samples_'+zone.toLowerCase()],600);
+ assert.equal(rows[0].activity_zone_samples!.length,2500);
+ assert.equal(rows[0].activity_zone_samples!.at(-1)!.time,input.at(-1)!.timestamp);
+ f.collect(async()=>({observations:rows,profile:f.profile}));await f.control('enable');await settle();
+ const r=f.h.read({categories:['activity'],hours:24});assert.ok('observations' in r);
+ const row=r.observations[0];assert.equal(row.activity_zone_samples!.length,96);
+ assert.equal(row.activity_zone_samples!.at(-1)!.time,input.at(-1)!.timestamp);
+ assert.equal(row.values.activity_zone_samples_reduced,true);assert.equal(row.values.activity_zone_sample_count,3000);
+ assert.equal(row.measured_at,null);assert.match(r.activity_metrics!.intensity.meaning,/not durations/);
+ assert.equal(Object.keys(r.activity_metrics!.intensity.zones).length,5);
+ assert.ok((new HealthVault(f.path).read(f.key) as any).observations.some((o:any)=>o.activity_zone_samples?.length===2500));
+ await f.control('disable');assert.equal(f.h.read({categories:['activity']}).status,'unavailable');
+});
