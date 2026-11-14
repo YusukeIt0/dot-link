@@ -47,6 +47,20 @@ test('heart-rate context exposes full-response summaries with bounded detail, le
  // A last-24h read must still include the potentially overlapping device day.
  const recent=f.h.read({categories:['heart_rate'],hours:24});assert.ok('observations' in recent);
  assert.equal(recent.observations.length,1);assert.equal(recent.heart_rate_metrics!.requested_hours,24);
+ assert.equal(recent.reference_time,new Date(NOW).toISOString());
+ assert.equal(recent.requested_window.start_at,new Date(NOW-24*3600_000).toISOString());
+ assert.equal(recent.requested_window.end_at,recent.reference_time);
+ assert.equal(recent.requested_window.exact_heart_rate_utc_filter,false);
+ // A fresh read advances the conversation reference, never the source clock
+ // or retrieval time, and never turns the retention anchor into a measurement.
+ f.advance(60_000);
+ const later=f.h.read({categories:['heart_rate'],hours:1});assert.ok('observations' in later);
+ assert.equal(later.reference_time,new Date(NOW+60_000).toISOString());
+ assert.equal(later.requested_window.start_at,new Date(NOW+60_000-3600_000).toISOString());
+ assert.equal(later.observations[0].measured_at,null);
+ assert.equal(later.observations[0].source_local_date,recent.observations[0].source_local_date);
+ assert.equal(later.observations[0].retrieved_at,recent.observations[0].retrieved_at);
+ assert.deepEqual(later.observations[0].heart_rate_summary,recent.observations[0].heart_rate_summary);
  await f.control('disable');assert.equal(f.h.read({categories:['heart_rate']}).status,'unavailable');
  await assert.rejects(f.h.respond({read_id:r.read_id,disposition:'announce',text:'old data'}));
  const legacy=f.observations.find(x=>x.category==='heart_rate')!;legacy.values={};legacy.samples=[{time:'00:01:00',value:65},{time:'03:00:00',value:85}];

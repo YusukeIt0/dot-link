@@ -116,7 +116,7 @@ export class HealthContext {
   read(raw:unknown) {
     this.maintain();const args=z.object({categories:z.array(z.enum(categories)).max(5).default(['sleep','activity','recovery']),hours:z.number().min(1).max(168).default(24),profile:z.boolean().default(false)}).strict().parse(raw??{});
     if(!this.usable())return {status:'unavailable',activity_guidance:contextActivityGuidance};
-    const cutoff=this.now()-args.hours*3600_000;
+    const referenceTime=this.now(),cutoff=referenceTime-args.hours*3600_000;
     const matching=this.state.observations.filter(x=>args.categories.includes(x.category)&&(
       // Offset-free heart-rate days may overlap the requested window even if
       // their conservative retention anchor predates it. Do not invent UTC.
@@ -141,7 +141,10 @@ export class HealthContext {
     }).map(x=>x.samples&&x.samples.length>96?{...x,samples:x.samples.filter((_,i)=>i%Math.ceil(x.samples!.length/96)===0),samples_total:x.samples.length,samples_reduced:true}:x);
     const read_id=randomUUID();const expires=Math.min(this.now()+5*60_000,...observations.map(x=>x.retention_anchor+RETENTION));
     this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires});while(this.reads.size>40)this.reads.delete(this.reads.keys().next().value!);
-    return {status:'available',read_id,source:'Polar',observations,omitted_observations:Math.max(0,matching.length-observations.length),...(args.profile?{profile:this.state.profile??null}:{}),
+    return {status:'available',read_id,source:'Polar',reference_time:new Date(referenceTime).toISOString(),
+      requested_window:{start_at:new Date(cutoff).toISOString(),end_at:new Date(referenceTime).toISOString(),
+        heart_rate_selection:'potentially_overlapping_device_dates',exact_heart_rate_utc_filter:false},
+      observations,omitted_observations:Math.max(0,matching.length-observations.length),...(args.profile?{profile:this.state.profile??null}:{}),
       ...(observations.some(x=>x.category==='activity')?{activity_metrics:{activity_goal_completion_percent:{unit:'%',meaning:'Percentage of the daily activity goal achieved; 100 means the goal is met. This is not a health or recovery score.'},active_duration:{format:'ISO 8601 duration'},inactive_duration:{format:'ISO 8601 duration'}}}:{}),
       ...(observations.some(x=>x.category==='heart_rate')?{heart_rate_metrics:{...heartRateGuidance,requested_hours:args.hours}}:{}),
       timestamp_note:'Local-date-only records retain the original date; their UTC measurement time is unknown. profile_modified_at is a profile edit time, not a weight measurement time. retrieved_at is not device synchronization time.',

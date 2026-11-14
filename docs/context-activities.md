@@ -133,6 +133,17 @@ remain unknown. `hours` selects potentially overlapping device dates rather than
 clipping samples to an invented UTC interval. Conservative measurement retention
 is unchanged. Gaps and absent hours are not interpolated.
 
+Health reads expose `reference_time` and `requested_window` in UTC so the AI can
+distinguish the conversation's reference interval from acquisition and measurement
+times. Heart-rate days can overlap that interval without being exactly clipped to
+it. These fields do not establish the device's UTC offset. Source-local hour
+questions can use the preserved device clock. Dated, already-permitted timezone
+evidence or clear same-local-clock conversation may support a qualified association
+with an event, but does not prove exact clock alignment. The AI must distinguish
+that inference from an established correspondence, especially across travel or
+clock changes. No additional timezone collection or history-sharing requirement
+is introduced; unavailable optional evidence does not require a setup prompt.
+
 The encrypted v1 scalar-value shape remains compatible with earlier builds.
 Existing records without full-response summaries are labeled `legacy_stored_samples`;
 their old first-2,500 cap is not retroactively treated as complete input. A later
