@@ -274,3 +274,13 @@ test('activity intensity preserves all five source classes and bounded dated evi
  assert.ok((new HealthVault(f.path).read(f.key) as any).observations.some((o:any)=>o.activity_zone_samples?.length===2500));
  await f.control('disable');assert.equal(f.h.read({categories:['activity']}).status,'unavailable');
 });
+
+
+test('multi-day intensity reads share one detail budget without reducing daily counts',async t=>{
+ const f=await fixture(t,true);
+ const rows=['2026-11-12','2026-11-13','2026-11-14'].flatMap(day=>normalize('activity',[{start_time:day+'T00:00:00',samples:{activity_zones:{samples:Array.from({length:120},(_,i)=>({zone:'LIGHT',timestamp:day+'T'+new Date(i*600_000).toISOString().slice(11,19)}))}}}],NOW));
+ f.collect(async()=>({observations:rows,profile:f.profile}));await f.control('enable');await settle();
+ const r=f.h.read({categories:['activity'],hours:48});assert.ok('observations' in r);assert.equal(r.observations.length,3);
+ assert.equal(r.observations.reduce((n,o)=>n+(o.activity_zone_samples?.length??0),0),96);
+ for(const row of r.observations){assert.equal(row.values.zone_samples_light,120);assert.equal(row.values.activity_zone_samples_reduced,true);assert.equal(row.activity_zone_samples![0].time.slice(11),'00:00:00');assert.equal(row.activity_zone_samples!.at(-1)!.time.slice(11),'19:50:00');}
+});

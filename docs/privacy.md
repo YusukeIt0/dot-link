@@ -42,7 +42,7 @@ versions. A profile edit timestamp is not a weight measurement timestamp.
 
 For activity intensity, the Mac retains provider classifications and source sample
 timestamps (up to 2,500 per day), plus counts across all valid distinct returned
-samples. Tool responses limit detail to 96 samples across the sequence and mark
+samples. Tool responses share a 96-sample detail budget across returned days and mark
 reduction. Counts do not establish durations; old count-only records cannot
 recover timestamps. The same health sharing, encryption and expiry rules apply.
 

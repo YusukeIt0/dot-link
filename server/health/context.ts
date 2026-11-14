@@ -138,7 +138,9 @@ export class HealthContext {
         ?Date.parse(`${x.source_local_date}T00:00:00Z`)+36*3600_000>cutoff&&x.retention_anchor<=referenceTime
         :x.retention_anchor>cutoff));
     // Bound model context independently of encrypted storage size.
-    const observations=matching.slice(0,80).map<ContextObservation>(x=>{
+    const selected=matching.slice(0,80);
+    const activityDetailLimit=Math.max(1,Math.floor(96/Math.max(1,selected.filter(x=>x.category==='activity'&&x.activity_zone_samples?.length).length)));
+    const observations=selected.map<ContextObservation>(x=>{
       if(x.category==='heart_rate') {
         // Old encrypted records remain readable, but cannot claim that their
         // original first-2500 sample cap covered the full provider response.
@@ -152,8 +154,8 @@ export class HealthContext {
       const {daily_activity,...values}=x.values;
       // Translate the provider field on read, including already encrypted records.
       const zones=x.activity_zone_samples;
-      const detail=zones&&zones.length>96?Array.from({length:96},(_,i)=>zones[Math.floor(i*(zones.length-1)/95)]):zones;
-      return {...x,...(detail?{activity_zone_samples:detail}:{}),activity_zone_coverage:{scope:zones?'all_valid_distinct_returned_samples_for_source_date':'legacy_count_only_subset_unknown',source_local_date:x.source_local_date??null,first_source_time:zones?.[0]?.time??null,last_source_time:zones?.at(-1)?.time??null,detail_selection:'bounded_index_selection_across_source_sequence',continuous_coverage:'unknown'},values:{...values,...(zones?{activity_zone_samples_reduced:x.values.activity_zone_samples_reduced===true||zones.length>96}:{}),...(typeof daily_activity==='number'?{activity_goal_completion_percent:daily_activity}:{})}};
+      const detail=zones&&zones.length>activityDetailLimit?Array.from({length:activityDetailLimit},(_,i)=>zones[activityDetailLimit===1?zones.length-1:Math.floor(i*(zones.length-1)/(activityDetailLimit-1))]):zones;
+      return {...x,...(detail?{activity_zone_samples:detail}:{}),activity_zone_coverage:{scope:zones?'all_valid_distinct_returned_samples_for_source_date':'legacy_count_only_subset_unknown',source_local_date:x.source_local_date??null,first_source_time:zones?.[0]?.time??null,last_source_time:zones?.at(-1)?.time??null,detail_selection:'bounded_index_selection_across_source_sequence',continuous_coverage:'unknown'},values:{...values,...(zones?{activity_zone_samples_reduced:x.values.activity_zone_samples_reduced===true||zones.length>activityDetailLimit}:{}),...(typeof daily_activity==='number'?{activity_goal_completion_percent:daily_activity}:{})}};
     }).map(x=>x.samples&&x.samples.length>96?{...x,samples:x.samples.filter((_,i)=>i%Math.ceil(x.samples!.length/96)===0),samples_total:x.samples.length,samples_reduced:true}:x);
     const dates=observations.filter(x=>x.category==='heart_rate'&&x.source_local_date).map(x=>x.source_local_date!);
     const phoneTime=dates.length?(this.options.phoneTime?.(dates,this.state.owner!)??{evidence:{status:'unavailable' as const}}):undefined;
@@ -168,7 +170,7 @@ export class HealthContext {
       ...(phoneTime?{phone_time_evidence:phoneTime.evidence}:{}),
       ...(observations.some(x=>x.category==='activity')?{activity_metrics:{activity_goal_completion_percent:{unit:'%',meaning:'Percentage of the daily activity goal achieved; 100 means the goal is met. This is not a health or recovery score.'},active_duration:{format:'ISO 8601 duration'},inactive_duration:{format:'ISO 8601 duration'},
         intensity:{zones:{SLEEP:'Resting: sleep, rest or lying down',SEDENTARY:'Sitting or other passive activity',LIGHT:'Low intensity, e.g. standing work or light housework',MODERATE:'Medium intensity, e.g. walking',VIGOROUS:'High intensity, e.g. jogging, running or other vigorous exercise'},
-          meaning:'Provider activity classifications, not proof of a specific action or sleep episode. Samples retain source timestamps; an absent UTC offset remains unknown. Counts are sample counts, not durations or percentages of a day. Detail is an index-spaced excerpt across the source sequence, not regular time sampling or a complete timeline; reduction can hide short changes. Day counts can include times outside the requested window. Do not interpolate continuous activity or inactivity between samples. Missing samples do not mean resting. Older count-only records may cover only an initial subset and have no temporal evidence.'}}}:{}),
+          meaning:'Provider activity classifications, not proof of a specific action or sleep episode. Samples retain source timestamps; an absent UTC offset remains unknown. Counts are sample counts, not durations or percentages of a day. Activity detail shares a 96-sample response budget across returned records. Detail is an index-spaced excerpt across the source sequence, not regular time sampling or a complete timeline; reduction can hide short changes. Day counts can include times outside the requested window. Do not interpolate continuous activity or inactivity between samples. Missing samples do not mean resting. Older count-only records may cover only an initial subset and have no temporal evidence.'}}}:{}),
       ...(observations.some(x=>x.category==='heart_rate')?{heart_rate_metrics:{...heartRateGuidance,requested_hours:args.hours}}:{}),
       timestamp_note:'Local-date-only records retain the original date; their UTC measurement time is unknown. profile_modified_at is a profile edit time, not a weight measurement time. retrieved_at is not device synchronization time.',
       interpretation_guidance:healthInterpretationGuidance,

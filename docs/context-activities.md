@@ -231,7 +231,8 @@ Activity reads preserve Polar's five classifications (SLEEP, SEDENTARY, LIGHT,
 MODERATE and VIGOROUS), with resting/sitting/low/medium/high explanations. All
 valid distinct dated samples are counted before bounded detail is selected across
 the full returned sequence. Encrypted storage keeps up to 2,500 samples per day;
-tool detail keeps up to 96, including endpoints. Reduction is explicit. These are
+tool detail shares up to 96 samples across returned days, retaining endpoints
+when at least two samples fit. Reduction is explicit. These are
 sample counts, not durations; missing intervals are not inferred as inactivity.
 Source timestamps without offsets cannot establish UTC alignment with an event
 or a different device clock. Older count-only records have no recoverable timing
