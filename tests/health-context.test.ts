@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 import {HealthContext, healthTool, healthEvent, type HealthOptions} from '../server/health/context.ts';
-import {healthInterpretationPurpose, healthInterpretationGuidance} from '../server/health/interpretation.ts';
+import {healthInterpretationPurpose, healthInterpretationGuidance} from '../server/health/context.ts';
 import {LocationHistoryStore} from '../server/history/store.ts';
 import {HealthVault} from '../server/health/vault.ts';
 import {PolarAPI} from '../server/health/polar.ts';
