@@ -59,7 +59,10 @@ message identity; conflicting decisions are rejected. With a current location,
 both response routes share the location/question decision identity and serialize
 their commits. Changing receipts or switching routes cannot create a second
 decision for that location/question. Retry through the original route with the
-original receipts; a new location or distinct question remains independent. No extra user setting,
+original receipts; a new location or distinct question remains independent. Each
+health read retains its existing one-decision rule across both routes, including
+when several health reads contribute. A later question can use a fresh health read;
+a silent decision does not consume the question itself. No extra user setting,
 collection or AI reasoning engine is introduced.
 
 `silent` writes no message and omits text/question ID. It can acknowledge an

@@ -53,8 +53,10 @@ export class ContextResponder {
     if (p.disposition === 'silent' ? p.text !== undefined || p.utterance_id !== undefined : p.text === undefined) throw invalid();
     if (p.history_context_ids && p.disposition === 'announce' && !p.utterance_id)
       throw new ToolRejection('history_question_required', 'Historical evidence may inform reasoning, but a historical G2 announcement still requires an existing question. Do not bypass this boundary through another tool.');
-    if (p.context_id && sources.locations) return sources.locations.withResponseLock(() => this.commit(p, sources));
-    return this.commit(p, sources);
+    // Always acquire location before health; individual routes acquire only their own lock.
+    const commit = () => p.health_read_ids && sources.health
+      ? sources.health.withResponseLock(() => this.commit(p, sources)) : this.commit(p, sources);
+    return p.context_id && sources.locations ? sources.locations.withResponseLock(commit) : commit();
   }
   private async commit(p: Input, sources: ContextSources) {
     const guards: (() => boolean)[] = [];
@@ -71,9 +73,11 @@ export class ContextResponder {
       location = withLocation(() => sources.locations!.responseContext(p.context_id!, p.utterance_id));
       guards.push(() => withLocation(location!.guard));
     }
+    const healthDecisions: ReturnType<HealthContext['responseContext']>[] = [];
     for (const id of p.health_read_ids ?? []) {
       if (!sources.health) throw unavailable('health');
-      guards.push(sources.health.responseGuard(id));
+      const read = sources.health.responseContext(id);
+      guards.push(read.guard); healthDecisions.push(read);
     }
     for (const id of p.history_context_ids ?? []) {
       if (!sources.history?.responseGuard) throw unavailable('history');
@@ -96,6 +100,9 @@ export class ContextResponder {
     const receiptKey = responseId(p);
     const message_id = location?.decisionId ?? receiptKey;
     const signature = JSON.stringify([p.disposition, p.text ?? null]);
+    const healthSignature = JSON.stringify(['combined', receiptKey, signature]);
+    for (const read of healthDecisions) if (read.previous && read.previous.signature !== healthSignature)
+      throw new ToolRejection('context_decision_conflict', 'This health read already has a different decision. Retry the original route and receipts, or read fresh evidence for a new question.');
     if (location?.previous) {
       const previous = location.previous;
       if (previous.receiptKey !== receiptKey || previous.disposition !== p.disposition || previous.text !== p.text)
@@ -112,6 +119,7 @@ export class ContextResponder {
     this.decisions.set(receiptKey, {signature, result});
     while (this.decisions.size > 1000) this.decisions.delete(this.decisions.keys().next().value!);
     location?.complete(message_id, {...p, receiptKey}, result);
+    for (const read of healthDecisions) read.complete(healthSignature, result);
     return result;
   }
 }

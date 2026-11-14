@@ -117,7 +117,7 @@ test('silence writes nothing, does not consume a question, and does not authoriz
   assert.equal(silent.result.structuredContent.stored_for_g2, false); assert.deepEqual(f.bridge.history(), before);
   const proactive = await f.call('respond_to_context', {...refs, disposition: 'announce', text: 'Past places'});
   assert.equal(proactive.error.data.reason, 'history_question_required');
-  const answer = await f.call('respond_to_context', {...refs, disposition: 'announce', utterance_id: f.question, text: 'An answer'});
+  const answer = await f.call('respond_to_context', {...refs, health_read_ids: [(f.health.read({categories: ['sleep']}) as any).read_id], disposition: 'announce', utterance_id: f.question, text: 'An answer'});
   assert.equal(answer.result.structuredContent.stored_for_g2, true);
   assert.equal((await f.call('respond_to_context', {...refs, disposition: 'silent', utterance_id: f.question})).error.data.reason, 'invalid_arguments');
 });
@@ -214,3 +214,42 @@ for (const firstRoute of ['respond_to_context', 'respond_to_location']) {
     assert.equal(f.location.status().locationAnnouncementCount, 1);
   });
 }
+
+for (const firstRoute of ['respond_to_context', 'respond_to_health']) {
+  test(`${firstRoute} owns the health read across silence and route changes`, async t => {
+    const f = await fixture(t), read = (f.health.read({categories: ['sleep']}) as any).read_id;
+    const args = (route: string) => route === 'respond_to_health' ? {read_id: read} : {health_read_ids: [read]};
+    const secondRoute = firstRoute === 'respond_to_health' ? 'respond_to_context' : 'respond_to_health';
+    const p = {...args(firstRoute), disposition: 'silent'};
+    const first = await f.call(firstRoute, p); assert.ok(first.result);
+    assert.deepEqual(await f.call(firstRoute, p), first);
+    const second = await f.call(secondRoute, {...args(secondRoute), disposition: 'announce', text: 'Reversed decision'});
+    assert.ok(second.error); assert.equal(f.bridge.outboundHistory().length, 0);
+  });
+  test(`${firstRoute} serializes concurrent health answers across routes`, async t => {
+    const f = await fixture(t), read = (f.health.read({categories: ['sleep']}) as any).read_id;
+    const args = (route: string) => route === 'respond_to_health' ? {read_id: read} : {health_read_ids: [read]};
+    const secondRoute = firstRoute === 'respond_to_health' ? 'respond_to_context' : 'respond_to_health';
+    const hold = await f.holdBridge();
+    const first = f.call(firstRoute, {...args(firstRoute), disposition: 'announce', utterance_id: f.question, text: 'One health answer'});
+    await settle();
+    const second = f.call(secondRoute, {...args(secondRoute), disposition: 'announce', utterance_id: f.question, text: 'Duplicate health answer'});
+    await settle(); hold.release(); await hold.pending;
+    assert.equal((await first).result.structuredContent.stored_for_g2, true);
+    assert.ok((await second).error);
+    assert.equal(f.bridge.history().find(x => x.id === f.question)!.reply, 'One health answer');
+    assert.equal(f.bridge.outboundHistory().length, 0);
+  });
+}
+
+test('combined decisions reserve every used health read, not just the first', async t => {
+  const f = await fixture(t), reads = ['sleep', 'activity'].map(category => (f.health.read({categories: [category]}) as any).read_id);
+  const p = {health_read_ids: reads, disposition: 'announce', utterance_id: f.question, text: 'Both health reads'};
+  const first = await f.call('respond_to_context', p); assert.equal(first.result.structuredContent.stored_for_g2, true);
+  assert.deepEqual(await f.call('respond_to_context', {...p, health_read_ids: [...reads].reverse()}), first);
+  for (const read of reads) {
+    assert.ok((await f.call('respond_to_health', {read_id: read, disposition: 'announce', text: 'Another use'})).error);
+    assert.equal((await f.call('respond_to_context', {health_read_ids: [read], disposition: 'silent'})).error.data.reason, 'context_decision_conflict');
+  }
+  assert.equal(f.bridge.outboundHistory().length, 0);
+});

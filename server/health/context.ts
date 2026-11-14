@@ -165,9 +165,16 @@ export class HealthContext {
       return true;
     };
   }
-  respond(raw:unknown) {
-    const task=this.responseTail.then(()=>this.performResponse(raw));
+  withResponseLock<T>(action:()=>Promise<T>) {
+    const task=this.responseTail.then(action);
     this.responseTail=task.catch(()=>{});return task;
+  }
+  responseContext(readId:string) {
+    return {guard:this.responseGuard(readId),previous:this.decisions.get(readId),
+      complete:(signature:string,result:unknown)=>{this.decisions.set(readId,{signature,result});}};
+  }
+  respond(raw:unknown) {
+    return this.withResponseLock(()=>this.performResponse(raw));
   }
   private async performResponse(raw:unknown) {
     const p=z.object({read_id:z.string().uuid(),disposition:z.enum(['silent','announce']),utterance_id:z.string().uuid().optional(),text:z.string().trim().min(1).max(1800).optional()}).strict().parse(raw);
