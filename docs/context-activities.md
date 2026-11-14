@@ -55,7 +55,11 @@ read and reconsideration; never send the old text through another route. A newly
 considered answer can omit an unavailable source if the remaining evidence supports
 it. The bridge retains current-location client expiry and associates a question
 answer with its original `utterance_id`. Identical retries use one deterministic
-message identity; conflicting decisions are rejected. No extra user setting,
+message identity; conflicting decisions are rejected. With a current location,
+both response routes share the location/question decision identity and serialize
+their commits. Changing receipts or switching routes cannot create a second
+decision for that location/question. Retry through the original route with the
+original receipts; a new location or distinct question remains independent. No extra user setting,
 collection or AI reasoning engine is introduced.
 
 `silent` writes no message and omits text/question ID. It can acknowledge an

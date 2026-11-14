@@ -53,6 +53,10 @@ export class ContextResponder {
     if (p.disposition === 'silent' ? p.text !== undefined || p.utterance_id !== undefined : p.text === undefined) throw invalid();
     if (p.history_context_ids && p.disposition === 'announce' && !p.utterance_id)
       throw new ToolRejection('history_question_required', 'Historical evidence may inform reasoning, but a historical G2 announcement still requires an existing question. Do not bypass this boundary through another tool.');
+    if (p.context_id && sources.locations) return sources.locations.withResponseLock(() => this.commit(p, sources));
+    return this.commit(p, sources);
+  }
+  private async commit(p: Input, sources: ContextSources) {
     const guards: (() => boolean)[] = [];
     let location: ReturnType<LocationContext['responseContext']> | undefined;
     // Location errors have their own legacy transport. Normalize only this route.
@@ -64,7 +68,7 @@ export class ContextResponder {
     };
     if (p.context_id) {
       if (!sources.locations) throw unavailable('location');
-      location = withLocation(() => sources.locations!.responseContext(p.context_id!));
+      location = withLocation(() => sources.locations!.responseContext(p.context_id!, p.utterance_id));
       guards.push(() => withLocation(location!.guard));
     }
     for (const id of p.health_read_ids ?? []) {
@@ -89,18 +93,25 @@ export class ContextResponder {
     }
     const allowed = () => { for (const guard of guards) if (!guard()) throw new ToolRejection('context_access_changed', 'Used context changed. Re-read permitted evidence and reconsider.'); return true; };
     allowed();
-    const message_id = responseId(p);
+    const receiptKey = responseId(p);
+    const message_id = location?.decisionId ?? receiptKey;
     const signature = JSON.stringify([p.disposition, p.text ?? null]);
-    const prior = this.decisions.get(message_id);
+    if (location?.previous) {
+      const previous = location.previous;
+      if (previous.receiptKey !== receiptKey || previous.disposition !== p.disposition || previous.text !== p.text)
+        throw new ToolRejection('context_decision_conflict', 'This location already has a different decision. Retry only the original receipts, question, disposition and text.');
+      return previous.result;
+    }
+    const prior = this.decisions.get(receiptKey);
     if (prior) {
       if (prior.signature !== signature) throw new ToolRejection('context_decision_conflict', 'This context decision already has different content. Retry only the original receipts, question, disposition and text.');
       return prior.result;
     }
     const result = p.disposition === 'silent' ? {disposition: 'silent', stored_for_g2: false} :
       await this.send({message_id, text: p.text!, ...(p.utterance_id ? {utterance_id: p.utterance_id} : {})}, allowed, location?.location);
-    this.decisions.set(message_id, {signature, result});
+    this.decisions.set(receiptKey, {signature, result});
     while (this.decisions.size > 1000) this.decisions.delete(this.decisions.keys().next().value!);
-    location?.complete(message_id, p, result);
+    location?.complete(message_id, {...p, receiptKey}, result);
     return result;
   }
 }

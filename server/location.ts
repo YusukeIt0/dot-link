@@ -76,7 +76,7 @@ export class LocationContext {
   private latest?: FixRecord;
   private reads = new Map<string, FixRecord>();
   private mobilityReads = new Map<string, {contextId: string; guard: () => boolean; evidence: object; expires: number}>();
-  private outcomes = new Map<string, { disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; result: unknown }>();
+  private outcomes = new Map<string, { disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string; result: unknown }>();
   private pending?: Pending;
   private lastAnchor?: LocationFix;
   private lastEventAt = -Infinity;
@@ -272,17 +272,18 @@ export class LocationContext {
     return read;
   }
   /** Capture the same location guard and client expiry used by individual replies. */
-  responseContext(contextId: string) {
+  responseContext(contextId: string, utteranceId?: string) {
     const read = this.reads.get(contextId), generation = this.generation;
     this.requireResponseContext(read, generation);
     const guard = () => { this.requireResponseContext(read, generation); return true; };
-    return {guard, location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
-      complete: (id: string, decision: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string}, result: unknown) => {
+    const decisionId = responseId(contextId, utteranceId);
+    return {guard, decisionId, previous: this.outcomes.get(decisionId), location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
+      complete: (id: string, decision: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string}, result: unknown) => {
         this.recordResponse(id, read, generation, decision, result);
       }};
   }
   private recordResponse(id: string, read: FixRecord, generation: number,
-    p: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string}, result: unknown) {
+    p: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string}, result: unknown) {
     if (generation !== this.generation) return;
     this.outcomes.set(id, {...p, result});
     while (this.outcomes.size > 30) this.outcomes.delete(this.outcomes.keys().next().value!);
@@ -300,6 +301,12 @@ export class LocationContext {
     this.scheduleContextEvent(); this.changes.emit();
   }
   private syncMobility(){this.mobility?.revalidate();}
+  /** Both response routes serialize decisions for the same location owner. */
+  withResponseLock<T>(action: () => Promise<T>) {
+    const operation = this.announceTail.then(action);
+    this.announceTail = operation.catch(() => {});
+    return operation;
+  }
   respond(raw: unknown) {
     const parsed = z.object({ context_id: z.string().uuid(), disposition: z.enum(['silent', 'announce']), utterance_id: z.string().uuid().optional(), text: z.string().trim().min(1).max(2000).optional() }).strict().safeParse(raw);
     if (!parsed.success) throw new LocationResponseError('invalid_arguments');
@@ -308,10 +315,10 @@ export class LocationContext {
     if (p.disposition === 'silent' && p.utterance_id !== undefined) throw new LocationResponseError('invalid_arguments');
     if (p.disposition === 'announce' && p.text === undefined) throw new LocationResponseError('text_required_for_announcement');
     const id = responseId(p.context_id, p.utterance_id);
-    const operation = this.announceTail.then(async () => {
+    return this.withResponseLock(async () => {
       const previous = this.outcomes.get(id);
       if (previous) {
-        if (previous.disposition !== p.disposition || previous.text !== p.text || previous.utterance_id !== p.utterance_id) throw new LocationResponseError('conflicting_decision');
+        if (previous.receiptKey !== undefined || previous.disposition !== p.disposition || previous.text !== p.text || previous.utterance_id !== p.utterance_id) throw new LocationResponseError('conflicting_decision');
         return previous.result;
       }
       const read = this.reads.get(p.context_id);
@@ -334,7 +341,6 @@ export class LocationContext {
       this.recordResponse(id, read, generation, p, result);
       return result;
     });
-    this.announceTail = operation.catch(() => {}); return operation;
   }
   private requireResponseContext(read: FixRecord | undefined, generation = this.generation): asserts read is FixRecord {
     this.checkOwner();

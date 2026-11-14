@@ -167,3 +167,50 @@ test('unknown questions never turn combined answers into proactive sends; malfor
     assert.doesNotMatch(JSON.stringify(r), /PRIVATE BAD/);
   }
 });
+
+test('one location decision survives changed receipt sets and still permits a new location', async t => {
+  const f = await fixture(t), refs = f.receipts();
+  const p = {context_id: refs.context_id, health_read_ids: refs.health_read_ids, disposition: 'silent'};
+  const first = await f.call('respond_to_context', p);
+  assert.equal(first.result.structuredContent.stored_for_g2, false);
+  assert.deepEqual(await f.call('respond_to_context', p), first);
+  const refreshed = (f.health.read({categories: ['sleep']}) as any).read_id;
+  for (const changed of [
+    {...p, health_read_ids: [refreshed]},
+    {...p, health_read_ids: [refreshed], disposition: 'announce', text: 'Duplicate interruption'},
+    {context_id: refs.context_id, disposition: 'announce', text: 'Dropped the health receipt'},
+  ]) assert.equal((await f.call('respond_to_context', changed)).error.data.reason, 'context_decision_conflict');
+  assert.equal(f.bridge.outboundHistory().length, 0);
+  f.update(11);
+  assert.equal((await f.call('respond_to_context', {context_id: f.location.read().context!.context_id,
+    disposition: 'announce', text: 'A different location decision'})).result.structuredContent.stored_for_g2, true);
+  assert.equal(f.bridge.outboundHistory().length, 1);
+});
+
+for (const firstRoute of ['respond_to_context', 'respond_to_location']) {
+  test(`${firstRoute} prevents a competing decision through the other route`, async t => {
+    const f = await fixture(t), {context_id} = f.receipts();
+    const secondRoute = firstRoute === 'respond_to_context' ? 'respond_to_location' : 'respond_to_context';
+    const p = {context_id, disposition: 'silent'};
+    const first = await f.call(firstRoute, p);
+    assert.equal(first.result.structuredContent.stored_for_g2, false);
+    assert.deepEqual(await f.call(firstRoute, p), first);
+    const conflict = await f.call(secondRoute, {context_id, disposition: 'announce', text: 'Second decision'});
+    assert.ok(conflict.error); assert.match(conflict.error.data.reason, /conflict/);
+    assert.equal(f.bridge.outboundHistory().length, 0);
+  });
+  test(`${firstRoute} serializes a queued announcement against the other route`, async t => {
+    const f = await fixture(t), {context_id} = f.receipts();
+    const secondRoute = firstRoute === 'respond_to_context' ? 'respond_to_location' : 'respond_to_context';
+    const hold = await f.holdBridge();
+    const first = f.call(firstRoute, {context_id, disposition: 'announce', utterance_id: f.question, text: 'First answer'});
+    await settle();
+    const second = f.call(secondRoute, {context_id, disposition: 'announce', utterance_id: f.question, text: 'Competing answer'});
+    await settle(); hold.release(); await hold.pending;
+    assert.equal((await first).result.structuredContent.stored_for_g2, true);
+    assert.match((await second).error.data.reason, /conflict/);
+    assert.equal(f.bridge.history().find(x => x.id === f.question)!.reply, 'First answer');
+    assert.equal(f.bridge.outboundHistory().length, 0);
+    assert.equal(f.location.status().locationAnnouncementCount, 1);
+  });
+}
