@@ -1,6 +1,6 @@
 # README conversation images
 
-These are synthetic sample conversations, not user conversations or photos of the physical glasses.
+`conversation-en.png` and `conversation-ja.png` are synthetic sample conversations, not user conversations or photos of the physical glasses.
 
 Captured using the official Even Hub Simulator 0.9.5 with the public Dot Link source at 42332b7 (Even app 0.2.27). The screenshot API’s transparent glasses image is displayed on a black background and captured at 576 × 288 CSS pixels. No status indicators or conversation text were added to the captured image afterward.
 
