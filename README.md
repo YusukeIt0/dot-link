@@ -39,11 +39,13 @@
 | **Walking routes** | Separate requests | Routes from your location |
 | **Terrain** | General information | Elevation and slopes |
 | **Recent places** | Conversation and memory | 7 days of recorded history |
-| **Weather** | Forecast on request | Linked to your location |
+| **Weather** | Forecast on request | Location-linked forecasts, satellite rain estimates (in development) |
 | **Health** | What you share | Polar data for context-aware suggestions |
 | **Proactive help** | Conversation and connected context | Real-world context too |
 
 </div>
+
+Dot Link does more than retrieve data. Your Dot can choose and combine relevant context based on your conversation and what you're doing, then decide whether to respond or stay silent.
 
 <p align="center">
   <img src="assets/readme/conversation-en.png" alt="Sample conversation in the Even G2 simulator" width="576">
@@ -60,10 +62,25 @@ Choose what to share in the iPhone companion's **Sharing settings**. These featu
 - **Walking routes:** ask about a destination and get estimated walking routes and travel times.
 - **Terrain:** understand elevation and slopes, including hills along a route.
 - **Recent places:** let Dot refer to recorded movement and places, with up to seven days of history stored on your Mac.
-- **Weather:** forecasts for your shared location or another place you ask about, including temperature, humidity and precipitation. Requires a compatible Mac client and the **Weather context** option in your Even companion.
+- **Weather:** forecasts for your shared location or another place you ask about, including temperature, humidity and precipitation. Satellite-based estimates of nearby rainfall are in development. Requires a compatible Mac client and the **Weather context** option in your Even companion.
 - **Health:** let Dot use shared Polar sleep, activity, heart rate, and recovery data to make more context-aware suggestions. Connect Polar in the Mac app's **Healthcare settings**, then turn on **Health context** in your Even companion.
 
 See [location and history setup](docs/setup.md#location-sharing), [weather setup](docs/setup.md#optional-weather-context), and [Polar health setup](docs/setup.md#polar-health-context) for sharing controls and compatible versions.
+
+## Real-world example
+
+<p align="center">
+  <img src="assets/readme/real-world-shangri-la-bangkok.jpg" alt="Dot Link message about Shangri-La Bangkok beside a night view of the hotel from the river" width="720">
+  <br><sub>Shangri-La Bangkok</sub>
+</p>
+
+<p align="center">
+  <img src="assets/readme/real-world-thammasat-tha-prachan.jpg" alt="Dot Link message about Thammasat University's Tha Pra Chan campus beside a night view of the campus from the river" width="720">
+  <br><sub>Thammasat University's Tha Pra Chan campus</sub>
+</p>
+
+> During a river cruise in Bangkok, Dot proactively pointed out nearby landmarks using shared location context.
+> These screenshots are from the iPhone companion. The same messages are displayed on Even G2.
 
 ## What you can do
 
