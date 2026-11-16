@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget } from '../scripts/check-pinned-runtimes.mjs';
+import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget, reviewState, materiallyActionable, withReviewState, readReviewState } from '../scripts/check-pinned-runtimes.mjs';
 
 const index = [
   { version: 'v24.11.0', npm: '11.6.0', lts: 'Krypton', security: false },
@@ -106,13 +106,40 @@ test('end-of-life of the pinned Node major is reported before it happens and whe
   assert.equal(renderIssue([near], '2026-11-09').actionable, 1);
 });
 
-test('only a new or materially updated report requests the dotsweeper issue review (#368)', () => {
-  assert.equal(reviewTarget({ action: 'update', number: 362 }), 362);
-  assert.equal(reviewTarget({ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/issues/401\n'), 401);
-  for (const [decision, url] of [[{ action: 'none', number: 362 }], [{ action: 'none' }], [{ action: 'close', number: 362 }],
-    [{ action: 'create' }, ''], [{ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/pull/401'], [{ action: 'create' }, 'not a url']]) {
-    assert.equal(reviewTarget(decision, url), null, JSON.stringify([decision, url]));
+test('only a new or materially changed actionable report requests the dotsweeper issue review (#368)', () => {
+  const node = (patch = {}) => ({ id: 'node', pinned: 'v26.13.1', latest: 'v26.13.1', outdated: false, security: false, eol: { end: '2029-04-30', days: 900 }, findings: [], ...patch });
+  const tunnel = (patch = {}) => ({ id: 'tunnel', pinned: 'v0.0.21', latest: 'v0.0.22', outdated: true, security: false, advisories: [], findings: [], ...patch });
+  const base = reviewState([node(), tunnel()]);
+  assert.equal(materiallyActionable(base), true);
+  // Not material: a countdown inside the warning window, a failed lookup, and its recovery.
+  const warned = reviewState([node({ eol: { end: '2029-04-30', days: 120 }, findings: ['Node.js 26 reaches end-of-life on 2029-04-30 (in 120 days). Plan …'] }), tunnel()]);
+  assert.deepEqual(reviewState([node({ eol: { end: '2029-04-30', days: 113 }, findings: ['Node.js 26 reaches end-of-life on 2029-04-30 (in 113 days). Plan …'] }), tunnel()], warned), warned);
+  const failed = reviewState([node({ eol: null, findings: ['Node.js release schedule unavailable, so end-of-life status is unknown.'] }),
+    tunnel({ security: null, advisories: [], findings: ['Advisory lookup failed, so security status is unknown.'] })], base);
+  assert.deepEqual(failed, base);
+  assert.deepEqual(reviewState([node(), tunnel()], failed), base);
+  // Material: a new version, a new advisory, entering the EOL warning, a stable finding.
+  for (const changed of [reviewState([node(), tunnel({ latest: 'v0.0.23' })], base),
+    reviewState([node(), tunnel({ security: true, advisories: [{ id: 'GHSA-xxxx' }] })], base), warned,
+    reviewState([node({ findings: ['CI and the bundled runtime differ: ci.yml uses 26.13.0 (bundled v26.13.1).'] }), tunnel()], base)]) {
+    assert.notDeepEqual(changed, base);
+    assert.equal(reviewTarget({ action: 'update', number: 362 }, '', base, changed), 362);
   }
+  assert.equal(reviewTarget({ action: 'update', number: 362 }, '', base, failed), null);
+  assert.equal(reviewTarget({ action: 'update', number: 362 }, '', null, base), 362, 'An issue without stored state is reviewed once');
+  assert.equal(reviewTarget({ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/issues/401\n', null, base), 401);
+  // A failure-only report is not materially actionable, even when it creates the issue.
+  const failureOnly = reviewState([node({ eol: null, findings: ['Node.js release schedule unavailable, so end-of-life status is unknown.'] }),
+    tunnel({ outdated: false, latest: 'v0.0.21', security: null, findings: ['Advisory lookup failed, so security status is unknown.'] })]);
+  assert.equal(materiallyActionable(failureOnly), false);
+  assert.equal(reviewTarget({ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/issues/401', null, failureOnly), null);
+  for (const [decision, url] of [[{ action: 'none', number: 362 }], [{ action: 'close', number: 362 }],
+    [{ action: 'create' }, ''], [{ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/pull/401']]) {
+    assert.equal(reviewTarget(decision, url, null, base), null, JSON.stringify([decision, url]));
+  }
+  // The state survives in the issue body; malformed or absent state reads as null.
+  assert.deepEqual(readReviewState(withReviewState('report\n', base)), base);
+  for (const body of ['report', '<!-- dot-link-pinned-runtime-review-state:@@@ -->', undefined]) assert.equal(readReviewState(body), null);
 });
 
 test('the watch requests review only from a separate least-privilege job', () => {
