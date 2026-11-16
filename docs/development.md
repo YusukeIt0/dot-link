@@ -378,7 +378,7 @@ comparison covers its entire difference from main, not just the last push.
 
 | Change impact | Required validation |
 | --- | --- |
-| README and ordinary Markdown documentation | Changed local links/conflict markers, recommended installer command, dependency documentation consistency |
+| README, ordinary Markdown documentation and single-level Markdown notes beside README/film assets | Changed local links/conflict markers, recommended installer command, dependency documentation consistency |
 | Website source and website-only README/film assets | Complete localized static build/link checks and analytics consent/privacy tests |
 | Only the two Mac version values | Parse plist, require increasing build/nondecreasing version, preserve every other byte including identity, minimum OS and permissions |
 | Signed Mac update feed | XML schema, app version/OS, public release status/notes, archive length/hash and both Ed25519 signatures using only the public key |

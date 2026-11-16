@@ -41,7 +41,8 @@ export function classify(changes, read, protectedPaths = []) {
     if (!['A', 'M'].includes(f.status) || !['000000', '100644'].includes(f.oldMode) || f.newMode !== '100644' ||
         !/^[\w./-]+$/.test(f.path) || f.path.split('/').some(p => p === '..' || p === '.')) return full('Non-regular, deleted, renamed or unsafe path.');
     if (protectedPaths.some(p => f.path === p || p.endsWith('/') && f.path.startsWith(p))) return full('Protected control-plane change.');
-    if (f.path === 'README.md' || /^docs\/[\w/-]+\.md$/.test(f.path)) checks.add('docs');
+    // Asset-folder notes are single-level Markdown that no site, Mac or Even build copies.
+    if (f.path === 'README.md' || /^docs\/[\w/-]+\.md$/.test(f.path) || /^assets\/(?:readme|film)\/[\w.-]+\.md$/.test(f.path)) checks.add('docs');
     else if (/^site\/[\w./-]+\.(?:html|css|mjs|json)$/.test(f.path) || /^assets\/(?:readme|film)\/[\w.-]+\.(?:png|jpg|mp4|vtt)$/.test(f.path)) checks.add('site');
     else if (f.path === macPlist && f.status === 'M' && versionOnly(read('base', f.path), read('head', f.path))) checks.add('version');
     else if (f.path === macFeed && f.status === 'M') checks.add('feed');
