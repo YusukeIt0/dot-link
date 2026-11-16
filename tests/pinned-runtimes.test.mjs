@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget, reviewState, materiallyActionable, withReviewState, readReviewState } from '../scripts/check-pinned-runtimes.mjs';
+import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget, reviewState, materiallyActionable, withReviewState, readReviewState, pinnedLookupTransient } from '../scripts/check-pinned-runtimes.mjs';
 
 const index = [
   { version: 'v24.11.0', npm: '11.6.0', lts: 'Krypton', security: false },
@@ -151,4 +151,19 @@ test('the watch requests review only from a separate least-privilege job', () =>
   assert.match(job, /case "\$ISSUE" in ''\|\*\[!0-9\]\*\)/);
   assert.match(job, /gh workflow run claude-review\.yml --repo "\$GITHUB_REPOSITORY" --ref main -f item_number="\$ISSUE"/);
   assert.doesNotMatch(workflow.slice(0, workflow.indexOf('\n  request-review:')), /actions: write/);
+});
+
+test('only a missing release (404) for the pinned tag widens the advisory window; other failures make it unknown (#368 review)', () => {
+  assert.equal(pinnedLookupTransient(new Error('api.github.com request failed: 404')), false);
+  for (const message of ['api.github.com request failed: 500', 'api.github.com request failed: 403', 'fetch failed', 'The operation was aborted due to timeout']) {
+    assert.equal(pinnedLookupTransient(new Error(message)), true, message);
+  }
+  // An unknown window is reported like a failed advisory lookup, so the previous review state carries forward.
+  const source = sources[0], latest = { tag_name: 'v9.9.9', html_url: 'https://example.invalid' };
+  const unknown = releaseStatus(source, 'v1.0.0', latest, null, undefined);
+  assert.equal(unknown.security, null);
+  const previous = { [source.id]: { security: false, advisories: [] } };
+  const state = reviewState([unknown], previous);
+  assert.equal(state[source.id].security, false);
+  assert.deepEqual(state[source.id].advisories, []);
 });

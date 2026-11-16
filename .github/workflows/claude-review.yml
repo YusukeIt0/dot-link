@@ -153,7 +153,7 @@ jobs:
           include_fix_links: false
           classify_inline_comments: false
           settings: |
-            {"disableAllHooks":true,"permissions":{"allow":["WebSearch","WebFetch"],"deny":["Edit","Write","Bash","Read(//proc/**)","Read(//dev/**)","Read(~/.claude/**)","Read(~/.config/**)","Read(./.git/**)"]}}
+            {"disableAllHooks":true,"permissions":{"allow":["WebSearch","WebFetch"],"deny":["Edit","Write","Bash","Read(//proc/**)","Read(//dev/**)","Read(~/.claude/**)","Read(//home/runner/work/_temp/**)","Read(//tmp/**)","Read(~/.config/**)","Read(./.git/**)"]}}
           claude_args: >-
             --model claude-opus-5-5
             --max-turns 40

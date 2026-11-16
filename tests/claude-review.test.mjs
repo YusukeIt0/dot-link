@@ -760,7 +760,7 @@ test('workflow intake admits the Actions bot only for main dispatches; review to
   assert.match(workflow, /allowed_bots: "dependabot\[bot\],github-actions\[bot\]"/);
   const settings = JSON.parse(workflow.match(/settings: \|\n\s+(\{.*\})\n/)[1]);
   assert.deepEqual(settings.permissions.allow, ['WebSearch', 'WebFetch']);
-  for (const denied of ['Edit', 'Write', 'Bash', 'Read(//proc/**)', 'Read(//dev/**)', 'Read(~/.claude/**)', 'Read(~/.config/**)', 'Read(./.git/**)']) {
+  for (const denied of ['Edit', 'Write', 'Bash', 'Read(//proc/**)', 'Read(//dev/**)', 'Read(~/.claude/**)', 'Read(~/.config/**)', 'Read(./.git/**)', 'Read(//home/runner/work/_temp/**)', 'Read(//tmp/**)']) {
     assert.ok(settings.permissions.deny.includes(denied), denied);
   }
   assert.equal(settings.disableAllHooks, true);

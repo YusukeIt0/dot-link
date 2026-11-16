@@ -163,6 +163,8 @@ export function reviewTarget(decision, createdUrl = '', previous = null, state =
   return match ? Number(match[1]) : null;
 }
 
+export const pinnedLookupTransient = error => !/request failed: 404$/.test(String(error?.message ?? ''));
+
 async function json(url, token) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'dot-link-pinned-runtime-watch' };
   if (token && url.startsWith('https://api.github.com/')) headers.Authorization = `Bearer ${token}`;
@@ -180,10 +182,12 @@ async function main() {
   for (const source of sources) {
     const api = `https://api.github.com/repos/${source.repo}`;
     const latest = await json(`${api}/releases/latest`, token);
-    let pinnedRelease = null;
-    try { pinnedRelease = await json(`${api}/releases/tags/${encodeURIComponent(pins[source.id])}`, token); } catch { /* Tag without a release: compare advisories from all time. */ }
+    let pinnedRelease = null, windowUnknown = false;
+    // A tag without a release (404) compares advisories from all time; any other
+    // failure leaves the advisory window unknown for this week (#368 review).
+    try { pinnedRelease = await json(`${api}/releases/tags/${encodeURIComponent(pins[source.id])}`, token); } catch (error) { windowUnknown = pinnedLookupTransient(error); }
     let advisories = null;
-    try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Unknown, reported as a finding; never treated as no advisories. */ }
+    if (!windowUnknown) try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Unknown, reported as a finding; never treated as no advisories. */ }
     rows.push(releaseStatus(source, pins[source.id], latest, advisories, pinnedRelease?.published_at));
   }
   const rendered = renderIssue(rows, new Date().toISOString().slice(0, 10));
