@@ -34,6 +34,20 @@ test('unsafe files, deletions, modes and unbounded comparisons never narrow', ()
   for (const changes of [[], Array(301).fill(file('README.md'))]) assert.deepEqual(classify(changes, read).checks, ['product']);
 });
 
+test('Markdown notes beside README/film assets run docs checks; nearby files keep their scope', () => {
+  for (const change of [file('assets/readme/README.md'), file('assets/film/x.md'), file('assets/film/x.md', {status: 'A', oldMode: '000000'})]) {
+    const result = classify([change], read, protectedPaths);
+    assert.deepEqual([result.checks, result.runner], [['docs'], 'ubuntu-latest'], change.path);
+  }
+  assert.deepEqual(classify([file('assets/readme/README.md'), file('assets/readme/conversation-en.png')], read, protectedPaths).checks, ['docs', 'site']);
+  assert.deepEqual(classify([file('assets/readme/README.md'), file('src/main.ts')], read, protectedPaths).checks, ['product']);
+  for (const path of ['assets/readme/sub/x.md', 'assets/readme/notes.txt', 'assets/film/notes.markdown', 'assets/film/x.MD',
+    'assets/brand/x.md', 'assets/x.md', 'assets/readme.md']) assert.deepEqual(classify([file(path)], read, protectedPaths).checks, ['product'], path);
+  for (const extra of [{status: 'D'}, {status: 'R'}, {newMode: '100755'}, {newMode: '120000'}, {oldMode: '120000'}]) {
+    assert.deepEqual(classify([file('assets/readme/README.md', extra)], read, protectedPaths).checks, ['product'], JSON.stringify(extra));
+  }
+});
+
 test('version-only means precisely the two values, never a hidden OS/permission/identity change', () => {
   assert.equal(versionOnly(original, next), true);
   for (const changed of [original, next.replace('112', '110'), next.replace('0.4.33', '0.4.31'), next.replace('13.5', '14.0'),
@@ -68,6 +82,21 @@ test('Git comparisons cover complete branch and fail closed without an integrate
   assert.deepEqual(plan(parent, git('rev-parse', 'HEAD'), root).checks, ['product']);
 });
 
+test('an asset-note-only comparison plans docs from Git, while deleting the note keeps full scope', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dotlink-ci-plan-note-')); t.after(() => rmSync(root, {recursive: true, force: true}));
+  const git = (...args) => execFileSync('git', args, {cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe']}).trim();
+  git('init'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Test');
+  mkdirSync(join(root, 'config')); writeFileSync(join(root, 'config/development-policy.json'), JSON.stringify({protectedPaths}));
+  mkdirSync(join(root, 'assets/readme'), {recursive: true}); writeFileSync(join(root, 'assets/readme/README.md'), 'before');
+  git('add', '.'); git('commit', '-m', 'base');
+  const base = git('rev-parse', 'HEAD'); git('update-ref', 'refs/remotes/origin/main', base);
+  writeFileSync(join(root, 'assets/readme/README.md'), 'after'); git('commit', '-am', 'note');
+  const note = plan(base, git('rev-parse', 'HEAD'), root);
+  assert.deepEqual([note.checks, note.runner, note.paths], [['docs'], 'ubuntu-latest', ['assets/readme/README.md']]);
+  git('rm', '-q', 'assets/readme/README.md'); git('commit', '-m', 'delete');
+  assert.deepEqual(plan(base, git('rev-parse', 'HEAD'), root).checks, ['product']);
+});
+
 test('event comparison never treats a branch last-push delta as its whole scope', () => {
   assert.deepEqual(eventRevisions('push', {ref: 'refs/heads/feature', before: 'prior', after: 'head'}), {base: null, head: 'head'});
   assert.deepEqual(eventRevisions('push', {ref: 'refs/heads/main', before: 'prior', after: 'head'}), {base: 'prior', head: 'head'});
@@ -82,4 +111,15 @@ test('documentation validation catches broken local links, escaping symlinks and
     writeFileSync(path, body); assert.throws(() => checkDocs(['guide.md'], root));
   }
   symlinkSync(tmpdir(), join(root, 'outside')); writeFileSync(path, '[bad](outside)'); assert.throws(() => checkDocs(['guide.md'], root));
+});
+
+test('documentation validation resolves an asset note from its own folder without the root README rule', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dotlink-docs-note-')); t.after(() => rmSync(root, {recursive: true, force: true}));
+  mkdirSync(join(root, 'assets/readme'), {recursive: true});
+  writeFileSync(join(root, 'README.md'), 'root'); writeFileSync(join(root, 'assets/readme/sample.png'), '');
+  const note = 'assets/readme/README.md', path = join(root, note);
+  writeFileSync(path, '![sample](sample.png) [home](../../README.md)'); checkDocs([note], root);
+  for (const body of ['![sample](assets/readme/sample.png)', '[outside](../../../outside.md)', '>>>>>>> conflict']) {
+    writeFileSync(path, body); assert.throws(() => checkDocs([note], root), body);
+  }
 });
