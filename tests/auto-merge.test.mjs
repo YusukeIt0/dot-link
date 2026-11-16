@@ -3,7 +3,7 @@ import {checksFailureOutput} from '../scripts/check-output.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -823,4 +823,58 @@ test('check classifier preserves real API failures and rejects mixed or unrecogn
   ]) assert.equal(checksFailureOutput(error), undefined);
   assert.equal(commandFailure({status: 1, stderr: 'HTTP 403: Forbidden'}).retryable, false);
   assert.equal(commandFailure({status: 1, stderr: 'HTTP 502: Bad Gateway'}).retryable, true);
+});
+
+test('queue and assessor admission keep eligibility wake-ups and ignore only no-op or self-reported events (#371)', () => {
+  const yaml = readFileSync(new URL('../.github/workflows/auto-merge.yml', import.meta.url), 'utf8');
+  const group = new Function('github', 'format', `return (${yaml.match(/group: >-\n\s+\$\{\{([\s\S]*?)\}\}/)[1]});`);
+  const admit = new Function('github', `return (${yaml.match(/\n  assess:\n\s+if: >-\n([\s\S]*?)\n\s+runs-on:/)[1]});`);
+  const format = (pattern, value) => pattern.replace('{0}', String(value));
+  const context = (event_name, event = {}, ref = 'refs/heads/main') => ({repository: repository, event_name, ref, run_id: 999,
+    event: {issue: {}, workflow_run: {}, sender: {}, ...event}});
+  const owner = {login: 'YusukeIt0', type: 'User'}, reviewer = {login: 'dotsweeper[bot]', type: 'Bot'};
+  const second = {login: 'dotsweeper2nd[bot]', type: 'Bot'}, onPR = {pull_request: {url: 'pr'}};
+  const kept = [
+    ['pull_request_target', {action: 'synchronize', sender: owner}],
+    ['pull_request_target', {action: 'labeled', sender: owner}],
+    ['workflow_run', {workflow_run: {conclusion: 'success'}, sender: reviewer}],
+    ['workflow_run', {workflow_run: {conclusion: 'failure'}, sender: owner}],
+    ['workflow_run', {workflow_run: {conclusion: 'cancelled'}, sender: owner}],
+    ['issue_comment', {action: 'created', issue: onPR, sender: owner}],
+    ['issue_comment', {action: 'created', issue: onPR, sender: second}],
+    ['issues', {action: 'unlabeled', sender: owner}],
+    ['issues', {action: 'reopened', sender: owner}],
+    ['workflow_dispatch', {}],
+  ];
+  const ignored = [
+    ['workflow_run', {workflow_run: {conclusion: 'skipped'}, sender: owner}],
+    ['issue_comment', {action: 'edited', issue: onPR, sender: reviewer}],
+    ['issues', {action: 'labeled', sender: reviewer}],
+    ['issue_comment', {action: 'created', issue: {}, sender: owner}],
+  ];
+  for (const [name, event] of kept) {
+    assert.equal(group(context(name, event), format), 'dot-link-automatic-merge', `${name} ${JSON.stringify(event)}`);
+    assert.equal(admit(context(name, event)), true, name);
+  }
+  for (const [name, event, ref] of [...ignored, ['workflow_dispatch', {}, 'refs/heads/feature']]) {
+    assert.equal(group(context(name, event, ref), format), 'dot-link-automatic-merge-ignored-999', `${name} ${JSON.stringify(event)}`);
+    assert.equal(admit(context(name, event, ref)), false, name);
+  }
+  // Trigger set: unchanged except reopened scope issues; cancellation and the manual path stay.
+  assert.match(yaml, /workflows: \[Tests, dotsweeper review\]/);
+  assert.match(yaml, /types: \[edited, labeled, unlabeled, reopened\]/);
+  assert.match(yaml, /queue: single\n\s+cancel-in-progress: false/);
+  assert.match(yaml, /\n  workflow_dispatch:\n/);
+});
+
+test('every workflow that can act as dotsweeper wakes the assessment on completion (#371 safety assumption)', () => {
+  const directory = new URL('../.github/workflows/', import.meta.url);
+  const listed = readFileSync(new URL('auto-merge.yml', directory), 'utf8').match(/workflows: \[([^\]]*)\]/)[1].split(',').map(name => name.trim());
+  const users = readdirSync(directory).filter(file => /\.ya?ml$/.test(file))
+    .map(file => readFileSync(new URL(file, directory), 'utf8')).filter(text => /DOTSWEEPER_(?:PRIVATE_KEY|CLIENT_ID)/.test(text))
+    .map(text => text.match(/^name: (.+)$/m)[1].trim());
+  assert.ok(users.length > 0);
+  // auto-merge ignores dotsweeper's own comment/label events; a run of each such
+  // workflow must therefore wake it through workflow_run instead.
+  for (const name of users) assert.ok(listed.includes(name), `${name} acts as dotsweeper but is not in auto-merge workflow_run`);
 });
