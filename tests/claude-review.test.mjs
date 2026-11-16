@@ -749,6 +749,15 @@ test('workflow intake admits the Actions bot only for main dispatches; review to
   assert.equal(admit(context('workflow_dispatch', {id: 49699333, login: 'dependabot[bot]', type: 'Bot'}), startsWith), false);
   assert.equal(admit(context('issue_comment', actions, 'refs/heads/main', {comment: {body: '/dotlink review'}}), startsWith), false);
   assert.equal(admit(context('issues', actions), startsWith), false);
+  // The admitted dispatch shares the per-item queue, so it cannot overlap another review of the same issue.
+  const groupExpression = workflow.match(/group: >-\n\s+opus-review-\$\{\{([\s\S]*?)\}\}/)[1];
+  const group = new Function('github', 'inputs', 'format', 'fromJSON', 'contains', 'startsWith', `return (${groupExpression});`);
+  const groupFor = (sender, ref = 'refs/heads/main') => group({event_name: 'workflow_dispatch', ref, run_id: 999,
+    event: {sender, issue: {}, pull_request: {}, comment: {}}}, {item_number: '12'}, (p, v) => p.replace('{0}', String(v)), JSON.parse, (xs, x) => xs.includes(x), startsWith);
+  assert.equal(groupFor(actions), 'item-12');
+  assert.equal(groupFor(actions, 'refs/heads/feature'), 'ignored-999');
+  assert.equal(groupFor({...actions, id: 1}), 'ignored-999');
+  assert.match(workflow, /allowed_bots: "dependabot\[bot\],github-actions\[bot\]"/);
   const settings = JSON.parse(workflow.match(/settings: \|\n\s+(\{.*\})\n/)[1]);
   assert.deepEqual(settings.permissions.allow, ['WebSearch', 'WebFetch']);
   for (const denied of ['Edit', 'Write', 'Bash', 'Read(//proc/**)', 'Read(//dev/**)', 'Read(~/.claude/**)', 'Read(~/.config/**)', 'Read(./.git/**)']) {

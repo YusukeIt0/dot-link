@@ -28,6 +28,8 @@ concurrency:
         github.event.sender.id == 49699333 && github.event.sender.login == 'dependabot[bot]' &&
         github.event.pull_request.draft == false &&
         github.event.pull_request.user.id == 49699333 && github.event.pull_request.user.login == 'dependabot[bot]') ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.event.sender.type == 'Bot' &&
+        github.event.sender.id == 41898282 && github.event.sender.login == 'github-actions[bot]') ||
       github.event.sender.type == 'User' && (
         (github.event_name == 'issues' && github.event.action == 'opened') ||
         (github.event_name == 'pull_request_target' && github.event.pull_request.draft == false && (
@@ -143,8 +145,10 @@ jobs:
           github_token: ${{ github.token }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           allowed_non_write_users: "*"
-          # Only Dependabot's own PR events pass intake; never admit every bot.
-          allowed_bots: "dependabot[bot]"
+          # Intake admits only Dependabot's own PR events and the weekly watch's
+          # dispatch for its own tracking issue (#368); never admit every bot.
+          # The action's agent mode rejects any bot actor not listed here.
+          allowed_bots: "dependabot[bot],github-actions[bot]"
           show_full_output: false
           include_fix_links: false
           classify_inline_comments: false
