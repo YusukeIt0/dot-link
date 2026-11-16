@@ -81,7 +81,13 @@ trigger of these workflows to it.
 manual dispatch from `main`. `scripts/check-pinned-runtimes.mjs` reads every pin
 from the repository and compares it with the official Node.js release list and the
 upstream GitHub releases and published advisories. For Node.js it also reads the official release schedule (`nodejs/Release` `schedule.json`) and reports when the pinned major is within 180 days of end-of-life, naming the latest LTS. An unavailable schedule or advisory lookup is reported as unknown and keeps the issue open. It keeps one tracking issue,
-"Pinned runtime updates available", opened by `github-actions`. The issue is
+"Pinned runtime updates available", opened by `github-actions`. When it creates
+an actionable issue or its material state changes, a separate job with only
+`actions: write` dispatches the existing dotsweeper issue review. Material state
+means versions, security, advisory IDs, stable findings and whether the EOL
+warning applies; it is stored in the issue body. Countdown days, failed lookups
+and their recovery, unchanged reports, no-action results and closes start no
+review. A failed dispatch stays visible in that run. The issue is
 created when something is actionable, updated in place when the report changes,
 and closed when everything is current. Each entry gives the update or advisory,
 why no automatic PR is generated (the version must change together with its

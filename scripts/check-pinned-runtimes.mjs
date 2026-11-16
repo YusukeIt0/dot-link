@@ -2,7 +2,7 @@
 // It never edits pins or checksums: it reports newer upstream versions and
 // advisories in one tracking issue so a reviewed PR can update each version
 // together with its integrity data.
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -123,6 +123,48 @@ export function decide(existing, report) {
   return unchanged ? { action: 'none', number: existing.number } : { action: 'update', number: existing.number };
 }
 
+// Material review state (#368): versions, security, advisory IDs, stable findings
+// and whether the EOL warning applies. Day counts are excluded, and a failed lookup
+// carries the previous value forward, so neither a countdown nor a transient failure
+// (or its recovery) counts as a change. Stored in the issue body for next week.
+const reviewMarker = '<!-- dot-link-pinned-runtime-review-state:';
+const transient = finding => /unavailable|lookup failed|reaches end-of-life on/.test(finding);
+export function reviewState(rows, previous = {}) {
+  return Object.fromEntries(rows.map(row => {
+    const before = previous[row.id] ?? {};
+    const unknown = row.security === null;
+    return [row.id, {
+      pinned: row.pinned, latest: row.latest, outdated: row.outdated,
+      security: unknown ? before.security ?? null : row.security,
+      advisories: unknown ? before.advisories ?? [] : (row.advisories ?? []).map(a => a.id).sort(),
+      findings: row.findings.filter(finding => !transient(finding)),
+      ...(row.id === 'node' ? {
+        eolWarning: row.eol ? row.eol.days <= eolWarningDays : before.eolWarning ?? null,
+        eolEnd: row.eol?.end ?? before.eolEnd ?? null,
+      } : {}),
+    }];
+  }));
+}
+export const materiallyActionable = state => Object.values(state)
+  .some(row => row.outdated || row.security === true || row.findings.length > 0 || row.eolWarning === true);
+export const withReviewState = (body, state) => `${body}${reviewMarker}${Buffer.from(JSON.stringify(state)).toString('base64url')} -->\n`;
+export function readReviewState(body) {
+  const match = String(body ?? '').match(/<!-- dot-link-pinned-runtime-review-state:([A-Za-z0-9_-]+) -->/);
+  try { return match ? JSON.parse(Buffer.from(match[1], 'base64url').toString('utf8')) : null; } catch { return null; }
+}
+
+// Only a new or materially changed actionable report asks dotsweeper to investigate.
+// Unchanged, no-action and close decisions, day counts and failed lookups never do.
+export function reviewTarget(decision, createdUrl = '', previous = null, state = {}) {
+  if (!materiallyActionable(state)) return null;
+  if (decision.action === 'update') return JSON.stringify(previous) === JSON.stringify(state) ? null : decision.number;
+  if (decision.action !== 'create') return null;
+  const match = String(createdUrl).trim().match(/\/issues\/(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+export const pinnedLookupTransient = error => !/request failed: 404$/.test(String(error?.message ?? ''));
+
 async function json(url, token) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'dot-link-pinned-runtime-watch' };
   if (token && url.startsWith('https://api.github.com/')) headers.Authorization = `Bearer ${token}`;
@@ -140,24 +182,32 @@ async function main() {
   for (const source of sources) {
     const api = `https://api.github.com/repos/${source.repo}`;
     const latest = await json(`${api}/releases/latest`, token);
-    let pinnedRelease = null;
-    try { pinnedRelease = await json(`${api}/releases/tags/${encodeURIComponent(pins[source.id])}`, token); } catch { /* Tag without a release: compare advisories from all time. */ }
+    let pinnedRelease = null, windowUnknown = false;
+    // A tag without a release (404) compares advisories from all time; any other
+    // failure leaves the advisory window unknown for this week (#368 review).
+    try { pinnedRelease = await json(`${api}/releases/tags/${encodeURIComponent(pins[source.id])}`, token); } catch (error) { windowUnknown = pinnedLookupTransient(error); }
     let advisories = null;
-    try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Unknown, reported as a finding; never treated as no advisories. */ }
+    if (!windowUnknown) try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Unknown, reported as a finding; never treated as no advisories. */ }
     rows.push(releaseStatus(source, pins[source.id], latest, advisories, pinnedRelease?.published_at));
   }
-  const report = renderIssue(rows, new Date().toISOString().slice(0, 10));
-  console.log(report.body);
-  if (!process.argv.includes('--issue')) return;
+  const rendered = renderIssue(rows, new Date().toISOString().slice(0, 10));
+  if (!process.argv.includes('--issue')) { console.log(rendered.body); return; }
   const gh = args => execFileSync('gh', args, { encoding: 'utf8', maxBuffer: 2_000_000 });
   // Not search: the index lags. Only an issue opened by this workflow's bot counts.
   const open = JSON.parse(gh(['issue', 'list', '--state', 'open', '--json', 'number,body,author', '--limit', '200']))
     .find(issue => issue.body?.startsWith(marker) && issue.author?.login === 'app/github-actions');
+  const previous = readReviewState(open?.body);
+  const state = reviewState(rows, previous ?? {});
+  const report = { ...rendered, body: withReviewState(rendered.body, state) };
+  console.log(report.body);
   const decision = decide(open, report);
-  if (decision.action === 'create') gh(['issue', 'create', '--title', title, '--body', report.body]);
+  const created = decision.action === 'create' ? gh(['issue', 'create', '--title', title, '--body', report.body]) : '';
   if (decision.action === 'update') gh(['issue', 'edit', String(decision.number), '--body', report.body]);
   if (decision.action === 'close') gh(['issue', 'close', String(decision.number), '--comment', `All pinned runtimes are current as of ${new Date().toISOString().slice(0, 10)}.`]);
   console.log(`Tracking issue: ${decision.action}${decision.number ? ` #${decision.number}` : ''}`);
+  const review = reviewTarget(decision, created, previous, state);
+  if (!review && ['create', 'update'].includes(decision.action)) console.log('Review not requested: no material change, or the created issue number could not be read.');
+  if (review && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `review_issue=${review}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
