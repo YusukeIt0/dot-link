@@ -2,7 +2,7 @@
 // It never edits pins or checksums: it reports newer upstream versions and
 // advisories in one tracking issue so a reviewed PR can update each version
 // together with its integrity data.
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
@@ -123,6 +123,15 @@ export function decide(existing, report) {
   return unchanged ? { action: 'none', number: existing.number } : { action: 'update', number: existing.number };
 }
 
+// Only a new or materially changed report asks dotsweeper to investigate (#368).
+// Unchanged, no-action and close decisions never request a review.
+export function reviewTarget(decision, createdUrl = '') {
+  if (decision.action === 'update') return decision.number;
+  if (decision.action !== 'create') return null;
+  const match = String(createdUrl).trim().match(/\/issues\/(\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
 async function json(url, token) {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'dot-link-pinned-runtime-watch' };
   if (token && url.startsWith('https://api.github.com/')) headers.Authorization = `Bearer ${token}`;
@@ -154,10 +163,13 @@ async function main() {
   const open = JSON.parse(gh(['issue', 'list', '--state', 'open', '--json', 'number,body,author', '--limit', '200']))
     .find(issue => issue.body?.startsWith(marker) && issue.author?.login === 'app/github-actions');
   const decision = decide(open, report);
-  if (decision.action === 'create') gh(['issue', 'create', '--title', title, '--body', report.body]);
+  const created = decision.action === 'create' ? gh(['issue', 'create', '--title', title, '--body', report.body]) : '';
   if (decision.action === 'update') gh(['issue', 'edit', String(decision.number), '--body', report.body]);
   if (decision.action === 'close') gh(['issue', 'close', String(decision.number), '--comment', `All pinned runtimes are current as of ${new Date().toISOString().slice(0, 10)}.`]);
   console.log(`Tracking issue: ${decision.action}${decision.number ? ` #${decision.number}` : ''}`);
+  const review = reviewTarget(decision, created);
+  if (decision.action === 'create' && !review) console.log('Review not requested: the created issue number could not be read.');
+  if (review && process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `review_issue=${review}\n`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

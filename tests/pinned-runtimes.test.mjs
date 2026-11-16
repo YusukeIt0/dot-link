@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays } from '../scripts/check-pinned-runtimes.mjs';
+import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget } from '../scripts/check-pinned-runtimes.mjs';
 
 const index = [
   { version: 'v24.11.0', npm: '11.6.0', lts: 'Krypton', security: false },
@@ -104,4 +104,24 @@ test('end-of-life of the pinned Node major is reported before it happens and whe
   assert.match(nodeStatus(index.slice(2), 'v22.23.4', ci, { v20: {} }).findings.join(), /No end-of-life date/);
   // An end-of-life finding keeps the tracking issue open even when no newer release exists.
   assert.equal(renderIssue([near], '2026-11-09').actionable, 1);
+});
+
+test('only a new or materially updated report requests the dotsweeper issue review (#368)', () => {
+  assert.equal(reviewTarget({ action: 'update', number: 362 }), 362);
+  assert.equal(reviewTarget({ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/issues/401\n'), 401);
+  for (const [decision, url] of [[{ action: 'none', number: 362 }], [{ action: 'none' }], [{ action: 'close', number: 362 }],
+    [{ action: 'create' }, ''], [{ action: 'create' }, 'https://github.com/YusukeIt0/dot-link/pull/401'], [{ action: 'create' }, 'not a url']]) {
+    assert.equal(reviewTarget(decision, url), null, JSON.stringify([decision, url]));
+  }
+});
+
+test('the watch requests review only from a separate least-privilege job', () => {
+  const workflow = readFileSync('.github/workflows/pinned-runtime-watch.yml', 'utf8');
+  assert.match(workflow, /review_issue: \$\{\{ steps\.report\.outputs\.review_issue \}\}/);
+  const job = workflow.slice(workflow.indexOf('\n  request-review:'));
+  assert.match(job, /needs: watch\n\s+if: needs\.watch\.outputs\.review_issue != ''/);
+  assert.match(job, /permissions:\n\s+actions: write\n\s+steps:/);
+  assert.match(job, /case "\$ISSUE" in ''\|\*\[!0-9\]\*\)/);
+  assert.match(job, /gh workflow run claude-review\.yml --repo "\$GITHUB_REPOSITORY" --ref main -f item_number="\$ISSUE"/);
+  assert.doesNotMatch(workflow.slice(0, workflow.indexOf('\n  request-review:')), /actions: write/);
 });

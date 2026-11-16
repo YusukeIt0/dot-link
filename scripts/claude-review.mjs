@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {latestReceipt, assertReviewRun} from './review-receipt.mjs';
 import {collectPriorReviews} from './review-provenance.mjs';
+import {marker as watchMarker} from './check-pinned-runtimes.mjs';
 import {hash, reviewInput, acceptanceMarker, trustedUser, dependencyBot, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
@@ -84,12 +85,19 @@ function finishWithoutFindings(s, d) {
   console.log(`Review disposition: ${d.state}`);
 }
 class InvalidResult extends Error {}
+const actionsBot = {id: 41898282, login: 'github-actions[bot]'};
+function watchIssueRequest(actor, s) {
+  return actor.id === actionsBot.id && actor.login === actionsBot.login && !s.pr && s.issue.state === 'open' &&
+    s.issue.user?.type === 'Bot' && s.issue.user?.id === actionsBot.id && typeof s.issue.body === 'string' && s.issue.body.startsWith(watchMarker);
+}
 function authorized(s) {
   const name = process.env.GITHUB_EVENT_NAME;
   const actor = event.sender;
   // A dependency bot may start review only for its own non-draft PR events.
-  if (actor?.type === 'Bot') return name === 'pull_request_target' && dependencyBot(actor) && dependencyBot(s.issue.user)
-    && ['opened', 'ready_for_review', 'synchronize'].includes(event.action);
+  // The weekly pinned-runtime watch may request review of its own open tracking issue only (#368).
+  if (actor?.type === 'Bot') return (name === 'workflow_dispatch' && watchIssueRequest(actor, s)) ||
+    (name === 'pull_request_target' && dependencyBot(actor) && dependencyBot(s.issue.user)
+    && ['opened', 'ready_for_review', 'synchronize'].includes(event.action));
   if (actor?.type !== 'User') return false;
   if (name === 'issue_comment') {
     const live = get(`${root}/issues/comments/${event.comment.id}`);

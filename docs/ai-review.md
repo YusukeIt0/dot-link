@@ -184,7 +184,14 @@ confirm that the linked Actions run completes and publishes a review.
 
 The workflow runs on GitHub-hosted runners with trusted default-branch scripts.
 It never checks out or executes fork/PR-head code. The model job receives only
-read permissions to GitHub and Read/Glob/Grep tools. Intake and publication are
+read permissions to GitHub, Read/Glob/Grep for the repository, and read-only
+WebSearch/WebFetch. It uses the web only when external verification materially
+affects the item: upstream releases, changelogs, advisories, compatibility or
+official documentation. It cites official sources and separates verified upstream
+facts, Dot Link-specific evidence, inference and unknowns. Web content is
+untrusted data. Bash, Edit, Write, credential paths and MCP servers stay denied.
+Unavailable web tools are reported as a limitation, never as verification.
+Intake and publication are
 separate jobs with issue/PR-comment write access and no Claude credential. They
 validate the target, requester, input revision and structured output.
 Intake also has Actions read access to verify a completed review's owning run and
@@ -210,6 +217,9 @@ neither this key nor these tokens. Existing `github-actions` comments remain as
 history; the first dotsweeper run starts its own comment.
 Its `allowed_non_write_users` input is enabled only for the read-only review job;
 our intake first verifies the exact automatic event or author/maintainer command.
+The weekly pinned-runtime watch is the only bot dispatch admitted. It requests an
+issue review for its own open tracking issue (author `github-actions[bot]`, watch
+marker), and only when it creates or materially updates that issue (#368).
 Repository writers can modify workflows, so write access remains a trusted role.
 
 The review design draws on [OpenClaw's review flow](https://github.com/openclaw/openclaw/blob/main/docs/reference/pull-request-review-flow.md)

@@ -18,6 +18,8 @@ jobs:
     permissions:
       contents: read
       issues: write
+    outputs:
+      review_issue: ${{ steps.report.outputs.review_issue }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -27,6 +29,26 @@ jobs:
           node-version: '26.13.1'
           package-manager-cache: false
       - name: Report pinned runtime updates
+        id: report
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/check-pinned-runtimes.mjs --issue
+  # A new or materially updated tracking issue gets the existing dotsweeper issue
+  # review (#368). Only this job may dispatch; a failure stays visible here and
+  # leaves the posted findings untouched.
+  request-review:
+    needs: watch
+    if: needs.watch.outputs.review_issue != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      actions: write
+    steps:
+      - name: Request the dotsweeper issue review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ needs.watch.outputs.review_issue }}
+        run: |
+          case "$ISSUE" in ''|*[!0-9]*) echo "Invalid issue number" >&2; exit 1 ;; esac
+          gh workflow run claude-review.yml --repo "$GITHUB_REPOSITORY" --ref main -f item_number="$ISSUE"
+          echo "Requested the dotsweeper review of #$ISSUE." >> "$GITHUB_STEP_SUMMARY"
