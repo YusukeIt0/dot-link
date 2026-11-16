@@ -24,7 +24,9 @@ It checks:
 - No protected or unknown paths, including rename origins. Workflows, scripts,
   configuration, assurance documentation and gate tests require a human merge
   decision after technical verification. Dependency/build configuration is
-  excluded; package/app JSON is permitted only for strictly version-only changes.
+  excluded; package/app JSON is permitted only when all three package files pass
+  the shared CI version-only check: one matching, increasing version and no other
+  field change.
 - Current main is contained in the head; branch protection has not fallen below
   the observed strict required-test/admin/no-force/no-delete baseline.
 - The latest associated exact-head CI run and all required jobs succeeded.

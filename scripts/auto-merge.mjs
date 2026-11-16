@@ -8,12 +8,11 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as delay} from 'node:timers/promises';
 import {latestReceipt, assertReady} from './check-review-before-merge.mjs';
-import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, versionOnly, readMetadata, authenticateComments, commentRevisionQuery, websiteOnlyAsset} from './review-evidence.mjs';
+import {policy, trustedUser, gatherContext, scopeRevision, reviewDiscussion, validateAssessment, acceptanceBlockers, hash, versionFiles, packageVersionBetween, readMetadata, authenticateComments, commentRevisionQuery, websiteOnlyAsset} from './review-evidence.mjs';
 import {collectPriorReviews} from './review-provenance.mjs';
 import {macPlist, versionOnly as macVersionOnly} from './ci-plan.mjs';
 
 export const repository = 'YusukeIt0/dot-link';
-export {versionOnly};
 
 // A valid negative decision is not an infrastructure failure. Only explicitly
 // retryable read failures may spend the one run-wide recovery allowance.
@@ -116,9 +115,9 @@ export function collect(number, client) {
   const files = pages(`pulls/${number}/files?per_page=100`);
   if (files.length > 100) throw new AssessmentHeld('Automatic merging requires a bounded changed-file set.');
   const versionChanges = {};
-  for (const f of files.filter(x => versionFiles.has(x.filename) && x.status === 'modified')) {
-    versionChanges[f.filename] = versionOnly(f.filename, readMetadata(api, f.filename, main), readMetadata(api, f.filename, pr.head.sha));
-  }
+  const packageMetadata = files.filter(x => versionFiles.has(x.filename) && x.status === 'modified');
+  const packageVersion = packageMetadata.length > 0 && packageVersionBetween(api, main, pr.head.sha);
+  for (const f of packageMetadata) versionChanges[f.filename] = packageVersion;
   if (files.some(f => f.filename === macPlist && f.status === 'modified' && !f.previous_filename)) {
     versionChanges[macPlist] = macVersionOnly(readMetadata(api, macPlist, main), readMetadata(api, macPlist, pr.head.sha));
   }

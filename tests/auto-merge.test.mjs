@@ -214,6 +214,44 @@ test('non-version, invalid and decreasing plist comparisons retain physical acce
   client.api = path => { if (path.startsWith('contents/')) throw new Error('Contents unavailable'); return clientFor(macFixture()).api(path); };
   assert.throws(() => collect(74, client), /Contents unavailable/);
 });
+const packageMetadata = version => ({
+  'app.json': {package_id: 'app.example', version, min_sdk_version: '0.0.16', permissions: []},
+  'package.json': {name: 'even-g2-dot', version, scripts: {test: 'node --test'}},
+  'package-lock.json': {name: 'even-g2-dot', version, lockfileVersion: 3, packages: {'': {name: 'even-g2-dot', version}}},
+});
+function packageClient(paths, after, before = packageMetadata('0.3.12')) {
+  const s = fixture();
+  s.files = paths.map(filename => ({filename, status: 'modified'})); s.pr.changed_files = s.files.length;
+  const client = clientFor(s), api = client.api;
+  client.metadataReads = [];
+  client.api = path => {
+    if (!path.startsWith('contents/')) return api(path);
+    client.metadataReads.push(path);
+    const [, file, ref] = path.match(/^contents\/(.+)\?ref=([a-f0-9]{40})$/);
+    assert.ok([main, head].includes(ref));
+    const text = JSON.stringify((ref === main ? before : after)[file]);
+    return {encoding: 'base64', size: Buffer.byteLength(text), content: Buffer.from(text).toString('base64')};
+  };
+  return client;
+}
+test('package metadata is unprotected only when the shared CI check proves one matching increasing version', () => {
+  const all = ['app.json', 'package.json', 'package-lock.json'];
+  const client = packageClient(all, packageMetadata('0.3.13'));
+  const snapshot = collect(74, client);
+  assert.equal(client.metadataReads.length, 6);
+  assert.deepEqual(snapshot.versionChanges, {'app.json': true, 'package.json': true, 'package-lock.json': true});
+  assert.equal(evaluate(snapshot).eligible, true);
+  const changed = packageMetadata('0.3.13'); changed['app.json'].permissions = ['microphone'];
+  const lone = {...packageMetadata('0.3.12'), 'package.json': packageMetadata('0.3.13')['package.json']};
+  for (const [paths, after] of [[all, changed], [all, packageMetadata('0.3.11')], [['package.json'], lone]]) {
+    const held = collect(74, packageClient(paths, after));
+    assert.ok(Object.values(held.versionChanges).every(value => value === false));
+    assert.ok(evaluate(held).reasons.some(r => r.includes('Human merge decision required')), JSON.stringify(paths));
+  }
+  const failing = packageClient(all, packageMetadata('0.3.13')), files = failing.api;
+  failing.api = path => { if (path.startsWith('contents/')) throw new Error('Contents unavailable'); return files(path); };
+  assert.throws(() => collect(74, failing), /Contents unavailable/);
+});
 test('renamed, deleted, unknown and mixed runtime paths never inherit the plist exception', () => {
   const proof = {[macPlist]: true};
   for (const file of [

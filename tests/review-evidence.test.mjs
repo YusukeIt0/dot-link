@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {acceptanceMarker, policy, hash, scopeDigest, acceptanceFromComments, validateAcceptance,
-  validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, versionOnly, trustedUser, dependencyBot, authenticateComments} from '../scripts/review-evidence.mjs';
+  validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, packageVersionBetween, trustedUser, dependencyBot, authenticateComments} from '../scripts/review-evidence.mjs';
 
 const head = 'b'.repeat(40), before = 'a'.repeat(40);
 const owner = {...policy.trustedMaintainers[0], type: 'User'};
@@ -78,6 +78,7 @@ function contextFor(r, changes = {}) {
     if (path.startsWith('compare/')) { changes.onCompare?.(path); return changes.comparisons?.[path] || changes.comparison; }
     if (path.startsWith('git/commits/')) return {sha: path.split('/').at(-1), tree: {sha: 'f'.repeat(40)}};
     if (path.startsWith('actions/')) return {workflow_runs: []};
+    if (path.startsWith('contents/') && changes.contents) return changes.contents(path);
     throw new Error(`Unexpected API: ${path}`);
   };
   return gatherContext({pr: {number: 74, head: {sha: head, ref: 'work', repo: {full_name: 'YusukeIt0/dot-link'}}, base: {ref: 'main', sha: before}}, rows: [row(r)], fingerprint: hash('snapshot')}, api, () => changes.comments || []);
@@ -219,12 +220,47 @@ test('publisher can retain findings while flagging stale/unknown requirement IDs
   assert.ok(acceptanceBlockers(context.acceptance, published).length);
 });
 
-test('version-only exception does not allow dependency, script, or permission changes', () => {
-  const first = JSON.stringify({version: '0.3.12', scripts: {test: 'node --test'}});
-  assert.equal(versionOnly('package.json', first, JSON.stringify({scripts: {test: 'node --test'}, version: '0.3.13'})), true);
-  assert.equal(versionOnly('package.json', first, JSON.stringify({version: '0.3.13', scripts: {test: 'true'}})), false);
-  assert.equal(versionOnly('app.json', '{"version":"0.3.12","permissions":[]}', '{"version":"0.3.13","permissions":["microphone"]}'), false);
-  assert.equal(versionOnly('package.json', first, 'invalid'), false);
+const packageMetadata = version => ({
+  'app.json': {package_id: 'app.example', version, min_sdk_version: '0.0.16', permissions: []},
+  'package.json': {name: 'even-g2-dot', version, scripts: {test: 'node --test'}, dependencies: {sdk: '0.0.16'}},
+  'package-lock.json': {name: 'even-g2-dot', version, lockfileVersion: 3,
+    packages: {'': {name: 'even-g2-dot', version, dependencies: {sdk: '0.0.16'}}, 'node_modules/sdk': {version: '0.0.16'}}},
+});
+const contentsReader = (byRef, reads = []) => path => {
+  reads.push(path);
+  const [, file, ref] = path.match(/^contents\/(.+)\?ref=([a-f0-9]{40})$/);
+  const text = typeof byRef[ref][file] === 'string' ? byRef[ref][file] : JSON.stringify(byRef[ref][file]);
+  return {encoding: 'base64', size: Buffer.byteLength(text), content: Buffer.from(text).toString('base64')};
+};
+
+test('package version-only exception requires one shared increasing version and no dependency, script or permission change', () => {
+  const read = after => packageVersionBetween(contentsReader({[before]: packageMetadata('0.3.12'), [head]: after}), before, head);
+  assert.equal(read(packageMetadata('0.3.13')), true);
+  const variants = [s => s['package.json'].scripts.test = 'true', s => s['app.json'].permissions = ['microphone'],
+    s => s['package.json'].dependencies.sdk = '0.0.17', s => s['app.json'].version = '0.3.12',
+    s => s['package-lock.json'].packages[''].version = '0.3.12', s => s['package-lock.json'] = 'invalid'];
+  for (const change of variants) {
+    const after = packageMetadata('0.3.13'); change(after);
+    assert.equal(read(after), false, change.toString());
+  }
+  assert.equal(read(packageMetadata('0.3.11')), false);
+  assert.throws(() => packageVersionBetween(() => { throw new Error('Contents unavailable'); }, before, head), /Contents unavailable/);
+});
+
+test('evidence reuse across package metadata uses the shared check once per comparison', () => {
+  const r = record(); r.evidence.push({kind: 'device', result: 'pass', requirements: ['R1'],
+    reference: 'Attributed observation', details: 'Tester saw state preserved', commit: before, build: '0.3.12 Beta',
+    steps: 'Save and reopen', observed: 'Saved state appears'});
+  const files = ['app.json', 'package.json', 'package-lock.json'].map(filename => ({filename, status: 'modified'}));
+  const comparison = {status: 'ahead', merge_base_commit: {sha: before}, files};
+  const reads = [];
+  const bumped = contentsReader({[before]: packageMetadata('0.3.12'), [head]: packageMetadata('0.3.13')}, reads);
+  assert.equal(contextFor(r, {comparison, contents: bumped}).acceptance.status, 'ready');
+  assert.equal(reads.length, 6);
+  // The former per-file check accepted a lone package.json bump that no longer matches app.json.
+  const lone = {...packageMetadata('0.3.12'), 'package.json': packageMetadata('0.3.13')['package.json']};
+  assert.equal(contextFor(r, {comparison: {...comparison, files: [files[1]]},
+    contents: contentsReader({[before]: packageMetadata('0.3.12'), [head]: lone})}).acceptance.status, 'stale');
 });
 
 test('related discovery is bounded, excludes self/PRs and prioritizes explicit links', () => {
