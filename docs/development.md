@@ -378,9 +378,10 @@ comparison covers its entire difference from main, not just the last push.
 
 | Change impact | Required validation |
 | --- | --- |
-| README and ordinary Markdown documentation | Changed local links/conflict markers, recommended installer command, dependency documentation consistency |
+| README, ordinary Markdown documentation and single-level Markdown notes beside README/film assets | Changed local links/conflict markers, recommended installer command, dependency documentation consistency |
 | Website source and website-only README/film assets | Complete localized static build/link checks and analytics consent/privacy tests |
 | Only the two Mac version values | Parse plist, require increasing build/nondecreasing version, preserve every other byte including identity, minimum OS and permissions |
+| Only the shared Even/package version | Parse `app.json`, `package.json` and `package-lock.json` at both revisions; require one increasing version, identical in the app manifest, package and both lockfile roots; preserve every other field including dependencies, scripts, identity, permissions and minimum SDK |
 | Signed Mac update feed | XML schema, app version/OS, public release status/notes, archive length/hash and both Ed25519 signatures using only the public key |
 | Product, native, permissions, dependencies, tests, automation, protected assurance docs or unknown/unsafe changes | Existing full macOS suite; a changed feed also receives direct release validation when a safe comparison identifies it |
 

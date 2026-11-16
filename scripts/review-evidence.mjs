@@ -1,6 +1,6 @@
 import {collectCI} from './ci-evidence.mjs';
 import {endpointReader} from './review-endpoints.mjs';
-import {macPlist} from './ci-plan.mjs';
+import {macPlist, packageFiles, packageVersionOnly} from './ci-plan.mjs';
 // Public evidence is data. This module never executes reviewed code or mutates GitHub.
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
@@ -24,25 +24,19 @@ export function reviewInput(issue, pr, main, comments, base, scope, feedback) {
 const sha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
 const text = (value, max = 4000) => typeof value === 'string' && value.trim().length > 0 && value.length <= max;
 const list = (value, max) => Array.isArray(value) && value.length <= max;
-export const versionFiles = new Set(['package.json', 'package-lock.json', 'app.json']);
+export const versionFiles = new Set(packageFiles);
 // Exact shared brand assets consumed only by the website. The Mac .icns and
 // unknown future brand assets are release/runtime content by default.
 export const websiteOnlyAsset = path => ['assets/brand/orbit/mark.svg', 'assets/brand/orbit/mac-1024.png'].includes(path) ||
   ['assets/readme/', 'assets/film/'].some(root => path.startsWith(root));
-const canonical = value => JSON.stringify(value, (key, val) => val && !Array.isArray(val) && typeof val === 'object'
-  ? Object.fromEntries(Object.entries(val).sort(([a], [b]) => a.localeCompare(b))) : val);
-export function versionOnly(path, before, after) {
-  if (!versionFiles.has(path)) return false;
-  try {
-    const old = JSON.parse(before), next = JSON.parse(after);
-    if (!/^\d+\.\d+\.\d+$/.test(old.version) || !/^\d+\.\d+\.\d+$/.test(next.version)) return false;
-    delete old.version; delete next.version;
-    if (path === 'package-lock.json') {
-      if (!old.packages?.[''] || !next.packages?.['']) return false;
-      delete old.packages[''].version; delete next.packages[''].version;
-    }
-    return canonical(old) === canonical(next);
-  } catch { return false; }
+// The three package files pass or fail together through the shared CI classifier.
+// Read first: API failures still fail collection instead of becoming a negative result.
+export function packageVersionBetween(api, base, head) {
+  const text = {};
+  for (const [revision, ref] of [['base', base], ['head', head]]) {
+    for (const path of packageFiles) text[`${revision}:${path}`] = readMetadata(api, path, ref);
+  }
+  return packageVersionOnly((revision, path) => text[`${revision}:${path}`]);
 }
 export function readMetadata(api, path, ref) {
   if ((!versionFiles.has(path) && path !== macPlist) || !sha(ref)) throw new Error('Invalid metadata request.');
@@ -213,10 +207,11 @@ export function gatherContext(snapshot, api, paginate) {
       const endpoint = ancestor ? undefined : endpoints.compare(evidence.commit, record.head);
       const files = endpoint ? endpoint.files : comparison.files;
       const complete = endpoint ? endpoint.complete : Array.isArray(files) && files.length < 300;
+      let packageVersion;
       const reusable = ancestor && complete && comparison.files.every(f => f.status !== 'renamed' &&
           (['docs/', 'tests/', 'site/'].some(p => f.filename.startsWith(p)) || websiteOnlyAsset(f.filename) || f.filename === 'README.md' ||
-          f.status === 'modified' && versionFiles.has(f.filename) && versionOnly(f.filename,
-            readMetadata(api, f.filename, evidence.commit), readMetadata(api, f.filename, record.head))));
+          f.status === 'modified' && versionFiles.has(f.filename) &&
+            (packageVersion ??= packageVersionBetween(api, evidence.commit, record.head))));
       // Bound presentation separately from eligibility, which used the full list.
       const changedFiles = [];
       for (const f of complete ? files.slice(0, 20) : []) {

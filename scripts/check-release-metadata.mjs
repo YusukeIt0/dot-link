@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {createPublicKey, verify, createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
-import {macPlist, macFeed, plist, versionOnly} from './ci-plan.mjs';
+import {macPlist, macFeed, plist, versionOnly, packageVersionOnly} from './ci-plan.mjs';
 
 export function verifySignature(bytes, signature, publicKey) {
   assert.match(signature, /^[A-Za-z0-9+/]{86}==$/);
@@ -83,6 +83,13 @@ export function checkArtifact(bytes, feed, asset, publicKey) {
 }
 
 export async function checkRelease(kind, base) {
+  // Independent of the Mac plist, so an Even-only version bump is not held to Mac rules.
+  if (kind === 'package-version') {
+    assert.ok(packageVersionOnly((revision, path) => revision === 'base'
+      ? execFileSync('git', ['show', `${base}:${path}`], {encoding: 'utf8'}) : readFileSync(path, 'utf8')), 'Package version-only invariants failed');
+    console.log('Package metadata verified: one matching increased version; all other fields unchanged.');
+    return;
+  }
   const text = readFileSync(macPlist, 'utf8'), app = plist(text);
   assert.equal(app.CFBundleIdentifier, 'app.tripsurf.dotlink.mac');
   assert.equal(app.DotLinkBeta, false);
