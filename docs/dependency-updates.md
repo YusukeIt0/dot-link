@@ -62,8 +62,9 @@ persisted credentials and never run pull request code. Without this policy,
 GitHub's default policy blocks `pull_request_target` in public repositories.
 Enforcement starts on 2026-12-02; until then, scheduled brownouts make these
 runs end in `startup_failure`, with an annotation on the run page. The policy
-is an allowlist, so add any new trigger of these workflows to it. If PR events
-stop starting them, `/dotlink review` still requests a review.
+is an allowlist for these workflows. Removing or narrowing it also stops
+`/dotlink review` (`issue_comment`) and their other triggers. Add any new
+trigger of these workflows to it.
 
 ## Coverage and gaps
 
