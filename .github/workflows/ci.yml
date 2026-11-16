@@ -61,7 +61,7 @@ jobs:
         run: node scripts/ci-current.mjs
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '26.13.0'
+          node-version: '26.13.1'
           package-manager-cache: false
           cache: ${{ needs.workflow-lint.outputs.runner == 'macos-15' && 'npm' || '' }}
       - name: Run full product validation

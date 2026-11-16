@@ -4,9 +4,9 @@ Dot Link's own source is MIT-licensed. Dependencies retain their own licenses an
 
 | Component | Pinned version | License / notices |
 |---|---|---|
-| Node.js | 26.13.0 | Upstream Node license and bundled dependency notices |
+| Node.js | 26.13.1 | Upstream Node license and bundled dependency notices |
 | whisper.cpp | 1.9.5 | MIT |
-| OpenAI tunnel-client | 0.0.20 | Apache-2.0, upstream NOTICE and bundled dependency notices |
+| OpenAI tunnel-client | 0.0.21 | Apache-2.0, upstream NOTICE and bundled dependency notices |
 | Sparkle | 2.10.1 | Upstream Sparkle license |
 | Even Hub SDK | `package.json` (exact pin) | MIT |
 | hyparquet | `package.json` (exact pin) | MIT |
