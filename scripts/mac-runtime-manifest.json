@@ -1,13 +1,13 @@
 {
   "node": {
-    "version": "v26.13.0",
-    "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0-darwin-arm64.tar.xz",
-    "sha256": "6f5b3187d9df9fc007e881167905bc7d69ad26450ddc377c83d63256a2495b6e"
+    "version": "v26.13.1",
+    "url": "https://nodejs.org/dist/v26.13.1/node-v26.13.1-darwin-arm64.tar.xz",
+    "sha256": "af6202f5370a3a5209e85dc543758dfd9f44c8726626a236730cd603a67a8559"
   },
   "tunnel": {
-    "version": "v0.0.20",
-    "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.20/tunnel-client-v0.0.20-darwin-arm64.zip",
-    "sha256": "f4689e75a835f69f1bbb9c59de9c4debb8e9c9cbbdd2721aa93378b4b048fd33"
+    "version": "v0.0.21",
+    "url": "https://github.com/openai/tunnel-client/releases/download/v0.0.21/tunnel-client-v0.0.21-darwin-arm64.zip",
+    "sha256": "353a535d2513f599f9fe7897606e89b3248611453b30203ebddfb6e62fd4f58b"
   },
   "whisper": {
     "version": "v1.9.5",

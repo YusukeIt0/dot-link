@@ -65,7 +65,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.admission.outputs.run == 'true'
         with:
-          node-version: '26.13.0'
+          node-version: '26.13.1'
           package-manager-cache: false
           cache: ${{ needs.branch-preflight.outputs.runner == 'macos-15' && 'npm' || '' }}
       - name: Run full product validation
