@@ -107,10 +107,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   let [base, head] = process.argv.slice(2);
   if (base === '--event') {
     ({base, head} = eventRevisions(process.env.GITHUB_EVENT_NAME, JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, 'utf8'))));
-    // Branch validation covers the whole branch, not only its last push.
-    if (!base && process.env.GITHUB_EVENT_NAME === 'push') {
-      try { base = git(['merge-base', 'origin/main', head]).trim(); } catch {}
-    }
   }
   const result = plan(base, head);
   // Keep impact classification intact. Only CI may substitute proven execution.

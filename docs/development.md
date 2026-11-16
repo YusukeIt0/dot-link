@@ -24,15 +24,14 @@ sh scripts/test-notification-native.sh
 sh scripts/test-setup-native.sh
 ```
 
-These are the full product checks. Main pushes, PRs and work branches use the
+These are the full product checks. Main pushes and PRs use the
 [shared impact policy](#verification-by-change-impact) to select them or the
-bounded non-runtime checks. Work branches use Branch validation until an open PR
-owns validation for the same head. Passing checks do not publish an application
-automatically. Only a tested release updates installed clients.
+bounded non-runtime checks. A work branch is validated through its PR; open a
+draft PR when CI feedback is needed before review. Passing checks do not publish
+an application automatically. Only a tested release updates installed clients.
 
-Failed branch preflight already fails Branch validation and does not allocate a
-macOS job just to report the same failure. This differs from the required PR
-`test` check, which must explicitly fail after a lint failure rather than skip.
+The required PR `test` check must explicitly fail after a lint failure rather
+than skip.
 
 MCP `serverInfo.version` reports the root `package.json` version, shared with the
 Even app. It is not the Mac app release/build number. For Mac update or support
@@ -321,13 +320,10 @@ media. Keep that separate from speaker-role work.
 ### CI ownership and recovery
 
 `Tests` is canonical for main pushes and PRs (including drafts and child PRs).
-`Branch validation` checks non-main pushes without a matching open PR. Its distinct
-`branch-test` check cannot replace required `test`. Read failures retain branch
-validation. Admission is checked again after runner allocation, before dependency
-installation. A matching PR opened during that wait takes ownership; the branch
-summary states that no product validation was performed. A PR opened after that
-second check can still overlap; no polling or arbitrary delay is added.
-Branch-only and PR evidence are not interchangeable.
+The separate pre-PR Branch validation workflow was retired in #370. In a measured
+week, PRs opened a median of 18 seconds after the first push, every pre-PR test
+run was repeated by the PR's `Tests` on the same head, and no failure was caught
+only by branch validation. Pushes without a PR start no CI.
 
 Review evidence and both merge gates share `scripts/ci-evidence.mjs`: select the
 latest matching complete PR workflow and its latest attempt for the exact head,
@@ -336,7 +332,7 @@ jobs to succeed. Never search backward for a passing run. Cancelled,
 skipped, missing and stale evidence holds integration. Unknown fork association
 also holds it. Update a child after its parent advances and rerun CI/review.
 
-Tests and branch validation use separate cancellation groups by PR/ref. Manual
+Tests use separate cancellation groups by PR/ref. Manual
 retries are isolated from ordinary runs so an old retry cannot cancel current
 validation. GitHub does not guarantee dispatch order: inspect the latest head and
 run after cancellation. A supersession failure requires updating the PR head from

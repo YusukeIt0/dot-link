@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 
 export const marker = '<!-- dot-link-pinned-runtime-watch:v1 -->';
 export const title = 'Pinned runtime updates available';
-export const nodeWorkflows = ['.github/workflows/ci.yml', '.github/workflows/branch-ci.yml', '.github/workflows/pages.yml', '.github/workflows/pinned-runtime-watch.yml'];
+export const nodeWorkflows = ['.github/workflows/ci.yml', '.github/workflows/pages.yml', '.github/workflows/pinned-runtime-watch.yml'];
 export const sources = [
   { id: 'sparkle', name: 'Sparkle', repo: 'sparkle-project/Sparkle', file: 'config/mac-update.json',
     integrity: 'version and sha256 in `config/mac-update.json` (verified by `scripts/prepare-sparkle.mjs`)' },

@@ -64,22 +64,10 @@ class ProductCIValidation(unittest.TestCase):
         self.assertNotIn('if', ci['jobs']['workflow-lint'])
         self.assertTrue(ci['concurrency']['cancel-in-progress'])
         self.assertIn('github.run_attempt > 1', ci['concurrency']['group'])
-        branch = yaml.safe_load(Path('.github/workflows/branch-ci.yml').read_text())
-        events = branch.get('on', branch.get(True))
-        self.assertEqual(events['push']['branches-ignore'], ['main'])
-        self.assertNotIn('test', branch['jobs'])
-        self.assertEqual(branch['jobs']['branch-test']['runs-on'], "${{ needs.branch-preflight.outputs.runner || 'macos-15' }}")
-        self.assertEqual(branch['jobs']['branch-test']['if'],
-                         "${{ !cancelled() && needs.branch-preflight.result == 'success' && needs.branch-preflight.outputs.run == 'true' }}")
-        self.assertNotEqual(ci['concurrency']['group'], branch['concurrency']['group'])
-        for job in [ci['jobs']['test'], branch['jobs']['branch-test']]:
-            self.assertEqual(job['steps'][-1]['run'], 'node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"')
-        for job in [ci['jobs']['workflow-lint'], branch['jobs']['branch-preflight']]:
-            self.assertEqual(job['steps'][-1]['run'], 'node scripts/ci-plan.mjs --event')
-        ownership = next(s for s in branch['jobs']['branch-test']['steps'] if s.get('id') == 'admission')
-        self.assertEqual(ownership['run'], 'node scripts/branch-ci-admission.mjs')
-        self.assertIn("steps.admission.outputs.run == 'true'", branch['jobs']['branch-test']['steps'][-1]['if'])
-        for workflow, preflight, test_job in [(ci, 'workflow-lint', 'test'), (branch, 'branch-preflight', 'branch-test')]:
+        self.assertFalse(Path('.github/workflows/branch-ci.yml').exists(), 'Branch validation is retired (#370); PR/main Tests own validation')
+        self.assertEqual(ci['jobs']['test']['steps'][-1]['run'], 'node scripts/run-ci-plan.mjs "$CI_BASE" "$CI_HEAD"')
+        self.assertEqual(ci['jobs']['workflow-lint']['steps'][-1]['run'], 'node scripts/ci-plan.mjs --event')
+        for workflow, preflight, test_job in [(ci, 'workflow-lint', 'test')]:
             steps = workflow['jobs'][test_job]['steps']
             full = next(s for s in steps if s.get('name') == 'Run full product validation')
             reused = next(s for s in steps if s.get('name') == 'Run bounded or reused validation')
