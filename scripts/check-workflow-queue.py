@@ -9,7 +9,9 @@ from pathlib import Path
 ADMISSION = " ".join("""
 github.repository == 'YusukeIt0/dot-link' &&
 (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
-(github.event_name != 'issue_comment' || github.event.issue.pull_request != null)
+(github.event_name != 'issue_comment' || github.event.issue.pull_request != null) &&
+(github.event_name != 'workflow_run' || github.event.workflow_run.conclusion != 'skipped') &&
+((github.event_name != 'issue_comment' && github.event_name != 'issues') || github.event.sender.login != 'dotsweeper[bot]')
 """.split())
 GROUP = "${{ " + ADMISSION + " && 'dot-link-automatic-merge' || format('dot-link-automatic-merge-ignored-{0}', github.run_id) }}"
 

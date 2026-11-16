@@ -93,8 +93,13 @@ the active coordinator and any mutation continue. A cancelled pending run is a
 superseded request, not a successful assessment. Every retained request scans all
 candidates, so a final manual priority request still covers other PRs.
 Non-main manual dispatches and non-PR comment events use isolated ignored groups
-and skip assessment: they cannot replace a valid pending full scan. The YAML
-checker enforces that admission to the shared group matches assessor admission.
+and skip assessment: they cannot replace a valid pending full scan. The same
+applies to completions of Tests or dotsweeper runs whose jobs were all skipped,
+which changed nothing, and to dotsweeper's own comment and issue-label events.
+Those happen inside a dotsweeper review run, whose completion still wakes the
+assessment. A reopened issue does wake it, because reopening an acceptance scope
+issue can make a held PR eligible again. The YAML checker enforces that admission
+to the shared group matches assessor admission.
 
 The assessor and executor share **one immediate failure-recovery allowance** per
 workflow execution. The assessor exports whether it used that allowance; the
