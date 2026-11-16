@@ -3,7 +3,7 @@ import {checksFailureOutput} from '../scripts/check-output.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -865,4 +865,16 @@ test('queue and assessor admission keep eligibility wake-ups and ignore only no-
   assert.match(yaml, /types: \[edited, labeled, unlabeled, reopened\]/);
   assert.match(yaml, /queue: single\n\s+cancel-in-progress: false/);
   assert.match(yaml, /\n  workflow_dispatch:\n/);
+});
+
+test('every workflow that can act as dotsweeper wakes the assessment on completion (#371 safety assumption)', () => {
+  const directory = new URL('../.github/workflows/', import.meta.url);
+  const listed = readFileSync(new URL('auto-merge.yml', directory), 'utf8').match(/workflows: \[([^\]]*)\]/)[1].split(',').map(name => name.trim());
+  const users = readdirSync(directory).filter(file => /\.ya?ml$/.test(file))
+    .map(file => readFileSync(new URL(file, directory), 'utf8')).filter(text => /DOTSWEEPER_(?:PRIVATE_KEY|CLIENT_ID)/.test(text))
+    .map(text => text.match(/^name: (.+)$/m)[1].trim());
+  assert.ok(users.length > 0);
+  // auto-merge ignores dotsweeper's own comment/label events; a run of each such
+  // workflow must therefore wake it through workflow_run instead.
+  for (const name of users) assert.ok(listed.includes(name), `${name} acts as dotsweeper but is not in auto-merge workflow_run`);
 });
