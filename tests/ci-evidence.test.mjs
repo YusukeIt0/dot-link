@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {ciTarget, ciReceipt, ciHeadReceipt, matchesCI, selectCI, assertCI, collectCI} from '../scripts/ci-evidence.mjs';
-import {branchAdmission} from '../scripts/branch-ci-admission.mjs';
 const repository = 'YusukeIt0/dot-link', head = 'b'.repeat(40), base = 'a'.repeat(40);
 const pr = {number: 7, head: {sha: head, ref: 'work', repo: {full_name: repository}}, base: {ref: 'main', sha: base}};
 const target = ciTarget(pr);
@@ -65,33 +64,7 @@ test('enumeration reaches later pages and pins jobs to the selected attempt', ()
   assert.throws(() => collectCI(pr, pr.base, () => ({total_count: 1001, workflow_runs: []}), () => []));
   assert.throws(() => collectCI(pr, pr.base, () => {throw new Error('API unavailable');}, () => []));
 });
-test('branch admission omits only obsolete heads or matching open PRs; errors retain tests', async () => {
-  const context = {repository, ref: 'work', head};
-  const get = rows => async path => path.startsWith('git/') ? {object: {sha: head}} : rows;
-  assert.equal((await branchAdmission(context, get([{...pr, state: 'open'}]))).run, false);
-  for (const rows of [[], [{...pr, state: 'closed'}], [{...pr, state: 'open', head: {...pr.head, sha: base}}],
-    [{...pr, state: 'open', head: {...pr.head, repo: {full_name: 'external/fork'}}}]]) {
-    assert.equal((await branchAdmission(context, get(rows))).run, true);
-  }
-  assert.equal((await branchAdmission(context, async () => {throw Error('offline');})).run, true);
-  assert.equal((await branchAdmission(context, async () => ({object: {sha: base}}))).run, false);
-});
-
-test('malformed ref metadata cannot suppress branch validation', async () => {
-  assert.equal((await branchAdmission({repository, ref: 'work', head}, async () => ({}))).run, true);
-});
-
 import {currentCI} from '../scripts/ci-current.mjs';
-test('a matching PR opened during runner allocation takes ownership at the second admission check', async () => {
-  const context = {repository, ref: 'work', head};
-  let rows = [];
-  const get = async path => path.startsWith('git/') ? {object: {sha: head}} : rows;
-  assert.equal((await branchAdmission(context, get)).run, true);
-  rows = [{...pr, state: 'open'}];
-  assert.equal((await branchAdmission(context, get)).run, false);
-  rows[0].head = {...pr.head, sha: base};
-  assert.equal((await branchAdmission(context, get)).run, true, 'A different head cannot suppress validation');
-});
 test('late starts and stale retries cannot execute expensive tests against a moved PR/ref', () => {
   const event = {pull_request: {...pr, state: 'open'}};
   assert.equal(currentCI('pull_request', event, event.pull_request, base, {status: 'ahead', merge_base_commit: {sha: base}}), true);

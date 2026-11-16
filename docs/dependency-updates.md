@@ -16,9 +16,8 @@ require reading the diff. See #274.
    decision per week. A breaking major in the batch is fixed on that PR by the
    implementing AI before the decision. Security updates arrive separately and
    immediately.
-2. Each Dependabot PR runs the ordinary CI (`Tests`; `Branch validation` for the
-   branch push, as for any branch). Existing duplicate avoidance and cancellation
-   are unchanged.
+2. Each Dependabot PR runs the ordinary CI (`Tests`). Existing duplicate
+   avoidance and cancellation are unchanged.
 3. dotsweeper reviews the PR automatically on open, ready-for-review and every
    Dependabot update or rebase. Maintainer pushes onto the PR also refresh it.
    The review starts with a decision brief: the dependency and version changes,
