@@ -38,7 +38,7 @@ try {
       if (selected.paths.includes('docs/dependencies.md')) tests('tests/dependency-docs.test.mjs');
     }
     if (check === 'site') tests('tests/site.test.mjs', 'tests/site-analytics.test.mjs');
-    if (check === 'version' || check === 'feed') await checkRelease(check, selected.base);
+    if (check === 'version' || check === 'feed' || check === 'package-version') await checkRelease(check, selected.base);
   }
   result = 'passed';
 } finally {
