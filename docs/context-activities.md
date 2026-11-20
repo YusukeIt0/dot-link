@@ -21,6 +21,14 @@ observation, forecast or walking plan could materially change the answer, use
 evidence need not interrupt the conversation or prompt another settings request.
 Silence is a valid result.
 
+An explicit Weather read can also include a recent estimate of rain in nearby
+areas derived from NOAA. The model forecast and satellite grid carry separate
+source and time information. Use the area relevant to the person's plan. If
+that direction is missing, its conditions remain unknown. Credit NOAA naturally
+when the estimate contributes to a suggestion. A question about an earlier
+decision can select only retained satellite summaries already available locally
+at the requested cutoff; each has its own coverage window.
+
 Keep numerical accuracy, timestamps, source, missing values and model limitations
 as reasoning evidence. A generic possibility of error does not by itself justify
 a spoken caveat or a routine verification chore. For example, do not append
@@ -43,8 +51,9 @@ Each available result includes `response_context` with its argument mapping and
 Use only receipts that materially influenced the reasoning or answer, including
 unspoken evidence behind a recommendation. Do not fetch or attach unused sources.
 A current location `context_id` covers its attached geography/weather. Explicit
-weather and finished mobility reads also return `weather_read_id` and
-`mobility_read_id`; include these in their respective plural arrays. Current-weather
+weather and finished mobility reads supply their receipt IDs in the returned
+argument mappings. When only the MET forecast informed the answer, use the
+weather result's `forecast_only_response_context` if present. Current-weather
 and mobility receipts must accompany their returned `context_id`. Specified-place
 weather can be used without current-location sharing. Health and recent-place
 reads supply `health_read_ids` and `history_context_ids`. Saved forecasts and

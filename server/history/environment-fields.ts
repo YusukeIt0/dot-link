@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto';
-import { weatherArchiveForecast, type WeatherEvidence, type WeatherPoint, type WeatherSample } from '../weather/types.ts';
+import { weatherArchiveForecast, weatherQueryPoint, type WeatherEvidence, type WeatherPoint, type WeatherSample } from '../weather/types.ts';
+import type { SatellitePrecipitation } from '../weather/satellite.ts';
 import type { MobilityArguments } from '../mobility/context.ts';
 import type { ArchiveInput, ArchiveRecord } from './archive-store.ts';
 
 export const environmentFields = {
-  weather: ['temperature', 'humidity', 'wind', 'pressure', 'cloud', 'precipitation', 'place', 'status'],
+  weather: ['temperature', 'humidity', 'wind', 'pressure', 'cloud', 'precipitation', 'place', 'status', 'satellite_precipitation'],
   mobility: ['plan', 'endpoints', 'steps', 'geometry', 'terrain', 'terrain_details'],
 } as const;
 export type EnvironmentWriter = ((record: ArchiveInput) => void) & {readonly since: number};
@@ -82,6 +83,36 @@ function forecastProjection(snapshot: ForecastPart, fields: readonly string[], w
     ...(fields.includes('place') ? {place: {...snapshot.scope, query_point: snapshot.query_point, model_elevation_m: snapshot.elevation_m}} : {})};
 }
 
+/** One verified local summary per approximate place and immutable public edition.
+ * Store the frame actually read. A live comparison may include another frame
+ * whose local summary was never admitted under this history grant. */
+export function satelliteArchiveRecord(evidence: SatellitePrecipitation, scope: WeatherScope, point: WeatherPoint, availableAt: number): ArchiveInput | undefined {
+  const fromMs = Date.parse(evidence.coverage_start), lastMs = Date.parse(evidence.coverage_end);
+  const fileEnd = Date.parse(evidence.file_interval_end);
+  const anchorMs = Date.parse(evidence.first_retrieved_at), localSummary = Date.parse(evidence.available_at);
+  if (!(fileEnd === fromMs + 599_900 && Math.floor(fileEnd / 60_000) * 60_000 === lastMs && fileEnd <= anchorMs &&
+      anchorMs <= localSummary && localSummary <= availableAt)) return;
+  const queryPoint = weatherQueryPoint(point);
+  const identity = digest([scope.mode, scope.mode === 'specified' ? scope.place : queryPoint, evidence.edition]);
+  const estimate = {
+    edition: evidence.edition, source: evidence.source, status: evidence.status, coverage_start: evidence.coverage_start,
+    coverage_end: evidence.coverage_end, file_interval_end: evidence.file_interval_end,
+    generated_at: evidence.generated_at, published_at: evidence.published_at,
+    first_retrieved_at: evidence.first_retrieved_at, live_expires_at: evidence.expires_at, pixel_observed_at: evidence.pixel_observed_at,
+    limitations: evidence.limitations, satellite_precipitation: {rate_unit: evidence.rate_unit, areas: evidence.areas,
+      resolution_degrees: evidence.resolution_degrees, inner_radius_km: evidence.inner_radius_km, outer_radius_km: evidence.outer_radius_km,
+      missing_inputs: evidence.missing_inputs, edge_clipped: evidence.edge_clipped},
+  };
+  // The filename gives the nominal frame's last tenth of a second. Its embedded
+  // coverage end is only minute precision; individual observation times are unknown.
+  // Sharing a cached projection across scopes cannot backdate when this particular
+  // place association became known. The store retains the first admission of this ID.
+  return {version: 1, id: 'weather:satellite:' + identity, fromMs, toMs: fileEnd + 1, anchorMs, availableAtMs: availableAt,
+    payload: {kind: 'satellite_precipitation_rate_estimate', scope, query_point: queryPoint, estimate}};
+}
+
+type SatellitePart = {kind: 'satellite_precipitation_rate_estimate'; scope: WeatherScope; query_point: WeatherPoint; estimate: Values};
+
 const object = (v: unknown): Values => typeof v === 'object' && v !== null && !Array.isArray(v) ? v as Values : {};
 const array = (v: unknown): unknown[] => Array.isArray(v) ? v : [];
 function select(v: unknown, keys: readonly string[]) {
@@ -149,8 +180,13 @@ export function mobilityArchiveRecords(input: MobilityArguments, measuredAt: str
 
 export function projectEnvironment(source: 'weather' | 'mobility', row: ArchiveRecord, fields: readonly string[], window: Window): object | null {
   if (row.version !== 1 || row.fromMs >= window.end || row.toMs <= window.start) return null;
-  const data = row.payload as ForecastPart | PlanPart | null;
+  const data = row.payload as ForecastPart | SatellitePart | PlanPart | null;
   if (data?.kind === 'model_forecast' && source === 'weather') return forecastProjection(data, fields, window, row);
+  if (data?.kind === 'satellite_precipitation_rate_estimate' && source === 'weather') {
+    if (!fields.includes('satellite_precipitation')) return null;
+    return {kind: data.kind, scope: data.scope.mode, ...data.estimate, available_at: iso(row.availableAtMs),
+      ...(fields.includes('place') ? {place: {...data.scope, query_point: data.query_point}} : {})};
+  }
   if (data?.kind !== 'planned_route_or_model_terrain' || source !== 'mobility') return null;
   const selected = select(data.values, fields.filter(field => environmentFields.mobility.some(name => name === field)));
   if (!Object.keys(selected).length) return null;

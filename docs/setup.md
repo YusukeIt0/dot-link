@@ -226,24 +226,27 @@ configuration, or the wake phrase.
 
 ## Optional weather context
 
-In the companion's Location sharing section, read the **Weather context**
-disclosure and MET Norway service terms before enabling it. This separate choice
-is off by default and belongs to the selected Mac. Current-location weather also
-needs fresh location sharing; a different place explicitly named in conversation
-does not. No paid API, account or API key is needed.
+Open **Sharing settings → Weather context** on the companion for your selected Mac.
+Read the disclosure and MET Norway service terms. On a compatible Mac, enabling
+Weather covers the forecast and recent nearby satellite rain estimates. If you
+already share MET forecasts, they continue working after an update or restart.
+Choose **Add nearby rain estimates** in the same settings whenever you want to
+add NOAA. An older Mac continues to offer forecasts.
 
-Update the Mac and companion to matching versions that offer this control. Refresh
-the existing Dot Link connection's tools in ChatGPT, then restart the existing Dot
-so it loads the new definitions. Confirm `get_weather_context` is available there;
-a successful connection refresh alone does not establish that the running Dot
-loaded it. Ask an ordinary weather question without repeating an already shared
-location, or ask about another place. Forecasts, unknown fields and source limits
-remain visible to Dot. Weather failure does not prevent ordinary conversation.
+Your Mac sends rounded coordinates to MET Norway. It downloads a global NOAA
+file from Amazon S3 and estimates nearby rain locally. Both services see the
+Mac's outgoing IP address. Current-location weather needs fresh phone location
+sharing. You can also ask about a particular place. Ordinary weather requests
+work with the existing Dot. A cold satellite lookup can finish after the forecast
+arrives. The Mac reuses the downloaded file for other places. If the Weather
+tool itself is missing from an older ChatGPT connection, see the connector
+setup instructions for refreshing that connection.
 
-Turning weather off stops all weather use after the Mac acknowledges it. Turning
-location sharing off only stops current-location weather. If a setting change
-cannot be confirmed, reconnect and check it. See the [source/privacy details](../public/weather-sources.html)
-for the coarse-coordinate cache and request intervals.
+Turning Weather off stops live weather after the Mac acknowledges the change.
+Turning location sharing off stops current-location weather. **Sharing settings
+→ History** controls saved weather separately, including retention and deletion.
+If you previously enabled weather history, adding NOAA allows newly acquired
+nearby summaries to be saved for the selected period. [Weather sources and privacy](../public/weather-sources.html).
 
 ## Polar health context
 
