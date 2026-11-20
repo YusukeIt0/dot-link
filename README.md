@@ -62,7 +62,7 @@ Choose what to share in the iPhone companion's **Sharing settings**. These featu
 - **Walking routes:** ask about a destination and get estimated walking routes and travel times.
 - **Terrain:** understand elevation and slopes, including hills along a route.
 - **Recent places:** let Dot refer to recorded movement and places. The default history period is seven days.
-- **Weather:** get forecasts for temperature, humidity and precipitation at your shared location or a place you ask about. With Mac 0.5.0 and an Even companion that lists NOAA in **Weather context**, you can also share satellite estimates of recent rainfall nearby.
+- **Weather:** get forecasts for temperature, humidity and precipitation at your shared location or a place you ask about. With Mac 0.5.0 and Even 0.4.1, turning on **Weather context** also shares nearby satellite rain estimates. If you already share forecasts only, you can include nearby rain when the companion asks or later in **Sharing settings → Weather context**.
 - **Health:** let Dot use shared Polar sleep, activity, heart rate, and recovery data to make more context-aware suggestions. Connect Polar in the Mac app's **Healthcare settings**, then turn on **Health context** in your Even companion.
 
 See [location and history setup](docs/setup.md#location-sharing), [weather setup](docs/setup.md#optional-weather-context), and [Polar health setup](docs/setup.md#polar-health-context) for sharing controls and compatible versions.

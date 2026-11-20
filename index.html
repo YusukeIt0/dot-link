@@ -3,6 +3,12 @@
   <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png"><title>Dot Link</title></head>
   <body><main>
     <header><p>EVEN G2</p><h1>Dot Link</h1><small id="app-version"></small><p id="connection" role="status" data-i18n="even.waiting_for_the_even_app">Waiting for the Even app</p></header>
+    <section id="weather-upgrade" aria-labelledby="weather-upgrade-prompt" hidden>
+      <p id="weather-upgrade-prompt" data-i18n="even.weather_upgrade_prompt">Forecasts will stay on. Add nearby rain estimates? Your Mac downloads global NOAA satellite data from AWS. AWS sees your Mac’s IP address. The location lookup stays on your Mac. If weather history is on, it also saves the estimates, place and time they became available for your chosen period.</p>
+      <button type="button" id="weather-upgrade-accept" data-i18n="even.weather_upgrade_accept">Use nearby rain estimates</button>
+      <button type="button" id="weather-upgrade-keep" class="secondary" data-i18n="even.weather_upgrade_keep">Keep forecasts only</button>
+      <p id="weather-upgrade-error" role="status" hidden></p>
+    </section>
     <section class="glass" aria-label="G2 display" data-i18n-aria-label="even.g2_display"><p id="hud-state" data-i18n="even.waiting_for_connection">Waiting for connection</p><pre id="hud-content" data-i18n="even.hold_to_speak">Hold to speak</pre><p id="speech-status" class="speech-status" aria-label="STT / TTS">STT:— / TTS:OFF</p><small id="recording-hint" data-i18n="even.hold_to_record_release_to_stop">Hold to record · release to stop</small></section>
     <p id="notice" role="status" data-i18n="even.open_in_even_hub_to_use_the_g2_microphone_and">Open in Even Hub to use the G2 microphone and display.</p>
     <p id="dot-status" role="status" data-i18n="even.checking_your_relay">Checking your relay</p>
@@ -40,10 +46,16 @@
       <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-i18n="even.share_my_location">Share my location</span></label>
       <p class="note" data-i18n="even.share_your_phone_s_current_location_with_your_existing_dot">Share your phone's location with your Dot through your Mac. Stop sharing anytime. Nearby map data stays on your Mac until unused for 30 days and can reveal past areas.</p>
       <div class="weather-settings">
-      <label class="display-checkbox"><input id="weather-share" type="checkbox"> <span data-i18n="even.weather">Weather context</span></label>
+      <label id="weather-checkbox-field" class="display-checkbox"><input id="weather-share" type="checkbox"> <span data-i18n="even.weather">Weather context</span></label>
+      <label id="weather-mode-field" hidden><span data-i18n="even.weather">Weather context</span>
+        <select id="weather-mode">
+          <option value="forecast" data-i18n="even.weather_mode_forecast">Forecasts only</option>
+          <option id="weather-mode-combined" value="combined" data-i18n="even.weather_mode_combined">Forecasts and nearby rain</option>
+          <option value="off" data-i18n="even.weather_mode_off">Off</option>
+        </select>
+      </label>
       <p class="note"><span data-i18n="even.weather_disclosure">Your Mac sends rounded coordinates to api.met.no for forecasts. The service also receives its IP address.</span> <a href="https://api.met.no/doc/TermsOfService" target="_blank" rel="noopener noreferrer" data-i18n="even.weather_terms">Read service terms</a> · <a href="./weather-sources.html" target="_blank" rel="noopener noreferrer" data-i18n="even.walking_terrain_privacy">Data sources and privacy</a></p>
       <p id="weather-satellite-disclosure" class="note" data-i18n="even.weather_satellite_disclosure" hidden>For nearby rain estimates, your Mac downloads global NOAA satellite data from AWS. AWS sees your IP address. Your coordinates stay on your Mac for this lookup. If weather history is on, it also saves these estimates, the place and when they became available for your selected period.</p>
-      <button id="weather-add-rain" type="button" aria-describedby="weather-satellite-disclosure" data-i18n="even.weather_add_rain" hidden>Add nearby rain estimates</button>
       <p id="weather-status" class="note" role="status"></p>
       </div>
       <label class="display-checkbox"><input id="mobility-share" type="checkbox"> <span data-i18n="even.walking_terrain">Walking and terrain information</span></label>

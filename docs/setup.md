@@ -227,12 +227,19 @@ configuration, or the wake phrase.
 ## Optional weather context
 
 Open **Sharing settings → Weather context** on the companion for your selected Mac.
-Read the disclosure and MET Norway service terms. With Mac 0.5.0 and a companion
-that lists NOAA here, enabling Weather for the first time covers forecasts and
-satellite estimates of recent rainfall nearby. If you already share MET forecasts,
-that choice carries over after an update or restart. You can choose **Add nearby
-rain estimates** in the same settings to include NOAA. Earlier Mac and companion
-versions that support weather can continue to share forecasts.
+Read the disclosure and the MET Norway service terms. With Even 0.4.1 and Mac
+0.5.0, turning Weather on shares both forecasts and satellite estimates of recent
+rainfall nearby. Weather starts off.
+
+If you were already sharing forecasts only, forecasts continue. The first time
+you use the updated companion in the foreground and it can confirm that setting
+with your paired Mac, choose **Use nearby rain estimates** or **Keep forecasts
+only** in the prompt. If you keep forecasts only or leave the prompt, you can add
+nearby rain later in **Sharing settings → Weather context**. Choose **Forecasts
+and nearby rain** and confirm. Your forecasts stay on while you make this change.
+If you already share both, or have Weather off, the companion keeps your setting.
+Earlier versions that support forecasts continue to work with their existing
+Weather settings.
 
 Your Mac sends rounded coordinates to MET Norway. It downloads a global NOAA
 file from Amazon S3 and estimates nearby rain locally. Both services see the

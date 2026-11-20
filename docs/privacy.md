@@ -1,6 +1,6 @@
 # Data handling
 
-Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects Mac 0.4.30 and Even 0.3.53 source, reviewed November 2, 2026. Optional weather context and sharing-based context reception additionally reflect Mac 0.4.34 and Even 0.3.57 source, reviewed November 10, 2026. Sharing-based Mac notification reception and stop controls additionally reflect Mac 0.4.35 source, reviewed November 10, 2026. Optional Polar health context and combined guarded responses additionally reflect Mac 0.4.40 and Even 0.3.63 source, reviewed November 15, 2026. Mac 0.5.0 source, reviewed November 21, 2026, covers conversation and Polar sharing recovery after restart, selective local history and optional NOAA satellite rain estimates. Even 0.4.0 adds controls for setting retention, deleting history by source and opting in to NOAA estimates. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
+Implementation baseline: Mac 0.4.14 and Even 0.3.29 source, reviewed October 24, 2026. Photo attachments additionally reflect Mac 0.4.18 and Even 0.3.39 source, reviewed October 25, 2026. Geographic reference enrichment additionally reflects Mac 0.4.23 and Even 0.3.42 source, reviewed October 27, 2026. Conversation ordering, linked-record storage, URL presentation and read-aloud handling additionally reflect Mac 0.4.24 and Even 0.3.47 source, reviewed October 28, 2026. The speech-presence check before transcription additionally reflects Mac 0.4.25 source, reviewed October 28, 2026. Automatic update-backup retention additionally reflects Mac 0.4.26 source, reviewed October 28, 2026. Walking/terrain opt-in additionally reflects Mac 0.4.27 and Even 0.3.51 source, reviewed October 30, 2026. Optional recent-location history additionally reflects Mac 0.4.30 and Even 0.3.53 source, reviewed November 2, 2026. Optional weather context and sharing-based context reception additionally reflect Mac 0.4.34 and Even 0.3.57 source, reviewed November 10, 2026. Sharing-based Mac notification reception and stop controls additionally reflect Mac 0.4.35 source, reviewed November 10, 2026. Optional Polar health context and combined guarded responses additionally reflect Mac 0.4.40 and Even 0.3.63 source, reviewed November 15, 2026. Mac 0.5.0 source, reviewed November 21, 2026, covers conversation and Polar sharing recovery after restart, selective local history and optional NOAA satellite rain estimates. Even 0.4.0 adds controls for setting retention, deleting history by source and opting in to NOAA estimates. Even 0.4.1 offers existing forecast users a one-time choice about nearby rain during ordinary use. Implementation and device observations are tracked in the associated development records. This baseline describes implementation, not Even Hub publication status. Location sharing requires compatible versions on both devices; legacy-version differences are noted below.
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [User guide](setup.md)
 
@@ -145,7 +145,7 @@ values and the time each revision became available. Walking/terrain history can
 include precise endpoints, destination provenance, route geometry, steps and model
 elevations. These records can reveal places you asked about. A walking plan does
 not establish that you took the route. A forecast does not establish what weather
-occurred. A separately authorized NOAA lookup can add an encrypted local
+occurred. When your Weather choice includes nearby rain, a NOAA lookup can add an encrypted local
 summary of estimated rain within 20 km of the selected place. Each summary
 keeps its observation window, public edition and first local availability for
 that place. History queries do not contact either weather provider.
@@ -386,11 +386,21 @@ current location. With a valid location subscription, fresh location and weather
 consent, changes in the MET forecast can enrich the existing location event.
 Dot decides whether to speak. Geography downloads never block weather acquisition.
 
-On Mac 0.5.0, an Even companion that lists NOAA in **Weather context** lets the
-paired owner approve nearby rain estimates from NOAA Enterprise Rain Rate. An
-existing MET-only grant retains its scope across upgrade or reconnect. For an
-explicit weather read, the Mac can download a global frame from the NOAA-managed
-Amazon S3 bucket. S3
+With Even 0.4.1 and Mac 0.5.0, turning on **Weather context** authorizes MET
+Norway forecasts and nearby NOAA Enterprise Rain Rate estimates together. If
+the Mac already has permission for forecasts only, it continues to use only MET.
+Once the updated companion confirms that setting with the paired Mac while the
+app is in the foreground, it asks whether to include nearby rain or keep forecasts
+only. Only choosing to include nearby rain authorizes the Mac to fetch NOAA
+files. Once shown, the prompt is remembered for the same pairing and terms on
+this companion installation. If you keep forecasts only or leave the prompt,
+you can include nearby rain later in **Sharing settings → Weather context**.
+Your Mac keeps forecast sharing active and records the additional permission
+only when you choose to share nearby rain. Existing combined permissions and
+Weather-off settings carry over.
+
+When Dot requests weather and your permission includes nearby rain, the Mac can
+download a global frame from the NOAA-managed Amazon S3 bucket. S3
 receives the Mac's IP, User-Agent and the public UTC listing or file path. Requests
 contain no user coordinates, place names, device identifiers or conversation.
 The Mac summarizes cells locally around the selected rounded position. The disk

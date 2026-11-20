@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import { stripTypeScriptTypes } from 'node:module';
 import * as sdk from '@evenrealities/even_hub_sdk';
 import { catalogs, localeMetadata } from '../src/localization-catalogs.ts';
+import { SATELLITE_TERMS, WEATHER_TERMS } from '../src/weather-terms.ts';
 
 const mainUrl = new URL('../src/main.ts', import.meta.url);
 const source = await readFile(mainUrl, 'utf8');
@@ -646,6 +647,66 @@ test('native languages restore into a new WebView without replacing G2 startup',
     assert.equal(app.element('language').value, locale);
     assert.equal(app.calls.filter(c => c[0] === 'create').length, 1);
     await app.close();
+  }
+});
+
+test('forecast-only owners can add nearby rain or stop later from the same weather setting', async t => {
+  const forecasts = {weatherProtocol: 1, weatherEpoch: 'forecasts', weatherTerms: WEATHER_TERMS,
+    satelliteTerms: SATELLITE_TERMS, weatherEnabled: true, satelliteEnabled: false};
+  for (const choice of ['combined', 'off']) {
+    await t.test(choice, async t => {
+      const posts = [];
+      const prompts = [];
+      const markerRead = Promise.withResolvers();
+      let accept = false;
+      const app = await launch({
+        language: 'en',
+        // This pairing already saw the foreground invitation on an earlier launch.
+        nativeRead: key => {
+          if (/^dot-weather-[a-f0-9]{64}$/.test(key)) {markerRead.resolve(); return 'shown';}
+        },
+        request: (url, init) => {
+          if (!url.endsWith('/api/weather')) return;
+          assert.equal(init.method, 'POST');
+          const body = JSON.parse(init.body);
+          posts.push(body);
+          return Promise.resolve({status: 200, ok: true, json: async () => ({...forecasts,
+            weatherEpoch: 'changed', weatherEnabled: body.enabled, satelliteEnabled: body.satellite_terms === SATELLITE_TERMS})});
+        },
+      });
+      t.after(app.close);
+      app.context.confirm = prompt => {prompts.push(prompt); return accept;};
+      const snapshot = app.snapshot();
+      Object.assign(snapshot.status, forecasts);
+      await app.deliver(snapshot);
+      await markerRead.promise; await flush();
+      assert.equal(app.element('weather-upgrade').hidden, true);
+      assert.equal(app.element('weather-checkbox-field').hidden, true);
+      assert.equal(app.element('weather-mode-field').hidden, false);
+      const mode = app.element('weather-mode');
+      assert.equal(mode.value, 'forecast');
+      assert.equal(mode.disabled, false);
+      const select = async value => {mode.value = value; mode.onchange({currentTarget: mode}); await flush();};
+
+      await select('forecast');
+      assert.deepEqual(prompts, []);
+      assert.deepEqual(posts, []);
+      if (choice === 'combined') {
+        await select('combined'); // Decline the disclosure; the existing forecast grant stays active.
+        assert.deepEqual(prompts, [catalogs.en['even.weather_upgrade_prompt']]);
+        assert.deepEqual(posts, []);
+        assert.equal(mode.value, 'forecast');
+        accept = true;
+      }
+      await select(choice);
+      assert.deepEqual(posts, [choice === 'combined'
+        ? {protocol: 1, epoch: 'forecasts', enabled: true, terms: WEATHER_TERMS, satellite_terms: SATELLITE_TERMS}
+        : {protocol: 1, epoch: 'forecasts', enabled: false}]);
+      assert.equal(prompts.length, choice === 'combined' ? 2 : 0);
+      assert.equal(app.element('weather-mode-field').hidden, true);
+      assert.equal(app.element('weather-checkbox-field').hidden, false);
+      assert.equal(app.element('weather-share').checked, choice === 'combined');
+    });
   }
 });
 
