@@ -290,6 +290,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        terminationReply(for: NSAppleEventManager.shared().currentAppleEvent)
+    }
+    func terminationReply(for event: NSAppleEventDescriptor?) -> NSApplication.TerminateReply {
         // Before location validation this copy must not mutate relay lifecycle.
         if !appLocationValidated && !busy { return .terminateNow }
         if restartingUpdateHost { notifications?.shutdown(); return .terminateNow }
@@ -300,8 +303,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if appUpdater?.blocksActions == true { _ = appUpdater?.cancelForQuit(); return .terminateCancel }
         if allowTermination { notifications?.shutdown(); return .terminateNow }
         if quitting { return .terminateLater }
-        let systemExit = Self.isSystemSessionEnd(NSAppleEventManager.shared().currentAppleEvent)
-        if systemExit && (!busy || currentAction == "inspect") {
+        let systemExit = Self.isSystemSessionEnd(event)
+        if systemExit && (!busy || currentAction == "inspect" || currentAction == "recover-startup-tunnel") {
             // launchd ends the login session. Keep its enabled jobs and the owner's pause/quit intent.
             notifications?.shutdown()
             return .terminateNow

@@ -25,6 +25,17 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
             quitEvent.setAttribute(NSAppleEventDescriptor(enumCode: OSType(reason)), forKeyword: AEKeyword(kAEQuitReason))
             precondition(SetupApp.isSystemSessionEnd(quitEvent))
         }
+        // An OS restart can arrive while a background status check or tunnel retry is in flight.
+        quitEvent.setAttribute(NSAppleEventDescriptor(enumCode: OSType(kAERestart)), forKeyword: AEKeyword(kAEQuitReason))
+        sut.appLocationValidated = true
+        precondition(sut.terminationReply(for: quitEvent) == .terminateNow && !sut.quitting)
+        sut.busy = true
+        for action in ["inspect", "recover-startup-tunnel"] {
+            sut.currentAction = action
+            precondition(sut.terminationReply(for: quitEvent) == .terminateNow && !sut.quitting)
+        }
+        sut.busy = false
+        sut.currentAction = ""
         #endif
         NSApp.setActivationPolicy(.accessory)
         sut.window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740),
