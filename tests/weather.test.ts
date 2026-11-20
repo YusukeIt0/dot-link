@@ -1,11 +1,12 @@
 import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { MetNorwayProvider, parseMetForecast, WeatherSourceError } from '../server/weather/met-norway.ts';
 import { WeatherCache, pruneWeatherCache, type WeatherCacheState } from '../server/weather/cache.ts';
 import { WeatherService } from '../server/weather/service.ts';
+import { archiveRetrievalConfirmed } from '../server/weather/types.ts';
 import { weatherQueryPoint, type WeatherPoint, type WeatherProvider, type WeatherProviderResult } from '../server/weather/types.ts';
 
 const HOUR = 3_600_000;
@@ -144,6 +145,103 @@ test('an equal 200 revalidates the same normalized edition across restart; a cha
   assert.equal((await query(next)).retrieved_at,new Date(now).toISOString());
   now+=10*HOUR; const old=await query(next);
   assert.equal(old.checked_at,new Date(now).toISOString()); assert.equal(old.status,'stale');
+});
+
+test('a v1 refresh preserves live weather and rate limits while ambiguous first retrieval stays ineligible', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dot-weather-downgrade-'));
+  t.after(() => rm(directory, {recursive:true, force:true}));
+  const path = join(directory, 'cache.json');
+  let now = NOW, calls = 0, modified = false, notModified = false;
+  const header = new Date(NOW - HOUR).toUTCString();
+  const provider: WeatherProvider = {id:'met-norway-locationforecast-2',load:async (point, since) => {
+    if (calls++) assert.equal(since, header);
+    if (notModified) return {notModified:true, deprecated:false};
+    const raw = fixture(point, NOW);
+    if (modified) raw.properties.timeseries[0].data.instant.details.air_temperature++;
+    return {forecast:parseMetForecast(raw, point, now), lastModified:header, notModified:false, deprecated:false};
+  }};
+  const make = () => new WeatherService(path, {cache:new WeatherCache(path, () => now), provider, now:() => now, random:() => 0});
+  let service = make(); t.after(() => service.close());
+  const query = () => service.query(POINT, new AbortController().signal, () => {});
+  const restart = () => {service.close(); service = make();};
+  const first = await query();
+  assert.ok(archiveRetrievalConfirmed(first));
+  const legacy = JSON.parse(await readFile(path, 'utf8'));
+  const record = legacy.entries[0];
+  assert.deepEqual(Object.keys(record.forecast).sort(), ['elevation_m','point','provider','samples','updated_at']);
+  assert.equal(record.lastModified, header);
+  assert.equal(record.nextRequestAt, now + 3 * HOUR);
+  assert.equal(legacy.nextRequestAt, now + 60_000);
+  const metadata = JSON.parse(await readFile(path + '.editions', 'utf8'));
+  assert.deepEqual(metadata.map(([bound, id, verified]: [string,string,boolean]) =>
+    [/^[a-f0-9]{64}$/.test(bound), /^[a-f0-9]{64}$/.test(id), verified]), [[true,true,true]]);
+  assert.equal((await stat(path + '.editions')).mode & 0o777, 0o600);
+  restart(); assert.ok(archiveRetrievalConfirmed(await query())); assert.equal(calls, 1);
+
+  // The old client writes this strict shape, updating retrievedAt on every 200.
+  now += 3 * HOUR + 1; record.retrievedAt = record.checkedAt = now;
+  record.nextRequestAt = now + 3 * HOUR; legacy.nextRequestAt = now + 60_000;
+  await writeFile(path, JSON.stringify(legacy)); restart();
+  const cached = await query();
+  assert.equal(cached.status, 'ready'); assert.equal(calls, 1); assert.equal(archiveRetrievalConfirmed(cached), false);
+  now += 3 * HOUR + 1; notModified = true;
+  assert.equal(archiveRetrievalConfirmed(await query()), false);
+  now += 3 * HOUR + 1; notModified = false;
+  assert.equal(archiveRetrievalConfirmed(await query()), false);
+  restart(); assert.equal(archiveRetrievalConfirmed(await query()), false); assert.equal(calls, 3);
+  now += 3 * HOUR + 1; modified = true;
+  const revised = await query();
+  assert.equal(revised.retrieved_at, new Date(now).toISOString()); assert.ok(archiveRetrievalConfirmed(revised));
+  restart(); assert.ok(archiveRetrievalConfirmed(await query())); assert.equal(calls, 4);
+});
+
+test('invalid or unavailable edition metadata preserves the legacy forecast, cooldown and private file boundary', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dot-weather-edition-metadata-'));
+  t.after(() => rm(directory, {recursive:true, force:true}));
+  const path = join(directory, 'weather.json'), side = path + '.editions';
+  const entry = {key:'a'.repeat(64), nextRequestAt:NOW + 3 * HOUR, retrievedAt:NOW, checkedAt:NOW,
+    deprecated:false, refreshFailed:false, forecast:parseMetForecast(fixture(), POINT, NOW)};
+  const state: WeatherCacheState = {version:1, nextRequestAt:NOW+60_000, entries:[entry]};
+  const cache = new WeatherCache(path, () => NOW);
+  await cache.write(state);
+  for (const data of ['broken', 'x'.repeat(20001)]) {
+    await writeFile(side, data);
+    const restored = await cache.read();
+    assert.equal(restored.nextRequestAt, state.nextRequestAt); assert.equal(restored.entries[0].nextRequestAt, entry.nextRequestAt);
+    assert.deepEqual(restored.entries[0].forecast?.samples, entry.forecast.samples);
+    assert.equal(restored.entries[0].forecast?.first_retrieval_unverified, true);
+  }
+  await rm(side);
+  const elsewhere = join(directory, 'outside'); await writeFile(elsewhere, 'untouched'); await symlink(elsewhere, side);
+  assert.equal((await cache.read()).entries[0].forecast?.first_retrieval_unverified, true);
+  await cache.write(state);
+  assert.equal(await readFile(elsewhere, 'utf8'), 'untouched');
+  assert.equal((await cache.read()).entries[0].forecast?.edition, entry.forecast.edition);
+  await cache.write({version:1, nextRequestAt:state.nextRequestAt, entries:[]});
+  await assert.rejects(stat(side), {code:'ENOENT'});
+});
+
+test('an interrupted cache replacement still matches the previous forecast and missing metadata leaves live weather intact', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dot-weather-cache-commit-'));
+  t.after(() => rm(directory, {recursive:true, force:true}));
+  const path = join(directory, 'weather.json'), side = path + '.editions';
+  const entry = {key:'a'.repeat(64), nextRequestAt:NOW + 3 * HOUR, retrievedAt:NOW, checkedAt:NOW,
+    deprecated:false, refreshFailed:false, forecast:parseMetForecast(fixture(), POINT, NOW)};
+  const first: WeatherCacheState = {version:1, nextRequestAt:NOW+60_000, entries:[entry]};
+  const cache = new WeatherCache(path);
+  await cache.write(first);
+  const raw = fixture(); raw.properties.timeseries[3].data.instant.details.air_temperature++;
+  const changed = { ...first, entries:[{...entry, retrievedAt:NOW+1, forecast:parseMetForecast(raw, POINT, NOW)}] };
+  await rename(path, path+'.saved'); await mkdir(path);
+  await assert.rejects(cache.write(changed));
+  await rm(path, {recursive:true}); await rename(path+'.saved', path);
+  assert.equal((await new WeatherCache(path).read()).entries[0].forecast?.edition, entry.forecast.edition);
+  await rm(side); await mkdir(side);
+  await cache.write(changed);
+  const live = await new WeatherCache(path).read();
+  assert.equal(live.entries[0].forecast?.first_retrieval_unverified,true);
+  assert.deepEqual(live.entries[0].forecast?.samples,changed.entries[0].forecast.samples);
+  assert.equal(live.nextRequestAt,first.nextRequestAt);
 });
 
 test('refresh failure stays stale on later cache reads and respects provider retry-after', async t => {
