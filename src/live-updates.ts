@@ -10,10 +10,10 @@ export class LiveUpdates<T extends Revisioned> {
   private failureShown = false;
   private recoveryGraceMs: number;
   private fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>;
-  private receive: (value: T, initial: boolean) => void;
+  private receive: (value: T, initial: boolean, resumed: boolean) => void;
   private failure: unknown;
   private failed: (error: unknown) => void;
-  constructor(fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>, receive: (value: T, initial: boolean) => void, failed: (error: unknown) => void, recoveryGraceMs = 2000) {
+  constructor(fetchUpdate: (revision: string | undefined, signal: AbortSignal) => Promise<T>, receive: (value: T, initial: boolean, resumed: boolean) => void, failed: (error: unknown) => void, recoveryGraceMs = 2000) {
     this.recoveryGraceMs = recoveryGraceMs;
     this.fetchUpdate = fetchUpdate; this.receive = receive; this.failed = failed;
   }
@@ -50,8 +50,9 @@ export class LiveUpdates<T extends Revisioned> {
       try {
         const update = await this.fetchUpdate(revision, signal);
         if (signal.aborted) return;
+        const resumed = this.connected && revision === undefined;
         this.clearFailure(); this.connected = true;
-        this.receive(update, this.initialPending);
+        this.receive(update, this.initialPending, resumed);
         if (signal.aborted) return;
         this.initialPending = false; revision = update.revision; retryMs = 1000;
       } catch (error) {

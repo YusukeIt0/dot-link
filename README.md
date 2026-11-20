@@ -67,6 +67,8 @@ Choose what to share in the iPhone companion's **Sharing settings**. These featu
 
 See [location and history setup](docs/setup.md#location-sharing), [weather setup](docs/setup.md#optional-weather-context), and [Polar health setup](docs/setup.md#polar-health-context) for sharing controls and compatible versions.
 
+**In development:** The companion’s **History** settings let you choose which phone locations, Polar observations, forecasts and walking plans your Mac keeps for your existing Dot. You can choose seven days, one month, six months or one year for new records and delete a source’s history separately. [History settings and examples](docs/setup.md#looking-back-with-dot).
+
 ## Real-world example
 
 <p align="center">

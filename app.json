@@ -8,7 +8,7 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Connect to your Mac to send messages, voice recordings, selected photos and optional location, and receive Dot replies. Also used for pairing and connection management.",
+      "desc": "Connect to your Mac for pairing, messages, voice recordings, selected photos, optional location and Dot replies. The companion also sends your sharing choices, history retention settings and deletion requests to that Mac.",
       "whitelist": []
     },
     {
@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "Share phone location with Dot through your Mac only when enabled. Separate options save up to 7 days of history, send walking/terrain queries to FOSSGIS/AWS, or send rounded coordinates to MET Norway for weather forecasts. History can be deleted."
+      "desc": "Share phone location with Dot via your Mac when enabled. Separate options send route endpoints to FOSSGIS, terrain areas to AWS or rounded points to MET Norway. Opt in to save selected history on your Mac for 7 days to 1 year. Delete by source."
     },
     {
       "name": "camera",

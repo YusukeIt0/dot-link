@@ -211,7 +211,7 @@ Location sharing starts off. When enabled in the Even app, the phone location, m
 
 If your connected Dot is receiving conversation input but has not registered for context changes, enabling sharing sends one explicitly identified app-control request through that existing connection. It contains no coordinates and is not stored as a spoken message or answer in conversation history. The existing input list carries it with explicit app-action provenance so older connections can process it. If an older receiver attempts a control reply, the relay returns a non-delivery acknowledgement only after actual subscription; it does not store or display that reply. Dot registers the context subscription through its normal event mechanism; receipt of the request alone does not establish readiness. The Mac keeps only the latest activation identifier, hashed session/destination identity, creation time and bounded delivery-attempt state. Stopping sharing invalidates pending requests.
 
-Without the separate **Remember recent places** opt-in, Dot Link does not save an exact phone-coordinate trail to disk. The latest phone fix and short-lived decision context remain in Mac memory; preferences, subscriptions and revoked identifiers are saved. Optional history is described below. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
+Saving an exact phone-coordinate trail requires a separate location-history opt-in. With history off, the latest phone fix and short-lived decision context remain in Mac memory. Preferences, subscriptions and revoked identifiers are saved. Optional history is described below. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
 
 While sharing has a fresh measurement and Dot has an active location subscription, the Mac automatically retrieves nearby geographic data from Overture Maps. Coordinates are available immediately; map references can arrive later, be incomplete, or be unavailable. Map proximity is not proof of a visit, road membership or safe passage. References include source attribution and are shared with Dot alongside the coordinates. No paid geocoding, places or search API is used by this component.
 
@@ -220,6 +220,30 @@ Requests go to `stac.overturemaps.org` and Overture’s Azure distribution at `o
 Reusable public map bytes and normalized areas are stored in an owner-only cache on the Mac, limited to 256 MiB. Area cells are roughly two kilometres across with surrounding margins. Cache contents and last-use days can reveal approximate past areas even though filenames are hashed; hashes are not location anonymization. Use times are rounded to whole days. Entries unused for 30 days are removed, and older entries may be evicted sooner to meet capacity. Cleanup runs at relay startup and every six hours while it runs, including when sharing is off; if the relay is stopped, cleanup resumes on the next launch. Normalized areas refresh after seven days independently of their use age.
 
 Stopping sharing, losing a fresh measurement, ending Dot’s subscription, revoking pairing or stopping the relay cancels acquisition and clears live geographic context. Already cached map files remain until expiry or capacity eviction. Uninstalling Dot Link moves this cache to Trash with the other app data, including for supported development installations. Stopping sharing does not delete that cache, backups or information already read by Dot.
+
+## History settings
+
+The **History** panel in the unreleased Mac and Even clients lets the paired
+owner choose what the Mac saves for their connected Dot to read through
+OpenAI. Each source needs its own recording choice. The phone restores those
+choices from the selected Mac when it reconnects. Existing seven-day location
+and health sharing retain their original scope and deadlines.
+
+| Source | Information available for selected historical periods |
+| --- | --- |
+| Phone locations and nearby places | Precise fixes, available motion and phone clock evidence, plus nearby map references and their attribution. A reference near a phone fix does not establish a visit. |
+| Polar health observations | Shared sleep, activity, heart rate, recovery and exercise data with their original units and source-time uncertainty. The latest registered profile stays outside historical queries. |
+| Weather forecasts | Rounded model coordinates, a requested place and its reference, forecast fields and revisions. Each forecast has an issue time, a local retrieval time and a period it forecasts. |
+| Planned walks and model terrain | Requested endpoints and destination references, route geometry and steps, and modeled elevations. These can reveal places considered for a walk. |
+
+The common period applies to newly recorded evidence. Choose seven days, one
+calendar month, six calendar months or one calendar year. Phone fixes expire
+from measurement time. Polar records expire from the earlier of the source-time
+boundary and first receipt. A forecast edition or plan expires from first local
+retrieval. Stopping an archive blocks recording and historical access. Saved
+records continue to age until expiry or deletion. Deleting a source cannot
+retract information already delivered to Dot, provider logs or external
+backups. [History controls, including Polar observation and profile deletion](setup.md#looking-back-with-dot).
 
 ## Recent places
 
@@ -231,13 +255,21 @@ accuracy, available speed/heading, timezone/UTC offset and recording-session
 boundaries. Existing geographic references may be attached; history does not
 start additional map requests. A separate history grant controls walking and terrain results.
 
-The owner-only SQLite database is in the Mac runtime's `location-history`
+The original seven-day, owner-only SQLite database is in the Mac runtime's `location-history`
 directory (directory mode 0700, file mode 0600). It is not separately encrypted by
 Dot Link. It retains at most 168 hours and 50,000 observations, evicting the oldest
 when full; the database has a 256 MiB page limit. Expiry runs at startup, on access
 and every minute while the relay runs. When stopped, cleanup resumes on launch.
 App updates retain this data outside the bundle. Filesystem/device backups may
 retain older copies; local deletion cannot erase those backups.
+
+In the unreleased History panel, separately enabling phone location history
+also protects newly saved fixes and attached references with a source-specific
+encryption key on this Mac. Recent records may have a copy in the original
+seven-day database under its existing limits. The protected archive’s keyed
+indexes can reveal repeated time groups, file size and record counts. A full
+backup of both the authority and evidence on the same Mac can restore records
+that were subsequently deleted.
 
 Your existing Dot can read bounded historical evidence through the normal
 connection when history is enabled. Candidate stays and nearby road references
