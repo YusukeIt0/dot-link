@@ -10,6 +10,7 @@ import type { GeographicEvidence } from '../geography/types.ts';
 import { HISTORY_RETENTION_MS, LocationHistoryIndex, grantedExpiry, historyObservationSchema, type HistoryEntry } from './replay.ts';
 import { installPhoneTimeIndex, readStoredPhoneTime, type PhoneTimeRead } from './phone-time.ts';
 import { historyExpiry } from './retention.ts';
+import type { HistoryPageInput } from './factor-tool.ts';
 
 const MAXIMUM = 50_000;
 const consentSchema = z.object({ version: z.literal(1), owner: z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -206,18 +207,25 @@ export class LocationHistoryStore {
       const now = this.now();
       if (earliestExpiry <= now) return {evidence:{status:'unavailable'}};
       const expires = Math.min(now + 5 * 60_000, earliestExpiry);
-      return {evidence, allowed: () => {
+      return {evidence, expiresAt: expires, allowed: () => {
         try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() < expires; }
         catch { this.fail(); return false; }
       }};
     } catch { this.fail(); return {evidence:{status:'unavailable'}}; }
   }
-  read(raw: unknown = {}) {
+  /** Used only inside the relay to prevent historical data from different pairings being joined. */
+  historyOwner(): string | undefined {
+    try { this.maintain(); return this.authorized() ? this.consent.owner : undefined; }
+    catch { this.fail(); return undefined; }
+  }
+  read(raw: unknown = {}) { return this.readHistory(raw, false); }
+  readSelectedHistory(input: HistoryPageInput) { return this.readHistory(input, true); }
+  private readHistory(raw: unknown, selected: boolean) {
     this.maintain();
     if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};
     const {result, expiresAt} = this.index.readWithExpiry(raw, {
       window: (start, end) => this.readWindow(start, end), capacityOmitted: this.consent.capacityOmitted,
-    });
+    }, selected);
     const now = this.now();
     if (expiresAt <= now) throw failure();
     const expires = Math.min(now + 5 * 60_000, expiresAt);

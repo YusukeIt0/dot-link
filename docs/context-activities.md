@@ -120,6 +120,37 @@ reply or silence separately from policy delivery. Reuse unchanged acquisition an
 transport evidence; brief relevant caveats remain acceptable. Do not paste the new
 policy into the test prompt or alter a personal activity to make the test pass.
 
+## Selective history (unreleased Mac feature)
+
+`get_factor_history` lets the connected Dot choose fields from recent-place
+history, Polar observations or both for one explicit interval within the past
+seven days. Give `start_at` and `end_at` as instants with explicit UTC offsets.
+The start is inclusive and the end is exclusive. A window ending later today
+stops at the time of the read. A window entirely in the future is rejected.
+Under `fields.location`,
+select from `position`, `motion`, `clock` and `geography`. Under `fields.polar`,
+select the relevant metrics by name. A comparison
+of two periods can start with a narrow selection for each, followed by a request
+for more detail only where it matters.
+
+Location history describes recorded phone fixes and any saved geographic
+references. Polar observations retain their own timestamps or source-local
+dates. A date-only record can overlap the requested hours without identifying
+the hour of a measurement. Each source reports its own coverage and missing
+values. An empty period, a stopped source or a gap can be handled in the
+conversation using whatever evidence is available. The latest registered Polar
+profile remains accessible through its separate current-profile read.
+
+Version 1 returns a separate page for each requested source. To continue one
+selection, send only its `source` and its `next_cursor` as `cursor`.
+For a combined G2 answer, supply the contributing sources' response references
+to `respond_to_context`. The Mac rechecks their authorization and expiry.
+An answer based on recent-place history still requires the existing G2 question and its
+`utterance_id`. A history read neither acquires new source data nor sends a
+message. The contract can be exercised with synthetic records through MCP.
+The connected Dot's choice of period and fields, follow-up, and handling of
+partial or empty results still need verification in conversation.
+
 ## Polar health context
 
 `get_health_context` selects categories and a time window of 1–168 hours; the latest
