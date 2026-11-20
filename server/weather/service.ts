@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { WeatherCache, pruneWeatherCache, type WeatherCacheEntry, type WeatherCacheState } from './cache.ts';
 import { MetNorwayProvider, WeatherSourceError } from './met-norway.ts';
-import { weatherQueryPoint, weatherSource, type WeatherEvidence, type WeatherPoint, type WeatherProvider } from './types.ts';
+import { weatherArchiveForecast, weatherQueryPoint, weatherSource, type WeatherEvidence, type WeatherForecast, type WeatherPoint, type WeatherProvider } from './types.ts';
 
 const HOUR = 3_600_000;
 const limitations = [
@@ -15,6 +16,17 @@ function useful(sample: WeatherEvidence['current']) {
   return !!sample && (sample.temperature_c !== null || sample.humidity_percent !== null || sample.wind_m_s !== null || sample.precipitation.some(p => p.amount_mm !== null));
 }
 
+function sameEdition(before: WeatherForecast | undefined, after: WeatherForecast) {
+  if (!before) return false;
+  if (before.edition && after.edition) return before.edition === after.edition;
+  if (!after.edition && !before.first_retrieval_unverified) return isDeepStrictEqual(before, after);
+  // Older caches lack an edition digest. Never renew their first retrieval
+  // merely because the retained time window moved on the first upgraded read.
+  if (before.updated_at !== after.updated_at || before.elevation_m !== after.elevation_m || !isDeepStrictEqual(before.point, after.point)) return false;
+  const oldSamples = new Map(before.samples.map(s => [s.valid_at, s]));
+  return after.samples.every(s => !oldSamples.has(s.valid_at) || isDeepStrictEqual(s, oldSamples.get(s.valid_at)));
+}
+
 export function weatherEvidence(point: WeatherPoint, entry: WeatherCacheEntry | undefined, now: number, failure?: string): WeatherEvidence {
   const data = entry?.forecast;
   const samples = data?.samples ?? [];
@@ -23,7 +35,7 @@ export function weatherEvidence(point: WeatherPoint, entry: WeatherCacheEntry | 
   const aged = !!data && (entry?.refreshFailed || Date.parse(data.updated_at) > now + 300_000 || now - Date.parse(data.updated_at) > 18 * HOUR || now - (entry?.checkedAt ?? 0) >= 24 * HOUR);
   const complete = current && [current.temperature_c, current.humidity_percent, current.wind_m_s].every(v => v !== null) && current.precipitation.some(p => p.amount_mm !== null);
   const any = useful(current) || forecast.some(useful);
-  return {status: !any ? 'unavailable' : aged || failure ? 'stale' : complete ? 'ready' : 'partial',
+  const evidence: WeatherEvidence = {status: !any ? 'unavailable' : aged || failure ? 'stale' : complete ? 'ready' : 'partial',
     source: weatherSource, data_kind: 'model_forecast', query_point: point, as_of: new Date(now).toISOString(),
     retrieved_at: data && entry ? new Date(entry.retrievedAt).toISOString() : null,
     checked_at: data && entry ? new Date(entry.checkedAt).toISOString() : null,
@@ -36,6 +48,8 @@ export function weatherEvidence(point: WeatherPoint, entry: WeatherCacheEntry | 
       ...(entry?.deprecated ? ['The provider marked this API deprecated; maintainer migration is required.'] : []),
       ...(failure ? [failure] : [])],
   };
+  if (data) weatherArchiveForecast.set(evidence, data);
+  return evidence;
 }
 
 /** Bounded acquisition shared by both location modes; callers own authorization. */
@@ -104,7 +118,14 @@ export class WeatherService {
       check();
       if (response.notModified && !entry.forecast) throw new Error('Weather cache miss on revalidation');
       if (!response.notModified && !response.forecast) throw new Error('Weather provider returned no evidence');
-      if (response.forecast) {entry.forecast = response.forecast; entry.retrievedAt = this.now();}
+      // A repeated 200 for the same normalized edition validates it again.
+      // Keep its first retrieval clock, including across a Mac restart.
+      if (response.forecast) {
+        const unchanged = sameEdition(entry.forecast, response.forecast);
+        if (!unchanged) entry.retrievedAt = this.now();
+        entry.forecast = unchanged && entry.forecast?.first_retrieval_unverified
+          ? {...response.forecast, first_retrieval_unverified: true} : response.forecast;
+      }
       entry.checkedAt = this.now(); entry.deprecated = response.deprecated; entry.refreshFailed = false;
       if (response.lastModified) entry.lastModified = response.lastModified;
       else if (!response.notModified) delete entry.lastModified;

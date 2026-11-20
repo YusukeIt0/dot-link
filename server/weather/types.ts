@@ -21,6 +21,10 @@ export type WeatherSample = z.infer<typeof weatherSampleSchema>;
 export const weatherForecastSchema = z.object({
   provider: z.literal('met-norway-locationforecast-2'),
   updated_at: time, point: weatherPointSchema, elevation_m: nullable(-500, 9000),
+  edition: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  // Legacy clients refresh retrievedAt even for an unchanged forecast edition.
+  // Such a value can drive live weather but cannot establish first acquisition.
+  first_retrieval_unverified: z.literal(true).optional(),
   samples: z.array(weatherSampleSchema).min(1).max(64),
 }).strict();
 export type WeatherForecast = z.infer<typeof weatherForecastSchema>;
@@ -57,6 +61,13 @@ export interface WeatherEvidence {
   forecast: WeatherSample[];
   apparent_temperature_c: null;
   limitations: string[];
+}
+
+// Optional recording can reuse the normalized cache without adding internal
+// fields or the complete time series to the live tool's JSON response.
+export const weatherArchiveForecast = new WeakMap<WeatherEvidence, WeatherForecast>();
+export function archiveRetrievalConfirmed(evidence: WeatherEvidence): boolean {
+  return !weatherArchiveForecast.get(evidence)?.first_retrieval_unverified;
 }
 
 /** Approximate one-kilometre cells, no raw phone coordinates in weather storage. */
