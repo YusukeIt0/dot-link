@@ -7,8 +7,8 @@ import { ChangeSignal } from '../changes.ts';
 import { ToolRejection } from '../tool-response.ts';
 import type { LocationFix } from '../../src/location-fix.ts';
 import type { GeographicEvidence } from '../geography/types.ts';
-import { HISTORY_RETENTION_MS, LocationHistoryIndex, historyObservationSchema, type HistoryEntry } from './replay.ts';
-import { phoneTimeEvidence, type PhoneTimeRead } from './phone-time.ts';
+import { HISTORY_RETENTION_MS, LocationHistoryIndex, grantedExpiry, historyObservationSchema, type HistoryEntry } from './replay.ts';
+import { installPhoneTimeIndex, readStoredPhoneTime, type PhoneTimeRead } from './phone-time.ts';
 import { historyExpiry } from './retention.ts';
 
 const MAXIMUM = 50_000;
@@ -49,7 +49,6 @@ export class LocationHistoryStore {
   private consent: Consent;
   private epoch = randomUUID();
   private index: LocationHistoryIndex;
-  private geography = new Map<string, GeographicEvidence>();
   private reads = new Map<string, {epoch: string; expires: number}>();
   private timer?: ReturnType<typeof setInterval>;
   private closed = false;
@@ -73,14 +72,22 @@ export class LocationHistoryStore {
     this.db.exec('PRAGMA journal_mode=DELETE; PRAGMA secure_delete=ON; PRAGMA synchronous=FULL; PRAGMA busy_timeout=1000; PRAGMA max_page_count=65536;');
     const version = Number((this.db.prepare('PRAGMA user_version').get() as {user_version: number}).user_version);
     if (version !== 0 && version !== 1) { this.db.close(); throw new Error('Unsupported history schema'); }
-    this.db.exec('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS observations (id TEXT PRIMARY KEY, measured INTEGER NOT NULL, data TEXT NOT NULL, geography TEXT); CREATE INDEX IF NOT EXISTS observation_time ON observations(measured); PRAGMA user_version=1;');
+    this.db.exec('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS observations (id TEXT PRIMARY KEY, measured INTEGER NOT NULL, data TEXT NOT NULL, geography TEXT); CREATE INDEX IF NOT EXISTS observation_order ON observations(measured,id); PRAGMA user_version=1;');
     installHistoryExpiry(this.db);
+    installPhoneTimeIndex(this.db);
     const row = this.db.prepare('SELECT data FROM state WHERE id=1').get() as {data: string} | undefined;
     this.consent = row ? consentSchema.parse(JSON.parse(row.data)) : emptyConsent();
     // Retire the old Beta-only table; schema parsing drops its scenario metadata.
     this.db.exec('DROP TABLE IF EXISTS simulation');
     this.consent.lastSession = undefined; // A restart is a recording boundary.
-    this.save(this.consent); this.index = this.makeIndex(); this.maintain(); this.reload();
+    this.save(this.consent);
+    const geography = this.db.prepare('SELECT geography FROM observations WHERE id=?');
+    this.index = new LocationHistoryIndex({now: this.now, source: 'phone_location', geography: entry => {
+      const value = geography.get(entry.id)?.geography;
+      return typeof value === 'string' ? JSON.parse(value) as GeographicEvidence : undefined;
+    }});
+    this.index.setReadable(this.consent.enabled);
+    this.maintain();
     this.timer = setInterval(() => { try { this.maintain(); } catch { this.fail(); } }, 60_000); this.timer.unref();
   }
   private save(next: Consent) {
@@ -88,36 +95,48 @@ export class LocationHistoryStore {
     this.db.prepare('INSERT INTO state(id,data) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data').run(JSON.stringify({...next, scenario: null, reference: null}));
     this.consent = next;
   }
-  private key(fix: LocationFix) { return `${fix.measured_at}:${fix.latitude}:${fix.longitude}`; }
-  private makeIndex() {
-    return new LocationHistoryIndex({now: this.now, source: 'phone_location', maximum: MAXIMUM,
-      geography: fix => this.geography.get(this.key(fix))});
+  private readWindow(start: number, end: number) {
+    const statement = this.db.prepare('SELECT id, measured, data, expires_at FROM observations WHERE measured>=? AND measured<? ORDER BY measured,id LIMIT ?');
+    const points: HistoryEntry[] = [];
+    let previousMeasured: number | undefined, tied = false;
+    for (const row of statement.iterate(start, end, MAXIMUM + 1)) {
+      if (points.length === MAXIMUM) throw new Error('History capacity exceeded');
+      const {recording_epoch, ...raw} = JSON.parse(row.data as string);
+      const fix = historyObservationSchema.parse(raw);
+      const measured = Date.parse(fix.measured_at);
+      if (fix.source !== 'phone_location' || fix.id !== row.id || measured !== row.measured ||
+          !Number.isSafeInteger(recording_epoch) || recording_epoch < 0) throw new Error('Invalid history observation');
+      points.push({...fix, recording_epoch, expires_at: grantedExpiry(measured, row.expires_at as number)});
+      if (measured === previousMeasured) tied = true;
+      previousMeasured = measured;
+    }
+    // Legacy entries can share a measurement instant. Preserve the previous
+    // locale ordering of their IDs even when SQLite's binary collation differs.
+    if (tied) points.sort((a,b) => Date.parse(a.measured_at)-Date.parse(b.measured_at) || a.id.localeCompare(b.id));
+    return points;
   }
-  private reload() {
-    this.geography.clear();
-    const rows = this.db.prepare('SELECT data, geography, expires_at FROM observations ORDER BY measured,id LIMIT ?').all(MAXIMUM) as {data: string; geography?: string; expires_at: number}[];
-    const entries = rows.map(row => { const value = JSON.parse(row.data) as HistoryEntry;
-      if (row.geography) this.geography.set(this.key(value), JSON.parse(row.geography));
-      return {...value, expires_at: row.expires_at}; });
-    this.index = this.makeIndex(); this.index.restore(entries, Math.max(this.consent.recordingEpoch, ...entries.map(x => x.recording_epoch)), this.consent.capacityOmitted);
-    this.index.setReadable(this.consent.enabled);
-  }
-  private changed() { this.epoch = randomUUID(); this.reads.clear(); this.index.invalidate(); this.changes.emit(); }
+  private changed() { this.epoch = randomUUID(); this.reads.clear(); this.index.setReadable(this.consent.enabled); this.index.invalidate(); this.changes.emit(); }
   private fail() { this.healthy = false; this.reads.clear(); this.index?.setReadable(false); this.changes.emit(); }
   private authorized() { return !this.closed && this.healthy && this.consent.enabled && !!this.consent.owner && this.ownerAuthorized(this.consent.owner); }
   private checkOwner() {
     if (this.consent.owner && this.ownerRevoked(this.consent.owner)) {
-      this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.reload(); this.changed();
+      this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.changed();
     }
   }
   maintain() {
     if (this.closed) return;
     this.checkOwner();
     const now = this.now();
-    const a = this.db.prepare('DELETE FROM observations WHERE expires_at<=? OR measured<=? OR measured>?').run(now, now - HISTORY_RETENTION_MS, now);
+    // Separate index ranges keep maintenance on a narrow read from scanning
+    // every retained row. The deletion is still one atomic statement.
+    const a = this.db.prepare(`DELETE FROM observations WHERE rowid IN (
+      SELECT rowid FROM observations WHERE expires_at<=?
+      UNION ALL SELECT rowid FROM observations WHERE measured<=?
+      UNION ALL SELECT rowid FROM observations WHERE measured>?
+    )`).run(now, now - HISTORY_RETENTION_MS, now);
     // Retention changes the data revision, not consent: keep negotiated uploads
     // and unrelated recent reads usable while their own evidence is retained.
-    if (a.changes) { this.reload(); this.changes.emit(); }
+    if (a.changes) { this.index.invalidate(); this.changes.emit(); }
   }
   status(owner?: string) {
     try { this.maintain(); } catch { this.fail(); }
@@ -137,7 +156,7 @@ export class LocationHistoryStore {
       if (input.action === 'delete') { this.db.exec('DELETE FROM observations'); next.capacityOmitted = false; }
       this.save(next); this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); this.fail(); throw error; }
-    this.reload(); this.changed(); return this.status(owner);
+    this.changed(); return this.status(owner);
   }
   ingest(fix: LocationFix, sharingId: string, raw: unknown, owner: string) {
     this.maintain(); const input = historyUploadSchema.parse(raw);
@@ -152,18 +171,17 @@ export class LocationHistoryStore {
       received_at: new Date(this.now()).toISOString(), ...(input.timezone ? {timezone: input.timezone} : {}),
       ...(input.utc_offset_minutes === undefined ? {} : {utc_offset_minutes: input.utc_offset_minutes})});
     const entry = {...observation, recording_epoch: next.recordingEpoch};
+    let evicted: {measured: number}[];
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const result = this.db.prepare('INSERT OR IGNORE INTO observations(id,measured,data,expires_at) VALUES(?,?,?,?)').run(id, measured, JSON.stringify(entry), expiresAt);
       if (!result.changes) { this.db.exec('ROLLBACK'); return false; }
-      const evicted = this.db.prepare('DELETE FROM observations WHERE id IN (SELECT id FROM observations ORDER BY measured DESC,id DESC LIMIT -1 OFFSET ?)').run(MAXIMUM);
-      if (evicted.changes) next.capacityOmitted = true;
+      evicted = this.db.prepare('DELETE FROM observations WHERE id IN (SELECT id FROM observations ORDER BY measured DESC,id DESC LIMIT -1 OFFSET ?) RETURNING measured').all(MAXIMUM) as {measured: number}[];
+      if (evicted.length) next.capacityOmitted = true;
       this.save(next); this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); this.fail(); throw error; }
-    try {
-      const evicted = this.index.append({...entry, expires_at: expiresAt});
-      if (evicted) this.geography.delete(this.key(evicted));
-    } catch (error) { this.fail(); throw error; }
+    this.index.invalidateAt(measured);
+    for (const row of evicted) this.index.invalidateAt(row.measured);
     this.changes.emit(); return true;
   }
   attachGeography(fix: LocationFix, evidence: GeographicEvidence, owner: string) {
@@ -175,18 +193,19 @@ export class LocationHistoryStore {
       attribution: evidence.attribution.slice(0, 250), license_url: evidence.license_url.slice(0, 250), areas: references(evidence.areas),
       lines: references(evidence.lines), landmarks: references(evidence.landmarks), limitations: evidence.limitations.slice(0, 2).map(x => x.slice(0, 150))};
     const text = JSON.stringify(bounded); if (Buffer.byteLength(text) > 4096) return;
-    const updated = this.db.prepare('UPDATE observations SET geography=? WHERE id=?').run(text, id);
-    if (updated.changes) this.geography.set(this.key(fix), bounded);
+    this.db.prepare('UPDATE observations SET geography=? WHERE id=?').run(text, id);
   }
-  revokeOwner(owner: string) { if (this.consent.owner === owner) { this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.reload(); this.changed(); } }
+  revokeOwner(owner: string) { if (this.consent.owner === owner) { this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.changed(); } }
   readPhoneTime(dates: string[], owner: string): PhoneTimeRead {
     try {
       this.maintain();
       if (!this.authorized() || this.consent.owner !== owner || !dates.length) return {evidence:{status:'unavailable'}};
-      const {evidence, earliestExpiry} = phoneTimeEvidence(this.index.snapshot(), dates);
+      const {evidence, earliestExpiry} = readStoredPhoneTime(this.db, dates);
       if (earliestExpiry === undefined) return {evidence};
       const epoch = this.epoch;
-      const expires = Math.min(this.now() + 5 * 60_000, earliestExpiry);
+      const now = this.now();
+      if (earliestExpiry <= now) return {evidence:{status:'unavailable'}};
+      const expires = Math.min(now + 5 * 60_000, earliestExpiry);
       return {evidence, allowed: () => {
         try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() < expires; }
         catch { this.fail(); return false; }
@@ -196,8 +215,12 @@ export class LocationHistoryStore {
   read(raw: unknown = {}) {
     this.maintain();
     if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};
-    const {result, expiresAt} = this.index.readWithExpiry(raw);
-    const expires = Math.min(this.now() + 5 * 60_000, expiresAt);
+    const {result, expiresAt} = this.index.readWithExpiry(raw, {
+      window: (start, end) => this.readWindow(start, end), capacityOmitted: this.consent.capacityOmitted,
+    });
+    const now = this.now();
+    if (expiresAt <= now) throw failure();
+    const expires = Math.min(now + 5 * 60_000, expiresAt);
     const id = randomUUID(); this.reads.set(id, {epoch: this.epoch, expires});
     while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
     return {...result, history_context_id: id, response_context: {tool: 'respond_to_context', arguments: {history_context_ids: [id]}, expires_no_later_than: new Date(expires).toISOString()}};
@@ -218,5 +241,5 @@ export class LocationHistoryStore {
     const message_id = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
     return this.announce({message_id, utterance_id: input.utterance_id, text: input.text}, guard);
   }
-  close() { if (this.closed) return; this.closed = true; clearInterval(this.timer); this.reads.clear(); this.index.clear(); this.geography.clear(); this.db.close(); }
+  close() { if (this.closed) return; this.closed = true; clearInterval(this.timer); this.reads.clear(); this.index.clear(); this.db.close(); }
 }

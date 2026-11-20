@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { distanceMeters, type LocationFix } from '../../src/location-fix.ts';
+import { distanceMeters } from '../../src/location-fix.ts';
 import type { GeographicEvidence } from '../geography/types.ts';
 import { ToolRejection } from '../tool-response.ts';
 import type { HistoryReader } from './tool.ts';
@@ -10,7 +10,10 @@ export const HISTORY_RETENTION_MS = SEVEN_DAYS_MS;
 export const HISTORY_REPLAY_LIMIT = 10_000;
 export const HISTORY_PAGE_BYTES = 48 * 1024;
 const instant = z.string().datetime({ offset: true }).refine(value => Number.isFinite(Date.parse(value)));
+const standardTimezones = new Set([...Intl.supportedValuesOf('timeZone'), 'UTC', 'Etc/UTC']);
 const timezone = z.string().max(80).refine(value => {
+  if (standardTimezones.has(value)) return true;
+  // Preserve accepted aliases which Intl does not include in its canonical list.
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
 });
 export const historyObservationSchema = z.object({
@@ -37,7 +40,7 @@ type Section = { kind: 'candidate_stay' | 'movement_observations' | 'observation
 const stamp = (point: Entry) => Date.parse(point.measured_at);
 const point = ({ latitude, longitude, accuracy }: Entry) => ({ latitude, longitude, accuracy });
 const invalid = () => new ToolRejection('invalid_arguments', 'Use a bounded time interval with UTC offsets and valid history detail/limit, or only a returned cursor.');
-function grantedExpiry(measured: number, stored: number) {
+export function grantedExpiry(measured: number, stored: number) {
   if (!Number.isSafeInteger(stored)) throw new Error('Invalid history expiry');
   return Math.min(stored, historyExpiry(measured, '7d'));
 }
@@ -50,7 +53,7 @@ export class LocationHistoryIndex implements HistoryReader {
   private readonly source: HistoryObservation['source'];
   private readonly maximum: number;
   private readonly now: () => number;
-  private readonly geography?: (fix: LocationFix) => GeographicEvidence | undefined;
+  private readonly geography?: (entry: HistoryEntry) => GeographicEvidence | undefined;
   private readonly gapMs: number;
   private readonly stayMs: number;
   private readonly stayRadiusM: number;
@@ -63,7 +66,7 @@ export class LocationHistoryIndex implements HistoryReader {
   private capacityOmitted = false;
   private nextExpiry = Infinity;
 
-  constructor(options: { now: () => number; geography?: (fix: LocationFix) => GeographicEvidence | undefined;
+  constructor(options: { now: () => number; geography?: (entry: HistoryEntry) => GeographicEvidence | undefined;
     gapMs?: number; stayMs?: number; stayRadiusM?: number; source?: HistoryObservation['source']; maximum?: number }) {
     this.source = options.source ?? 'synthetic_fixture'; this.maximum = options.maximum ?? HISTORY_REPLAY_LIMIT;
     this.now = options.now; this.geography = options.geography;
@@ -120,23 +123,13 @@ export class LocationHistoryIndex implements HistoryReader {
     return { accepted: true };
   }
 
-  /** Durable owner restores only validated, bounded rows; no consent is inferred. */
-  restore(entries: HistoryEntry[], epoch: number, capacityOmitted = false) {
-    if (entries.length > this.maximum || !Number.isSafeInteger(epoch) || epoch < 0) throw new Error('Invalid history snapshot');
-    this.clear(); this.epoch = epoch; this.capacityOmitted = capacityOmitted;
-    for (const entry of entries) {
-      const { recording_epoch, expires_at: storedExpiry, ...raw } = entry;
-      const value = historyObservationSchema.parse(raw);
-      if (value.source !== this.source || !Number.isSafeInteger(recording_epoch) || recording_epoch < 0 || recording_epoch > epoch) throw new Error('Invalid history snapshot');
-      const time = Date.parse(value.measured_at), expires_at = grantedExpiry(time, storedExpiry);
-      if (expires_at <= this.now() || time > this.now()) continue;
-      this.records.set(value.id, { ...value, recording_epoch, expires_at });
-      this.nextExpiry = Math.min(this.nextExpiry, expires_at);
+  snapshot() { this.prune(); return this.sorted(); }
+  invalidate() { this.changed(); }
+  invalidateAt(measured: number) {
+    for (const [cursor, {query}] of this.cursors) {
+      if (measured >= query.start && measured < query.end) this.cursors.delete(cursor);
     }
   }
-  snapshot() { this.prune(); return this.sorted(); }
-  recordingEpoch() { return this.epoch; }
-  invalidate() { this.changed(); }
 
   /** Append a committed phone fix without invalidating unrelated bounded reads. */
   append(entry: HistoryEntry) {
@@ -153,10 +146,8 @@ export class LocationHistoryIndex implements HistoryReader {
     if (this.records.size > this.maximum) {
       evicted = this.sorted()[0]; this.records.delete(evicted.id); this.capacityOmitted = true;
     }
-    for (const [cursor, page] of this.cursors) {
-      const contains = (at: number) => at >= page.query.start && at < page.query.end;
-      if (contains(time) || (evicted && contains(stamp(evicted)))) this.cursors.delete(cursor);
-    }
+    this.invalidateAt(time);
+    if (evicted) this.invalidateAt(stamp(evicted));
     return evicted;
   }
 
@@ -231,7 +222,7 @@ export class LocationHistoryIndex implements HistoryReader {
     return this.readWithExpiry(raw).result;
   }
 
-  readWithExpiry(raw: unknown = {}) {
+  readWithExpiry(raw: unknown = {}, stored?: {window: (start: number, end: number) => Entry[]; capacityOmitted: boolean}) {
     const parsed = querySchema.safeParse(raw);
     if (!parsed.success) throw invalid();
     const input = parsed.data;
@@ -254,7 +245,7 @@ export class LocationHistoryIndex implements HistoryReader {
         end: input.end_at ? Date.parse(input.end_at) : now + 1, detail: input.detail ?? 'summary', limit: input.limit ?? 20 };
       if (query.end <= query.start || query.end - query.start > HISTORY_RETENTION_MS + 1) throw invalid();
     }
-    const points = this.sorted().filter(p => stamp(p) >= query.start && stamp(p) < query.end);
+    const points = stored ? stored.window(query.start, query.end) : this.sorted().filter(p => stamp(p) >= query.start && stamp(p) < query.end);
     const sections: Section[] = query.detail === 'summary' ? this.sections(points) : points.map(p => ({ kind: 'observations', points: [p] }));
     const gaps: { after: string; before: string; reason: string }[] = [];
     let gapCount = 0;
@@ -268,7 +259,7 @@ export class LocationHistoryIndex implements HistoryReader {
       query: { start_at: new Date(query.start).toISOString(), end_at: new Date(query.end).toISOString() },
       coverage: { kind: 'partial_observations', observation_count: points.length,
         first_observed_at: points[0]?.measured_at ?? null, last_observed_at: points.at(-1)?.measured_at ?? null,
-        gaps, omitted_gap_count: gapCount - gaps.length, capacity_omissions: this.capacityOmitted },
+        gaps, omitted_gap_count: gapCount - gaps.length, capacity_omissions: stored?.capacityOmitted ?? this.capacityOmitted },
       entries: [] as ReturnType<LocationHistoryIndex['present']>[], next_cursor: null as string | null,
     };
     let next = offset;
