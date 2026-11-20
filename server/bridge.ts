@@ -15,6 +15,7 @@ import type { SharingActivation } from './sharing-activation.ts';
 
 const SESSION = 'personal-g2';
 const OUTBOUND_LIMIT = 1000;
+const MAX_CONVERSATION_LEASE_MS = 24 * 60 * 60 * 1000;
 interface OwnerInput {
   utterance_id: string; text: string; created_at: string;
   source?: 'owner_sharing_control'; photo_count?: number; photos_expired?: boolean;
@@ -23,7 +24,7 @@ const argsSchema = z.object({ session_id: z.literal(SESSION) }).strict();
 const deliverySchema = z.object({ mode: z.literal('webhook'), url: z.string().max(2048), secret: z.string().max(100) }).strict();
 const subscribeSchema = z.object({
   name: z.literal('utterance.created'), arguments: argsSchema, delivery: deliverySchema,
-  cursor: z.null().optional(), ttlMs: z.number().int().positive().max(86_400_000).nullable().optional(),
+  cursor: z.null().optional(), ttlMs: z.number().int().positive().max(MAX_CONVERSATION_LEASE_MS).nullable().optional(),
 });
 const replySchema = z.object({ utterance_id: z.string().uuid(), text: z.string().trim().min(1).max(8000) }).strict();
 const subscriptionSchema = z.object({ id: z.string(), url: z.string(), secret: z.string(), expiresAt: z.number() });
@@ -283,7 +284,7 @@ export class Bridge {
       const active = this.active();
       if (active && active.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: params.delivery.url, secret: params.delivery.secret,
-        expiresAt: this.now() + (params.ttlMs ?? 3_600_000) };
+        expiresAt: this.now() + (params.ttlMs ?? MAX_CONVERSATION_LEASE_MS) };
       // Verify before storing; a rejected callback never becomes an active subscriber.
       await this.sender.verify(sub);
       const kind = this.state.subscription?.id === id ? 'renewed' : 'created';

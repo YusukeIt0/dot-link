@@ -81,6 +81,58 @@ test('a restart preserves the granted deadline and same-Dot renewal restores del
   assert.deepEqual(history.at(-1), { at: now, kind: 'renewed', expiresAt: now + 60_000, requestedTtlMs: 60_000 });
 });
 
+test('a verified renewal switches a legacy lease to a finite overnight grant without extending it on startup', async t => {
+  let now = Date.now();
+  const hour = 3_600_000;
+  const clock = { now: () => now };
+  const s = setup(undefined, clock);
+  t.after(s.close);
+  const legacy = await s.bridge.subscribe({ ...subscription, ttlMs: hour });
+  s.bridge.close();
+  const upgraded = new Bridge(s.path, s.sender, s.hosts, undefined, clock);
+  t.after(() => upgraded.close());
+  assert.equal(upgraded.inputDestination()?.expiresAt, Date.parse(legacy.refreshBefore));
+  const renewed = await upgraded.subscribe(subscription);
+  assert.equal(renewed.id, legacy.id);
+  assert.equal(Date.parse(renewed.refreshBefore), now + 24 * hour);
+  upgraded.close();
+  now += 12 * hour;
+  const restarted = new Bridge(s.path, s.sender, s.hosts, undefined, clock);
+  t.after(() => restarted.close());
+  const message = await restarted.submit({ id: randomUUID(), text: 'after overnight shutdown' });
+  assert.equal(message.status, 'accepted');
+  await restarted.reply({ utterance_id: message.id, text: 'same conversation' });
+  assert.equal(restarted.history()[0].reply, 'same conversation');
+  now += 12 * hour;
+  assert.equal(restarted.status().subscribed, false);
+  await assert.rejects(restarted.submit({ id: randomUUID(), text: 'past deadline' }), /not subscribed/);
+  const bounded = await restarted.subscribe({ ...subscription, ttlMs: null });
+  assert.equal(Date.parse(bounded.refreshBefore), now + 24 * hour);
+});
+
+test('a terminal callback ends the overnight grant, while a transient failure keeps it', async t => {
+  let status = 503;
+  const s = setup(async (_url, body) => {
+    const event = JSON.parse(body);
+    return event.type === 'verification'
+      ? { status: 200, body: JSON.stringify({ challenge: event.challenge }) }
+      : { status, body: '{}' };
+  });
+  t.after(s.close);
+  await s.bridge.subscribe(subscription);
+  const input = () => ({ id: randomUUID(), text: 'callback status' });
+  assert.equal((await s.bridge.submit(input())).status, 'failed');
+  assert.equal(s.bridge.status().subscribed, true);
+  status = 410;
+  assert.equal((await s.bridge.submit(input())).status, 'failed');
+  assert.equal(s.bridge.status().subscribed, false);
+  s.bridge.close();
+  const restarted = new Bridge(s.path, s.sender, s.hosts);
+  t.after(() => restarted.close());
+  await assert.rejects(restarted.submit(input()), /not subscribed/);
+  assert.equal(JSON.parse(readFileSync(s.path, 'utf8')).leaseHistory.at(-1).kind, 'callback_gone');
+});
+
 test('returning setup can recognize an expired or removed subscription after restart', async t => {
   let now = Date.now();
   const clock = { now: () => now };
