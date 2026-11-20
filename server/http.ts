@@ -1,6 +1,6 @@
 import { ContextResponder, contextResponseTool } from './context-response.ts';
 import { HealthContext, healthEvent, healthTool, healthResponseTool } from './health/context.ts';
-import { decisionFactorResponse } from './context-guidance.ts';
+import { decisionFactorResponse, isDecisionFactorTool, type DecisionFactorTool } from './context-guidance.ts';
 import { WeatherContext, weatherContextTool } from './weather/context.ts';
 import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
@@ -31,19 +31,49 @@ const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(),
 
 const contextResponders = new WeakMap<Bridge, ContextResponder>();
 
+interface FactorSources {
+  health?: HealthContext;
+  weather?: WeatherContext;
+  locations?: LocationContext;
+  history?: HistoryReader;
+  archives?: EnvironmentHistory;
+}
+type FactorReader = (args: unknown) => unknown;
+type FactorRegistration = {tool: DecisionFactorTool; bind: (sources: FactorSources) => FactorReader | undefined};
+
+export function registerDecisionFactor<T extends DecisionFactorTool>(tool: T, bind: FactorRegistration['bind']) {
+  if (!isDecisionFactorTool(tool)) throw new Error('Register a reader using decisionFactorTool()');
+  return {tool, bind};
+}
+
+export const decisionFactorReaders = [
+  registerDecisionFactor(healthTool, ({health}) => health && (args => health.read(args))),
+  registerDecisionFactor(weatherContextTool, ({weather}) => weather && (args => weather.read(args))),
+  registerDecisionFactor(locationContextTool, ({locations}) => locations && (args => locations.read(args))),
+  registerDecisionFactor(mobilityContextTool, ({locations}) => locations && (args => locations.readMobility(args))),
+  registerDecisionFactor(locationHistoryTool, ({history}) => history && (args => history.read(args))),
+  registerDecisionFactor(factorHistoryTool, ({history, health, archives}) => {
+    const location = supportsSelectedHistory(history) ? history : undefined;
+    const polar = health?.readSelectedHistory ? health : undefined;
+    if (location || polar || archives) return args => readFactorHistory(args, {
+      location, polar, weather: archives?.reader('weather'), mobility: archives?.reader('mobility'),
+    });
+  }),
+] as const satisfies readonly FactorRegistration[];
+
 export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext, archives?: EnvironmentHistory): Promise<unknown> {
-  // Register factor definition and reader together: catalog and calls use this path.
-  const locationHistory = supportsSelectedHistory(history) ? history : undefined;
-  const polarHistory = health?.readSelectedHistory ? health : undefined;
-  const factors = [
-    {tool: healthTool, read: health ? (args: unknown) => health.read(args) : undefined},
-    {tool: weatherContextTool, read: weather ? (args: unknown) => weather.read(args) : undefined},
-    {tool: locationContextTool, read: locations ? (args: unknown) => locations.read(args) : undefined},
-    {tool: mobilityContextTool, read: locations ? (args: unknown) => locations.readMobility(args) : undefined},
-    {tool: locationHistoryTool, read: history ? (args: unknown) => history.read(args) : undefined},
-    {tool: factorHistoryTool, read: locationHistory || polarHistory || archives
-      ? (args: unknown) => readFactorHistory(args, {location: locationHistory, polar: polarHistory,
-        weather: archives?.reader('weather'), mobility: archives?.reader('mobility')}) : undefined},
+  const sources = {health, weather, locations, history, archives};
+  // Control and conversation tools retain their own response and error formats.
+  const controls = [
+    {tool: statusTool, available: true}, {tool: pendingTool, available: true},
+    {tool: replyTool, available: true}, {tool: sendMessageTool, available: true},
+    {tool: pendingNotificationsTool, available: !!notifications},
+    {tool: announceNotificationTool, available: !!notifications},
+    {tool: notificationDispositionTool, available: !!notifications},
+    {tool: locationResponseTool, available: !!locations},
+    {tool: historyResponseTool, available: !!history?.respond},
+    {tool: healthResponseTool, available: !!health},
+    {tool: contextResponseTool, available: !!(locations || health || history?.responseGuard || weather || archives)},
   ];
   const activations = activation ? (Array.isArray(activation) ? activation : [activation]) : [];
   const acknowledge = (name: 'reply_to_g2' | 'send_message_to_g2', args: unknown) => {
@@ -73,25 +103,32 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [...factors.filter(factor => factor.read).map(factor => factor.tool), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationResponseTool] : []), ...(history?.respond ? [historyResponseTool] : []), ...(health ? [healthResponseTool] : []), ...(locations || health || history?.responseGuard || weather || archives ? [contextResponseTool] : [])] }; break;
+      case 'tools/list':
+        result = {tools: [
+          ...decisionFactorReaders.filter(factor => factor.bind(sources)).map(factor => factor.tool),
+          ...controls.filter(control => control.available).map(control => control.tool),
+        ]};
+        break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
         if (!parsedCall.success) throw new ToolRejection('invalid_arguments', 'Specify a tool name from tools/list.');
         const { name, arguments: args } = parsedCall.data;
-        const factor = factors.find(factor => factor.tool.name === name);
+        const factor = decisionFactorReaders.find(entry => entry.tool.name === name);
         if (factor) {
           return {jsonrpc: '2.0', id, ...await decisionFactorResponse(() => {
-            if (!factor.read) throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
-            return factor.read(args);
+            const read = factor.bind(sources);
+            if (!read) throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
+            return read(args);
           })};
         }
-        const notificationNames = ['get_pending_notifications', 'set_notification_disposition', 'announce_notification_to_g2'];
-        const locationNames = ['respond_to_location'];
-        if (![...notificationNames, ...locationNames, 'respond_to_history', 'respond_to_health', 'respond_to_context', 'get_status', 'get_pending_utterances', 'send_message_to_g2', 'reply_to_g2'].includes(name)) {
+        const control = controls.find(entry => entry.tool.name === name);
+        if (!control) {
           throw new ToolRejection('unknown_tool', 'The tool is unknown. Refresh tools/list and select an available tool.');
         }
-        if ((!notifications && notificationNames.includes(name)) || (!locations && locationNames.includes(name)) || (name === 'respond_to_history' && !history?.respond) || (name === 'respond_to_health' && !health)) {
+        // The combined responder historically validates its own receipt set even
+        // when no source is available for discovery.
+        if (!control.available && control.tool !== contextResponseTool) {
           throw new ToolRejection('tool_unavailable', 'The tool is unavailable. Refresh tools/list and use an available tool.');
         }
         if (name === 'respond_to_location') {

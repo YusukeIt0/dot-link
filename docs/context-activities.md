@@ -15,7 +15,9 @@ Use the included geography and weather first. For an outdoor plan, consult
 additional forecasts only when useful. For a walk toward a known destination,
 walking/terrain evidence can help assess distance or slopes. Do not invent a
 destination or fetch all sources just because the tools exist. Recent history can
-help reasoning when the conversation or memory is insufficient. Missing optional
+help reasoning when the conversation or memory is insufficient. When a saved
+observation, forecast or walking plan could materially change the answer, use
+`get_factor_history` with the relevant fields and time window. Missing optional
 evidence need not interrupt the conversation or prompt another settings request.
 Silence is a valid result.
 
@@ -45,7 +47,9 @@ weather and finished mobility reads also return `weather_read_id` and
 `mobility_read_id`; include these in their respective plural arrays. Current-weather
 and mobility receipts must accompany their returned `context_id`. Specified-place
 weather can be used without current-location sharing. Health and recent-place
-reads supply `health_read_ids` and `history_context_ids`. Each array is bounded to
+reads supply `health_read_ids` and `history_context_ids`. Saved forecasts and
+walking plans supply `archive_read_ids` in each source's `response_context.arguments`.
+Include those IDs when that source informed the reply. Each array is bounded to
 eight receipts; duplicates/order do not change retry identity.
 
 All selected guards run again inside the bridge's commit queue, immediately before
@@ -67,8 +71,8 @@ collection or AI reasoning engine is introduced.
 
 `silent` writes no message and omits text/question ID. It can acknowledge an
 independent location activity without consuming a question answer. A user's
-question should still receive an answer from available evidence. Recent-place
-history announcements continue to require an existing question; combined replies
+question should still receive an answer from available evidence. G2 announcements
+using recent places, saved forecasts or walking plans require an existing question; combined replies
 do not enable proactive historical claims. Individual-source response tools remain
 compatible. Conversation preferences and already-available AI memory need no new
 Dot Link receipt. Notifications retain their separate disposition/announcement
@@ -101,14 +105,14 @@ Preserve source/license surfaces and material limitations.
 - Define its tool with `decisionFactorTool` in `server/context-guidance.ts`; keep
   factor-specific consent, acquisition and response constraints in its description.
   The helper supplies the common conversation and evidence-presentation policy.
-- Register its definition and reader together in the `factors` list in `rpc`
-  (`server/http.ts`). Catalog availability and calls share this registration;
-  `decisionFactorResponse` adds the short versioned contract once at the result
-  boundary. Do not duplicate the full location activity instructions, inject policy
-  into provider data, or create a separate dispatch branch that bypasses this path.
-- Extend `tests/context-guidance.test.ts` with the new factor. Check catalog and
-  result delivery, missing data, rejection semantics and unchanged evidence, not
-  copied phrases or a fixed AI answer. Keep acquisition/response-guard tests.
+- Register the wrapped tool and its service binding together in
+  `decisionFactorReaders` in `server/http.ts`. The catalog and dispatch both
+  use that registration. The dispatcher applies `decisionFactorResponse` to
+  reads and errors. Keep acquisition and consent checks with the source.
+- The shared tests in `tests/context-guidance.test.ts` enumerate the registered
+  readers and exercise the public MCP boundary. Provide a fixture for any new
+  service or input shape, including its evidence, missing values and receipts.
+  Keep the source-specific acquisition and response-guard tests.
 - Verify the deployed relay, registered connector and existing consumer. A policy
   version or fixture pass proves delivery structure, not model behavior. Use browser
   Dot for conversational checks; reserve device checks for affected device behavior.
