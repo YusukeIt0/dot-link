@@ -266,7 +266,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         menu.addItem(.separator())
         item(tr("mac.pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
-        item(tr("mac.resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
+        item(tr("mac.resume"), #selector(menuResume), enabled: step == "start" || step == "reconnecting" || (yes("lifecycleStopped") && yes("servicesConfigured")))
         menu.addItem(.separator())
         item(appUpdater?.checkTitle ?? tr("mac.check_for_updates"), #selector(menuCheckUpdate), enabled: appLocationReady)
         if let updater = appUpdater, !updater.message.isEmpty { let update = NSMenuItem(title: updater.message, action: nil, keyEquivalent: ""); update.isEnabled = false; menu.addItem(update) }

@@ -35,6 +35,9 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
         sut.appLocationValidated = true; sut.appLocationReady = true
         sut.state = ["installed": true, "directory": root.appendingPathComponent("data").path,
             "bridge": true, "device": true, "tunnel": true, "subscribed": true, "step": "pair"]
+        #if !BASELINE
+        checkReconnectMenu()
+        #endif
         sut.connectNotifications()
         sut.notifications?.healthTimer?.invalidate()
         sut.render()
@@ -139,6 +142,25 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
     }
 
     #if !BASELINE
+    func checkReconnectMenu() {
+        let connected = sut.state
+        defer { sut.state = connected; sut.busy = false }
+        func resumeItem() -> NSMenuItem {
+            sut.updateMenu()
+            return sut.statusItem.menu!.item(withTitle: sut.tr("mac.resume"))!
+        }
+        precondition(!resumeItem().isEnabled)
+        sut.state["step"] = "reconnecting"
+        sut.state["servicesConfigured"] = true
+        sut.state["device"] = false
+        sut.render()
+        let repair = resumeItem()
+        precondition(repair.isEnabled && repair.action == #selector(SetupApp.menuResume))
+        precondition(!buttons(sut.stack).contains { $0.title == sut.tr("mac.start_relay") })
+        sut.busy = true
+        precondition(!resumeItem().isEnabled)
+    }
+
     func renderLanguages() {
         for language in Localization.shared.languages {
             sut.language = language; sut.render()
