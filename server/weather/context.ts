@@ -38,7 +38,8 @@ const denied = () => new ToolRejection('weather_disabled', 'Weather sharing is n
 export class WeatherContext {
   readonly changes = new ChangeSignal();
   private consent: z.infer<typeof consentSchema>;
-  private epoch = randomUUID();
+  private metEpoch = randomUUID();
+  private controlEpoch = this.metEpoch;
   private reads = new Map<string, {contextId?: string; guard: () => boolean; expires: number}>();
   private closed = false;
   private timer?: ReturnType<typeof setInterval>;
@@ -97,15 +98,31 @@ export class WeatherContext {
     this.checkOwner();
     const owns = !!owner && this.ownerAuthorized(owner) && (!this.consent.owner || this.consent.owner === owner);
     const enabled = owns && this.allowed();
-    return {weatherProtocol: 1, weatherEpoch: owns ? this.epoch : null, weatherEnabled: enabled, weatherTerms: WEATHER_TERMS,
+    return {weatherProtocol: 1, weatherEpoch: owns ? this.controlEpoch : null, weatherEnabled: enabled, weatherTerms: WEATHER_TERMS,
       ...(this.satellite ? {satelliteTerms: SATELLITE_TERMS, satelliteEnabled: enabled && this.rainConsent.since(owner!) !== undefined} : {})};
   }
   control(raw: unknown, owner: string) {
     this.checkOwner();
     const p = z.object({protocol: z.literal(1), epoch: z.string().uuid(), enabled: z.boolean(), terms: z.literal(WEATHER_TERMS).optional(),
       satellite_terms: z.literal(SATELLITE_TERMS).optional()}).strict().parse(raw);
-    if (this.closed || !this.ownerAuthorized(owner) || p.epoch !== this.epoch || (this.consent.owner && this.consent.owner !== owner) || (p.enabled && p.terms !== WEATHER_TERMS)) throw denied();
+    if (this.closed || !this.ownerAuthorized(owner) || p.epoch !== this.controlEpoch || (this.consent.owner && this.consent.owner !== owner) || (p.enabled && p.terms !== WEATHER_TERMS)) throw denied();
     if (p.satellite_terms && (!p.enabled || !this.satellite)) throw denied();
+    if (p.enabled && this.allowed()) {
+      // Changing the supplemental grant preserves the active MET receipt, any
+      // pending forecast and the location decision already made for that forecast.
+      if (p.satellite_terms) {
+        if (this.rainConsent.since(owner) !== undefined) return this.status(owner);
+        this.rainConsent.grant(owner, this.now());
+      } else {
+        // Replacing the strict v1 generation fences its satellite pin even
+        // if supplemental storage cannot be cleaned up by a legacy-style save.
+        this.save(this.consent);
+      }
+      this.controlEpoch = randomUUID();
+      this.satellite?.clear();
+      this.changes.emit();
+      return this.status(owner);
+    }
     this.save({version: 1, enabled: p.enabled, owner, ...(p.enabled ? {terms: WEATHER_TERMS} : {})}, !!p.satellite_terms);
     this.invalidate(); if (p.enabled) void this.refresh().catch(() => {});
     return this.status(owner);
@@ -116,10 +133,11 @@ export class WeatherContext {
   }
   private invalidate() {
     this.satellite?.clear();
-    this.epoch = randomUUID(); this.reads.clear(); this.service.cancel(); this.currentController?.abort(); this.lastKey = undefined; this.lastCheck = -Infinity;
+    this.metEpoch = randomUUID(); this.controlEpoch = this.metEpoch;
+    this.reads.clear(); this.service.cancel(); this.currentController?.abort(); this.lastKey = undefined; this.lastCheck = -Infinity;
     this.locations.clearWeather(); this.changes.emit();
   }
-  private guard(epoch: string) {if (!this.allowed() || epoch !== this.epoch) throw denied();}
+  private guard(epoch: string) {if (!this.allowed() || epoch !== this.metEpoch) throw denied();}
   private revalidate() {
     this.satellite?.revalidate();
     try {this.currentGuard?.();} catch {this.currentController?.abort();}
@@ -171,10 +189,11 @@ export class WeatherContext {
     if (!satellite || selection === false) return;
     const since = this.rainConsent.since(owner);
     if (since === undefined) return;
+    const controlEpoch = this.controlEpoch;
     const compare = selection === true;
     const allowed = () => {
       guard();
-      if (this.rainConsent.since(owner) !== since) throw denied();
+      if (this.controlEpoch !== controlEpoch || this.rainConsent.since(owner) !== since) throw denied();
     };
     const writer = captureEnvironment(this.archive, owner);
     const record = (value: SatellitePrecipitation) => {
@@ -202,7 +221,7 @@ export class WeatherContext {
   async read(raw: unknown) {
     const p = args.safeParse(raw);
     if (!p.success) throw new ToolRejection('invalid_arguments', 'Choose current, or specified with known place coordinates, label and provenance.');
-    const epoch = this.epoch; this.guard(epoch);
+    const epoch = this.metEpoch; this.guard(epoch);
     const input = p.data;
     const access = input.mode === 'current' ? this.locations.weatherAccess(this.consent.owner!) : undefined;
     if (input.mode === 'current' && !access) throw new ToolRejection('location_unavailable', 'Current location is off, disconnected or stale. Continue the conversation without assuming a location; specified weather requires an explicitly requested known place.');
@@ -239,7 +258,7 @@ export class WeatherContext {
     const key = JSON.stringify(weatherQueryPoint(access.fix));
     if (key === this.lastKey && this.now() - this.lastCheck < 60_000) return;
     this.lastKey = key; this.lastCheck = this.now();
-    const epoch = this.epoch, controller = new AbortController(); this.currentController = controller;
+    const epoch = this.metEpoch, controller = new AbortController(); this.currentController = controller;
     const guard = () => {this.guard(epoch); access.guard();}; this.currentGuard = guard;
     try {
       const writer = this.archiveWriter(access.fix);

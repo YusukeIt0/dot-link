@@ -28,7 +28,7 @@ function clocks(read: NearbyRainRead) {
 function project(read: NearbyRainRead, previous: NearbyRainRead | undefined, availableAt: number) {
   const {sample} = read;
   const matched = previous && compareRainRateSamples(previous.sample, sample);
-  const comparison = previous && matched?.length ? {...clocks(previous), areas: matched} : undefined;
+  const comparison = previous && matched?.length ? {...clocks(previous), available_at: iso(availableAt), areas: matched} : undefined;
   const expires = Date.parse(sample.metadata.coverage_end) + FRAME_AGE;
   return {
     ...clocks(read), source, data_kind: 'satellite_precipitation_rate_estimate' as const,
@@ -79,8 +79,9 @@ export class SatelliteWeather {
   }
   close() {this.clear(); this.service.close();}
   available(point: WeatherPoint, compare: boolean): SatellitePrecipitation | undefined {
-    const value = usable(this.results.get(keyOf(weatherQueryPoint(point))), this.now())?.value;
-    if (!value?.comparison || (compare && this.now() < satelliteExpiry(value))) return value;
+    const now = this.now();
+    const value = usable(this.results.get(keyOf(weatherQueryPoint(point))), now)?.value;
+    if (!value?.comparison || (compare && Date.parse(value.comparison.available_at) <= now && now < satelliteExpiry(value))) return value;
     const {comparison: _comparison, ...single} = value;
     return single;
   }
@@ -104,7 +105,7 @@ export class SatelliteWeather {
     const guard = () => {signal.throwIfAborted(); access.guard();};
     const flight = {controller, guard};
     this.flight = flight;
-    const sample = async () => {
+    const sample = async (original = this.results.get(key)?.value) => {
       guard();
       const [current, previous] = await this.service.read(point, signal, {previous: access.compare});
       guard();
@@ -112,8 +113,11 @@ export class SatelliteWeather {
       const at = this.now();
       const value = project(current, previous, at);
       if (at >= satelliteExpiry(value)) return;
-      const original = this.results.get(key)?.value;
-      if (original?.edition === value.edition) value.available_at = original.available_at;
+      if (original?.edition === value.edition) {
+        value.available_at = original.available_at;
+        if (value.comparison && original.comparison?.edition === value.comparison.edition)
+          value.comparison.available_at = original.comparison.available_at;
+      }
       this.results.delete(key);
       this.results.set(key, {value, compared: access.compare});
       while (this.results.size > 8) this.results.delete(this.results.keys().next().value!);
@@ -129,8 +133,11 @@ export class SatelliteWeather {
       this.lastAttempt = this.now();
       const result = await this.service.refresh(signal);
       guard();
-      if (result === 'updated') this.results.clear();
-      if (result === 'updated' || (result === 'cached' && !this.available(point, access.compare))) await sample();
+      if (result === 'updated') {
+        const original = this.results.get(key)?.value;
+        this.results.clear();
+        await sample(original);
+      } else if (result === 'cached' && !this.available(point, access.compare)) await sample();
     };
     void finish().catch(() => {}).finally(() => {if (this.flight === flight) this.flight = undefined;});
     // A slow local worker or a pair of region samples must not hold up the primary forecast.

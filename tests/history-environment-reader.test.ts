@@ -76,7 +76,7 @@ test('selected weather history keeps independent satellite coverage, local knowl
   value.comparison = {edition: 'prior-frame', coverage_start: iso(frameStart - hour), coverage_end: iso(frameStart - hour + 9 * 60_000),
     file_interval_end: iso(frameStart - hour + 599_900), generated_at: iso(frameStart - hour + 600_000),
     published_at: iso(frameStart - hour + 610_000), acquisition_started_at: iso(frameStart - hour + 611_000), first_retrieved_at: iso(frameStart - hour + 612_000),
-    areas: [{area:'N', nominal_cells:2, earlier_wet:0, later_wet:1, earlier_peak_mm_h:0, later_peak_mm_h:3.5}]};
+    available_at: iso(derived), areas: [{area:'N', nominal_cells:2, earlier_wet:0, later_wet:1, earlier_peak_mm_h:0, later_peak_mm_h:3.5}]};
   const record = (scope: WeatherScope, at: number, e = value) => satelliteArchiveRecord(e, scope, point, at)!;
   write(forecast(start, 22));
   f.setTime(derived);

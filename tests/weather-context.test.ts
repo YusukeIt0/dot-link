@@ -386,3 +386,91 @@ test('the passive timer checks existing MET weather and a completed satellite re
   assert.equal(f.location.read().context!.context_id, context.context_id);
   assert.equal(f.location.read().context!.weather, met);
 });
+
+test('adding nearby rain to active MET preserves its accepted location decision, forecast receipt and in-flight read', async t => {
+  let reads = 0, refreshes = 0;
+  const f = fixture(t, undefined, {automatic:true, satellite:rainProvider(async point => {
+    reads++; return [rainFrame(point, frameAt(9, 0), frameAt(9, 20), frameAt(9, 20) + 1, 1)];
+  },
+    async () => {refreshes++; return 'unavailable';})});
+  f.enable(); f.update(); await f.subscribe();
+  const forecast = f.evidence({latitude:10, longitude:20});
+  f.setLoad(async () => forecast);
+  f.consent(); await flush();
+  const original = await f.weather.read({mode:'current'});
+  const location = f.location.read().context!;
+  await f.location.respond({context_id:location.context_id, disposition:'silent'});
+  const decision = f.location.read().context!;
+  const events = f.events.length;
+  f.advance(31_000);
+  const hold = barrier<WeatherEvidence>();
+  f.setLoad(() => hold.promise);
+  const pending = f.weather.read({mode:'current'});
+  const before = f.calls(), oldControl = f.weather.status(owner).weatherEpoch;
+  const granted = f.consent(true, true);
+  hold.release(forecast);
+  assert.equal((await pending).evidence, forecast);
+  await flush();
+  assert.equal(granted.satelliteEnabled, true);
+  assert.notEqual(granted.weatherEpoch, oldControl);
+  assert.throws(() => f.weather.control({protocol:1, epoch:oldControl, enabled:false}, owner));
+  assert.equal(f.weather.responseContext(original.weather_read_id).guard(), true);
+  assert.equal(f.location.read().context!.context_id, decision.context_id);
+  assert.equal(f.location.read().context!.weather, forecast);
+  assert.equal(f.calls(), before);
+  assert.equal(f.events.length, events);
+  assert.deepEqual([reads, refreshes], [0, 0]);
+  const combined = await f.weather.read(specified);
+  assert.equal(combined.satellite_precipitation?.status, 'available');
+  // A legacy MET-only save removes NOAA. A same-clock regrant and re-read
+  // cannot revive the prior supplemental receipt, even for the same public file.
+  f.consent();
+  assert.equal(f.weather.status(owner).satelliteEnabled, false);
+  f.consent(true, true); await f.weather.read(specified);
+  assert.throws(() => f.weather.responseContext(combined.weather_read_id).guard());
+  assert.equal(f.weather.responseContext(original.weather_read_id).guard(), true);
+  f.consent(false);
+  assert.throws(() => f.weather.responseContext(original.weather_read_id).guard());
+});
+
+test('first local availability is distinct for one frame and a later comparison of an exact pair', async t => {
+  const currentStart = frameAt(9, 10), previousStart = frameAt(9, 0);
+  let revision = 1, previousRevision = 2, refreshes = 0;
+  const f = fixture(t, undefined, {satellite:rainProvider(async (point, _signal, options) => {
+    const read = (at: number, version: number) => rainFrame(point, at, frameAt(9,22), frameAt(9,22) + 1, version);
+    return options?.previous ? [read(currentStart, revision), read(previousStart, previousRevision)] : [read(currentStart, revision)];
+  }, async () => ++refreshes === 1 ? 'cached' : 'updated')});
+  f.consent(true, true); f.advance(122_000);
+  const selected = async (compare: boolean) => {
+    const value = (await f.weather.read({...specified, ...(compare ? {nearby_precipitation:true} : {})})).satellite_precipitation;
+    assert.ok(value && 'areas' in value);
+    return value;
+  };
+  const one = await selected(false), firstFrameAt = one.available_at;
+  assert.equal(one.comparison, undefined);
+  f.advance(60_000);
+  const firstComparisonAt = new Date(f.now()).toISOString();
+  const pair = await selected(true);
+  assert.equal(pair.available_at, firstFrameAt);
+  assert.equal(pair.comparison?.available_at, firstComparisonAt);
+  f.advance(-30_000);
+  assert.equal((await selected(true)).comparison, undefined);
+  f.advance(30_000);
+  f.advance(60_000);
+  assert.equal((await selected(false)).comparison, undefined);
+  assert.equal((await selected(true)).comparison?.available_at, firstComparisonAt);
+  // A same-object repair revalidates both local samples. The clocks stay attached
+  // to their immutable identities. A different comparison or current frame gets a new clock.
+  f.advance(8 * 60_000);
+  await selected(true); await flush();
+  assert.equal((await selected(true)).comparison?.available_at, firstComparisonAt);
+  f.advance(10 * 60_000); previousRevision++;
+  await selected(true); await flush();
+  const revisedPair = await selected(true);
+  assert.equal(revisedPair.available_at, firstFrameAt);
+  assert.equal(revisedPair.comparison?.available_at, new Date(f.now()).toISOString());
+  f.advance(10 * 60_000); revision++;
+  await selected(true); await flush();
+  const revisedCurrent = await selected(true);
+  assert.equal(revisedCurrent.available_at, new Date(f.now()).toISOString());
+});
