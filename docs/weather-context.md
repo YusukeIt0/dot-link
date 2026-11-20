@@ -21,8 +21,12 @@ and historical queries make no NOAA requests. A cold or busy read returns the
 primary forecast promptly. A later ordinary weather read can use the verified
 local result. The existing tool arguments work with a single satellite frame.
 The optional `nearby_precipitation` argument can request a comparison or omit
-satellite evidence. The original Weather receipt guards the returned evidence
-again when Dot sends a reply. There is no satellite-specific activity.
+satellite evidence. The original `weather_read_id` and `response_context` guard the
+forecast and any returned satellite estimate again when Dot sends a reply. A Dot
+using the original mapping must reconsider if that estimate changes or expires.
+When the response used only the MET forecast, Dot can use the same read's
+`forecast_only_response_context` with the existing response tool. Both mappings
+retain owner and location checks and share one decision. There is no satellite-specific activity.
 
 Weather history can retain a separately selected `satellite_precipitation`
 field for already-authorized lookups. Source observation time, first Mac

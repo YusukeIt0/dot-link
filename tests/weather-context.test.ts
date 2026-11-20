@@ -340,6 +340,10 @@ for (const compare of [false, true]) {
     assert.equal(!!satellite.comparison, compare);
     const expiry = frameAt(9, 24); // The earlier 08:39 embedded end plus 45 minutes.
     assert.equal(result.response_context.expires_no_later_than, new Date(expiry).toISOString());
+    const forecastOnly = result.forecast_only_response_context;
+    assert.ok(forecastOnly);
+    const forecastExpiry = f.now() + 5 * 60_000;
+    assert.equal(forecastOnly.expires_no_later_than, new Date(forecastExpiry).toISOString());
     const bridge = new Bridge(join(f.dir,'weather-answer.json'), f.sender, []);
     t.after(() => bridge.close());
     const queue = barrier<void>(), admitted = barrier<void>();
@@ -353,6 +357,8 @@ for (const compare of [false, true]) {
     assert.ok(f.weather.responseContext(result.weather_read_id).guard());
     f.advance(1); queue.release();
     await assert.rejects(sending, {reason:'weather_context_expired'});
+    const forecastGuard = f.weather.responseContext(forecastOnly.arguments.weather_read_ids[0]).guard;
+    assert.equal(forecastGuard(), true);
     assert.equal(bridge.outboundHistory().length, 0);
     if (compare) {
       const remaining = (await f.weather.read(specified)).satellite_precipitation;
@@ -360,6 +366,8 @@ for (const compare of [false, true]) {
       assert.equal(remaining.edition, satellite.edition);
       assert.equal(remaining.comparison, undefined);
     }
+    f.advance(forecastExpiry - f.now());
+    assert.throws(forecastGuard, {reason:'weather_context_expired'});
   });
 }
 
@@ -473,4 +481,77 @@ test('first local availability is distinct for one frame and a later comparison 
   await selected(true); await flush();
   const revisedCurrent = await selected(true);
   assert.equal(revisedCurrent.available_at, new Date(f.now()).toISOString());
+});
+
+for (const mode of ['current', 'specified'] as const) {
+  test('a background satellite promotion preserves a queued MET-only reply from one ' + mode + ' read', async t => {
+    const started = barrier<void>(), promotion = barrier<'updated'>();
+    let refreshes = 0, latest = 1;
+    const backend = rainProvider(async point => [rainFrame(point, frameAt(9, latest === 1 ? 0 : 10), frameAt(9,22), frameAt(9,22) + 1, latest)],
+      async () => {
+        if (++refreshes === 1) return 'cached';
+        started.release();
+        const updated = await promotion.promise;
+        latest = 2; return updated;
+      });
+    const f = fixture(t, undefined, {satellite:backend});
+    if (mode === 'current') {f.enable(); f.update();}
+    f.consent(true, true); f.advance(122_000);
+    if (mode === 'current') f.update();
+    const request = mode === 'current' ? {mode} : specified;
+    const first = await f.weather.read(request); await flush();
+    f.advance(10 * 60_000);
+    if (mode === 'current') f.update();
+    const read = await f.weather.read(request);
+    await started.promise;
+    assert.ok(first.satellite_precipitation && 'edition' in first.satellite_precipitation);
+    assert.ok(read.satellite_precipitation && 'edition' in read.satellite_precipitation);
+    assert.equal(read.satellite_precipitation.edition, first.satellite_precipitation.edition);
+    const calls = f.calls(), queue = barrier<void>(), admitted = barrier<void>();
+    const bridge = new Bridge(join(f.dir, 'forecast-only.json'), f.sender, []);
+    t.after(() => bridge.close());
+    const responder = new ContextResponder(async (input, guard, location) => {
+      admitted.release(); await queue.promise; return bridge.sendMessage(input, guard, location);
+    });
+    const sources = {weather:f.weather, locations:f.location};
+    const answer = {disposition:'announce', text:'The forecast temperature is 20 °C.'};
+    const forecast = read.forecast_only_response_context ?? read.response_context;
+    const pending = responder.respond({...forecast.arguments, ...answer}, sources);
+    await admitted.promise;
+    promotion.release('updated'); await flush();
+    queue.release(); const sent = await pending;
+    assert.deepEqual(await responder.respond({...forecast.arguments, ...answer}, sources), sent);
+    await assert.rejects(responder.respond({...read.response_context.arguments, ...answer}, sources), {reason:'weather_context_expired'});
+    assert.equal(bridge.outboundHistory().length, 1);
+    assert.equal(f.calls(), calls); assert.equal(refreshes, 2);
+    if (mode === 'current') {
+      assert.ok('context_id' in read && read.context_id);
+      assert.equal(forecast.arguments.context_id, read.context_id);
+      f.update(11);
+    } else f.consent(false);
+    await assert.rejects(responder.respond({...forecast.arguments, ...answer}, sources));
+  });
+}
+
+test('using the strict and forecast-only mappings for one specified weather read cannot deliver two decisions', async t => {
+  const f = fixture(t, undefined, {satellite:rainProvider(async point => [rainFrame(point, frameAt(9,0), frameAt(9,18), frameAt(9,19), 1)])});
+  f.consent(true, true);
+  const r = await f.weather.read(specified);
+  assert.ok(r.forecast_only_response_context);
+  const bridge = new Bridge(join(f.dir,'weather-idempotency.json'), f.sender, []);
+  t.after(() => bridge.close());
+  const responder = new ContextResponder(bridge.sendMessage.bind(bridge));
+  const sources = {weather:f.weather};
+  const answer = {disposition:'announce', text:'The forecast is 20 °C.'};
+  const first = await responder.respond({...r.response_context.arguments, ...answer}, sources);
+  const retry = await responder.respond({...r.forecast_only_response_context.arguments, ...answer}, sources);
+  assert.deepEqual(retry, first);
+  assert.equal(bridge.outboundHistory().length, 1);
+  await assert.rejects(responder.respond({...r.forecast_only_response_context.arguments, ...answer, text:'A second statement'}, sources),
+    {reason:'context_decision_conflict'});
+  const metOnly = await f.weather.read({...specified, nearby_precipitation:false});
+  assert.equal(metOnly.forecast_only_response_context, undefined);
+  f.consent();
+  assert.throws(() => f.weather.responseContext(r.weather_read_id).guard());
+  assert.equal(f.weather.responseContext(r.forecast_only_response_context.arguments.weather_read_ids[0]).guard(), true);
 });
