@@ -16,7 +16,8 @@ import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 import { toolResponse, rpcResponse, ToolRejection } from './tool-response.ts';
 import { ReadResponseError } from './read-response-error.ts';
 import { subscriptionResponse } from './subscription-response-error.ts';
-import { locationHistoryTool, historyResponseTool, type HistoryReader } from './history/tool.ts';
+import { locationHistoryTool, historyResponseTool, supportsSelectedHistory, type HistoryReader } from './history/tool.ts';
+import { factorHistoryTool, readFactorHistory } from './history/factor-tool.ts';
 
 import type { LocationHistoryStore } from './history/store.ts';
 import { historyUploadSchema } from './history/store.ts';
@@ -30,12 +31,16 @@ const contextResponders = new WeakMap<Bridge, ContextResponder>();
 
 export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext): Promise<unknown> {
   // Register factor definition and reader together: catalog and calls use this path.
+  const locationHistory = supportsSelectedHistory(history) ? history : undefined;
+  const polarHistory = health?.readSelectedHistory ? health : undefined;
   const factors = [
     {tool: healthTool, read: health ? (args: unknown) => health.read(args) : undefined},
     {tool: weatherContextTool, read: weather ? (args: unknown) => weather.read(args) : undefined},
     {tool: locationContextTool, read: locations ? (args: unknown) => locations.read(args) : undefined},
     {tool: mobilityContextTool, read: locations ? (args: unknown) => locations.readMobility(args) : undefined},
     {tool: locationHistoryTool, read: history ? (args: unknown) => history.read(args) : undefined},
+    {tool: factorHistoryTool, read: locationHistory || polarHistory
+      ? (args: unknown) => readFactorHistory(args, {location: locationHistory, polar: polarHistory}) : undefined},
   ];
   const activations = activation ? (Array.isArray(activation) ? activation : [activation]) : [];
   const acknowledge = (name: 'reply_to_g2' | 'send_message_to_g2', args: unknown) => {

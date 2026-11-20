@@ -110,6 +110,13 @@ above; stopping a source does not erase previously shared conversations. These
 checks depend on the AI submitting every source used in its reasoning or text;
 they do not infer provenance by inspecting generated prose.
 
+The unreleased Mac history tool lets the connected AI request selected fields
+from the same paired owner's already-shared recent-place and Polar records for
+an explicit period within the past seven days. Each source keeps its own consent,
+storage, expiry and deletion rules. The Mac answers from local records without
+requesting a fresh phone location or contacting Polar. The latest registered
+Polar profile remains outside historical queries.
+
 ## Photos
 
 Camera and photo-library access occurs only when you tap the corresponding button in the phone composer. The Even SDK currently selects one image at a time; you can add up to four to a draft. Dot Link re-encodes the pixels as JPEG, with a maximum edge of 2,048 pixels and a limit of 512 KiB per photo. Original file names, device paths and EXIF metadata (including GPS) are not forwarded. Photos may still visibly contain private information.

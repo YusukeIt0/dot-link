@@ -171,4 +171,4 @@ function projectClocks(clocks: TimedClock[], days: string[]) {
   };
 }
 export type PhoneTimeEvidence = ReturnType<typeof phoneTimeEvidence>['evidence'];
-export type PhoneTimeRead = {evidence: PhoneTimeEvidence | {status:'unavailable'}; allowed?: () => boolean};
+export type PhoneTimeRead = {evidence: PhoneTimeEvidence | {status:'unavailable'}; allowed?: () => boolean; expiresAt?: number};

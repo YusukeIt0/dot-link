@@ -5,6 +5,7 @@ import type { GeographicEvidence } from '../geography/types.ts';
 import { ToolRejection } from '../tool-response.ts';
 import type { HistoryReader } from './tool.ts';
 import { historyExpiry, SEVEN_DAYS_MS } from './retention.ts';
+import { locationHistoryFields, locationHistoryFieldDescriptions, type LocationHistoryField } from './location-fields.ts';
 
 export const HISTORY_RETENTION_MS = SEVEN_DAYS_MS;
 export const HISTORY_REPLAY_LIMIT = 10_000;
@@ -34,7 +35,14 @@ const querySchema = z.object({
   start_at: instant.optional(), end_at: instant.optional(), detail: z.enum(['summary', 'observations']).optional(),
   limit: z.number().int().min(1).max(50).optional(), cursor: z.string().uuid().optional(),
 }).strict();
-type Query = { start: number; end: number; detail: 'summary' | 'observations'; limit: number };
+const selectedQuerySchema = z.union([
+  querySchema.pick({start_at: true, end_at: true, limit: true}).required().extend({
+    fields: z.array(z.enum(locationHistoryFields)).min(1).max(locationHistoryFields.length)
+      .refine(fields => new Set(fields).size === fields.length),
+  }),
+  z.object({cursor: z.string().uuid()}).strict(),
+]);
+type Query = { start: number; end: number; detail: 'summary' | 'observations'; limit: number; fields?: LocationHistoryField[] };
 type Page = { query: Query; offset: number; revision: number };
 type Section = { kind: 'candidate_stay' | 'movement_observations' | 'observations'; points: Entry[] };
 const stamp = (point: Entry) => Date.parse(point.measured_at);
@@ -199,9 +207,19 @@ export class LocationHistoryIndex implements HistoryReader {
     } catch { return { status: 'unavailable' as const }; }
   }
 
-  private present(section: Section, detail: Query['detail']) {
+  private present(section: Section, query: Query) {
     const first = section.points[0], last = section.points.at(-1)!;
-    if (detail === 'observations') {
+    if (query.fields) {
+      const fields = query.fields;
+      return {id: first.id, source: first.source, measured_at: first.measured_at,
+        ...(fields.includes('position') ? point(first) : {}),
+        ...(fields.includes('motion') ? {speed: first.speed ?? null, heading: first.heading ?? null} : {}),
+        ...(fields.includes('clock') ? {received_at: first.received_at ?? null, timezone: first.timezone ?? null,
+          utc_offset_minutes: first.utc_offset_minutes ?? null} : {}),
+        ...(fields.includes('geography') ? {geography: this.mapEvidence(first)} : {}),
+      };
+    }
+    if (query.detail === 'observations') {
       const { recording_epoch: _, expires_at: _expiry, ...observation } = first;
       return { ...observation, geography: this.mapEvidence(first) };
     }
@@ -222,10 +240,10 @@ export class LocationHistoryIndex implements HistoryReader {
     return this.readWithExpiry(raw).result;
   }
 
-  readWithExpiry(raw: unknown = {}, stored?: {window: (start: number, end: number) => Entry[]; capacityOmitted: boolean}) {
-    const parsed = querySchema.safeParse(raw);
+  readWithExpiry(raw: unknown = {}, stored?: {window: (start: number, end: number) => Entry[]; capacityOmitted: boolean}, selected = false) {
+    const parsed = (selected ? selectedQuerySchema : querySchema).safeParse(raw);
     if (!parsed.success) throw invalid();
-    const input = parsed.data;
+    const input: z.infer<typeof querySchema> & {fields?: LocationHistoryField[]} = parsed.data;
     if (input.cursor && Object.keys(input).length !== 1) throw invalid();
     this.prune();
     const now = this.now();
@@ -238,12 +256,13 @@ export class LocationHistoryIndex implements HistoryReader {
     let query: Query, offset = 0;
     if (input.cursor) {
       const page = this.cursors.get(input.cursor);
-      if (!page || page.revision !== this.revision) throw new ToolRejection('history_cursor_expired', 'This history page is no longer available. Make a new bounded query only if still useful to the conversation.');
+      if (!page || page.revision !== this.revision || Boolean(page.query.fields) !== selected) throw new ToolRejection('history_cursor_expired', 'This history page is no longer available. Make a new bounded query only if still useful to the conversation.');
       query = page.query; offset = page.offset;
     } else {
       query = { start: input.start_at ? Date.parse(input.start_at) : now - HISTORY_RETENTION_MS,
-        end: input.end_at ? Date.parse(input.end_at) : now + 1, detail: input.detail ?? 'summary', limit: input.limit ?? 20 };
-      if (query.end <= query.start || query.end - query.start > HISTORY_RETENTION_MS + 1) throw invalid();
+        end: input.end_at ? Date.parse(input.end_at) : now + 1, detail: selected ? 'observations' : (input.detail ?? 'summary'),
+        limit: input.limit ?? 20, fields: input.fields };
+      if (query.end <= query.start || query.end - query.start > HISTORY_RETENTION_MS + (selected ? 0 : 1)) throw invalid();
     }
     const points = stored ? stored.window(query.start, query.end) : this.sorted().filter(p => stamp(p) >= query.start && stamp(p) < query.end);
     const sections: Section[] = query.detail === 'summary' ? this.sections(points) : points.map(p => ({ kind: 'observations', points: [p] }));
@@ -256,7 +275,9 @@ export class LocationHistoryIndex implements HistoryReader {
     }
     const result = {
       ...base, status: points.length ? 'available' as const : 'empty' as const, detail: query.detail,
-      query: { start_at: new Date(query.start).toISOString(), end_at: new Date(query.end).toISOString() },
+      query: { start_at: new Date(query.start).toISOString(), end_at: new Date(query.end).toISOString(),
+        ...(query.fields ? {fields: [...query.fields]} : {}) },
+      ...(query.fields ? {field_definitions: Object.fromEntries(query.fields.map(field => [field, locationHistoryFieldDescriptions[field]]))} : {}),
       coverage: { kind: 'partial_observations', observation_count: points.length,
         first_observed_at: points[0]?.measured_at ?? null, last_observed_at: points.at(-1)?.measured_at ?? null,
         gaps, omitted_gap_count: gapCount - gaps.length, capacity_omissions: stored?.capacityOmitted ?? this.capacityOmitted },
@@ -264,7 +285,7 @@ export class LocationHistoryIndex implements HistoryReader {
     };
     let next = offset;
     while (next < sections.length && result.entries.length < query.limit) {
-      const entry = this.present(sections[next], query.detail);
+      const entry = this.present(sections[next], query);
       result.entries.push(entry);
       if (Buffer.byteLength(JSON.stringify(result)) > HISTORY_PAGE_BYTES - 128) { result.entries.pop(); break; }
       next++;

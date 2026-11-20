@@ -83,6 +83,12 @@ export class ContextResponder {
       if (!sources.history?.responseGuard) throw unavailable('history');
       guards.push(sources.history.responseGuard(id));
     }
+    if (p.history_context_ids && p.health_read_ids) {
+      guards.push(() => {
+        const owner = sources.history?.historyOwner?.();
+        return !!owner && owner === sources.health?.historyOwner();
+      });
+    }
     for (const id of p.weather_read_ids ?? []) {
       if (!sources.weather) throw unavailable('weather');
       const read = sources.weather.responseContext(id);

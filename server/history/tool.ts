@@ -1,9 +1,14 @@
 import { decisionFactorTool } from '../context-guidance.ts';
+import type { SelectedHistoryReader } from './factor-tool.ts';
 /** Shared interface for the isolated fixture and opt-in persistent history. */
-export interface HistoryReader {
+export interface HistoryReader extends Partial<SelectedHistoryReader> {
   read(input?: unknown): unknown;
   respond?(input: unknown): unknown;
   responseGuard?(contextId: string): () => boolean;
+}
+
+export function supportsSelectedHistory(reader?: HistoryReader): reader is HistoryReader & SelectedHistoryReader {
+  return !!(reader?.readSelectedHistory && reader.historyOwner && reader.responseGuard);
 }
 
 export const locationHistoryTool = decisionFactorTool({

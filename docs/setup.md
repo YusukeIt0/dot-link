@@ -137,6 +137,15 @@ Turning current-location sharing off leaves existing history readable. Turn
 **Delete history** to erase the local history too. A failed control must be retried
 when the Mac is reachable. See [retention and deletion](privacy.md#recent-places).
 
+### Looking back with Dot (unreleased Mac feature)
+
+You can ask your existing Dot about a particular period in the past seven days.
+For example, you might ask how your activity on two afternoons compared. Dot can
+select the relevant parts of your shared Polar observations and recent-place
+history. If only one source has records for that period, Dot can use what is
+available. The Mac reads the records it already holds. You can keep using the
+same connection and sharing choices.
+
 ## Updates
 
 Use **Check for updates** in the Mac app. Automatic updates are currently paused. No GitHub account or token is required. Starting a manual update interrupts the active conversation while the Mac app restarts. After you choose **Update**, Dot Link first refreshes the running app and continues the approved update automatically; you do not need to quit, reopen it, or approve the same update again. A progress window shows download, verification, preparation and installation; after restart it shows connection recovery, then automatically opens Dot Link and closes the progress window. A paused connection stays paused. Percentages are shown only when progress is measured. Closing the progress window does not cancel the update. If the app says **Finish the current settings operation, then click Retry update**, finish that operation and choose **Retry update**.
