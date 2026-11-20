@@ -2,7 +2,7 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
-## Unreleased
+## 0.4.0
 
 - Add nearby rain estimates from NOAA in **Sharing settings → Weather context** on a compatible Mac. You can keep your current MET Norway forecasts or add the new source when you want it.
 - Choose which phone locations, Polar observations, weather forecasts and walking plans your Mac saves for your Dot in **Sharing settings → History**.
