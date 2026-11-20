@@ -88,6 +88,7 @@ try {
       ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
 } catch { console.error('Weather unavailable; ordinary conversation remains available'); }
 const health = new HealthContext(resolve('.runtime/health/state.enc'), {
+  archivePeriod: owner => archives?.authority.periodFor(owner),
   phoneTime: (dates,owner) => history?.readPhoneTime(dates,owner) ?? {evidence:{status:'unavailable'}},
   key: healthKeychain(appExecutable),
   ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),

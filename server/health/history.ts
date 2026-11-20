@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ToolRejection } from '../tool-response.ts';
-import { RETENTION, type Observation } from './data.ts';
+import { RETENTION, categories, type Category, type Observation } from './data.ts';
 import { readHeartRateSummary, summarizeHeartRates } from './heart-rate.ts';
 import type { PhoneTimeRead } from '../history/phone-time.ts';
 
@@ -31,14 +31,19 @@ const instant = z.string().datetime({offset:true});
 const querySchema = z.object({start_at:instant,end_at:instant, fields:z.array(z.enum(polarHistoryFields)).min(1).max(polarHistoryFields.length),
   limit:z.number().int().min(1).max(80)}).strict().refine(query => {
   const width=Date.parse(query.end_at)-Date.parse(query.start_at);
-  return width>0 && width<=RETENTION && new Set(query.fields).size===query.fields.length;
+  return width>0 && new Set(query.fields).size===query.fields.length;
 });
 export type PolarHistoryQuery = z.infer<typeof querySchema>;
 export type PolarHistoryInput = {start_at:string;end_at:string;fields:readonly string[];limit:number} | {cursor:string};
-export function parsePolarHistoryQuery(input: PolarHistoryInput) {
+export function parsePolarHistoryQuery(input: PolarHistoryInput, maximumMs = RETENTION) {
   const parsed=querySchema.safeParse(input);
-  if (!parsed.success) throw new ToolRejection('invalid_arguments','Select known Polar fields in a positive interval of at most seven days.');
+  if (!parsed.success || !Number.isFinite(maximumMs) || Date.parse(parsed.data.end_at)-Date.parse(parsed.data.start_at)>Math.min(maximumMs,366*86_400_000))
+    throw new ToolRejection('invalid_arguments','Select known Polar fields within the available query window.');
   return {...parsed.data,start_at:new Date(Date.parse(parsed.data.start_at)).toISOString(),end_at:new Date(Date.parse(parsed.data.end_at)).toISOString()};
+}
+
+export function polarQueryCategories(query: PolarHistoryQuery): Category[] {
+  return categories.filter(category=>query.fields.some(field=>groups[category].includes(field)));
 }
 
 export function projectHeartRates(row: Observation) {
@@ -50,21 +55,28 @@ export function projectHeartRates(row: Observation) {
 function sourceDay(row: Observation) {
   return row.time_basis==='local_date_earliest_bound' || (row.category==='activity' && !!row.source_local_date);
 }
-function timeMatch(row: Observation, start: number, end: number) {
+/** Candidate time interval for the historical record, including uncertain device days. */
+export function polarHistoryInterval(row: Observation): {from: number; to: number} | undefined {
   // Daily aggregates describe the whole source day even when its start was
   // reported with an offset. Older normalized records keep only its UTC instant.
   if (sourceDay(row)) {
-    if (!row.source_local_date) return false;
+    if (!row.source_local_date) return;
     const midnight = Date.parse(row.source_local_date+'T00:00:00Z');
-    return midnight-14*3600_000 < end && midnight+36*3600_000 > start;
+    if (Number.isFinite(midnight)) return {from: midnight-14*3600_000, to: midnight+36*3600_000};
+    return;
   }
-  if (!row.measured_at) return false;
+  if (!row.measured_at) return;
   const measured=Date.parse(row.measured_at);
+  if (!Number.isFinite(measured)) return;
   if (row.category==='sleep' && typeof row.values.sleep_end_time==='string') {
     const until=Date.parse(row.values.sleep_end_time);
-    if (until>measured) return measured<end && until>start;
+    if (until>measured) return {from: measured, to: until};
   }
-  return measured>=start && measured<end;
+  return {from: measured, to: measured+1};
+}
+function timeMatch(row: Observation, start: number, end: number) {
+  const interval = polarHistoryInterval(row);
+  return !!interval && interval.from < end && interval.to > start;
 }
 
 function sampleMatches(time: string, date: string | undefined, start: number, end: number) {
@@ -116,7 +128,8 @@ export function needsPhoneClock(entry: ReturnType<typeof renderEntry>) {
   return Array.isArray(samples) && samples.some(sample=>typeof sample.time==='string' && !/(?:Z|[+-]\d{2}:\d{2})$/.test(sample.time));
 }
 
-export function selectPolarHistory(observations: Observation[], query: PolarHistoryQuery, offset: number) {
+export function selectPolarHistory(observations: Observation[], query: PolarHistoryQuery, offset: number,
+  expiryOf?: (observation: Observation) => number) {
   const start=Date.parse(query.start_at), end=Date.parse(query.end_at);
   const selectedFields = new Map(Object.entries(groups).map(([category, group])=>[category, query.fields.filter(field=>group.includes(field))]));
   const matches=observations.filter(row=>selectedFields.get(row.category)!.length && timeMatch(row,start,end))
@@ -135,9 +148,9 @@ export function selectPolarHistory(observations: Observation[], query: PolarHist
   const nextOffset=offset+entries.length;
   return {entries, nextOffset:nextOffset<matches.length?nextOffset:null,
     // Counts and remaining pages also depend on retained rows outside this page.
-    earliestExpiry:matches.reduce((expiry,row)=>Math.min(expiry,row.retention_anchor+RETENTION),Infinity),
+    earliestExpiry:matches.reduce((expiry,row)=>Math.min(expiry,expiryOf ? expiryOf(row) : row.retention_anchor+RETENTION),Infinity),
     coverage:{matching_retained_records:matches.length,returned_records:entries.length,remaining_records:matches.length-nextOffset,
-      retention_hours:168,completeness:'unknown',date_only_selection:'Daily totals and heart-rate summaries cover their source record. Partial window overlap does not apportion samples or daily totals to specific hours.'},
+      ...(expiryOf ? {} : {retention_hours:168}),completeness:'unknown',date_only_selection:'Daily totals and heart-rate summaries cover their source record. Partial window overlap does not apportion samples or daily totals to specific hours.'},
     units:Object.fromEntries(query.fields.map(field=>[field,units[field]]))};
 }
 

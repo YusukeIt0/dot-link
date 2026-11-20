@@ -193,9 +193,9 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       const historyOwner = typeof subject === 'string' && /^[a-f0-9]{64}$/.test(subject) ? subject : undefined;
       if (archives && request.url === '/api/factor-history') {
         if (!historyOwner) { send(400, {error: 'Device subject required'}); return; }
-        if (request.method === 'GET') { send(200, await archiveSettings(archives.authority, historyOwner)); return; }
+        if (request.method === 'GET') { send(200, await archiveSettings(archives.authority, historyOwner, health)); return; }
         if (request.method === 'POST') {
-          const value = await changeArchiveSettings(archives.authority, historyOwner, await body(request));
+          const value = await changeArchiveSettings(archives.authority, historyOwner, await body(request), health);
           changed(); send(200, value); return;
         }
         send(405, {error: 'Method not allowed'}); return;
