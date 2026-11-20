@@ -274,6 +274,21 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let quit = NSMenuItem(title: tr("mac.quit_dot_link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
         statusItem.menu = menu
     }
+    static func isSystemSessionEnd(_ event: NSAppleEventDescriptor?) -> Bool {
+        guard let event, event.eventClass == kCoreEventClass, event.eventID == kAEQuitApplication else { return false }
+        let reason = event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+            ?? event.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+        switch reason?.enumCodeValue {
+        case OSType(kAERestart), OSType(kAEShowRestartDialog), OSType(kAEShutDown),
+             OSType(kAEShowShutdownDialog), OSType(kAELogOut), OSType(kAEReallyLogOut):
+            return true
+        default:
+            // Some loginwindow requests omit a specific restart or logout reason.
+            guard let pid = event.attributeDescriptor(forKeyword: AEKeyword(keySenderPIDAttr))?.int32Value,
+                  pid > 0 else { return false }
+            return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "com.apple.loginwindow"
+        }
+    }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         // Before location validation this copy must not mutate relay lifecycle.
         if !appLocationValidated && !busy { return .terminateNow }
@@ -285,6 +300,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if appUpdater?.blocksActions == true { _ = appUpdater?.cancelForQuit(); return .terminateCancel }
         if allowTermination { notifications?.shutdown(); return .terminateNow }
         if quitting { return .terminateLater }
+        let systemExit = Self.isSystemSessionEnd(NSAppleEventManager.shared().currentAppleEvent)
+        if systemExit && (!busy || currentAction == "inspect") {
+            // launchd ends the login session. Keep its enabled jobs and the owner's pause/quit intent.
+            notifications?.shutdown()
+            return .terminateNow
+        }
         if busy {
             let alert = NSAlert(); alert.messageText = tr("mac.wait_for_the_current_operation_to_finish")
             alert.informativeText = tr("mac.settings_are_being_updated_you_can_quit_when_the_operation_finishes")

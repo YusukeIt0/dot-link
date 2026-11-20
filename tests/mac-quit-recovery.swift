@@ -16,6 +16,16 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: ["notificationSettingsImported": true, "monitoringPaused": true,
             "shareAllMacNotifications": false, "selectedApps": [], "notificationSharingIntentID": UUID().uuidString])
+        #if !BASELINE
+        let quitEvent = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass),
+            eventID: AEEventID(kAEQuitApplication), targetDescriptor: nil,
+            returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+        precondition(!SetupApp.isSystemSessionEnd(nil) && !SetupApp.isSystemSessionEnd(quitEvent))
+        for reason in [kAEShowRestartDialog, kAERestart, kAEShowShutdownDialog, kAEShutDown, kAEReallyLogOut, kAELogOut] {
+            quitEvent.setAttribute(NSAppleEventDescriptor(enumCode: OSType(reason)), forKeyword: AEKeyword(kAEQuitReason))
+            precondition(SetupApp.isSystemSessionEnd(quitEvent))
+        }
+        #endif
         NSApp.setActivationPolicy(.accessory)
         sut.window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
