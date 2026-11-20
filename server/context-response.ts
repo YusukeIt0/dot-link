@@ -95,9 +95,11 @@ export class ContextResponder {
       guards.push(read.guard);
       owners.push(() => read.owner);
     }
+    const weatherDecisions = new Set<string>();
     for (const id of p.weather_read_ids ?? []) {
       if (!sources.weather) throw unavailable('weather');
       const read = sources.weather.responseContext(id);
+      weatherDecisions.add(read.decisionId);
       if (read.contextId && read.contextId !== p.context_id) throw invalid();
       guards.push(() => withLocation(read.guard));
       owners.push(() => read.owner);
@@ -114,7 +116,9 @@ export class ContextResponder {
     });
     const allowed = () => { for (const guard of guards) if (!guard()) throw new ToolRejection('context_access_changed', 'Used context changed. Re-read permitted evidence and reconsider.'); return true; };
     allowed();
-    const receiptKey = responseId(p);
+    // Both weather mappings come from one read. Switching mappings cannot
+    // commit another message or evade a conflicting decision for that read.
+    const receiptKey = responseId({...p, weather_read_ids: [...weatherDecisions].sort()});
     const message_id = location?.decisionId ?? receiptKey;
     const signature = JSON.stringify([p.disposition, p.text ?? null]);
     const healthSignature = JSON.stringify(['combined', receiptKey, signature]);

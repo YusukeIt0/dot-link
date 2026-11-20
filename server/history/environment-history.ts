@@ -39,7 +39,7 @@ function project(source: Source, row: ArchiveRecord, fields: readonly string[], 
     const candidate = projectEnvironment(source, row, [...kept, field], window);
     if (candidate && byteSize(candidate) < budget - 512) { kept.push(field); subset = candidate; }
   }
-  const basis = subset ?? {data_kind: source === 'weather' ? 'model_forecast' : 'planned_route_or_model_terrain',
+  const basis = subset ?? {data_kind: 'kind' in full ? full.kind : 'unknown',
     available_at: new Date(row.availableAtMs).toISOString()};
   return {entry: {...basis, omitted_fields: fields.filter(field => !kept.includes(field)),
     detail_status: 'requested_fields_exceed_page_budget'}, reduced: true};

@@ -42,6 +42,8 @@
       <div class="weather-settings">
       <label class="display-checkbox"><input id="weather-share" type="checkbox"> <span data-i18n="even.weather">Weather context</span></label>
       <p class="note"><span data-i18n="even.weather_disclosure">Your Mac sends rounded coordinates to api.met.no for forecasts. The service also receives its IP address.</span> <a href="https://api.met.no/doc/TermsOfService" target="_blank" rel="noopener noreferrer" data-i18n="even.weather_terms">Read service terms</a> · <a href="./weather-sources.html" target="_blank" rel="noopener noreferrer" data-i18n="even.walking_terrain_privacy">Data sources and privacy</a></p>
+      <p id="weather-satellite-disclosure" class="note" data-i18n="even.weather_satellite_disclosure" hidden>For nearby rain estimates, your Mac downloads global NOAA satellite data from AWS. AWS sees your IP address. Your coordinates stay on your Mac for this lookup. If weather history is on, it also saves these estimates, the place and when they became available for your selected period.</p>
+      <button id="weather-add-rain" type="button" aria-describedby="weather-satellite-disclosure" data-i18n="even.weather_add_rain" hidden>Add nearby rain estimates</button>
       <p id="weather-status" class="note" role="status"></p>
       </div>
       <label class="display-checkbox"><input id="mobility-share" type="checkbox"> <span data-i18n="even.walking_terrain">Walking and terrain information</span></label>
@@ -79,10 +81,10 @@
           </div>
           <p class="note" id="archive-polar-detail" data-i18n="even.archive_detail_polar">Sleep, activity, synced heart rate, recovery and exercise. Health sharing keeps its usual seven days when this archive is off.</p>
           <div class="factor-history-row">
-            <label class="display-checkbox"><input id="archive-weather" aria-describedby="archive-weather-detail" type="checkbox" disabled> <span id="archive-weather-label" data-i18n="even.archive_weather">Weather forecasts and their revisions</span></label>
+            <label class="display-checkbox"><input id="archive-weather" aria-describedby="archive-weather-detail" type="checkbox" disabled> <span id="archive-weather-label" data-i18n="even.archive_weather">Forecasts and nearby rain estimates</span></label>
             <button id="archive-weather-delete" type="button" aria-describedby="archive-weather-label" data-i18n="even.archive_delete" disabled>Delete</button>
           </div>
-          <p class="note" id="archive-weather-detail" data-i18n="even.archive_detail_weather">Forecast values and revisions for your shared location or a place you asked about.</p>
+          <p class="note" id="archive-weather-detail" data-i18n="even.archive_detail_weather">Forecasts and their revisions for a shared or requested place. When nearby rain is enabled, history also saves the estimates, the place and when they became available.</p>
           <div class="factor-history-row">
             <label class="display-checkbox"><input id="archive-mobility" aria-describedby="archive-mobility-detail" type="checkbox" disabled> <span id="archive-mobility-label" data-i18n="even.archive_mobility">Planned walks and model terrain</span></label>
             <button id="archive-mobility-delete" type="button" aria-describedby="archive-mobility-label" data-i18n="even.archive_delete" disabled>Delete</button>

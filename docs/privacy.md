@@ -132,7 +132,7 @@ checks depend on the AI submitting every source used in its reasoning or text;
 they do not infer provenance by inspecting generated prose.
 
 The unreleased Mac history tool lets the connected AI request selected fields
-from the same paired owner's recent-place, Polar, forecast and walking/terrain
+from the same paired owner's recent-place, Polar, weather and walking/terrain
 records. Each request covers up to seven days. The Mac reads local records and
 does not contact any provider or request another phone fix. Each source has its
 own consent, expiry and deletion rules. The latest registered Polar profile
@@ -145,7 +145,10 @@ values and the time each revision became available. Walking/terrain history can
 include precise endpoints, destination provenance, route geometry, steps and model
 elevations. These records can reveal places you asked about. A walking plan does
 not establish that you took the route. A forecast does not establish what weather
-occurred. Reading saved evidence makes no additional requests to a provider.
+occurred. A separately authorized NOAA lookup can add an encrypted local
+summary of estimated rain within 20 km of the selected place. Each summary
+keeps its observation window, public edition and first local availability for
+that place. History queries do not contact either weather provider.
 
 The initial retention period is seven days. Changes to seven days, one month, six
 months or one year set deadlines for newly admitted records only. Stopping a
@@ -380,9 +383,24 @@ coordinates can still be sensitive and are not anonymous.
 Dot may request a fresh shared current location or an explicitly requested place
 with coordinate provenance. Specified-place requests do not change or establish
 current location. With a valid location subscription, fresh location and weather
-consent, bounded changes also enrich the existing location event; Dot decides
-whether to speak. Data is optional model forecast evidence, not sensor observations
-or a safety recommendation. Geography downloads never block weather acquisition.
+consent, changes in the MET forecast can enrich the existing location event.
+Dot decides whether to speak. Geography downloads never block weather acquisition.
+
+On a compatible Mac, a new Weather grant can include nearby precipitation estimates
+derived from NOAA Enterprise Rain Rate. Existing MET grants continue after upgrade;
+the paired owner can add NOAA in Weather settings. For an explicit weather read,
+the Mac downloads a global frame from the NOAA-managed Amazon S3 bucket. S3
+receives the Mac's IP, User-Agent and the public UTC listing or file path. Requests
+contain no user coordinates, place names, device identifiers or conversation.
+The Mac summarizes cells locally around the selected rounded position. The disk
+cache keeps up to three global files (8 MiB each) plus one temporary file. A
+rolling 64 MiB daily transfer budget limits traffic across restarts. Up to eight
+regional summaries remain in relay memory while Weather sharing permits use.
+Stopping Weather cancels outstanding acquisition and clears those local summaries.
+The public global files may remain for bounded reuse; expired frames cannot be
+used as recent evidence. Weather history uses its own encryption, lifetime and
+deletion controls. Later access cannot fill a gap in what was known at an earlier
+cutoff. [NOAA source and attribution](https://registry.opendata.aws/noaa-ghe/).
 
 The private Mac cache holds at most 16 coarse-position forecasts, which expire
 after 24 hours and are removed at access/startup and hourly while active. Physical
