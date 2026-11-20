@@ -1,10 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { grantedExpiry, historyObservationSchema, type HistoryEntry } from './replay.ts';
 
-type ClockEntry = Pick<HistoryEntry, 'id' | 'measured_at' | 'received_at' | 'recording_epoch' | 'timezone' | 'utc_offset_minutes' | 'expires_at'>;
+export type ClockEntry = Pick<HistoryEntry, 'id' | 'measured_at' | 'received_at' | 'recording_epoch' | 'timezone' | 'utc_offset_minutes' | 'expires_at'>;
 type TimedClock = ClockEntry & {received_at: string; received: number; measured: number};
-type Window = {start: number; end: number};
-function dateWindow(date: string): Window {
+export type ClockWindow = {start: number; end: number};
+function dateWindow(date: string): ClockWindow {
   const midnight = Date.parse(`${date}T00:00:00Z`);
   const start = midnight - 14 * 3600_000;
   return {start, end: start + 52 * 3600_000};
@@ -38,12 +38,12 @@ function clockInstant(value: string, expected?: number) {
   return time;
 }
 
-export function readStoredPhoneTime(db: DatabaseSync, dates: string[]) {
+export function readStoredPhoneTime(db: DatabaseSync, dates: string[], archived?: (ranges: ClockWindow[]) => ClockEntry[] | undefined) {
   // The existing Polar read supplies at most 80 observations, often sharing dates.
   const unavailable = {evidence: {status: 'unavailable' as const}, earliestExpiry: undefined};
   if (dates.length > 80) return unavailable;
   const days = [...new Set(dates)].sort();
-  const ranges: Window[] = [];
+  const ranges: ClockWindow[] = [];
   for (const date of days) {
     if (typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return unavailable;
     const midnight = Date.parse(`${date}T00:00:00Z`);
@@ -76,6 +76,13 @@ export function readStoredPhoneTime(db: DatabaseSync, dates: string[]) {
         utc_offset_minutes: historyObservationSchema.shape.utc_offset_minutes.parse(utc_offset_minutes ?? undefined),
         expires_at: grantedExpiry(measured, expires_at)});
     }
+  }
+  if (archived) {
+    const protectedClocks = archived(ranges);
+    if (!protectedClocks) return unavailable;
+    const unique = new Map<string, ClockEntry>(entries.map(entry => [entry.id, entry]));
+    for (const clock of protectedClocks) unique.set(clock.id, clock);
+    return phoneTimeEvidence([...unique.values()], days);
   }
   return projectClocks(entries, days);
 }

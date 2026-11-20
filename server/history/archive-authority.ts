@@ -1,11 +1,12 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { chmodSync, closeSync, lstatSync, mkdirSync, openSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { openArchive, sealArchive } from './archive-crypto.ts';
 import type { ArchiveKeyProvider } from './archive-key.ts';
-import { HistoryArchiveStore, type ArchiveInput, type ArchiveQuery } from './archive-store.ts';
+import { HistoryArchiveStore, type ArchiveInput, type ArchiveQuery, type ArchiveRecord } from './archive-store.ts';
+import type { LocationContinuity, LocationTransaction } from './location-continuity.ts';
 import type { HistoryPeriod } from './retention.ts';
 
 // Health keeps its separately authorized key and is never opened by this authority.
@@ -16,6 +17,7 @@ const period = z.enum(['7d', '1m', '6m', '1y']);
 const ownerId = z.string().regex(/^[a-f0-9]{64}$/);
 const grant = z.object({
   enabled: z.boolean(), stamp: z.uuid(), generation: z.uuid(), key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
+  locationContinuity: z.object({erased: z.string().regex(/^[a-f0-9]{32}$/), stopped: z.string().regex(/^[a-f0-9]{32}$/)}).strict().optional(),
   since: z.number().int().nonnegative().optional(),
 }).strict();
 const policy = z.object({
@@ -30,7 +32,7 @@ const change = z.discriminatedUnion('action', [
 ]);
 export type ArchiveLease = {readonly owner: string; readonly source: ArchiveSource; readonly stamp: string; readonly since: number};
 type Row = {wrapped: string; sealed: Uint8Array};
-type Options = {ownerStatus: (owner: string) => 'authorized' | 'unavailable' | 'revoked'; now?: () => number};
+type Options = {ownerStatus: (owner: string) => 'authorized' | 'unavailable' | 'revoked'; now?: () => number; locationContinuity?: () => LocationContinuity | undefined};
 const aad = 'dot-link:history:archive-authority:v1';
 const denied = () => new Error('HISTORY_ARCHIVE_ACCESS_CHANGED');
 const unavailable = () => new Error('HISTORY_ARCHIVE_UNAVAILABLE');
@@ -44,7 +46,7 @@ export class ArchiveAuthority {
   private options: Options;
   private records: string;
   private needsCleanup = true;
-  private initial = randomUUID();
+  private initial: string = randomUUID();
   private unlocked?: {key: Buffer; wrapped: string};
   private closed = false;
 
@@ -133,9 +135,18 @@ export class ArchiveAuthority {
     return ownerId.safeParse(owner).success && this.options.ownerStatus(owner) === 'authorized';
   }
 
-  private view(state: Policy, owner: string) {
+  private view(state: Policy, owner: string, committedMarker?: LocationContinuity) {
     if (!this.active(owner) || (state.owner && state.owner !== owner)) throw denied();
-    return {epoch: state.epoch, period: state.period, sources: {
+    let epoch = state.epoch;
+    if (this.options.locationContinuity) {
+      const mark = committedMarker ?? this.options.locationContinuity();
+      const hash = createHash('sha256').update(JSON.stringify([state.epoch, mark?.revision, mark?.erased, mark?.stopped])).digest();
+      hash[6] = (hash[6] & 0x0f) | 0x80;
+      hash[8] = (hash[8] & 0x3f) | 0x80;
+      const hex = hash.toString('hex');
+      epoch = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20,32)}`;
+    }
+    return {epoch, period: state.period, sources: {
       location: state.sources.location?.enabled ?? false,
       weather: state.sources.weather?.enabled ?? false,
       mobility: state.sources.mobility?.enabled ?? false,
@@ -173,6 +184,8 @@ export class ArchiveAuthority {
         for (const g of Object.values(current.sources)) g.since ??= now;
         this.save(current);
       });
+      const continuity = this.options.locationContinuity?.();
+      if (continuity) this.reconcileLocation(continuity);
       if (this.needsCleanup) this.collect();
     }
   }
@@ -188,7 +201,9 @@ export class ArchiveAuthority {
   periodFor(owner: string, epoch?: string): HistoryPeriod | undefined {
     try {
       const state = this.state();
-      return (!epoch || state.epoch === epoch) && state.owner === owner ? this.view(state, owner).period : undefined;
+      if (state.owner !== owner) return;
+      const current = this.view(state, owner);
+      return !epoch || current.epoch === epoch ? current.period : undefined;
     } catch { return undefined; }
   }
 
@@ -198,25 +213,50 @@ export class ArchiveAuthority {
     await this.unlock(true);
     this.transaction(() => {
       const state = this.state();
-      this.view(state, owner);
-      if (state.epoch !== epoch) throw denied();
+      if (this.view(state, owner).epoch !== epoch) throw denied();
       if (!state.owner) { state.owner = owner; this.save(state); }
     });
   }
 
-  async control(owner: string, epoch: string, raw: z.infer<typeof change>) {
+  /** Both durable files use SQLite's rollback journal. On the common panel,
+   * the old-client consent and protected grant commit in one transaction. */
+  private controlTransaction<T>(location: LocationTransaction | undefined, run: () => T) {
+    if (!location) return this.transaction(run);
+    this.db.prepare('ATTACH DATABASE ? AS legacy_history').run(location.path);
+    try {
+      for (const schema of ['main', 'legacy_history']) {
+        if (this.db.prepare(`PRAGMA ${schema}.journal_mode`).get()?.journal_mode !== 'delete') throw unavailable();
+      }
+      this.db.exec('PRAGMA legacy_history.synchronous=FULL; PRAGMA legacy_history.secure_delete=ON');
+      const result = this.transaction(run);
+      location.committed();
+      return result;
+    } finally { this.db.exec('DETACH DATABASE legacy_history'); }
+  }
+
+  async control(owner: string, epoch: string, raw: z.infer<typeof change>, location?: LocationTransaction) {
     const input = change.parse(raw);
+    if (location && (input.action === 'period' || input.source !== 'location')) throw denied();
     const displayed = await this.status(owner);
     if (displayed.epoch !== epoch) throw denied();
     if (!this.row() && (input.action === 'set' && input.enabled || input.action === 'period' && input.period !== '7d'))
       await this.unlock(true);
-    const result = this.transaction(() => {
+    const result = this.controlTransaction(location, () => {
       const state = this.state();
       const before = this.view(state, owner);
-      if (state.epoch !== epoch) throw denied();
-      if ((input.action === 'period' && state.period === input.period) ||
+      if (before.epoch !== epoch) throw denied();
+      const paired = location?.apply(this.db);
+      const unchanged = (input.action === 'period' && state.period === input.period) ||
           (input.action === 'set' && before.sources[input.source] === input.enabled) ||
-          (input.action === 'delete' && !state.sources[input.source])) return before;
+          (input.action === 'delete' && !state.sources[input.source]);
+      if (unchanged) {
+        if (paired?.changed) {
+          state.epoch = randomUUID();
+          if (this.row()) this.save(state);
+          else this.initial = state.epoch;
+        }
+        return this.view(state, owner, paired?.marker);
+      }
       state.owner = owner;
       state.epoch = randomUUID();
       if (input.action === 'period') {
@@ -226,20 +266,24 @@ export class ArchiveAuthority {
       } else if (input.action === 'delete') {
         delete state.sources[input.source];
       } else {
+        const marker = input.source === 'location' ? paired?.marker ?? this.options.locationContinuity?.() : undefined;
+        if (input.source === 'location' && input.enabled && this.options.locationContinuity && !marker) throw unavailable();
         const existing = state.sources[input.source];
         const g = existing ?? {key: randomBytes(32).toString('base64'), generation: randomUUID()};
         if (!existing) {
+          this.needsCleanup = true;
           const key = Buffer.from(g.key, 'base64');
           try { new HistoryArchiveStore(this.path(g.generation), key, this.options).close(); }
           finally { key.fill(0); }
         }
-        state.sources[input.source] = {...g, enabled: input.enabled, stamp: randomUUID(), since: (this.options.now ?? Date.now)()};
+        state.sources[input.source] = {...g, ...(marker ? {locationContinuity:{erased:marker.erased, stopped:marker.stopped}} : {}), enabled: input.enabled, stamp: randomUUID(), since: (this.options.now ?? Date.now)()};
       }
       this.save(state);
-      return this.view(state, owner);
+      return this.view(state, owner, paired?.marker);
     });
     if (input.action === 'delete') this.collect();
-    return result;
+    // The legacy epoch renews synchronously after both files commit.
+    return location ? this.view(this.state(), owner) : result;
   }
 
   async revoke(owner: string) {
@@ -251,8 +295,45 @@ export class ArchiveAuthority {
     this.collect();
   }
 
+  /** The live legacy database can also be changed by an older app, which knows
+   * only its seven-day consent. Reconcile before showing or using the extension. */
+  reconcileLocation(mark: LocationContinuity) {
+    const needsCheck = (g: NonNullable<Policy['sources']['location']>) =>
+      g.locationContinuity?.erased !== mark.erased || g.locationContinuity.stopped !== mark.stopped;
+    const existing = this.state().sources.location;
+    if (!existing || !needsCheck(existing)) return;
+    const removed = this.transaction(() => {
+      const current = this.state(), g = current.sources.location;
+      if (!g || !needsCheck(g)) return false;
+      const previous = g.locationContinuity;
+      if (previous && previous.erased !== mark.erased) {
+        delete current.sources.location;
+        current.epoch = randomUUID();
+        this.save(current);
+        return true;
+      }
+      if (previous && g.enabled) {
+        g.enabled = false;
+        g.stamp = randomUUID();
+        current.epoch = randomUUID();
+      }
+      g.locationContinuity = {erased:mark.erased, stopped:mark.stopped};
+      this.save(current);
+      return false;
+    });
+    if (removed) this.collect();
+  }
+
+  private ensureLocationAccess(source: ArchiveSource) {
+    if (source !== 'location' || !this.options.locationContinuity) return;
+    const mark = this.options.locationContinuity();
+    if (!mark) throw unavailable();
+    this.reconcileLocation(mark);
+  }
+
   historyOwner(source: ArchiveSource): string | undefined {
     try {
+      this.ensureLocationAccess(source);
       const state = this.state();
       const grant = state.sources[source];
       if (state.owner && grant?.enabled && grant.since !== undefined && this.active(state.owner)) return state.owner;
@@ -261,6 +342,7 @@ export class ArchiveAuthority {
 
   capture(owner: string, source: ArchiveSource): ArchiveLease | undefined {
     if (!this.active(owner)) return;
+    this.ensureLocationAccess(source);
     const state = this.state();
     const g = state.sources[source];
     if (state.owner === owner && g?.enabled && g.since !== undefined) return {owner, source, stamp: g.stamp, since: g.since};
@@ -276,6 +358,7 @@ export class ArchiveAuthority {
 
   /** Synchronous read/write under the current policy. Never cache the key or the store outside this call. */
   use<T>(lease: ArchiveLease, run: (key: Buffer, generation: string, period: HistoryPeriod) => T): T {
+    this.ensureLocationAccess(lease.source);
     return this.transaction(() => {
       const state = this.state();
       const g = state.sources[lease.source];
@@ -327,6 +410,9 @@ export class ArchiveAuthority {
   put(lease: ArchiveLease, record: ArchiveInput) {
     if (record.availableAtMs < lease.since) return 'before_grant' as const;
     return this.withStore(lease, (store, period) => store.put(record, period));
+  }
+  updatePayload(lease: ArchiveLease, id: string, edit: (record: ArchiveRecord) => unknown) {
+    return this.withStore(lease, store => store.updatePayload(id, edit));
   }
   read(lease: ArchiveLease, query: ArchiveQuery) { return this.withStore(lease, store => store.read(query)); }
 

@@ -41,11 +41,13 @@ const pairing = new PairingAuthority(resolve('.runtime/pairing'));
 const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
 const appExecutable = process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../../../MacOS/DotLink', import.meta.url)) : undefined;
 const archiveDirectory = resolve('.runtime/factor-history');
+let history: LocationHistoryStore | undefined;
 let archives: FactorArchives | undefined;
 let archiveTimer: NodeJS.Timeout | undefined;
 if (appExecutable || existsSync(resolve(archiveDirectory, 'authority.sqlite'))) {
   try {
     const archive = new ArchiveAuthority(archiveDirectory, archiveKeyProvider(appExecutable), {
+      locationContinuity: () => history?.continuity(),
       ownerStatus: owner => owner === legacyLocationOwner ? 'authorized' : pairing.subjectStatus(owner),
     });
     archives = {authority: archive, environment: new EnvironmentHistory(archive)};
@@ -64,9 +66,9 @@ if (appExecutable || existsSync(resolve(archiveDirectory, 'authority.sqlite'))) 
     archiveTimer.unref();
   } catch { console.error('Protected history unavailable; ordinary conversation remains available'); }
 }
-let history: LocationHistoryStore | undefined;
 try {
   history = new LocationHistoryStore(resolve('.runtime/location-history'), {
+    archive: () => archives?.authority,
     ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
     ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
     announce: (input, guard) => bridge.sendMessage(input, guard),
