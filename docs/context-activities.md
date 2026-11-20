@@ -133,9 +133,9 @@ reply or silence separately from policy delivery. Reuse unchanged acquisition an
 transport evidence; brief relevant caveats remain acceptable. Do not paste the new
 policy into the test prompt or alter a personal activity to make the test pass.
 
-## Selective history (unreleased Mac and Even feature)
+## Selective history
 
-In the Even companion’s **Sharing settings → History**, the paired owner can
+With Mac 0.5.0 and an Even companion that includes **Sharing settings → History**, the paired owner can
 choose whether to retain phone locations, Polar observations, forecasts and
 planned walks with model terrain. Changing the common period assigns a
 deadline only to newly admitted records. Reopening the companion reads the
