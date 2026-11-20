@@ -5,6 +5,7 @@ import { writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { WeatherContext } from './weather/context.ts';
 import { WeatherService } from './weather/service.ts';
+import { RainRateService } from './weather/rain-rate/service.ts';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Bridge } from './bridge.ts';
@@ -86,6 +87,7 @@ try {
   weather = new WeatherContext(resolve('.runtime/weather-consent.json'),
     new WeatherService(resolve('.runtime/weather-cache.json')), locations,
     {ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
+      satellite: new RainRateService(resolve('.runtime/weather-rain-frames')),
       archive: owner => archives?.environment.capture(owner, 'weather'),
       ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
 } catch { console.error('Weather unavailable; ordinary conversation remains available'); }

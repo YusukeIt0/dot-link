@@ -13,11 +13,12 @@ import { ArchiveAuthority } from '../server/history/archive-authority.ts';
 import { EnvironmentHistory } from '../server/history/environment-history.ts';
 import { bridgeServer } from '../server/http.ts';
 import { LocationContext } from '../server/location.ts';
-import { WeatherContext, WEATHER_TERMS } from '../server/weather/context.ts';
+import { WeatherContext, SATELLITE_TERMS, WEATHER_TERMS } from '../server/weather/context.ts';
+import { rainFrame } from './fixtures/rain-rate.ts';
 import { weatherSource, type WeatherEvidence } from '../server/weather/types.ts';
 import { WebhookSender } from '../server/webhook.ts';
 
-test('only the device can grant archive access; the existing Dot reads the forecast known at the requested time', async t => {
+test('paired weather grants preserve MET and admit only authorized NOAA summaries to independently guarded history', async t => {
   const dir = mkdtempSync(join(tmpdir(), 'environment-history-http-'));
   const tokens = {device: randomBytes(32).toString('hex'), mcp: randomBytes(32).toString('hex')};
   const owner = createHash('sha256').update(tokens.device).digest('hex');
@@ -35,6 +36,8 @@ test('only the device can grant archive access; the existing Dot reads the forec
   const locations = new LocationContext(join(dir, 'location.json'), sender, [], async () => ({}), () => now);
   let calls = 0;
   let temperature = 17;
+  const frameStart = Math.floor((base - 20 * 60_000) / 600_000) * 600_000;
+  let rainRequested = base, rainRetrieved = base, revision = 1, rainReads = 0, rainRefreshes = 0;
   const place = {latitude: 10, longitude: 20, label: 'Requested point', source: 'user_provided', reference: 'test request'};
   const weather = new WeatherContext(join(dir, 'weather.json'), {
     query: async (point, _signal, guard): Promise<WeatherEvidence> => {
@@ -46,7 +49,9 @@ test('only the device can grant archive access; the existing Dot reads the forec
           wind_m_s: 1, wind_from_degrees: 0, cloud_percent: 20, precipitation: []}]};
     }, cancel() {}, close() {},
   }, locations, {now: () => now, ownerAuthorized: candidate => candidate === owner, automatic: false,
-    archive: candidate => environment.capture(candidate, 'weather')});
+    archive: candidate => environment.capture(candidate, 'weather'),
+    satellite: {read: async point => {rainReads++; return [rainFrame(point, frameStart, rainRequested, rainRetrieved, revision)];},
+      refresh: async () => {rainRefreshes++; return 'cached';}, cancel() {}, close() {}}});
   const relay = bridgeServer(bridge, tokens, undefined, locations, undefined, weather, undefined, undefined, {authority, environment});
   relay.listen(0, '127.0.0.1'); await once(relay, 'listening');
   const relayURL = 'http://127.0.0.1:' + (relay.address() as AddressInfo).port;
@@ -55,7 +60,7 @@ test('only the device can grant archive access; the existing Dot reads the forec
   const deviceURL = 'http://127.0.0.1:' + (gateway.address() as AddressInfo).port;
   t.after(async () => {
     for (const server of [gateway, relay]) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
-    authority.close(); master.fill(0); rmSync(dir, {recursive: true, force: true});
+    weather.close(); authority.close(); master.fill(0); rmSync(dir, {recursive: true, force: true});
   });
   function device(path: string, input?: unknown, token = tokens.device): Promise<Response> {
     return new Promise((resolve, reject) => {
@@ -111,4 +116,41 @@ test('only the device can grant archive access; the existing Dot reads the forec
   assert.ok((await tool('respond_to_context', {disposition: 'silent', archive_read_ids: receipt})).data?.reason);
   await live();
   assert.equal(calls, readsBeforeHistory + 1);
+  assert.deepEqual([rainReads, rainRefreshes], [0, 0]);
+
+  assert.equal((await change(enable)).status, 200);
+  const metOnly = await (await device('/api/status')).json();
+  assert.equal(metOnly.satelliteEnabled, false);
+  assert.equal((await device('/api/weather', {protocol:1, epoch:metOnly.weatherEpoch, enabled:true,
+    terms:WEATHER_TERMS, satellite_terms:SATELLITE_TERMS})).status, 200);
+  // The shared public file started acquisition before either current grant.
+  rainRequested = now - 1; rainRetrieved = now + 1; now += 100;
+  const fromEarlierAcquisition = await live();
+  assert.equal(fromEarlierAcquisition.satellite_precipitation.data_kind, 'satellite_precipitation_rate_estimate');
+  const rainQuery = {start_at: iso(frameStart), end_at: iso(frameStart + 60_000), fields: {weather:['satellite_precipitation']}};
+  assert.equal((await tool('get_factor_history', rainQuery)).sources.weather.status, 'empty');
+
+  rainRequested = now + 1; rainRetrieved = now + 2; now += 100; revision++;
+  const shared = await tool('get_weather_context', {mode:'specified', place:{...place, latitude:11, label:'Requested pier'}});
+  assert.equal(shared.evidence.data_kind, 'model_forecast');
+  assert.equal(shared.satellite_precipitation.status, 'available');
+  assert.equal(shared.satellite_precipitation.areas[0].peak_nominal_mm_h, 1.2);
+  assert.deepEqual(shared.response_context.arguments.weather_read_ids, [shared.weather_read_id]);
+  const providerCalls = [calls, rainReads, rainRefreshes];
+  const enabled = await (await device('/api/status')).json();
+  assert.equal((await device('/api/weather', {protocol:1, epoch:enabled.weatherEpoch, enabled:false})).status, 200);
+  assert.ok((await tool('respond_to_context', {disposition:'silent', weather_read_ids:[shared.weather_read_id]})).data?.reason);
+  const prior = (await tool('get_factor_history', {...rainQuery, known_at:iso(now - 1)})).sources.weather;
+  assert.equal(prior.status, 'empty');
+  const saved = (await tool('get_factor_history', rainQuery)).sources.weather;
+  assert.equal(saved.entries.length, 1);
+  assert.equal(saved.entries[0].available_at, iso(now));
+  assert.equal(saved.entries[0].first_retrieved_at, iso(rainRetrieved));
+  assert.deepEqual(saved.entries[0].satellite_precipitation.areas, shared.satellite_precipitation.areas);
+  assert.doesNotMatch(JSON.stringify(saved.entries), /Requested pier|latitude|longitude/);
+  const archiveOnly = {disposition:'silent', archive_read_ids:saved.response_context.arguments.archive_read_ids};
+  assert.equal((await tool('respond_to_context', archiveOnly)).stored_for_g2, false);
+  assert.equal((await change({action:'delete',source:'weather'})).status, 200);
+  assert.equal((await tool('respond_to_context', archiveOnly)).data?.reason, 'archive_context_unknown');
+  assert.deepEqual([calls, rainReads, rainRefreshes], providerCalls);
 });

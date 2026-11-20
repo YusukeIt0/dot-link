@@ -33,7 +33,8 @@ export class RainRateService {
     try {
       cache = new RainRateCache(this.directory);
       const store = cache;
-      await store.acquire(this.now(), signal, async reserve => {
+      const requested = this.now();
+      await store.acquire(requested, signal, async reserve => {
         const candidates = await discoverFrames(this.now(), this.request, reserve, signal);
         signal.throwIfAborted();
         const frame = chooseEdition(candidates.filter(f => freshFrame(f, this.now()) && store.supported(f) !== false));
@@ -53,7 +54,8 @@ export class RainRateService {
         signal.throwIfAborted();
         if (!freshFrame(frame, this.now())) return;
         const sameEdition = newest?.key === frame.key && newest.etag === frame.etag && newest.checksum === checksum;
-        const entry = {...frame, checksum, retrieved: sameEdition ? newest.retrieved : this.now()};
+        const entry = {...frame, checksum, retrieved: sameEdition ? newest.retrieved : this.now(),
+          requested: sameEdition ? newest.requested : requested};
         if (await store.store(entry, bytes, this.probe, signal, this.now)) result.status = 'updated';
       });
       return result.status;

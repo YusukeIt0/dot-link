@@ -8,8 +8,10 @@ import test, {type TestContext} from 'node:test';
 import { ArchiveAuthority } from '../server/history/archive-authority.ts';
 import { openArchive, sealArchive } from '../server/history/archive-crypto.ts';
 import { HistoryArchiveStore } from '../server/history/archive-store.ts';
-import { weatherArchiveRecords } from '../server/history/environment-fields.ts';
+import { satelliteArchiveRecord, weatherArchiveRecords, type WeatherScope } from '../server/history/environment-fields.ts';
 import { EnvironmentHistory } from '../server/history/environment-history.ts';
+import { readFactorHistory } from '../server/history/factor-tool.ts';
+import type { SatellitePrecipitation } from '../server/weather/satellite.ts';
 import { weatherSource, type WeatherEvidence } from '../server/weather/types.ts';
 
 const owner = 'c'.repeat(64);
@@ -36,7 +38,7 @@ function fixture(t: TestContext) {
   }
   async function reopen() { auth.close(); auth = open(); await auth.restore(); history = new EnvironmentHistory(auth, options.now); }
   t.after(() => { auth.close(); key.fill(0); rmSync(directory, {recursive: true, force: true}); });
-  return {directory, key, setTime(t: number) { time = t; }, authorize(enabled: boolean) { authorized = enabled; },
+  return {directory, key, now: () => time, setTime(t: number) { time = t; }, authorize(enabled: boolean) { authorized = enabled; },
     get authority() { return auth; }, get history() { return history; }, get reader() { return history.reader('weather'); },
     control, reopen};
 }
@@ -50,6 +52,120 @@ function forecast(available: number, temperature: number, limitations: string[] 
   const [record] = weatherArchiveRecords(evidence, scope, available);
   return record;
 }
+
+const frameStart = start + day, retrieved = frameStart + 15 * 60_000, derived = retrieved + 4_000;
+const area = {area: 'N' as const, cells: 4, nominal: 2, wet_nominal: 1, peak_nominal_mm_h: 3.5,
+  degraded: 1, wet_degraded: 0, missing_or_bad: 1};
+function satellite(): SatellitePrecipitation {
+  return {edition: 'a'.repeat(64), source: {provider:'NOAA', product:'Enterprise Rain Rate', attribution:'Derived from NOAA', url:'https://registry.opendata.aws/noaa-ghe/'},
+    data_kind: 'satellite_precipitation_rate_estimate', status: 'partial', resolution_degrees: 0.02, rate_unit: 'mm/h',
+    inner_radius_km: 5, outer_radius_km: 20, areas: [area], edge_clipped: false, missing_inputs: 2, pixel_observed_at: null,
+    coverage_start: iso(frameStart), coverage_end: iso(frameStart + 9 * 60_000), file_interval_end: iso(frameStart + 599_900), generated_at: iso(retrieved - 4_000),
+    published_at: iso(retrieved - 1_000), acquisition_started_at: iso(retrieved - 500), first_retrieved_at: iso(retrieved), available_at: iso(derived),
+    expires_at: iso(derived + hour), limitations: ['Missing and degraded cells cannot establish dryness.']};
+}
+
+test('selected weather history keeps independent satellite coverage, local knowledge, quality and scope across restart', async t => {
+  const f = fixture(t);
+  await f.control('enable');
+  const write = f.history.capture(owner, 'weather')!;
+  const point = {latitude: 10.1234567, longitude: 100.456789};
+  const scope: WeatherScope = {mode:'current', location_measured_at: iso(derived - 100)};
+  const named: WeatherScope = {mode:'specified', place:{...point, label:'fixture market', source:'user_provided', reference:'fixture conversation'}};
+  const value = satellite();
+  value.comparison = {edition: 'prior-frame', coverage_start: iso(frameStart - hour), coverage_end: iso(frameStart - hour + 9 * 60_000),
+    file_interval_end: iso(frameStart - hour + 599_900), generated_at: iso(frameStart - hour + 600_000),
+    published_at: iso(frameStart - hour + 610_000), acquisition_started_at: iso(frameStart - hour + 611_000), first_retrieved_at: iso(frameStart - hour + 612_000),
+    areas: [{area:'N', nominal_cells:2, earlier_wet:0, later_wet:1, earlier_peak_mm_h:0, later_peak_mm_h:3.5}]};
+  const record = (scope: WeatherScope, at: number, e = value) => satelliteArchiveRecord(e, scope, point, at)!;
+  write(forecast(start, 22));
+  f.setTime(derived);
+  const first = record(scope, derived);
+  assert.equal(first.anchorMs, retrieved);
+  assert.equal(record(scope, retrieved), undefined);
+  assert.equal(record(scope, derived, {...value, file_interval_end: iso(frameStart + 600_000)}), undefined);
+  assert.equal(record(scope, derived, {...value, file_interval_end: iso(frameStart + 599_800)}), undefined);
+  write(first);
+  f.setTime(derived + 5000);
+  const repeated = record({...scope, location_measured_at: iso(derived + 5000)}, f.now(), {...value, available_at: iso(f.now())});
+  assert.equal(repeated.id, first.id);
+  write(repeated);
+  write(record(named, f.now()));
+  await f.reopen();
+  const query = (fields: string[], known = f.now(), from = frameStart, to = frameStart + 1) => readFactorHistory(
+    {fields: {weather: fields}, start_at: iso(from), end_at: iso(to), known_at: iso(known)},
+    {weather: f.reader}, f.now()).sources.weather;
+  assert.equal(query(['satellite_precipitation'], derived - 1).status, 'empty');
+  const original = query(['satellite_precipitation'], derived);
+  assert.equal(original.entries.length, 1);
+  const row = original.entries[0] as Record<string, any>;
+  assert.equal(row.kind, value.data_kind); assert.equal(row.scope, 'current');
+  assert.equal(row.available_at, iso(derived)); assert.equal(row.first_retrieved_at, iso(retrieved));
+  assert.equal(row.coverage_start, value.coverage_start); assert.equal(row.coverage_end, value.coverage_end);
+  assert.equal(row.generated_at, value.generated_at); assert.equal(row.published_at, value.published_at);
+  assert.equal(row.source.attribution, value.source.attribution); assert.equal(row.pixel_observed_at, null);
+  assert.equal(row.status, 'partial'); assert.equal(row.satellite_precipitation.missing_inputs, 2);
+  assert.deepEqual(row.satellite_precipitation.areas, [area]);
+  assert.doesNotMatch(JSON.stringify(original), /latitude|longitude|query_point|location_measured_at|prior-frame|fixture market/);
+  const finalInstant = Date.parse(value.file_interval_end);
+  const last = query(['satellite_precipitation'], derived, finalInstant, finalInstant + 1);
+  assert.equal(last.entries.length, 1);
+  assert.equal((last.entries[0] as {file_interval_end:string}).file_interval_end, value.file_interval_end);
+  assert.equal(query(['satellite_precipitation'], f.now(), finalInstant + 1, derived).status, 'empty');
+  const both = query(['satellite_precipitation','place']).entries as {kind:string; scope:string; available_at:string; place: any}[];
+  const satelliteRows = both.filter(r => r.kind === value.data_kind);
+  assert.equal(satelliteRows.length, 2);
+  assert.deepEqual(satelliteRows[0].place.query_point, {latitude:10.12, longitude:100.46});
+  assert.equal(satelliteRows[1].scope, 'specified');
+  assert.equal(satelliteRows[1].available_at, iso(derived + 5000));
+  assert.equal(satelliteRows[1].place.place.label, 'fixture market');
+  for (const fields of [['temperature'], ['precipitation'], ['place'], ['status']])
+    assert.deepEqual(query(fields).entries.map(r => (r as {kind:string}).kind), ['model_forecast']);
+  assert.deepEqual(query(['temperature', 'satellite_precipitation']).entries.map(r => (r as {kind:string}).kind),
+    ['model_forecast', value.data_kind, value.data_kind]);
+});
+
+test('satellite history reports revised and genuinely missing coverage and fences retained reports on stop, expiry and delete', async t => {
+  const f = fixture(t);
+  await f.control('enable');
+  const write = f.history.capture(owner, 'weather')!;
+  const point = {latitude: 10, longitude: 100};
+  const scope: WeatherScope = {mode: 'current', location_measured_at: iso(derived - 100)};
+  const value = satellite(), query = {...period, limit:10, fields:['satellite_precipitation']};
+  const row = satelliteArchiveRecord(value, scope, point, derived)!;
+  const late = derived + 60_000;
+  const revision = {...value, edition:'b'.repeat(64), status:'no_usable_cells' as const, first_retrieved_at: iso(late),
+    available_at:iso(late + 1), areas:[{...area, nominal:0, wet_nominal:0, degraded:0, missing_or_bad:4, peak_nominal_mm_h:null}]};
+  const second = satelliteArchiveRecord(revision, scope, point, late + 1)!;
+  assert.notEqual(row.id, second.id);
+  f.setTime(late + 1);
+  write(row); write(second);
+  assert.equal(f.reader.readSelectedHistory({...query, known_at: iso(late)}).entries.length, 1);
+  const now = f.reader.readSelectedHistory(query);
+  assert.equal(now.entries.length, 2);
+  assert.match(JSON.stringify(now.entries[1]), /"status":"no_usable_cells"/);
+  assert.match(JSON.stringify(now.entries[1]), /"peak_nominal_mm_h":null/);
+  assert.ok('response_context' in now);
+  const guard = f.history.responseContext(now.response_context.arguments.archive_read_ids[0])!.guard;
+  await f.control('disable');
+  assert.equal(guard(), false);
+  assert.equal(f.reader.readSelectedHistory(query).status, 'unavailable');
+  await f.control('enable');
+  const expiry = retrieved + 7 * day;
+  f.setTime(expiry - 1);
+  const last = f.reader.readSelectedHistory(query);
+  assert.ok('response_context' in last);
+  assert.equal(last.response_context.expires_no_later_than, iso(expiry));
+  const expiryGuard = f.history.responseContext(last.response_context.arguments.archive_read_ids[0])!.guard;
+  f.setTime(expiry);
+  assert.equal(expiryGuard(), false);
+  assert.equal(f.reader.readSelectedHistory(query).entries.length, 1);
+  await f.control('delete');
+  await f.control('enable');
+  write(second);
+  f.history.capture(owner, 'weather')!(second);
+  assert.equal(f.reader.readSelectedHistory(query).status, 'empty');
+});
 
 test('forecast versions retain cutoff, selected fields and location privacy across genuine source continuations', async t => {
   const f = fixture(t);

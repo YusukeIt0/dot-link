@@ -10,7 +10,7 @@ const DAY = 86_400_000;
 export const FETCH_TIMEOUT = 90_000;
 export const COOLDOWN = 10 * 60_000;
 export const DAILY_BYTES = 64 * 1024 * 1024;
-export type StoredFrame = RainRateFrame & {checksum: string; retrieved: number};
+export type StoredFrame = RainRateFrame & {checksum: string; retrieved: number; requested?: number};
 function basename(f: RainRateFrame & {checksum: string}) {
   return createHash('sha256').update(JSON.stringify([f.key, f.etag, f.checksum])).digest('hex') + '.nc';
 }
@@ -18,7 +18,8 @@ function decodeRow(r: Record<string, unknown>): StoredFrame {
   const f = frameFromKey(String(r.key), String(r.etag), Number(r.size), Number(r.published));
   if (!f || typeof r.checksum !== 'string' || !/^[A-Za-z0-9+/]{6}==$/.test(r.checksum) ||
     !Number.isSafeInteger(r.retrieved) || Number(r.retrieved) < f.published) throw Error('Invalid NOAA cache record');
-  return {...f, checksum: r.checksum, retrieved: Number(r.retrieved)};
+  if (r.requested != null && (!Number.isSafeInteger(r.requested) || Number(r.requested) < 0 || Number(r.requested) > Number(r.retrieved))) throw Error('Invalid NOAA acquisition time');
+  return {...f, checksum: r.checksum, retrieved: Number(r.retrieved), ...(r.requested != null ? {requested: Number(r.requested)} : {})};
 }
 function regularIfPresent(path: string, maxSize: number) {
   const info = lstatSync(path, {throwIfNoEntry: false});
@@ -40,9 +41,12 @@ export class RainRateCache {
         CREATE TABLE IF NOT EXISTS transfers (id INTEGER PRIMARY KEY, at INTEGER NOT NULL CHECK(at>=0),
           bytes INTEGER NOT NULL CHECK(bytes>=0 AND bytes<=${OBJECT_LIMIT + 2 * LIST_LIMIT}));
         CREATE TABLE IF NOT EXISTS frames (key TEXT PRIMARY KEY, etag TEXT NOT NULL, size INTEGER NOT NULL,
-          published INTEGER NOT NULL, checksum TEXT NOT NULL, retrieved INTEGER NOT NULL);
+          published INTEGER NOT NULL, checksum TEXT NOT NULL, retrieved INTEGER NOT NULL, requested INTEGER);
         CREATE TABLE IF NOT EXISTS inspections (key TEXT PRIMARY KEY, etag TEXT NOT NULL, end INTEGER NOT NULL,
           supported INTEGER NOT NULL CHECK(supported IN(0,1)));`);
+      // Older caches establish live receipt but cannot prove the start of a
+      // transfer relative to a later grant for personal history.
+      if (!db.prepare('PRAGMA table_info(frames)').all().some(c => c.name === 'requested')) db.exec('ALTER TABLE frames ADD COLUMN requested INTEGER');
     } catch (e) {db.close(); throw e;}
     this.db = db;
     this.reconcile();
@@ -163,8 +167,8 @@ export class RainRateCache {
       renameSync(temporary, this.path({...frame, checksum}));
       const directory = openSync(this.directory, constants.O_RDONLY | constants.O_DIRECTORY);
       try {fsyncSync(directory);} finally {closeSync(directory);}
-      this.db.prepare('INSERT INTO frames(key,etag,size,published,checksum,retrieved) VALUES(?,?,?,?,?,?)')
-        .run(frame.key, frame.etag, frame.size, frame.published, checksum, retrieved);
+      this.db.prepare('INSERT INTO frames(key,etag,size,published,checksum,retrieved,requested) VALUES(?,?,?,?,?,?,?)')
+        .run(frame.key, frame.etag, frame.size, frame.published, checksum, retrieved, frame.requested ?? null);
       return true;
     } finally {if (existsSync(temporary)) unlinkSync(temporary);}
   }

@@ -17,7 +17,7 @@
     },
     {
       "name": "location",
-      "desc": "Share phone location with Dot via your Mac when enabled. Separate options send route endpoints to FOSSGIS, terrain areas to AWS or rounded points to MET Norway. Opt in to save selected history on your Mac for 7 days to 1 year. Delete by source."
+      "desc": "Share location via your Mac. Optional lookups send route endpoints to FOSSGIS, terrain areas to AWS or rounded points to MET Norway. Your Mac gets global NOAA rain files from AWS. Keep local history for 7 days to 1 year. Delete by source."
     },
     {
       "name": "camera",

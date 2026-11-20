@@ -7,11 +7,29 @@ separate states; check the release feed and Even Hub for the versions available
 to you. Actual service, existing-Dot and device evidence is recorded separately
 from offline tests.
 
-The NOAA Enterprise Rain Rate investigation for #357 covers a supplemental
-satellite estimate. Current measurements cover the public data and a local Mac
-decoder prototype. MET Norway remains the primary forecast. Product integration
-and existing-Dot acceptance are tracked in [#357](https://github.com/YusukeIt0/dot-link/issues/357).
-See the [source measurements and reproducible frame check](evidence/noaa-err.md).
+The development version adds nearby precipitation estimates derived from NOAA
+Enterprise Rain Rate. MET Norway remains the primary forecast. Existing grants
+continue to cover MET. New users can accept both sources in Weather settings.
+Someone already sharing MET can add NOAA once in the same settings. Reopening
+the companion or restarting the relay keeps the owner's decision.
+
+An explicit current- or specified-place weather read can start a bounded download
+of one public global frame. NOAA's S3 bucket receives the Mac's IP address, an
+app identifier and the frame request. The Mac rounds the selected point and
+summarizes the grid locally. Automatic forecast attachment, location updates
+and historical queries make no NOAA requests. A cold or busy read returns the
+primary forecast promptly. A later ordinary weather read can use the verified
+local result. The existing tool arguments work with a single satellite frame.
+The optional `nearby_precipitation` argument can request a comparison or omit
+satellite evidence. The original Weather receipt guards the returned evidence
+again when Dot sends a reply. There is no satellite-specific activity.
+
+Weather history can retain a separately selected `satellite_precipitation`
+field for already-authorized lookups. Source observation time, first Mac
+retrieval and first eligible local summary for that place have different
+meanings. A historical cutoff excludes later local knowledge. See the
+[source measurements and reproducible frame check](evidence/noaa-err.md)
+and the [integration and delivery record](https://github.com/YusukeIt0/dot-link/issues/357).
 
 ## Outcome and boundaries
 

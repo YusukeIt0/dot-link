@@ -267,14 +267,21 @@ function renderWeatherStatus() {
   const s = weatherSharing.status();
   const toggle = el<HTMLInputElement>('weather-share'); toggle.checked = s.weatherEnabled === true;
   toggle.disabled = !s.supported || s.pending;
+  el('weather-satellite-disclosure').hidden = !s.satelliteSupported;
+  const upgrade = el<HTMLButtonElement>('weather-add-rain');
+  upgrade.hidden = !s.satelliteSupported || !s.weatherEnabled || s.satelliteEnabled === true;
+  upgrade.disabled = s.pending;
   el('weather-status').textContent = s.failed ? t('even.weather_failed') : !s.supported ? t('even.weather_unavailable') :
-    s.weatherEnabled ? t('even.weather_on') : t('even.weather_off');
+    s.satelliteFailed ? t('even.weather_satellite_failed') : !s.weatherEnabled ? t('even.weather_off') :
+    s.satelliteSupported ? t(s.satelliteEnabled ? 'even.weather_combined_on' : 'even.weather_forecast_on') : t('even.weather_on');
 }
 el<HTMLInputElement>('weather-share').onchange = () => {
   const enabled = el<HTMLInputElement>('weather-share').checked;
-  if (enabled && !confirm(t('even.weather_accept'))) {renderWeatherStatus(); return;}
-  void weatherSharing.control(enabled);
+  const combined = enabled && weatherSharing.status().satelliteSupported;
+  if (enabled && !confirm(t(combined ? 'even.weather_accept_combined' : 'even.weather_accept'))) {renderWeatherStatus(); return;}
+  void weatherSharing.control(enabled, combined);
 };
+el<HTMLButtonElement>('weather-add-rain').onclick = () => {void weatherSharing.control(true, true);};
 renderWeatherStatus();
 const healthSharing = new HealthSharing({
   target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,

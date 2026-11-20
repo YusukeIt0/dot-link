@@ -4,7 +4,7 @@ import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {createHash, randomUUID, randomBytes} from 'node:crypto';
-import {WeatherContext, WEATHER_TERMS} from '../server/weather/context.ts';
+import {WeatherContext, SATELLITE_TERMS, WEATHER_TERMS} from '../server/weather/context.ts';
 import {weatherSource, weatherQueryPoint, type WeatherEvidence, type WeatherPoint} from '../server/weather/types.ts';
 import {LocationContext} from '../server/location.ts';
 import {WebhookSender} from '../server/webhook.ts';
@@ -15,9 +15,14 @@ import {ArchiveAuthority} from '../server/history/archive-authority.ts';
 import {EnvironmentHistory} from '../server/history/environment-history.ts';
 import {WeatherService} from '../server/weather/service.ts';
 import {WeatherCache} from '../server/weather/cache.ts';
+import {Bridge} from '../server/bridge.ts';
+import {ContextResponder} from '../server/context-response.ts';
+import {rainFrame} from './fixtures/rain-rate.ts';
+import type {NearbyRainRead, RainRateService} from '../server/weather/rain-rate/service.ts';
 const owner='a'.repeat(64);
 const flush=()=>new Promise<void>(r=>setImmediate(r));
-function fixture(t:TestContext, archive?:CaptureEnvironment) {
+type RainBackend = Pick<RainRateService,'read'|'refresh'|'cancel'|'close'>;
+function fixture(t:TestContext, archive?:CaptureEnvironment, options: {satellite?:RainBackend; automatic?:boolean} = {}) {
  const dir=mkdtempSync(join(tmpdir(),'weather-context-'));let now=Date.parse('2026-11-10T09:20:00Z');let authorized=true;
  const events:unknown[]=[];
  const sender=new WebhookSender(async (_url,raw)=>{const e=JSON.parse(raw);if(e.type==='verification')return {status:200,body:JSON.stringify({challenge:e.challenge})};events.push(e);return {status:202,body:'{}'};});
@@ -26,13 +31,13 @@ function fixture(t:TestContext, archive?:CaptureEnvironment) {
  let load:undefined|((point:WeatherPoint,signal:AbortSignal)=>Promise<WeatherEvidence>);
  const evidence=(point:WeatherPoint):WeatherEvidence=>({status:'ready',source:weatherSource,data_kind:'model_forecast',query_point:weatherQueryPoint(point),as_of:new Date(now).toISOString(),retrieved_at:new Date(now).toISOString(),checked_at:new Date(now).toISOString(),updated_at:'2026-11-10T09:00:00Z',retry_at:null,elevation_m:0,apparent_temperature_c:null,limitations:[],forecast:[],current:{valid_at:'2026-11-10T09:00:00Z',temperature_c:temp,humidity_percent:humidity,wind_m_s:1,wind_from_degrees:0,pressure_hpa:1000,cloud_percent:20,precipitation:[]}});
  const service={query:async (p:WeatherPoint,s:AbortSignal,g:()=>void)=>{calls++;g();return load?load(p,s):evidence(p);},cancel(){},close(){}};
- const create=()=>new WeatherContext(join(dir,'consent.json'),service,location,{ownerAuthorized:()=>authorized,now:()=>now,automatic:false,archive});
+ const create=()=>new WeatherContext(join(dir,'consent.json'),service,location,{ownerAuthorized:()=>authorized,now:()=>now,automatic:false,archive,...options});
  const weather=create();t.after(()=>{weather.close();location.close();rmSync(dir,{recursive:true,force:true});});
- const consent=(enabled=true)=>weather.control({protocol:1,epoch:weather.status(owner).weatherEpoch,enabled,...(enabled?{terms:WEATHER_TERMS}:{})},owner);
+ const consent=(enabled=true,rain=false)=>weather.control({protocol:1,epoch:weather.status(owner).weatherEpoch,enabled,...(enabled?{terms:WEATHER_TERMS}:{}),...(rain?{satellite_terms:SATELLITE_TERMS}:{})},owner);
  const update=(latitude=10)=>location.update({sharing_id:sharing,sequence:++seq,fix:{latitude,longitude:20,accuracy:5,measured_at:new Date(now).toISOString()}},owner);
  const enable=()=>location.control({sharing_id:sharing,enabled:true},owner);
  const subscribe=()=>location.subscribe({name:'location.updated',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://callback.example.test/location',secret:'whsec_'+randomBytes(32).toString('base64')}});
- return {weather,location,events,consent,update,enable,subscribe,create,evidence,calls:()=>calls,setLoad:(f:typeof load)=>{load=f;},setValues:(a:number,b:number)=>{temp=a;humidity=b;},advance:(ms:number)=>{now+=ms;},revoke:()=>{authorized=false;},stop:()=>location.control({sharing_id:sharing,enabled:false},owner)};
+ return {weather,location,events,consent,update,enable,subscribe,create,evidence,dir,sender,now:()=>now,calls:()=>calls,setLoad:(f:typeof load)=>{load=f;},setValues:(a:number,b:number)=>{temp=a;humidity=b;},advance:(ms:number)=>{now+=ms;},revoke:()=>{authorized=false;},stop:()=>location.control({sharing_id:sharing,enabled:false},owner)};
 }
 const specified={mode:'specified',place:{latitude:35.68,longitude:139.76,label:'Tokyo public fixture',source:'user_provided',reference:'Explicit test request'}};
 test('weather consent is independent, default off, terms and current epochs are mandatory',async t=>{
@@ -247,4 +252,137 @@ test('removing the old pairing permits a new owner to choose fresh consent, neve
  weather.control({protocol:1,epoch:weather.status(owner).weatherEpoch,enabled:true,terms:WEATHER_TERMS},owner);
  revoked=true;const other='b'.repeat(64),status=weather.status(other);assert.equal(status.weatherEnabled,false);assert.ok(status.weatherEpoch);
  weather.control({protocol:1,epoch:status.weatherEpoch,enabled:true,terms:WEATHER_TERMS},other);assert.equal(weather.status(other).weatherEnabled,true);
+});
+
+const frameAt = (hour: number, minute: number) => Date.UTC(2026, 10, 10, hour, minute);
+function rainProvider(read: RainBackend['read'], refresh: RainBackend['refresh'] = async () => 'cached'): RainBackend {
+  return {read, refresh, cancel() {}, close() {}};
+}
+function barrier<T>() {
+  let release!: (value: T) => void;
+  const promise = new Promise<T>(resolve => {release = resolve;});
+  return {release, promise};
+}
+
+for (const change of ['move', 'location off', 'owner replacement'] as const) {
+  test('a cold satellite download lets MET finish and loses access on ' + change, async t => {
+    const download = barrier<'updated'>();
+    const started = barrier<AbortSignal>();
+    const rows: ArchiveInput[] = [];
+    let reads = 0;
+    const backend = rainProvider(async point => {
+      reads++;
+      return reads === 1 ? [] : [rainFrame(point, frameAt(9, 0), frameAt(9, 20) + 1, frameAt(9, 20) + 2, 1)];
+    }, signal => {started.release(signal); return download.promise;});
+    const f = fixture(t, () => Object.assign((row: ArchiveInput) => {rows.push(row);}, {since:frameAt(9, 20)}), {satellite:backend});
+    f.enable(); f.update(); f.consent(true, true); f.advance(10);
+    const pending = f.weather.read({mode:'current'});
+    const signal = await started.promise;
+    const met = await pending; // The network response is still deliberately held.
+    assert.equal(met.evidence.current?.temperature_c, 20);
+    assert.equal(met.satellite_precipitation?.status, 'temporarily_unavailable');
+    assert.equal(signal.aborted, false);
+    if (change === 'move') f.update(11);
+    if (change === 'location off') f.stop();
+    if (change === 'owner replacement') {
+      f.weather.revokeOwner(owner);
+      const nextOwner = 'b'.repeat(64);
+      const state = f.weather.status(nextOwner);
+      assert.equal(state.satelliteEnabled, false);
+      f.weather.control({protocol:1, epoch:state.weatherEpoch, enabled:true, terms:WEATHER_TERMS}, nextOwner);
+      assert.equal((await f.weather.read(specified)).satellite_precipitation, undefined);
+    }
+    assert.equal(signal.aborted, true);
+    download.release('updated'); await flush();
+    assert.equal(reads, 1);
+    assert.ok(rows.every(row => !row.id.startsWith('weather:satellite:')));
+    assert.throws(() => f.weather.responseContext(met.weather_read_id).guard());
+  });
+}
+
+test('a slow local decode lets MET return first, then reports missing directional coverage when the satellite estimate is ready', async t => {
+  t.mock.timers.enable({apis:['setTimeout']});
+  const local = barrier<NearbyRainRead[]>();
+  const f = fixture(t, undefined, {satellite:rainProvider(() => local.promise)});
+  f.consent(true, true); f.advance(10);
+  const pending = f.weather.read(specified);
+  t.mock.timers.tick(1000);
+  const met = await pending;
+  assert.equal(met.evidence.current?.temperature_c, 20);
+  assert.equal(met.satellite_precipitation?.status, 'temporarily_unavailable');
+  assert.equal(f.location.read().context, null);
+  const data = rainFrame(specified.place, frameAt(9, 0), f.now() - 5, f.now() - 4, 1);
+  data.sample.status = 'partial';
+  const east = data.sample.areas.find(area => area.area === 'E')!;
+  Object.assign(east, {nominal:0, wet_nominal:0, missing_or_bad:east.cells, peak_nominal_mm_h:null});
+  local.release([data]); await flush();
+  const known = (await f.weather.read(specified)).satellite_precipitation;
+  assert.ok(known && 'areas' in known);
+  assert.equal(known.status, 'partial');
+  assert.deepEqual(known.areas.find(area => area.area === 'E'), east);
+  assert.equal(known.areas.find(area => area.area === 'W')!.peak_nominal_mm_h, 1.2);
+  assert.equal(f.location.read().context, null);
+  const outside = await f.weather.read({...specified, place:{...specified.place, latitude:75}});
+  assert.equal(outside.satellite_precipitation?.status, 'outside_extent');
+});
+
+for (const compare of [false, true]) {
+  test('a queued weather answer is rejected at the expiry of ' + (compare ? 'the earlier compared frame' : 'its satellite frame'), async t => {
+    const old = frameAt(8, 30), newer = frameAt(8, 40);
+    const f = fixture(t, undefined, {satellite:rainProvider(async (point, _signal, options) => {
+      const read = (start: number, revision: number) => rainFrame(point, start, frameAt(9, 19), frameAt(9, 19) + 1, revision);
+      return options?.previous ? [read(newer, 2), read(old, 1)] : [read(compare ? newer : old, 1)];
+    })});
+    f.consent(true, true);
+    const result = await f.weather.read({...specified, ...(compare ? {nearby_precipitation:true} : {})});
+    const satellite = result.satellite_precipitation;
+    assert.ok(satellite && 'areas' in satellite);
+    assert.equal(!!satellite.comparison, compare);
+    const expiry = frameAt(9, 24); // The earlier 08:39 embedded end plus 45 minutes.
+    assert.equal(result.response_context.expires_no_later_than, new Date(expiry).toISOString());
+    const bridge = new Bridge(join(f.dir,'weather-answer.json'), f.sender, []);
+    t.after(() => bridge.close());
+    const queue = barrier<void>(), admitted = barrier<void>();
+    const responder = new ContextResponder(async (input, guard, location) => {
+      admitted.release(); await queue.promise; return bridge.sendMessage(input, guard, location);
+    });
+    const message = {disposition:'announce', weather_read_ids:[result.weather_read_id], text:'A fixture answer'};
+    const sending = responder.respond(message, {weather:f.weather});
+    await admitted.promise;
+    f.advance(expiry - f.now() - 1);
+    assert.ok(f.weather.responseContext(result.weather_read_id).guard());
+    f.advance(1); queue.release();
+    await assert.rejects(sending, {reason:'weather_context_expired'});
+    assert.equal(bridge.outboundHistory().length, 0);
+    if (compare) {
+      const remaining = (await f.weather.read(specified)).satellite_precipitation;
+      assert.ok(remaining && 'areas' in remaining);
+      assert.equal(remaining.edition, satellite.edition);
+      assert.equal(remaining.comparison, undefined);
+    }
+  });
+}
+
+test('the passive timer checks existing MET weather and a completed satellite read creates no extra location event', async t => {
+  t.mock.timers.enable({apis:['setInterval']});
+  let reads = 0, refreshes = 0;
+  const f = fixture(t, undefined, {automatic:true, satellite:rainProvider(async point => {
+    reads++; return [rainFrame(point, frameAt(9,0), frameAt(9,20) + 1, frameAt(9,20) + 2, 1)];
+  }, async () => {refreshes++; return 'cached';})});
+  f.enable(); f.update(); await f.subscribe();
+  const met = f.evidence({latitude:10,longitude:20});
+  f.setLoad(async () => met);
+  f.consent(true, true); await flush();
+  const context = f.location.read().context!;
+  await f.location.respond({context_id:context.context_id, disposition:'silent'});
+  const eventCount = f.events.length, metCalls = f.calls();
+  f.advance(61_000); t.mock.timers.tick(61_000); await flush();
+  assert.ok(f.calls() > metCalls);
+  assert.deepEqual([reads,refreshes], [0,0]);
+  const result = await f.weather.read({mode:'current'}); await flush();
+  assert.equal(result.satellite_precipitation?.status, 'available');
+  assert.deepEqual([reads,refreshes], [1,1]);
+  assert.equal(f.events.length, eventCount);
+  assert.equal(f.location.read().context!.context_id, context.context_id);
+  assert.equal(f.location.read().context!.weather, met);
 });
