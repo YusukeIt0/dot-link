@@ -247,7 +247,7 @@ export class ArchiveAuthority {
     // Missing evidence after enrollment is a storage fault. Never substitute an empty database.
     const info = lstatSync(path, {throwIfNoEntry: false});
     if (!info?.isFile() || info.size === 0) throw unavailable();
-    return new HistoryArchiveStore(path, key, this.options);
+    return new HistoryArchiveStore(path, key, {...this.options, existingOnly: true});
   }
 
   async maintain() {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -154,6 +154,14 @@ test('on-disk records, lookup fields and cursors contain no plaintext identifier
   }
   assert.equal(statSync(f.path).mode & 0o777, 0o600);
   const copy = join(f.dir, 'replayed.sqlite');
+  assert.throws(() => new HistoryArchiveStore(copy, f.key, {existingOnly: true}));
+  writeFileSync(copy, Buffer.alloc(0), {mode: 0o600});
+  assert.throws(() => new HistoryArchiveStore(copy, f.key, {existingOnly: true}));
+  const blank = new DatabaseSync(copy);
+  blank.exec('VACUUM');
+  blank.close();
+  assert.ok(statSync(copy).size > 0);
+  assert.throws(() => new HistoryArchiveStore(copy, f.key, {existingOnly: true}));
   copyFileSync(f.path, copy);
   assert.throws(() => new HistoryArchiveStore(copy, randomBytes(32)));
   const sql = new DatabaseSync(f.path);

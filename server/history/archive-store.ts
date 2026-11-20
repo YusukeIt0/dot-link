@@ -53,7 +53,7 @@ type DatabaseState = {
 };
 type Stored = { record: ArchiveRecord } | { forgetAt: number };
 type Row = { n: number; token: string; body: Uint8Array };
-type Options = { now?: () => number; maxRecords?: number; maxBytes?: number };
+type Options = { now?: () => number; maxRecords?: number; maxBytes?: number; existingOnly?: boolean };
 const dayOf = (ms: number) => Math.floor(ms / DAY);
 const validTime = (ms: number) => Number.isSafeInteger(ms) && Math.abs(ms) <= 8.64e15;
 function validWindow(from: number, to: number) {
@@ -102,7 +102,8 @@ export class HistoryArchiveStore {
       const info = lstatSync(name, {throwIfNoEntry: false});
       if (info && (!info.isFile() || info.nlink !== 1)) throw new Error('Invalid archive file');
     }
-    const fd = openSync(path, constants.O_CREAT | constants.O_NOFOLLOW | constants.O_RDWR, 0o600);
+    const flags = constants.O_NOFOLLOW | constants.O_RDWR | (options.existingOnly ? 0 : constants.O_CREAT);
+    const fd = openSync(path, flags, 0o600);
     closeSync(fd);
     chmodSync(path, 0o600);
     this.key = Buffer.from(key);
@@ -113,7 +114,8 @@ export class HistoryArchiveStore {
       this.transaction(() => {
         const version = this.sql('PRAGMA user_version').get()?.user_version;
         if (version === VERSION) { this.state(); return; }
-        if (version !== 0 || this.sql('SELECT 1 FROM sqlite_schema LIMIT 1').get()) throw new Error('Unsupported history archive');
+        if (options.existingOnly || version !== 0 || this.sql('SELECT 1 FROM sqlite_schema LIMIT 1').get())
+          throw new Error('Unsupported history archive');
         this.db.exec(`
           CREATE TABLE metadata (id INTEGER PRIMARY KEY CHECK(id=1), body BLOB NOT NULL);
           CREATE TABLE entries (n INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL UNIQUE, due TEXT NOT NULL, body BLOB NOT NULL);
