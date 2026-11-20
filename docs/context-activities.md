@@ -122,6 +122,22 @@ policy into the test prompt or alter a personal activity to make the test pass.
 
 ## Selective history (unreleased Mac feature)
 
+The development branch includes protected local storage for future opt-in
+archives. Existing grants keep their original scope. A separate encrypted
+authority holds the owner, duration and a random key for each source. The Mac
+opens its authority key with the Secure Enclave after first unlock. A stop
+invalidates outstanding reads. Deletion retires the source key before removing
+the evidence files. On restart the relay finishes interrupted cleanup and
+expires records even when recording is off. A code downgrade leaves these
+files outside the app bundle.
+
+The non-health archive encrypts source fields, timestamps and identities.
+Its on-disk indexes expose opaque grouping, row counts and ciphertext lengths.
+Polar keeps its own protected storage. Restoring an old evidence file alone
+cannot recover a deleted generation. Restoring both the old authority and
+evidence from a full backup on the same Mac can recover it. Local deletion
+cannot retract information already sent to Dot.
+
 `get_factor_history` lets the connected Dot choose fields from recent-place
 history, Polar observations or both for one explicit interval within the past
 seven days. Give `start_at` and `end_at` as instants with explicit UTC offsets.
