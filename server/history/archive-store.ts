@@ -25,6 +25,8 @@ export interface ArchiveInput {
   fromMs: number;
   toMs: number;
   availableAtMs: number;
+  /** Point observations can also be sought by their receiver clock. */
+  indexAvailability?: true;
   anchorMs: number;
   payload: unknown;
 }
@@ -36,6 +38,7 @@ export interface ArchiveQuery {
   fromMs: number;
   toMs: number;
   knownAtMs?: number;
+  axis?: 'availability';
   limit?: number;
   /** A single retained record may exceed this budget so its selected fields can still be projected. */
   maxBytes?: number;
@@ -43,7 +46,7 @@ export interface ArchiveQuery {
 }
 type Position = { day: number; after: number };
 type PageCursor = Position & {
-  generation: string; high: number; from: number; to: number; known: number | null; limit: number; bytes?: number;
+  axis?: 'availability'; generation: string; high: number; from: number; to: number; known: number | null; limit: number; bytes?: number;
 };
 type DatabaseState = {
   generation: string;
@@ -79,6 +82,12 @@ function duplicateMarker(anchorMs: number, now: number): DuplicateMarker | undef
 }
 function intervalDays(record: ArchiveInput) {
   return dayOf(record.toMs - 1) - dayOf(record.fromMs) + 1;
+}
+function delayedAvailability(record: ArchiveInput) {
+  return record.indexAvailability === true && dayOf(record.availableAtMs) !== dayOf(record.fromMs);
+}
+function bucketCount(record: ArchiveRecord) {
+  return 2 * intervalDays(record) + Number(delayedAvailability(record));
 }
 // Charge fixed row/index overhead as well as ciphertext. This is a logical
 // capacity budget, independent of SQLite page overhead and journal space.
@@ -176,6 +185,7 @@ export class HistoryArchiveStore {
     if (!input.id || input.id.length > 1024 || !Number.isSafeInteger(input.version) || input.version < 1 ||
         !validWindow(input.fromMs, input.toMs) || !validTime(input.anchorMs) || !validTime(input.availableAtMs) ||
         input.anchorMs > input.availableAtMs || input.availableAtMs > now || input.payload === undefined ||
+        (input.indexAvailability !== undefined && (input.indexAvailability !== true || input.toMs !== input.fromMs + 1)) ||
         !PERIODS.includes(period)) throw new Error('Invalid archive record');
     if (now >= this.nextMaintenance) { this.prune(); this.nextMaintenance = now + 30_000; }
     const token = this.tag('id', input.id);
@@ -191,7 +201,7 @@ export class HistoryArchiveStore {
         return marker && !this.insert(token, marker) ? 'capacity' : 'expired';
       }
       const record: ArchiveRecord = {id: input.id, version: input.version, fromMs: input.fromMs, toMs: input.toMs,
-        anchorMs: input.anchorMs, availableAtMs: input.availableAtMs, payload: input.payload, expiresAtMs, period};
+        anchorMs: input.anchorMs, availableAtMs: input.availableAtMs, ...(input.indexAvailability ? {indexAvailability:true} : {}), payload: input.payload, expiresAtMs, period};
       return this.insert(token, {record}) ? 'stored' : 'capacity';
     });
   }
@@ -200,7 +210,7 @@ export class HistoryArchiveStore {
     const record = 'record' in value ? value.record : undefined;
     const dueDay = 'forgetDay' in value ? value.forgetDay : dayOf(value.record.expiresAtMs);
     const body = this.pack('entry:' + token, value);
-    const bytes = cost(body, record ? 2 * intervalDays(record) : 0);
+    const bytes = cost(body, record ? bucketCount(record) : 0);
     const state = this.state();
     if (body.length > MAX_PAYLOAD_BYTES || state.bytes + bytes > this.maxBytes || state.count >= this.maxRecords) {
       if (!state.capacityOmitted) { state.capacityOmitted = true; this.save(state); }
@@ -211,6 +221,9 @@ export class HistoryArchiveStore {
       const index = this.sql('INSERT INTO days(bucket,n) VALUES(?,?)');
       const hour = Math.floor(record.fromMs / HOUR);
       const singleHour = hour === Math.floor((record.toMs - 1) / HOUR);
+      // A point received on its measurement day already has the required day
+      // index. Only delayed uploads need another encrypted bucket membership.
+      if (delayedAvailability(record)) index.run(this.tag('receipt', dayOf(record.availableAtMs)), lastInsertRowid);
       for (let day = dayOf(record.fromMs); day <= dayOf(record.toMs - 1); day++) {
         index.run(this.tag('day', day), lastInsertRowid);
         index.run(singleHour ? this.tag('hour', hour) : this.tag('spanning', day), lastInsertRowid);
@@ -221,6 +234,31 @@ export class HistoryArchiveStore {
     addDueDay(state, dueDay);
     this.save(state);
     return true;
+  }
+
+  /** Enrich an already admitted record without renewing its grant or changing
+   * its clocks or indexes. Delayed geography cannot recreate an expired fix. */
+  updatePayload(id: string, edit: (record: Readonly<ArchiveRecord>) => unknown) {
+    return this.transaction(() => {
+      const token = this.tag('id', id);
+      const row = this.sql('SELECT n,token,body FROM entries WHERE token=?').get(token) as Row | undefined;
+      if (!row) return false;
+      const value = this.openRow(row);
+      if (!('record' in value) || value.record.expiresAtMs <= this.now()) return false;
+      const payload = edit(structuredClone(value.record));
+      if (payload === undefined) return false;
+      const body = this.pack('entry:' + token, {record: {...value.record, payload}});
+      const state = this.state();
+      const delta = body.length - row.body.length;
+      if (body.length > MAX_PAYLOAD_BYTES || state.bytes + delta > this.maxBytes) {
+        if (!state.capacityOmitted) { state.capacityOmitted = true; this.save(state); }
+        return false;
+      }
+      this.sql('UPDATE entries SET body=? WHERE n=?').run(body, row.n);
+      state.bytes += delta;
+      this.save(state);
+      return true;
+    });
   }
 
   /** Rows are grouped by the first overlapping UTC day, then admission order.
@@ -238,12 +276,12 @@ export class HistoryArchiveStore {
     const state = this.state();
     const first = dayOf(query.fromMs);
     const last = dayOf(query.toMs - 1);
-    const scope = {generation: state.generation, from: query.fromMs, to: query.toMs, known: query.knownAtMs ?? null, limit, bytes: maxBytes};
+    const scope = {axis: query.axis, generation: state.generation, from: query.fromMs, to: query.toMs, known: query.knownAtMs ?? null, limit, bytes:maxBytes};
     let position: PageCursor;
     if (query.cursor !== undefined) {
       if (!query.cursor || query.cursor.length > 2048) throw new Error('Invalid archive cursor');
       position = this.unpack<PageCursor>('page', Buffer.from(query.cursor, 'base64url'));
-      if (position.generation !== scope.generation || position.from !== scope.from || position.to !== scope.to ||
+      if (position.axis !== scope.axis || position.generation !== scope.generation || position.from !== scope.from || position.to !== scope.to ||
           position.known !== scope.known || position.limit !== limit || (position.bytes ?? MAX_PAGE_BYTES) !== maxBytes || !Number.isSafeInteger(position.high) ||
           !Number.isSafeInteger(position.after) || position.after < 0 || position.after > position.high ||
           !Number.isInteger(position.day) || position.day < first || position.day > last) throw new Error('Invalid archive cursor');
@@ -261,11 +299,13 @@ export class HistoryArchiveStore {
       const remaining = MAX_INSPECT - inspected + 1;
       // A short question on a busy day skips observations from unrelated hours.
       // The second seek still includes intervals that span the requested hour.
-      const rows = singleHour
+      const tags = query.axis === 'availability'
+        ? [this.tag('day', position.day), this.tag('receipt', position.day)]
+        : singleHour ? [this.tag('hour', hour), this.tag('spanning', position.day)] : [this.tag('day', position.day)];
+      const rows = tags.length === 2
         ? this.sql(selectBucket + ' UNION ALL ' + selectBucket + ' ORDER BY n LIMIT ?').iterate(
-          this.tag('hour', hour), position.after, position.high,
-          this.tag('spanning', position.day), position.after, position.high, remaining)
-        : this.sql(selectBucket + ' ORDER BY n LIMIT ?').iterate(this.tag('day', position.day), position.after, position.high, remaining);
+          tags[0], position.after, position.high, tags[1], position.after, position.high, remaining)
+        : this.sql(selectBucket + ' ORDER BY n LIMIT ?').iterate(tags[0], position.after, position.high, remaining);
       for (const item of rows) {
         if (inspected === MAX_INSPECT) return result(true);
         const row = item as Row;
@@ -273,8 +313,10 @@ export class HistoryArchiveStore {
         inspected++;
         if (!('record' in data)) throw new Error('Invalid archive index');
         const r = data.record;
-        if (position.day === Math.max(first, dayOf(r.fromMs)) && r.fromMs < query.toMs && r.toMs > query.fromMs &&
-            r.expiresAtMs > now && (scope.known === null || r.availableAtMs <= scope.known)) {
+        const overlaps = query.axis === 'availability'
+          ? r.indexAvailability && position.day === dayOf(r.availableAtMs) && r.availableAtMs >= scope.from && r.availableAtMs < scope.to
+          : position.day === Math.max(first, dayOf(r.fromMs)) && r.fromMs < scope.to && r.toMs > scope.from;
+        if (overlaps && r.expiresAtMs > now && (scope.known === null || r.availableAtMs <= scope.known)) {
           if (records.length >= limit || (records.length > 0 && bytes + row.body.length > maxBytes)) return result(true);
           records.push(r);
           bytes += row.body.length;
@@ -309,7 +351,7 @@ export class HistoryArchiveStore {
           if (dayOf(deadline) !== day) throw new Error('Invalid archive deadline index');
           if (deadline <= now) {
             const marker = live ? duplicateMarker(value.record.anchorMs, now) : undefined;
-            state.bytes -= cost(row.body, live ? 2 * intervalDays(value.record) : 0);
+            state.bytes -= cost(row.body, live ? bucketCount(value.record) : 0);
             if (marker) {
               const body = this.pack('entry:' + row.token, marker);
               this.sql('DELETE FROM days WHERE n=?').run(row.n);

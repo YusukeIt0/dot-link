@@ -10,6 +10,9 @@ import type { GeographicEvidence } from '../geography/types.ts';
 import { HISTORY_RETENTION_MS, LocationHistoryIndex, grantedExpiry, historyObservationSchema, type HistoryEntry } from './replay.ts';
 import { installPhoneTimeIndex, readStoredPhoneTime, type PhoneTimeRead } from './phone-time.ts';
 import { historyExpiry } from './retention.ts';
+import { LocationArchive } from './location-archive.ts';
+import { installLocationContinuity, locationContinuity, type LocationArchiveChange } from './location-continuity.ts';
+import type { ArchiveAuthority } from './archive-authority.ts';
 import type { HistoryPageInput } from './factor-tool.ts';
 
 const MAXIMUM = 50_000;
@@ -47,10 +50,12 @@ function installHistoryExpiry(db: DatabaseSync) {
 export class LocationHistoryStore {
   readonly changes = new ChangeSignal();
   private db: DatabaseSync;
+  private readonly path: string;
   private consent: Consent;
   private epoch = randomUUID();
   private index: LocationHistoryIndex;
-  private reads = new Map<string, {epoch: string; expires: number}>();
+  private reads = new Map<string, {epoch: string; expires: number; guard?: () => boolean}>();
+  private readonly archive?: LocationArchive;
   private timer?: ReturnType<typeof setInterval>;
   private closed = false;
   private healthy = true;
@@ -58,7 +63,7 @@ export class LocationHistoryStore {
   private ownerAuthorized: (owner: string) => boolean;
   private ownerRevoked: (owner: string) => boolean;
   private announce: (input: {message_id: string; text: string; utterance_id: string}, guard: () => boolean) => Promise<unknown>;
-  constructor(directory: string, options: {now?: () => number; ownerAuthorized: (owner: string) => boolean; ownerRevoked?: (owner: string) => boolean;
+  constructor(directory: string, options: {now?: () => number; archive?: () => ArchiveAuthority | undefined; ownerAuthorized: (owner: string) => boolean; ownerRevoked?: (owner: string) => boolean;
     announce: (input: {message_id: string; text: string; utterance_id: string}, guard: () => boolean) => Promise<unknown>}) {
     this.now = options.now ?? Date.now;
     this.ownerAuthorized = options.ownerAuthorized; this.ownerRevoked = options.ownerRevoked ?? (() => false); this.announce = options.announce;
@@ -66,7 +71,7 @@ export class LocationHistoryStore {
     const directoryInfo = lstatSync(directory);
     if (!directoryInfo.isDirectory() || directoryInfo.isSymbolicLink()) throw new Error('Invalid history directory');
     chmodSync(directory, 0o700);
-    const path = join(directory, 'history.sqlite');
+    const path = this.path = join(directory, 'history.sqlite');
     try { const info = lstatSync(path); if (!info.isFile() || info.isSymbolicLink()) throw new Error('Invalid history file'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
     this.db = new DatabaseSync(path); chmodSync(path, 0o600);
@@ -76,6 +81,10 @@ export class LocationHistoryStore {
     this.db.exec('CREATE TABLE IF NOT EXISTS state (id INTEGER PRIMARY KEY CHECK(id=1), data TEXT NOT NULL); CREATE TABLE IF NOT EXISTS observations (id TEXT PRIMARY KEY, measured INTEGER NOT NULL, data TEXT NOT NULL, geography TEXT); CREATE INDEX IF NOT EXISTS observation_order ON observations(measured,id); PRAGMA user_version=1;');
     installHistoryExpiry(this.db);
     installPhoneTimeIndex(this.db);
+    if (options.archive) {
+      installLocationContinuity(this.db);
+      this.archive = new LocationArchive(this.db, options.archive, this.now);
+    }
     const row = this.db.prepare('SELECT data FROM state WHERE id=1').get() as {data: string} | undefined;
     this.consent = row ? consentSchema.parse(JSON.parse(row.data)) : emptyConsent();
     // Retire the old Beta-only table; schema parsing drops its scenario metadata.
@@ -116,7 +125,14 @@ export class LocationHistoryStore {
     if (tied) points.sort((a,b) => Date.parse(a.measured_at)-Date.parse(b.measured_at) || a.id.localeCompare(b.id));
     return points;
   }
-  private changed() { this.epoch = randomUUID(); this.reads.clear(); this.index.setReadable(this.consent.enabled); this.index.invalidate(); this.changes.emit(); }
+  continuity() {
+    if (this.archive && !this.closed && this.healthy) {
+      try { return {...locationContinuity(this.db), revision:this.epoch}; }
+      catch { return undefined; }
+    }
+  }
+  reconcileArchive() { this.archive?.reconcile(); }
+  private changed() { this.archive?.clear(); this.epoch = randomUUID(); this.reads.clear(); this.index.setReadable(this.consent.enabled); this.index.invalidate(); this.changes.emit(); }
   private fail() { this.healthy = false; this.reads.clear(); this.index?.setReadable(false); this.changes.emit(); }
   private authorized() { return !this.closed && this.healthy && this.consent.enabled && !!this.consent.owner && this.ownerAuthorized(this.consent.owner); }
   private checkOwner() {
@@ -127,6 +143,7 @@ export class LocationHistoryStore {
   maintain() {
     if (this.closed) return;
     this.checkOwner();
+    try { this.reconcileArchive(); } catch { /* Optional protected storage cannot interrupt the seven-day store. */ }
     const now = this.now();
     // Separate index ranges keep maintenance on a narrow read from scanning
     // every retained row. The deletion is still one atomic statement.
@@ -159,12 +176,57 @@ export class LocationHistoryStore {
     } catch (error) { this.db.exec('ROLLBACK'); this.fail(); throw error; }
     this.changed(); return this.status(owner);
   }
+  /** The authenticated common panel explicitly grants both location horizons.
+   * Legacy clients continue to write only their original seven-day consent. */
+  async controlArchive(owner: string, epoch: string, change: LocationArchiveChange) {
+    this.maintain();
+    const archive = this.archive;
+    if (!archive || this.closed || !this.healthy || !this.ownerAuthorized(owner) ||
+        (this.consent.owner && this.consent.owner !== owner)) throw failure();
+    const legacyEpoch = this.epoch;
+    const initial = locationContinuity(this.db);
+    let committed: Consent | undefined;
+    return archive.control(owner, epoch, change, {
+      path: this.path,
+      apply: db => {
+        const before = locationContinuity(db, true);
+        if (this.closed || !this.healthy || legacyEpoch !== this.epoch || !this.ownerAuthorized(owner) ||
+            before.erased !== initial.erased || before.stopped !== initial.stopped) throw failure();
+        const row = db.prepare('SELECT data FROM legacy_history.state WHERE id=1').get();
+        if (typeof row?.data !== 'string') throw failure();
+        const prior = consentSchema.parse(JSON.parse(row.data));
+        if (prior.owner && prior.owner !== owner) throw failure();
+        const erase = change.action === 'delete';
+        const enable = change.action === 'set' && change.enabled;
+        if (!erase && prior.enabled === enable) return {changed:false, marker:before};
+        let next: Consent;
+        if (erase) {
+          const deleted = db.prepare('DELETE FROM legacy_history.observations').run();
+          if (!deleted.changes && !prior.owner) return {changed:false, marker:before};
+          next = emptyConsent();
+        } else {
+          next = {...prior, owner, enabled:enable, lastSession:undefined, ...(enable ? {consentAt:this.now()} : {})};
+        }
+        db.prepare('UPDATE legacy_history.state SET data=? WHERE id=1').run(JSON.stringify({...next, scenario:null, reference:null}));
+        committed = next;
+        return {changed:true, marker:locationContinuity(db, true)};
+      },
+      committed: () => {
+        if (committed) { this.consent = committed; this.changed(); }
+      },
+    });
+  }
+
   ingest(fix: LocationFix, sharingId: string, raw: unknown, owner: string) {
     this.maintain(); const input = historyUploadSchema.parse(raw);
     if (!this.authorized() || this.consent.owner !== owner || input.epoch !== this.epoch) return false;
     const measured = Date.parse(fix.measured_at);
     const expiresAt = historyExpiry(measured, '7d');
-    if (measured < this.consent.consentAt || measured > this.now() || expiresAt <= this.now()) return false;
+    if (measured < this.consent.consentAt || measured > this.now()) return false;
+    let active: ReturnType<LocationArchive['active']>;
+    try { active = this.archive?.active(owner); } catch { /* Preserve the legacy grant if extension keys are unavailable. */ }
+    const recent = expiresAt > this.now();
+    if (!recent && !active) return false;
     const id = createHash('sha256').update(`${owner}:${fix.measured_at}`).digest('hex');
     const next = {...this.consent};
     if (next.lastSession !== sharingId) { next.lastSession = sharingId; next.recordingEpoch++; }
@@ -172,11 +234,22 @@ export class LocationHistoryStore {
       received_at: new Date(this.now()).toISOString(), ...(input.timezone ? {timezone: input.timezone} : {}),
       ...(input.utc_offset_minutes === undefined ? {} : {utc_offset_minutes: input.utc_offset_minutes})});
     const entry = {...observation, recording_epoch: next.recordingEpoch};
+    if (!recent) {
+      // A first upload can arrive outside the legacy period. Only an independent,
+      // already active archive grant can accept it at its original measurement time.
+      if (!active || this.archive?.put(active, observation, next.recordingEpoch) !== 'stored') return false;
+      this.save(next);
+      this.changes.emit();
+      return true;
+    }
     let evicted: {measured: number}[];
     this.db.exec('BEGIN IMMEDIATE');
     try {
       const result = this.db.prepare('INSERT OR IGNORE INTO observations(id,measured,data,expires_at) VALUES(?,?,?,?)').run(id, measured, JSON.stringify(entry), expiresAt);
       if (!result.changes) { this.db.exec('ROLLBACK'); return false; }
+      if (active && this.archive?.put(active, observation, next.recordingEpoch)) {
+        this.db.prepare('UPDATE observations SET archive_generation=?,archive_stamp=? WHERE id=?').run(active.generation, active.lease.stamp, id);
+      }
       evicted = this.db.prepare('DELETE FROM observations WHERE id IN (SELECT id FROM observations ORDER BY measured DESC,id DESC LIMIT -1 OFFSET ?) RETURNING measured').all(MAXIMUM) as {measured: number}[];
       if (evicted.length) next.capacityOmitted = true;
       this.save(next); this.db.exec('COMMIT');
@@ -195,20 +268,28 @@ export class LocationHistoryStore {
       lines: references(evidence.lines), landmarks: references(evidence.landmarks), limitations: evidence.limitations.slice(0, 2).map(x => x.slice(0, 150))};
     const text = JSON.stringify(bounded); if (Buffer.byteLength(text) > 4096) return;
     this.db.prepare('UPDATE observations SET geography=? WHERE id=?').run(text, id);
+    this.archive?.attach(id, bounded, owner);
   }
   revokeOwner(owner: string) { if (this.consent.owner === owner) { this.db.exec('DELETE FROM observations'); this.save(emptyConsent()); this.changed(); } }
   readPhoneTime(dates: string[], owner: string): PhoneTimeRead {
     try {
       this.maintain();
       if (!this.authorized() || this.consent.owner !== owner || !dates.length) return {evidence:{status:'unavailable'}};
-      const {evidence, earliestExpiry} = readStoredPhoneTime(this.db, dates);
-      if (earliestExpiry === undefined) return {evidence};
+      let active: ReturnType<LocationArchive['active']>;
+      try { active = this.archive?.active(owner); } catch { return {evidence:{status:'unavailable'}}; }
+      const extra = active ? this.archive!.guard(active) : undefined;
+      const {evidence, earliestExpiry} = readStoredPhoneTime(this.db, dates, active ? ranges => {
+        try { return this.archive!.clocks(active, ranges); }
+        catch { return undefined; }
+      } : undefined);
+      if (extra && !extra()) return {evidence:{status:'unavailable'}};
+      if (earliestExpiry === undefined && (!extra || evidence.status !== 'empty')) return {evidence};
       const epoch = this.epoch;
       const now = this.now();
-      if (earliestExpiry <= now) return {evidence:{status:'unavailable'}};
-      const expires = Math.min(now + 5 * 60_000, earliestExpiry);
+      if (earliestExpiry !== undefined && earliestExpiry <= now) return {evidence:{status:'unavailable'}};
+      const expires = Math.min(now + 5 * 60_000, earliestExpiry ?? Infinity);
       return {evidence, expiresAt: expires, allowed: () => {
-        try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() < expires; }
+        try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() >= now && this.now() < expires && (!extra || extra()); }
         catch { this.fail(); return false; }
       }};
     } catch { this.fail(); return {evidence:{status:'unavailable'}}; }
@@ -219,7 +300,29 @@ export class LocationHistoryStore {
     catch { this.fail(); return undefined; }
   }
   read(raw: unknown = {}) { return this.readHistory(raw, false); }
-  readSelectedHistory(input: HistoryPageInput) { return this.readHistory(input, true); }
+  readSelectedHistory(input: HistoryPageInput) {
+    if (!this.archive || ('cursor' in input && !this.archive.hasPage(input.cursor))) return this.readHistory(input, true);
+    this.maintain();
+    if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};
+    try {
+      const owner = this.consent.owner!;
+      const active = this.archive.active(owner);
+      if (active) {
+        const page = this.archive.read(input, owner, active, this.consent.capacityOmitted);
+        return {...page.result, ...this.receipt(page.expires, page.guard)};
+      }
+    } catch (error) {
+      if (error instanceof ToolRejection || 'cursor' in input) throw error;
+      const fallback = this.readHistory(input, true);
+      return {...fallback, status:'partial', protected_history:'unavailable'};
+    }
+    return this.readHistory(input, true);
+  }
+  private receipt(expires: number, guard?: () => boolean) {
+    const id = randomUUID(); this.reads.set(id, {epoch:this.epoch, expires, guard});
+    while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
+    return {history_context_id:id, response_context:{tool:'respond_to_context', arguments:{history_context_ids:[id]}, expires_no_later_than:new Date(expires).toISOString()}};
+  }
   private readHistory(raw: unknown, selected: boolean) {
     this.maintain();
     if (!this.authorized()) return {status: 'unavailable', entries: [], next_cursor: null};
@@ -229,13 +332,11 @@ export class LocationHistoryStore {
     const now = this.now();
     if (expiresAt <= now) throw failure();
     const expires = Math.min(now + 5 * 60_000, expiresAt);
-    const id = randomUUID(); this.reads.set(id, {epoch: this.epoch, expires});
-    while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
-    return {...result, history_context_id: id, response_context: {tool: 'respond_to_context', arguments: {history_context_ids: [id]}, expires_no_later_than: new Date(expires).toISOString()}};
+    return {...result, ...this.receipt(expires)};
   }
   responseGuard(contextId: string) {
     const record = this.reads.get(contextId);
-    return () => { this.maintain(); if (!record || !this.authorized() || record.epoch !== this.epoch || record.expires <= this.now()) throw failure(); return true; };
+    return () => { this.maintain(); if (!record || !this.authorized() || record.epoch !== this.epoch || record.expires <= this.now() || (record.guard && !record.guard())) throw failure(); return true; };
   }
   respond(raw: unknown) {
     const input = z.object({history_context_id: z.string().uuid(), utterance_id: z.string().uuid(), text: z.string().trim().min(1).max(2000)}).strict().parse(raw);
@@ -249,5 +350,5 @@ export class LocationHistoryStore {
     const message_id = `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
     return this.announce({message_id, utterance_id: input.utterance_id, text: input.text}, guard);
   }
-  close() { if (this.closed) return; this.closed = true; clearInterval(this.timer); this.reads.clear(); this.index.clear(); this.db.close(); }
+  close() { if (this.closed) return; this.closed = true; clearInterval(this.timer); this.archive?.clear(); this.reads.clear(); this.index.clear(); this.db.close(); }
 }

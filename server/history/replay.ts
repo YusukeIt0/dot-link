@@ -53,6 +53,44 @@ export function grantedExpiry(measured: number, stored: number) {
   return Math.min(stored, historyExpiry(measured, '7d'));
 }
 
+/** Gaps between successive observed fixes in an already ordered window. */
+export function locationGaps(points: readonly {measured_at:string; recording_epoch:number}[], gapMs=120_000) {
+  const gaps: {after: string; before: string; reason: string}[] = [];
+  let count = 0;
+  for (let i = 1; i < points.length; i++) {
+    const previous = points[i - 1], current = points[i];
+    const boundary = previous.recording_epoch !== current.recording_epoch;
+    if (!boundary && Date.parse(current.measured_at) - Date.parse(previous.measured_at) <= gapMs) continue;
+    count++;
+    if (gaps.length < 20) gaps.push({after:previous.measured_at, before:current.measured_at,
+      reason:boundary ? 'recording_boundary' : 'no_observations'});
+  }
+  return {gaps, omitted_gap_count:count - gaps.length};
+}
+
+export function selectedLocationFields(entry: HistoryObservation, fields: readonly LocationHistoryField[], geography: () => ReturnType<typeof mapLocationEvidence>) {
+  return {id: entry.id, source: entry.source, measured_at: entry.measured_at,
+    ...(fields.includes('position') ? {latitude: entry.latitude, longitude: entry.longitude, accuracy: entry.accuracy} : {}),
+    ...(fields.includes('motion') ? {speed: entry.speed ?? null, heading: entry.heading ?? null} : {}),
+    ...(fields.includes('clock') ? {received_at: entry.received_at ?? null, timezone: entry.timezone ?? null,
+      utc_offset_minutes: entry.utc_offset_minutes ?? null} : {}),
+    ...(fields.includes('geography') ? {geography: geography()} : {}),
+  };
+}
+
+export function mapLocationEvidence(evidence?: GeographicEvidence) {
+  if (!evidence) return {status: 'unavailable' as const};
+  const refs = (items: GeographicEvidence['lines']) => items.slice(0, 3).map(item => ({
+    id: item.id.slice(0,120), kind: item.kind.slice(0,60), ...(item.name ? {name: item.name.slice(0,120)} : {}),
+    relation: item.relation, distance_m: item.distance_m,
+  }));
+  return {status: 'available' as const, source: evidence.source.slice(0,160), release: evidence.release.slice(0,80),
+    attribution: evidence.attribution.slice(0,300), license_url: evidence.license_url.slice(0,300),
+    areas: refs(evidence.areas), lines: refs(evidence.lines), landmarks: refs(evidence.landmarks),
+    limitations: evidence.limitations.slice(0,4).map(s => s.slice(0,200)),
+    presentation: 'Bounded nearby references, not road matching or a complete map.'};
+}
+
 /**
  * Bounded query index shared by durable phone history and isolated fixtures.
  * Consent, persistence and ingestion authorization belong to the outer owner.
@@ -190,35 +228,13 @@ export class LocationHistoryIndex implements HistoryReader {
   }
 
   private mapEvidence(entry: Entry) {
-    if (!this.geography) return { status: 'unavailable' as const };
-    try {
-      const evidence = this.geography(entry);
-      if (!evidence) return { status: 'unavailable' as const };
-      // Reuse relations from the existing resolver; bound reference presentation.
-      const refs = (items: GeographicEvidence['lines']) => items.slice(0, 3).map(item => ({
-        id: item.id.slice(0, 120), kind: item.kind.slice(0, 60), ...(item.name ? { name: item.name.slice(0, 120) } : {}),
-        relation: item.relation, distance_m: item.distance_m,
-      }));
-      return { status: 'available' as const, source: evidence.source.slice(0, 160), release: evidence.release.slice(0, 80),
-        attribution: evidence.attribution.slice(0, 300), license_url: evidence.license_url.slice(0, 300),
-        areas: refs(evidence.areas), lines: refs(evidence.lines), landmarks: refs(evidence.landmarks),
-        limitations: evidence.limitations.slice(0, 4).map(s => s.slice(0, 200)),
-        presentation: 'Bounded nearby references, not road matching or a complete map.' };
-    } catch { return { status: 'unavailable' as const }; }
+    try { return mapLocationEvidence(this.geography?.(entry)); }
+    catch { return {status: 'unavailable' as const}; }
   }
 
   private present(section: Section, query: Query) {
     const first = section.points[0], last = section.points.at(-1)!;
-    if (query.fields) {
-      const fields = query.fields;
-      return {id: first.id, source: first.source, measured_at: first.measured_at,
-        ...(fields.includes('position') ? point(first) : {}),
-        ...(fields.includes('motion') ? {speed: first.speed ?? null, heading: first.heading ?? null} : {}),
-        ...(fields.includes('clock') ? {received_at: first.received_at ?? null, timezone: first.timezone ?? null,
-          utc_offset_minutes: first.utc_offset_minutes ?? null} : {}),
-        ...(fields.includes('geography') ? {geography: this.mapEvidence(first)} : {}),
-      };
-    }
+    if (query.fields) return selectedLocationFields(first, query.fields, () => this.mapEvidence(first));
     if (query.detail === 'observations') {
       const { recording_epoch: _, expires_at: _expiry, ...observation } = first;
       return { ...observation, geography: this.mapEvidence(first) };
@@ -266,13 +282,7 @@ export class LocationHistoryIndex implements HistoryReader {
     }
     const points = stored ? stored.window(query.start, query.end) : this.sorted().filter(p => stamp(p) >= query.start && stamp(p) < query.end);
     const sections: Section[] = query.detail === 'summary' ? this.sections(points) : points.map(p => ({ kind: 'observations', points: [p] }));
-    const gaps: { after: string; before: string; reason: string }[] = [];
-    let gapCount = 0;
-    for (let i = 1; i < points.length; i++) if (this.disconnected(points[i - 1], points[i])) {
-      gapCount++;
-      if (gaps.length < 20) gaps.push({ after: points[i - 1].measured_at, before: points[i].measured_at,
-        reason: points[i - 1].recording_epoch !== points[i].recording_epoch ? 'recording_boundary' : 'no_observations' });
-    }
+    const {gaps, omitted_gap_count} = locationGaps(points, this.gapMs);
     const result = {
       ...base, status: points.length ? 'available' as const : 'empty' as const, detail: query.detail,
       query: { start_at: new Date(query.start).toISOString(), end_at: new Date(query.end).toISOString(),
@@ -280,7 +290,7 @@ export class LocationHistoryIndex implements HistoryReader {
       ...(query.fields ? {field_definitions: Object.fromEntries(query.fields.map(field => [field, locationHistoryFieldDescriptions[field]]))} : {}),
       coverage: { kind: 'partial_observations', observation_count: points.length,
         first_observed_at: points[0]?.measured_at ?? null, last_observed_at: points.at(-1)?.measured_at ?? null,
-        gaps, omitted_gap_count: gapCount - gaps.length, capacity_omissions: stored?.capacityOmitted ?? this.capacityOmitted },
+        gaps, omitted_gap_count, capacity_omissions: stored?.capacityOmitted ?? this.capacityOmitted },
       entries: [] as ReturnType<LocationHistoryIndex['present']>[], next_cursor: null as string | null,
     };
     let next = offset;

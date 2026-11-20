@@ -144,8 +144,15 @@ retained history. Give `start_at` and `end_at` as instants with explicit UTC
 offsets. The start is inclusive and the end is exclusive. Observation windows
 stop at the time of the read. For weather alone, a forecast known in the past
 can have a validity time in the future.
-Under `fields.location`,
-select from `position`, `motion`, `clock` and `geography`. Under `fields.polar`,
+An existing recent-place grant keeps its seven-day scope. A new location archive
+can include newly accepted phone fixes and subsequently attached geographic
+references. A single location setting updates both grants together. Reading an
+overlapping period returns each fix once. Stopping location history in an older
+app leaves the extended grant off. Deleting it there retires the previous
+generation. Phone clock lookups use upload time, which can differ from measurement
+time, and report an unresolved clock when the retained coverage is incomplete.
+
+Under `fields.location`, select from `position`, `motion`, `clock` and `geography`. Under `fields.polar`,
 select the relevant metrics by name. A comparison
 of two periods can start with a narrow selection for each, followed by a request
 for more detail only where it matters.
