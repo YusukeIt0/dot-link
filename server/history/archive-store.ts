@@ -51,7 +51,8 @@ type DatabaseState = {
   dueDays: number[];
   sweep: Position | null;
 };
-type Stored = { record: ArchiveRecord } | { forgetAt: number };
+type DuplicateMarker = { forgetDay: number };
+type Stored = { record: ArchiveRecord } | DuplicateMarker;
 type Row = { n: number; token: string; body: Uint8Array };
 type Options = { now?: () => number; maxRecords?: number; maxBytes?: number; existingOnly?: boolean };
 const dayOf = (ms: number) => Math.floor(ms / DAY);
@@ -67,6 +68,12 @@ function addDueDay(state: DatabaseState, day: number) {
     state.dueDays.push(day);
     state.dueDays.sort((a, b) => a - b);
   }
+}
+function duplicateMarker(anchorMs: number, now: number): DuplicateMarker | undefined {
+  const latest = historyExpiry(anchorMs, '1y');
+  // The archive needs an opaque equality check after expiry, not the original
+  // measurement instant. Round up so forgetting can never make it eligible again.
+  if (latest > now) return {forgetDay: Math.ceil(latest / DAY)};
 }
 function intervalDays(record: ArchiveInput) {
   return dayOf(record.toMs - 1) - dayOf(record.fromMs) + 1;
@@ -177,18 +184,28 @@ export class HistoryArchiveStore {
         return 'record' in value && now < value.record.expiresAtMs ? 'duplicate' : 'expired';
       }
       const expiresAtMs = historyExpiry(input.anchorMs, period);
-      if (expiresAtMs <= now) return 'expired';
+      if (expiresAtMs <= now) {
+        const marker = duplicateMarker(input.anchorMs, now);
+        return marker && !this.insert(token, marker) ? 'capacity' : 'expired';
+      }
       const record: ArchiveRecord = {id: input.id, version: input.version, fromMs: input.fromMs, toMs: input.toMs,
         anchorMs: input.anchorMs, availableAtMs: input.availableAtMs, payload: input.payload, expiresAtMs, period};
-      const body = this.pack('entry:' + token, {record});
-      const bytes = cost(body, 2 * intervalDays(record));
-      const state = this.state();
-      if (body.length > MAX_PAYLOAD_BYTES || state.bytes + bytes > this.maxBytes || state.count >= this.maxRecords) {
-        if (!state.capacityOmitted) { state.capacityOmitted = true; this.save(state); }
-        return 'capacity';
-      }
-      const dueDay = dayOf(expiresAtMs);
-      const {lastInsertRowid} = this.sql('INSERT INTO entries(token,due,body) VALUES(?,?,?)').run(token, this.tag('due', dueDay), body);
+      return this.insert(token, {record}) ? 'stored' : 'capacity';
+    });
+  }
+
+  private insert(token: string, value: Stored) {
+    const record = 'record' in value ? value.record : undefined;
+    const dueDay = 'forgetDay' in value ? value.forgetDay : dayOf(value.record.expiresAtMs);
+    const body = this.pack('entry:' + token, value);
+    const bytes = cost(body, record ? 2 * intervalDays(record) : 0);
+    const state = this.state();
+    if (body.length > MAX_PAYLOAD_BYTES || state.bytes + bytes > this.maxBytes || state.count >= this.maxRecords) {
+      if (!state.capacityOmitted) { state.capacityOmitted = true; this.save(state); }
+      return false;
+    }
+    const {lastInsertRowid} = this.sql('INSERT INTO entries(token,due,body) VALUES(?,?,?)').run(token, this.tag('due', dueDay), body);
+    if (record) {
       const index = this.sql('INSERT INTO days(bucket,n) VALUES(?,?)');
       const hour = Math.floor(record.fromMs / HOUR);
       const singleHour = hour === Math.floor((record.toMs - 1) / HOUR);
@@ -196,12 +213,12 @@ export class HistoryArchiveStore {
         index.run(this.tag('day', day), lastInsertRowid);
         index.run(singleHour ? this.tag('hour', hour) : this.tag('spanning', day), lastInsertRowid);
       }
-      state.count++;
-      state.bytes += bytes;
-      addDueDay(state, dueDay);
-      this.save(state);
-      return 'stored';
-    });
+    }
+    state.count++;
+    state.bytes += bytes;
+    addDueDay(state, dueDay);
+    this.save(state);
+    return true;
   }
 
   /** Rows are grouped by the first overlapping UTC day, then admission order.
@@ -284,16 +301,17 @@ export class HistoryArchiveStore {
         for (const row of rows) {
           const value = this.openRow(row);
           const live = 'record' in value;
-          const deadline = live ? value.record.expiresAtMs : value.forgetAt;
+          const deadline = live ? value.record.expiresAtMs : value.forgetDay * DAY;
+          if (dayOf(deadline) !== day) throw new Error('Invalid archive deadline index');
           if (deadline <= now) {
-            const forgetAt = live ? historyExpiry(value.record.anchorMs, '1y') : deadline;
+            const marker = live ? duplicateMarker(value.record.anchorMs, now) : undefined;
             state.bytes -= cost(row.body, live ? 2 * intervalDays(value.record) : 0);
-            if (live && forgetAt > now) {
-              const body = this.pack('entry:' + row.token, {forgetAt});
+            if (marker) {
+              const body = this.pack('entry:' + row.token, marker);
               this.sql('DELETE FROM days WHERE n=?').run(row.n);
-              this.sql('UPDATE entries SET body=?,due=? WHERE n=?').run(body, this.tag('due', dayOf(forgetAt)), row.n);
+              this.sql('UPDATE entries SET body=?,due=? WHERE n=?').run(body, this.tag('due', marker.forgetDay), row.n);
               state.bytes += cost(body, 0);
-              addDueDay(state, dayOf(forgetAt));
+              addDueDay(state, marker.forgetDay);
             } else {
               this.sql('DELETE FROM entries WHERE n=?').run(row.n);
               state.count--;

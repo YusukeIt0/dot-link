@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import test, { type TestContext } from 'node:test';
 import { HistoryArchiveStore, type ArchiveInput } from '../server/history/archive-store.ts';
+import { openArchive } from '../server/history/archive-crypto.ts';
 
 const DAY = 86_400_000;
 const start = Date.UTC(2024, 0, 31, 12);
@@ -42,11 +43,21 @@ test('assigned deadlines outlive policy changes and restarts; an expired record 
   f.reopen();
   assert.equal(f.store.put(record('seven'), '1y'), 'expired');
   assert.equal(f.store.put(record('first-received-late'), '7d'), 'expired');
+  f.reopen();
+  assert.equal(f.store.put(record('first-received-late'), '1y'), 'expired');
+  const raw = new DatabaseSync(f.path, {readOnly: true});
+  const marker = raw.prepare('SELECT token,body FROM entries ORDER BY n DESC LIMIT 1').get()!;
+  const clear = openArchive(f.key, 'dot-link:factor-archive:v1:entry:' + marker.token, marker.body as Uint8Array);
+  assert.deepEqual(JSON.parse(clear.toString()), {forgetDay: Math.ceil(Date.UTC(2025, 0, 31, 12) / DAY)});
+  clear.fill(0);
+  raw.close();
   f.setNow(end);
   assert.deepEqual(f.store.read(query).records.map(r => r.id), ['year']);
   assert.equal(f.store.prune(), 1);
   f.setNow(Date.UTC(2025, 0, 31, 12));
   assert.deepEqual(f.store.read(query).records, []);
+  assert.equal(f.store.prune(), 1);
+  f.setNow(Date.UTC(2025, 1, 1));
   assert.equal(f.store.prune(), 3);
   assert.equal(f.store.put(jan, '1y'), 'expired');
 });
@@ -108,6 +119,8 @@ test('capacity loss is durable, and filtered-out rows are bounded even in a dens
   const second = f.store.read({...window, cursor: first.nextCursor});
   assert.deepEqual(second.records.map(r => r.id), ['160', '161']);
   assert.equal(second.nextCursor, null);
+  f.setNow(start + 7 * DAY);
+  assert.equal(f.store.put(record('late-marker-did-not-fit'), '7d'), 'capacity');
   f.store.clear();
   assert.equal(f.store.read(window).capacityOmitted, false);
 });
