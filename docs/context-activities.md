@@ -148,8 +148,9 @@ to `respond_to_context`. The Mac rechecks their authorization and expiry.
 An answer based on recent-place history still requires the existing G2 question and its
 `utterance_id`. A history read neither acquires new source data nor sends a
 message. The contract can be exercised with synthetic records through MCP.
-The connected Dot's choice of period and fields, follow-up, and handling of
-partial or empty results still need verification in conversation.
+For connected-Dot acceptance, compare the requested periods and fields in the
+synthetic server's trace with the answer in the conversation. Include a follow-up
+and a period in which only one source provides evidence.
 
 ## Polar health context
 
