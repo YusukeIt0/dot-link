@@ -11,36 +11,55 @@ export interface SharingIntentSource {
   sharingIntent(): {id: string; expiresAt: number; subscribed: boolean; activationStopped?: boolean} | undefined;
 }
 
-const recordSchema = z.object({
+export const activationRecordSchema = z.object({
   key: z.string().regex(/^[a-f0-9]{64}$/), id: z.string().uuid(), createdAt: z.string().datetime(),
   attempts: z.number().int().min(0).max(3), nextAttempt: z.number(),
   delivery: z.enum(['pending', 'accepted', 'failed', 'complete']),
 });
-type Record = z.infer<typeof recordSchema>;
+export type ActivationRecord = z.infer<typeof activationRecordSchema>;
+export interface ActivationStore {
+  load(): ActivationRecord | undefined;
+  save(record: ActivationRecord, previous?: ActivationRecord): void;
+}
+
+function fileStore(path: string): ActivationStore {
+  mkdirSync(dirname(path), {recursive: true, mode: 0o700});
+  let current: ActivationRecord | undefined;
+  try { current = activationRecordSchema.parse(JSON.parse(readFileSync(path, 'utf8'))); }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Sharing activation could not be loaded');
+  }
+  return {
+    load: () => current,
+    save(record) {
+      writeFileSync(`${path}.tmp`, JSON.stringify(record), {mode: 0o600});
+      renameSync(`${path}.tmp`, path);
+      current = record;
+    },
+  };
+}
 
 /** Translate the existing sharing control into one bounded owner request to the
  * already-connected Dot. Only ChatGPT can create the real feature subscription.
  * No coordinates, conversation messages, callback credentials or AI decisions are
  * stored here. This does not pretend a webhook receipt is a subscription. */
 export class SharingActivation {
-  private record?: Record;
+  private record?: ActivationRecord;
   private closed = false;
   private scheduled = false;
   private sending = false;
   private timer?: ReturnType<typeof setTimeout>;
   private readonly removers: (() => void)[];
-  private readonly path: string;
+  private readonly store: ActivationStore;
   private readonly bridge: Bridge;
   private readonly sharing: SharingIntentSource;
   private readonly feature: 'location' | 'notification' | 'health';
   private readonly now: () => number;
-  constructor(path: string, bridge: Bridge, sharing: SharingIntentSource, now = Date.now, feature: 'location' | 'notification' | 'health' = 'location') {
-    this.feature = feature; this.path = path; this.bridge = bridge; this.sharing = sharing; this.now = now;
-    if(feature !== 'health') mkdirSync(dirname(path), {recursive: true, mode: 0o700});
-    try { if(feature !== 'health') this.record = recordSchema.parse(JSON.parse(readFileSync(path, 'utf8'))); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw new Error('Sharing activation could not be loaded');
-    }
+  constructor(storage: string | ActivationStore, bridge: Bridge, sharing: SharingIntentSource, now = Date.now, feature: 'location' | 'notification' | 'health' = 'location') {
+    this.feature = feature; this.bridge = bridge; this.sharing = sharing; this.now = now;
+    if (feature === 'health' && typeof storage === 'string') throw new Error('Polar activation requires protected storage');
+    this.store = typeof storage === 'string' ? fileStore(storage) : storage;
+    if (typeof storage === 'string') this.record = this.store.load();
     this.removers = [bridge.changes.subscribe(() => this.schedule()), sharing.changes.subscribe(() => this.schedule())];
     this.schedule();
   }
@@ -74,10 +93,9 @@ export class SharingActivation {
     // must neither become a G2 message nor claim that reply text was delivered.
     return {request_id: this.record.id, source: 'owner_sharing_control', subscription_active: true, delivered_to_g2: false};
   }
-  private save(record: Record) {
-    if(this.feature === 'health'){this.record=record;return;}
-    writeFileSync(`${this.path}.tmp`, JSON.stringify(record), {mode: 0o600});
-    renameSync(`${this.path}.tmp`, this.path); this.record = record;
+  private save(record: ActivationRecord) {
+    this.store.save(record, this.record);
+    this.record = record;
   }
   private schedule() {
     if (this.closed || this.scheduled) return;
@@ -99,6 +117,7 @@ export class SharingActivation {
     clearTimeout(this.timer); this.timer = undefined;
     const source = this.source(true);
     if (!source) return;
+    this.record = this.store.load();
     if (source.subscribed) {
       if (this.record?.key === source.key && this.record.delivery !== 'complete') this.save({...this.record, delivery: 'complete'});
       return;

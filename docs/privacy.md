@@ -91,11 +91,14 @@ histories and preserves the latest profile. Disconnecting the account or deletin
 health data also removes the archive. A full external backup with the original
 keys and policy can still contain older records.
 
-Health activation retry metadata stays in memory. Missing keys or authentication
-failure block access. Local reset deletes the snapshot and its Keychain key; a new
-connection creates a new key. Existing encrypted filesystem backups are not securely
-erased by local deletion. Cloud storage, key recovery and device migration are not
-implemented, and this is not end-to-end encryption.
+The Mac keeps an encrypted local record of its request for Polar event updates.
+It stores the request identifier, delivery status and retry timing so a restart
+can resume the same request. The record contains no health measurements.
+Missing keys or authentication failure block access. Local reset deletes the
+snapshot and its Keychain key. A new connection creates a new key.
+Local deletion does not erase existing encrypted filesystem backups. Cloud storage,
+key recovery and device migration are not implemented, and this is not end-to-end
+encryption.
 
 OFF stops acquisition and AI reads; saved measurements still expire. **Delete health
 data** turns sharing off, deletes measurements/profile and prevents earlier measurements

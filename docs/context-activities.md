@@ -208,8 +208,10 @@ fetch every factor or force a report. Missing data, source dates and provider-de
 scores are reasoning inputs, not a routine disclaimer. Silence remains valid.
 
 Enabling health sharing in Even requests `health.updated` reception from the existing
-Dot through the same owner-control mechanism as other sharing choices. The event
-contains an opaque update identifier, not health values. Acquisition only notifies
+Dot through the same owner-control mechanism as other sharing choices. If the
+host accepted the request and registration is still pending, restarting the Mac
+relay keeps the same request. Ordinary conversation can continue while it is pending.
+The event contains an opaque update identifier, not health values. Acquisition only notifies
 normalized changes. No second user-managed subscription switch is introduced.
 
 Health-derived G2 output uses `respond_to_health` and the returned short-lived read

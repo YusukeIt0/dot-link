@@ -98,7 +98,7 @@ const health = new HealthContext(resolve('.runtime/health/state.enc'), {
   announce: (input,guard) => bridge.sendMessage(input,guard), sender: new WebhookSender(safePost(hosts)),hosts,
 });
 const activation: SharingActivation[] = [];
-try {activation.push(new SharingActivation(resolve('.runtime/health-sharing-activation.json'),bridge,health,Date.now,'health'));}
+try {activation.push(new SharingActivation(health.activationStore,bridge,health,Date.now,'health'));}
 catch {console.error('Health activation unavailable; ordinary conversation remains available');}
 try { activation.push(new SharingActivation(resolve('.runtime/sharing-activation.json'), bridge, locations)); }
 catch { console.error('Sharing activation unavailable; ordinary conversation remains available'); }

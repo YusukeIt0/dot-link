@@ -7,6 +7,8 @@ import { subscriptionArguments, subscriptionDelivery, SubscriptionResponseError 
 import { contextActivityGuidance, decisionFactorTool } from '../context-guidance.ts';
 import type { WebhookSender } from '../webhook.ts';
 import { HealthVault } from './vault.ts';
+import { PolarActivationJournal } from './activation.ts';
+import type { ActivationStore } from '../sharing-activation.ts';
 import { PolarArchiveGrant, type PolarArchiveChoice, type PolarArchiveLease } from './archive-grant.ts';
 import { type HistoryPeriod } from '../history/retention.ts';
 import { categories, observationSchema, profileSchema, RETENTION, type Observation } from './data.ts';
@@ -60,6 +62,14 @@ export class HealthContext {
   readonly changes=new ChangeSignal();
   private vault:HealthVault;private options:HealthOptions;private api:PolarAPI;private now:()=>number;
   private archive:PolarArchiveGrant;
+  private readonly activation:PolarActivationJournal;
+  readonly activationStore:ActivationStore = {
+    load: () => this.key && this.usable() && !this.state.activationStopped ? this.activation.load(this.key, this.vault) : undefined,
+    save: (record, previous) => {
+      if (!this.usable() || !this.key || this.state.activationStopped) throw rejected();
+      this.activation.save(this.key, this.vault, record, previous);
+    },
+  };
   private archiveCaptureFault?:string;
   private state=empty();private key?:Buffer;private epoch=randomUUID();private revision=randomUUID();private generation=0;
   private ready:Promise<void>;private closed=false;private healthy=true;private fault='';private busy=false;
@@ -74,14 +84,15 @@ export class HealthContext {
   constructor(path:string,options:HealthOptions) {
     this.vault=new HealthVault(path);this.options=options;this.api=options.api??new PolarAPI({now:options.now});this.now=options.now??Date.now;
     this.archive=new PolarArchiveGrant(this.vault,this.now);
-    this.ready=this.load();
+    this.activation=new PolarActivationJournal(path);
+    this.ready=this.load().then(() => this.changes.emit());
     this.timer=setInterval(()=>{void this.tick();},30_000);this.timer.unref();
   }
   private async load() {
     if(!this.vault.exists()){
       // An older app may have reset the legacy vault and its Keychain key.
       // Without that vault there is no authority to reopen its archive.
-      try{this.archive.reset();}catch{}
+      try{this.archive.reset();this.activation.discard();}catch{}
       return;
     }
     try {const key=await this.options.key('read');if(!key)throw new Error();if(this.closed){key.fill(0);return;}this.state=stateSchema.parse(this.vault.read(key));this.key=key;this.archive.restore(key,this.state,this.vault.fingerprint!);this.maintain();}
@@ -91,7 +102,27 @@ export class HealthContext {
     if(!this.key||!this.healthy)throw rejected();
     try {
       const previous=this.vault.fingerprint;
-      this.vault.write(this.key,stateSchema.parse(next),pending=>this.archive.checkpoint(next,previous,pending));
+      const key = this.key;
+      this.vault.write(key,stateSchema.parse(next),pending=>{
+        const release = this.archive.checkpoint(next,previous,pending);
+        if (release === undefined || !previous) return;
+        const prior = this.state;
+        const sameDecision = prior.enabled && next.enabled && !prior.activationStopped && !next.activationStopped &&
+          prior.owner === next.owner && prior.connection?.clientId === next.connection?.clientId &&
+          prior.connection?.userId === next.connection?.userId && prior.connection?.accessToken === next.connection?.accessToken;
+        const subscribed = !!next.subscription && next.subscription !== prior.subscription;
+        if (sameDecision && release && this.activation.checkpoint(key, previous, pending, subscribed)) return release;
+        // A skipped companion update cannot block the live v1 commit. Record a
+        // same-choice transition or retire local state only after it succeeds.
+        return () => {
+          try {
+            if (this.vault.fingerprint !== pending) return;
+            if (sameDecision) this.activation.defer(previous, pending, subscribed);
+            else if (release) this.activation.discard();
+            else this.activation.forget();
+          } finally { release?.(); }
+        };
+      });
       this.state=next;
       if (!previous) this.archive.restore(this.key,next,this.vault.fingerprint!);
     }
@@ -369,7 +400,13 @@ export class HealthContext {
     const result=await this.options.announce({message_id,text:p.text,...(p.utterance_id?{utterance_id:p.utterance_id}:{})},allowed);
     this.rememberDecision(p.read_id,signature,result);return result;
   }
-  sharingIntent() {return this.usable()?{id:this.epoch,expiresAt:this.state.connection!.expiresAt!,subscribed:!!this.active(),activationStopped:this.state.activationStopped}:undefined;}
+  sharingIntent() {
+    if (!this.usable() || !this.key || this.state.activationStopped) return;
+    try {
+      const {decision} = this.activation.current(this.key, this.vault);
+      return {id:decision, expiresAt:this.state.connection!.expiresAt!, subscribed:!!this.active()};
+    } catch { return; }
+  }
   private active() {const s=this.state.subscription;return s&&s.expiresAt>this.now()?s:undefined;}
   subscribe(raw:unknown) {
     const task=this.subscriptionTail.then(async()=>{await this.ready;if(!this.healthy||!this.key)throw rejected();
@@ -414,7 +451,7 @@ export class HealthContext {
       this.save({...this.state,enabled:false});this.fault='';this.maintain();this.changes.emit();return this.setupStatus();
     }
     if(p.action==='unlock'){try{await this.options.key('authorize');}catch{throw new Error('HEALTH_KEY_UNAVAILABLE');}this.healthy=true;this.fault='';await this.load();this.changes.emit();return this.setupStatus();}
-    if(p.action==='reset'){this.stopOAuth();this.invalidate();this.archive.reset();this.archive.close();this.vault.remove();await this.options.key('delete');this.key?.fill(0);this.key=undefined;this.state=empty();this.healthy=true;this.fault='';return this.setupStatus();}
+    if(p.action==='reset'){this.stopOAuth();this.invalidate();this.archive.reset();this.archive.close();this.activation.discard();this.vault.remove();await this.options.key('delete');this.key?.fill(0);this.key=undefined;this.state=empty();this.healthy=true;this.fault='';return this.setupStatus();}
     if(p.action==='disconnect'&&!this.state.connection){return this.setupStatus();}
     if(p.action==='disconnect'){
       this.stopOAuth();this.invalidate();if(!this.healthy)throw rejected();

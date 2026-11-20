@@ -77,7 +77,7 @@ test('health events and activation direct combined evidence through the combined
  });
  const bridge=new Bridge(f.path+'.bridge',sender,['example.com']);t.after(()=>bridge.close());
  await bridge.subscribe({name:'utterance.created',arguments:{session_id:'personal-g2'},delivery:{mode:'webhook',url:'https://example.com/input',secret:'whsec_'+Buffer.alloc(32,1).toString('base64')}});
- const activation=new SharingActivation(f.path+'.activation',bridge,f.h,()=>NOW,'health');t.after(()=>activation.close());
+ const activation=new SharingActivation(f.h.activationStore,bridge,f.h,()=>NOW,'health');t.after(()=>activation.close());
  await settle();await settle();
  const pending=activation.pending();assert.equal(pending.length,1);
  for(const text of [healthEvent.description,pending[0].text]) {

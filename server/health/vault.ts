@@ -5,6 +5,9 @@ import { execFile } from 'node:child_process';
 
 const AAD = Buffer.from('dot-link:polar-health:v1');
 const MAX = 8 * 1024 * 1024;
+/** Bytes were read, but the encrypted payload did not authenticate or decode. */
+export class InvalidHealthVaultPayload extends Error {}
+
 /** Encrypt the complete snapshot, including consent, timestamps, indexes and tokens.
  * Only format/version, nonce and ciphertext length are visible on disk. */
 export class HealthVault {
@@ -36,7 +39,9 @@ export class HealthVault {
     if (bytes.length < 33 || bytes[0] !== 1) throw new Error('HEALTH_STORAGE_UNAVAILABLE');
     const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(1,13));
     decipher.setAAD(AAD); decipher.setAuthTag(bytes.subarray(13,29));
-    const result=JSON.parse(Buffer.concat([decipher.update(bytes.subarray(29)), decipher.final()]).toString('utf8'));
+    let result: unknown;
+    try { result=JSON.parse(Buffer.concat([decipher.update(bytes.subarray(29)), decipher.final()]).toString('utf8')); }
+    catch { throw new InvalidHealthVaultPayload('HEALTH_STORAGE_UNAVAILABLE'); }
     this.fingerprint=createHash('sha256').update(bytes).digest('hex');
     return result;
   }
