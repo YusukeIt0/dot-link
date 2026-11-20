@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { weatherForecastSchema, type WeatherForecast, type WeatherPoint, type WeatherProvider, type WeatherProviderResult, type WeatherSample } from './types.ts';
 
@@ -39,7 +40,7 @@ export function parseMetForecast(raw: unknown, query: WeatherPoint, now: number)
     const value = data[field];
     return meta.units[field] === unit && typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high ? value : null;
   };
-  const samples: WeatherSample[] = timeseries.filter(s => Date.parse(s.time) >= now - HOUR && Date.parse(s.time) <= now + 48 * HOUR).slice(0, 64).map(s => {
+  const normalized: WeatherSample[] = timeseries.map(s => {
     const d = s.data.instant.details;
     const precipitation: WeatherSample['precipitation'] = [];
     for (const hours of [1, 6, 12] as const) {
@@ -56,8 +57,13 @@ export function parseMetForecast(raw: unknown, query: WeatherPoint, now: number)
       wind_m_s: number(d, 'wind_speed', 'm/s', 0, 150), wind_from_degrees: number(d, 'wind_from_direction', 'degrees', 0, 360),
       pressure_hpa: number(d, 'air_pressure_at_sea_level', 'hPa', 700, 1200), cloud_percent: number(d, 'cloud_area_fraction', '%', 0, 100), precipitation};
   });
+  const elevation_m = typeof elevation === 'number' && elevation >= -500 && elevation <= 9000 ? elevation : null;
+  // The retained validity window moves with the local clock. Identify editions
+  // before that cut, using only normalized source fields bounded by the parser.
+  const edition = createHash('sha256').update(JSON.stringify([query.latitude, query.longitude, meta.updated_at, elevation_m, normalized])).digest('hex');
+  const samples = normalized.filter(s => Date.parse(s.valid_at) >= now - HOUR && Date.parse(s.valid_at) <= now + 48 * HOUR).slice(0, 64);
   return weatherForecastSchema.parse({provider: 'met-norway-locationforecast-2', updated_at: meta.updated_at,
-    point: query, elevation_m: typeof elevation === 'number' && elevation >= -500 && elevation <= 9000 ? elevation : null, samples});
+    point: query, elevation_m, edition, samples});
 }
 
 /** Fixed HTTPS service, bounded same-origin redirects and decompressed body size. */

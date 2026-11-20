@@ -11,7 +11,7 @@ import {HealthContext} from '../server/health/context.ts';
 import {normalize} from '../server/health/data.ts';
 import {LocationHistoryStore} from '../server/history/store.ts';
 import {WebhookSender} from '../server/webhook.ts';
-import {readFactorHistory, type SelectedHistoryReader} from '../server/history/factor-tool.ts';
+import {createFactorHistoryContract, readFactorHistory, type HistoryPageInput, type SelectedHistoryReader} from '../server/history/factor-tool.ts';
 
 const owner = 'a'.repeat(64);
 const now = Date.parse('2026-11-14T12:00:00Z');
@@ -139,4 +139,68 @@ test('a calendar window crossing now stops at the read time and a wholly future 
   assert.equal(result.requested_end_at, end_at);
   assert.throws(() => readFactorHistory({start_at: end_at, end_at: '2026-11-16T00:00:00Z', fields}, {}, now),
     {reason: 'invalid_arguments'});
+});
+
+test('a forecast validity window and its local knowledge cutoff stay distinct from observed time', () => {
+  const inputs: HistoryPageInput[] = [];
+  const next = randomUUID();
+  const weather: SelectedHistoryReader = {historyOwner: () => owner, responseGuard: () => () => true,
+    readSelectedHistory(input) {
+      inputs.push(input);
+      return {status: 'empty', entries: [], next_cursor: next, response_context: {arguments: {archive_read_ids: [randomUUID()]}}};
+    }};
+  const known_at = '2026-11-13T09:00:00Z';
+  const future = {start_at: '2026-11-15T08:00:00Z', end_at: '2026-11-15T11:00:00Z'};
+  const fields = {weather: ['temperature']};
+  const page = readFactorHistory({...future, fields, known_at}, {weather}, now);
+  assert.deepEqual(page.window, future);
+  assert.deepEqual(inputs[0], {...future, fields: fields.weather, known_at, limit: 10});
+  readFactorHistory({source: 'weather', cursor: next}, {weather}, now);
+  assert.deepEqual(inputs[1], {cursor: next});
+  for (const request of [
+    {...future, fields, known_at: future.end_at}, {...future, fields: {...fields, polar: ['steps']}, known_at},
+    {...window, fields: {mobility: ['plan']}, known_at}, {source: 'weather', cursor: next, known_at},
+    {...window, fields: {weather: ['unregistered']}},
+  ]) assert.throws(() => readFactorHistory(request, {weather}, now), {reason: 'invalid_arguments'});
+  const calls: HistoryPageInput[] = [];
+  const mobility: SelectedHistoryReader = {...weather, readSelectedHistory(input) { calls.push(input); return weather.readSelectedHistory(input); }};
+  readFactorHistory({...window, fields: {weather: ['temperature'], mobility: ['plan']}, known_at}, {weather, mobility}, now);
+  assert.deepEqual(calls[0], {...window, fields: ['plan'], limit: 10});
+});
+
+test('different archive owners and invalid or wrongly typed receipts fail the final check', () => {
+  const request = {...window, fields: {weather: ['wind'], mobility: ['plan']}};
+  const allowed: SelectedHistoryReader = {historyOwner: () => owner, responseGuard: () => () => true,
+    readSelectedHistory: () => ({status: 'empty', entries: [], next_cursor: null, response_context: {arguments: {archive_read_ids: [randomUUID()]}}})};
+  const wrongReceipt = {...allowed, readSelectedHistory: () => ({status:'empty', entries:[], next_cursor:null,
+    response_context:{arguments:{health_read_ids:[randomUUID()]}}})};
+  for (const mobility of [{...allowed, historyOwner: () => 'b'.repeat(64)}, {...allowed, responseGuard: () => () => false}, wrongReceipt])
+    assert.throws(() => readFactorHistory(request, {weather: allowed, mobility}, now), {reason: 'history_access_changed'});
+  const inaccessible = {...allowed, readSelectedHistory: () => ({status: 'unavailable', entries: ['private fixture'], next_cursor: randomUUID()})};
+  const partial = readFactorHistory(request, {weather: allowed, mobility: inaccessible}, now);
+  assert.deepEqual(partial.sources.mobility, {status: 'unavailable', entries: [], next_cursor: null});
+});
+
+test('adding and retiring a declared field keeps older authorized projected records readable', () => {
+  const rows = [{v: 1, value: 4}, {v: 2, value: 5, detail: 'estimated'}];
+  const reader: SelectedHistoryReader = {
+    historyOwner: () => owner, responseGuard: () => () => true,
+    readSelectedHistory(input) {
+      assert.ok('fields' in input);
+      const entries = rows.map(row => ({version: row.v,
+        fields: Object.fromEntries(input.fields.filter(field => Object.hasOwn(row, field)).map(field => [field, row[field as 'value' | 'detail']]))}));
+      return {status: 'available', entries, next_cursor: null, response_context: {arguments: {archive_read_ids: [randomUUID()]}}};
+    },
+  };
+  const contract = (fields: string[]) => createFactorHistoryContract({fixture: {fields, receipt: 'archive_read_ids'}});
+  const read = (schema: ReturnType<typeof contract>, fields: string[]) => schema.read({...window, fields: {fixture: fields}}, {fixture: reader}, now).sources.fixture.entries;
+  const first = contract(['value']), extended = contract(['value', 'detail']), retired = contract(['value']);
+  const baseline = [{version: 1, fields: {value: 4}}, {version: 2, fields: {value: 5}}];
+  assert.deepEqual(read(first, ['value']), baseline);
+  assert.deepEqual(extended.tool.inputSchema.properties.fields.properties.fixture.items.enum, ['value', 'detail']);
+  assert.deepEqual(read(extended, ['detail']), [{version: 1, fields: {}}, {version: 2, fields: {detail: 'estimated'}}]);
+  assert.deepEqual(read(retired, ['value']), baseline);
+  assert.deepEqual(retired.tool.inputSchema.properties.fields.properties.fixture.items.enum, ['value']);
+  assert.throws(() => read(retired, ['detail']), {reason: 'invalid_arguments'});
+  assert.throws(() => retired.read({...window, fields: {unregistered: ['value']}}, {fixture: reader}, now), {reason: 'invalid_arguments'});
 });

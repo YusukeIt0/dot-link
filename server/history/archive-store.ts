@@ -37,11 +37,13 @@ export interface ArchiveQuery {
   toMs: number;
   knownAtMs?: number;
   limit?: number;
+  /** A single retained record may exceed this budget so its selected fields can still be projected. */
+  maxBytes?: number;
   cursor?: string;
 }
 type Position = { day: number; after: number };
 type PageCursor = Position & {
-  generation: string; high: number; from: number; to: number; known: number | null; limit: number;
+  generation: string; high: number; from: number; to: number; known: number | null; limit: number; bytes?: number;
 };
 type DatabaseState = {
   generation: string;
@@ -229,18 +231,20 @@ export class HistoryArchiveStore {
   }
   private readPage(query: ArchiveQuery) {
     const limit = query.limit ?? 50;
+    const maxBytes = query.maxBytes ?? MAX_PAGE_BYTES;
     if (!validWindow(query.fromMs, query.toMs) || !Number.isInteger(limit) || limit < 1 || limit > 100 ||
+        !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_PAGE_BYTES ||
         (query.knownAtMs !== undefined && !validTime(query.knownAtMs))) throw new Error('Invalid archive window');
     const state = this.state();
     const first = dayOf(query.fromMs);
     const last = dayOf(query.toMs - 1);
-    const scope = {generation: state.generation, from: query.fromMs, to: query.toMs, known: query.knownAtMs ?? null, limit};
+    const scope = {generation: state.generation, from: query.fromMs, to: query.toMs, known: query.knownAtMs ?? null, limit, bytes: maxBytes};
     let position: PageCursor;
     if (query.cursor !== undefined) {
       if (!query.cursor || query.cursor.length > 2048) throw new Error('Invalid archive cursor');
       position = this.unpack<PageCursor>('page', Buffer.from(query.cursor, 'base64url'));
       if (position.generation !== scope.generation || position.from !== scope.from || position.to !== scope.to ||
-          position.known !== scope.known || position.limit !== limit || !Number.isSafeInteger(position.high) ||
+          position.known !== scope.known || position.limit !== limit || (position.bytes ?? MAX_PAGE_BYTES) !== maxBytes || !Number.isSafeInteger(position.high) ||
           !Number.isSafeInteger(position.after) || position.after < 0 || position.after > position.high ||
           !Number.isInteger(position.day) || position.day < first || position.day > last) throw new Error('Invalid archive cursor');
     } else {
@@ -271,7 +275,7 @@ export class HistoryArchiveStore {
         const r = data.record;
         if (position.day === Math.max(first, dayOf(r.fromMs)) && r.fromMs < query.toMs && r.toMs > query.fromMs &&
             r.expiresAtMs > now && (scope.known === null || r.availableAtMs <= scope.known)) {
-          if (records.length >= limit || bytes + row.body.length > MAX_PAGE_BYTES) return result(true);
+          if (records.length >= limit || (records.length > 0 && bytes + row.body.length > maxBytes)) return result(true);
           records.push(r);
           bytes += row.body.length;
         }
