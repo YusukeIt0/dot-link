@@ -7,6 +7,12 @@ separate states; check the release feed and Even Hub for the versions available
 to you. Actual service, existing-Dot and device evidence is recorded separately
 from offline tests.
 
+The NOAA Enterprise Rain Rate investigation for #357 covers a supplemental
+satellite estimate. Current measurements cover the public data and a local Mac
+decoder prototype. MET Norway remains the primary forecast. Product integration
+and existing-Dot acceptance are tracked in [#357](https://github.com/YusukeIt0/dot-link/issues/357).
+See the [source measurements and reproducible frame check](evidence/noaa-err.md).
+
 ## Outcome and boundaries
 
 Dot can use weather for a valid shared location or an explicitly requested place
