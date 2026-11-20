@@ -228,11 +228,8 @@ test('an unavailable activation receipt cannot block a durable stop or interrupt
   assert.deepEqual(f.eventIds, [first]);
 });
 
-test('a failed activation checkpoint cannot roll back the owner’s deletion', async t => {
-  const f = await fixture(t);
-  const first = f.eventIds[0];
-  assert.ok(first);
-  const receipt = join(f.path + '.history', 'activation.enc');
+function failReceiptWrites(t: TestContext, path: string) {
+  const receipt = join(path + '.history', 'activation.enc');
   const write = HealthVault.prototype.write;
   let failedWrites = 0;
   const fault = t.mock.method(HealthVault.prototype, 'write', function(this: HealthVault, ...args: Parameters<typeof write>) {
@@ -242,17 +239,40 @@ test('a failed activation checkpoint cannot roll back the owner’s deletion', a
     }
     return write.apply(this, args);
   });
+  return {failures: () => failedWrites, restore: () => fault.mock.restore()};
+}
+
+test('a failed activation checkpoint cannot roll back the owner’s deletion', async t => {
+  const f = await fixture(t);
+  const first = f.eventIds[0];
+  assert.ok(first);
+  const fault = failReceiptWrites(t, f.path);
   await f.control('refresh');
   await settle();
-  assert.ok(failedWrites > 0);
+  assert.ok(fault.failures() > 0);
   assert.equal(f.app.health.setupStatus().sharing, true);
   assert.deepEqual(f.eventIds, [first]);
   await f.control('delete');
-  fault.mock.restore();
+  fault.restore();
   await f.restart();
   const saved = new HealthVault(f.path).read(f.key) as {enabled: boolean; profileDeleted: boolean};
   assert.equal(saved.enabled, false);
   assert.equal(saved.profileDeleted, true);
   assert.deepEqual(f.app.activation.pending(), []);
   assert.deepEqual(f.eventIds, [first]);
+});
+
+test('a later successful checkpoint preserves the accepted request after a temporary receipt failure', async t => {
+  const f = await fixture(t);
+  const id = f.app.activation.pending()[0].request_id;
+  const fault = failReceiptWrites(t, f.path);
+  await f.control('refresh');
+  await settle();
+  assert.ok(fault.failures() > 0);
+  fault.restore();
+  await f.control('refresh');
+  await settle();
+  await f.restart();
+  assert.equal(f.app.activation.pending()[0].request_id, id);
+  assert.deepEqual(f.eventIds, [`evt_${id}`]);
 });
