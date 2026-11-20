@@ -120,10 +120,16 @@ reply or silence separately from policy delivery. Reuse unchanged acquisition an
 transport evidence; brief relevant caveats remain acceptable. Do not paste the new
 policy into the test prompt or alter a personal activity to make the test pass.
 
-## Selective history (unreleased Mac feature)
+## Selective history (unreleased Mac and Even feature)
 
-The development branch includes protected local storage for future opt-in
-archives. Existing grants keep their original scope. A separate encrypted
+In the Even companion’s **Sharing settings → History**, the paired owner can
+choose whether to retain phone locations, Polar observations, forecasts and
+planned walks with model terrain. Changing the common period assigns a
+deadline only to newly admitted records. Reopening the companion reads the
+Mac’s choices. Existing seven-day grants keep their original scope and expiry.
+[User-facing controls and examples](setup.md#looking-back-with-dot).
+
+For non-health sources, a separate encrypted
 authority holds the owner, duration and a random key for each source. The Mac
 opens its authority key with the Secure Enclave after first unlock. A stop
 invalidates outstanding reads. Deletion retires the source key before removing

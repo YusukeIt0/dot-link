@@ -49,8 +49,10 @@ const microtasks = async () => { for (let n = 0; n < 30; n++) await Promise.reso
 function recoveryFixture() {
   const calls: {resolve(value: {revision: string}): void; reject(error: Error): void}[] = [];
   let failures = 0;
-  const loop = new LiveUpdates<{revision: string}>(() => new Promise((resolve, reject) => calls.push({resolve, reject})), () => {}, () => failures++);
-  return {loop, calls, failures: () => failures};
+  const resumed: boolean[] = [];
+  const loop = new LiveUpdates<{revision: string}>(() => new Promise((resolve, reject) => calls.push({resolve, reject})),
+    (_snapshot, _initial, recovered) => resumed.push(recovered), () => failures++);
+  return {loop, calls, resumed, failures: () => failures};
 }
 test('brief recovery stays online; a hanging retry becomes visible within the grace interval', async t => {
   t.mock.timers.enable({apis: ['setTimeout', 'Date'], now: 10000});
@@ -60,6 +62,7 @@ test('brief recovery stays online; a hanging retry becomes visible within the gr
   assert.equal(f.failures(), 0);
   t.mock.timers.tick(1000); await microtasks();
   f.calls[2].resolve({revision: 'recovered'}); await microtasks();
+  assert.deepEqual(f.resumed, [false, true]);
   t.mock.timers.tick(2000); assert.equal(f.failures(), 0);
   f.calls[3].reject(new Error('long outage')); await microtasks();
   t.mock.timers.tick(1000); await microtasks(); // retry now hangs

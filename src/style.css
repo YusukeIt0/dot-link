@@ -42,6 +42,11 @@ body[data-pair-state=unpaired] .glass { display: none; }
 .setup-steps p { margin: 6px 0; font-size: 14px; line-height: 1.6; }
 .setup-command { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; background: #070d09; padding: 10px; border-radius: 8px; }
 .display-settings { border-top: 1px solid #344637; padding-top: 16px; }
+.factor-history-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.factor-history-row label { min-width: 0; }
+.factor-history-row label span { overflow-wrap: anywhere; }
+.factor-history-row button { flex: 0 0 auto; margin: 0; }
+#factor-history-period { margin: 4px 0 8px 8px; }
 .display-settings summary { cursor: pointer; }
 .display-settings form > label { display: block; margin: 18px 0 8px; }
 .display-settings input[type=number] { width: 120px; padding: 10px; border: 1px solid #435446; border-radius: 8px; background: #1c2420; color: inherit; font: inherit; }

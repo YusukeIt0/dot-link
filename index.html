@@ -39,10 +39,6 @@
       <summary data-i18n="even.location_sharing">Sharing settings</summary>
       <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-i18n="even.share_my_location">Share my location</span></label>
       <p class="note" data-i18n="even.share_your_phone_s_current_location_with_your_existing_dot">Share your phone's location with your Dot through your Mac. Stop sharing anytime. Nearby map data stays on your Mac until unused for 30 days and can reveal past areas.</p>
-      <label class="display-checkbox"><input id="history-share" type="checkbox"> <span data-i18n="even.history_enable">Remember recent places</span></label>
-      <p class="note" data-i18n="even.history_consent">Save locations on this Mac for up to 7 days and let Dot read relevant history. Recording follows location sharing. Turn this off to block historical access.</p>
-      <p id="history-status" class="note" role="status"></p>
-      <button id="history-delete" type="button" data-i18n="even.history_delete">Delete history</button>
       <div class="weather-settings">
       <label class="display-checkbox"><input id="weather-share" type="checkbox"> <span data-i18n="even.weather">Weather context</span></label>
       <p class="note"><span data-i18n="even.weather_disclosure">Your Mac sends rounded coordinates to api.met.no for forecasts. The service also receives its IP address.</span> <a href="https://api.met.no/doc/TermsOfService" target="_blank" rel="noopener noreferrer" data-i18n="even.weather_terms">Read service terms</a> · <a href="./weather-sources.html" target="_blank" rel="noopener noreferrer" data-i18n="even.walking_terrain_privacy">Data sources and privacy</a></p>
@@ -56,11 +52,52 @@
       <p class="note" data-i18n="even.your_mac_must_be_awake_and_connected_location_sharing_pauses">Your Mac must be awake and connected. Location sharing pauses when you exit Dot Link on the glasses and resumes when you reopen it with this setting on.</p>
       <div class="weather-settings">
         <label class="display-checkbox"><input id="health-share" type="checkbox"> <span data-i18n="even.health">Health context</span></label>
-        <p class="note" data-i18n="even.health_consent">Share Polar sleep, heart rate, activity, exercise and recovery so Dot can consider fatigue, tension and energy in its responses. Measurements stay on your Mac for 7 days; your latest profile stays until deleted.</p>
+        <p class="note" data-i18n="even.health_consent">Share Polar sleep, heart rate, activity, exercise and recovery so Dot can consider fatigue, tension and physical stamina in its responses. The Mac keeps seven days of observations, or longer for new records if you choose this in History. Your latest profile stays until deleted.</p>
         <p id="health-status" class="note" role="status"></p>
         <button id="health-refresh" type="button" data-i18n="even.health_refresh">Fetch profile again</button>
         <button id="health-delete" type="button" data-i18n="even.health_delete">Delete health data</button>
       </div>
+      <details id="factor-history-panel" class="display-settings">
+        <summary data-i18n="even.archive_title">History</summary>
+        <div id="factor-history-controls" hidden>
+          <p class="note" data-i18n="even.archive_intro">Choose what your Mac saves for Dot to look back on. The period applies to new records. Turning a source off stops its archive; saved records expire on their original dates.</p>
+          <label for="factor-history-period" data-i18n="even.archive_period">Keep new records for</label>
+          <select id="factor-history-period" disabled>
+            <option value="7d" data-i18n="even.archive_period_7d">7 days</option>
+            <option value="1m" data-i18n="even.archive_period_1m">1 month</option>
+            <option value="6m" data-i18n="even.archive_period_6m">6 months</option>
+            <option value="1y" data-i18n="even.archive_period_1y">1 year</option>
+          </select>
+          <div class="factor-history-row">
+            <label class="display-checkbox"><input id="archive-location" aria-describedby="archive-location-detail" type="checkbox" disabled> <span id="archive-location-label" data-i18n="even.archive_location">Phone locations and nearby places</span></label>
+            <button id="archive-location-delete" type="button" aria-describedby="archive-location-label" data-i18n="even.archive_delete" disabled>Delete</button>
+          </div>
+          <p class="note" id="archive-location-detail" data-i18n="even.archive_detail_location">Exact phone fixes, motion, phone time zone and nearby map references.</p>
+          <div class="factor-history-row">
+            <label class="display-checkbox"><input id="archive-polar" aria-describedby="archive-polar-detail" type="checkbox" disabled> <span id="archive-polar-label" data-i18n="even.archive_polar">Polar health observations</span></label>
+            <button id="archive-polar-delete" type="button" aria-describedby="archive-polar-label" data-i18n="even.archive_delete" disabled>Delete</button>
+          </div>
+          <p class="note" id="archive-polar-detail" data-i18n="even.archive_detail_polar">Sleep, activity, synced heart rate, recovery and exercise. Health sharing keeps its usual seven days when this archive is off.</p>
+          <div class="factor-history-row">
+            <label class="display-checkbox"><input id="archive-weather" aria-describedby="archive-weather-detail" type="checkbox" disabled> <span id="archive-weather-label" data-i18n="even.archive_weather">Weather forecasts and their revisions</span></label>
+            <button id="archive-weather-delete" type="button" aria-describedby="archive-weather-label" data-i18n="even.archive_delete" disabled>Delete</button>
+          </div>
+          <p class="note" id="archive-weather-detail" data-i18n="even.archive_detail_weather">Forecast values and revisions for your shared location or a place you asked about.</p>
+          <div class="factor-history-row">
+            <label class="display-checkbox"><input id="archive-mobility" aria-describedby="archive-mobility-detail" type="checkbox" disabled> <span id="archive-mobility-label" data-i18n="even.archive_mobility">Planned walks and model terrain</span></label>
+            <button id="archive-mobility-delete" type="button" aria-describedby="archive-mobility-label" data-i18n="even.archive_delete" disabled>Delete</button>
+          </div>
+          <p class="note" id="archive-mobility-detail" data-i18n="even.archive_detail_mobility">Requested endpoints, route geometry, directions and model elevations.</p>
+          <p class="note" data-i18n="even.archive_legacy">Existing seven-day sharing keeps its original scope until you choose to save a source here.</p>
+        </div>
+        <p id="factor-history-status" class="note" role="status"></p>
+        <div id="legacy-history-controls">
+        <label class="display-checkbox"><input id="history-share" type="checkbox"> <span data-i18n="even.history_enable">Remember recent places</span></label>
+        <p class="note" data-i18n="even.history_consent">Save locations on this Mac for up to 7 days and let Dot read relevant history. Recording follows location sharing. Turn this off to block historical access.</p>
+        <p id="history-status" class="note" role="status"></p>
+        <button id="history-delete" type="button" data-i18n="even.history_delete">Delete history</button>
+        </div>
+      </details>
     </details>
     <details id="operation-settings" class="display-settings">
       <summary data-i18n="even.operation_settings">Operation settings</summary>

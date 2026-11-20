@@ -1,3 +1,4 @@
+import { FactorHistorySettings, historySources, historyPeriods, type HistoryPeriod, type HistorySource } from './factor-history-settings.ts';
 import { HealthSharing, type HealthStatus } from './health-sharing.ts';
 import { connectionFailure, connectionFailureCaption, connectionFailureHint } from './connection-failure.ts';
 import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
@@ -214,6 +215,49 @@ function renderHistoryStatus() {
 }
 el<HTMLInputElement>('history-share').onchange = () => { void historySharing.control(el<HTMLInputElement>('history-share').checked ? 'enable' : 'disable'); };
 el<HTMLButtonElement>('history-delete').onclick = () => { if (confirm(t('even.history_delete_confirm'))) void historySharing.control('delete'); };
+const archivePanel = el<HTMLDetailsElement>('factor-history-panel');
+const archiveSettings = new FactorHistorySettings({
+  request: command => command ? api('/api/factor-history', 'POST', JSON.stringify(command)) : api('/api/factor-history'),
+  changed: renderArchiveSettings,
+});
+function renderArchiveSettings() {
+  if (exited) return;
+  const {settings, supported, pending, failed} = archiveSettings.status();
+  const period = el<HTMLSelectElement>('factor-history-period');
+  period.disabled = !settings || pending;
+  if (settings) period.value = settings.period;
+  else period.selectedIndex = -1;
+  el('factor-history-controls').hidden = !supported;
+  const recent = historySharing.status();
+  el('legacy-history-controls').hidden = supported && (!recent.historyEnabled || settings?.sources.location === true);
+  el('factor-history-status').textContent = failed ? t('even.history_failed') : pending ? t('even.archive_loading') : '';
+  for (const source of historySources) {
+    const toggle = el<HTMLInputElement>('archive-' + source);
+    const enrolled = settings?.sources[source];
+    toggle.checked = enrolled === true;
+    toggle.disabled = pending || typeof enrolled !== 'boolean' ||
+      (source === 'polar' && (!settings?.polarEpoch || (!enrolled && settings.polarAvailable === false)));
+    const del = el<HTMLButtonElement>('archive-' + source + '-delete');
+    del.disabled = pending || typeof enrolled !== 'boolean' || (source === 'polar' && !settings?.polarEpoch);
+    del.setAttribute('aria-label', t('even.archive_delete') + ' · ' + archiveLabel(source));
+  }
+}
+const archiveLabel = (source: HistorySource) => t(({
+  location: 'even.archive_location', polar: 'even.archive_polar', weather: 'even.archive_weather', mobility: 'even.archive_mobility',
+} as const)[source]);
+archivePanel.ontoggle = () => { if (archivePanel.open) void archiveSettings.refresh(); };
+for (const source of historySources) {
+  const toggle = el<HTMLInputElement>('archive-' + source);
+  toggle.onchange = () => { void archiveSettings.change({action: 'set', source, enabled: toggle.checked}); };
+  el<HTMLButtonElement>('archive-' + source + '-delete').onclick = () => {
+    if (confirm(t('even.archive_confirm', {source: archiveLabel(source)}))) void archiveSettings.change({action: 'delete', source});
+  };
+}
+el<HTMLSelectElement>('factor-history-period').onchange = event => {
+  const value = (event.currentTarget as HTMLSelectElement).value as HistoryPeriod;
+  if (historyPeriods.includes(value)) void archiveSettings.change({action: 'period', period: value});
+};
+renderArchiveSettings();
 const weatherSharing = new WeatherSharing({
   target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
   api: input => session.location('/api/weather', input), changed: () => renderWeatherStatus(),
@@ -295,7 +339,7 @@ el<HTMLInputElement>('mobility-share').onchange = () => locationSharing.setMobil
 const connectionTransitions = new ConnectionTransitions({
   session,
   stopUpdates: () => updates.stop(), cancelPlayback: () => playback.cancel(),
-  stopLocation: () => { historySharing.reset(); weatherSharing.reset(); healthSharing.reset(); locationSharing.setEnabled(false); }, clearLegacyPairing: () => pairing.forget(),
+  stopLocation: () => { historySharing.reset(); weatherSharing.reset(); healthSharing.reset(); archiveSettings.receive(undefined, false); locationSharing.setEnabled(false); }, clearLegacyPairing: () => pairing.forget(),
   resetInteraction: (pairing, newIdentity) => {
     transcriptionController?.abort(); transcriptionController = undefined;
     photoRevision++; photoSelecting = false;
@@ -428,10 +472,17 @@ function showMessage(): void {
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
-interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
-function receiveUpdate(snapshot: Snapshot, initial = false): void {
+interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; factorHistoryProtocol?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
+function receiveUpdate(snapshot: Snapshot, initial = false, resumed = false): void {
   if (exited) return;
   historySharing.receive(snapshot.status); weatherSharing.receive(snapshot.status); healthSharing.receive(snapshot.status);
+  const supportedHistory = snapshot.status.factorHistoryProtocol === 1;
+  const target = session.token ? session.version + ':' + (session.credentials?.origin ?? location.origin) : undefined;
+  archiveSettings.receive(target, supportedHistory);
+  const archive = archiveSettings.status();
+  if (archivePanel.open && supportedHistory && (resumed || (!archive.settings && !archive.failed)))
+    void archiveSettings.refresh();
+  renderArchiveSettings();
   locationSharing.receive(snapshot.status);
   subscribed = snapshot.status.subscribed;
   photosSupported = snapshot.status.photoAttachments === 1;
@@ -775,7 +826,7 @@ function applyLanguage(): void {
   setLanguage(next); document.documentElement.lang = next;
   renderLanguageOptions();
   renderStaticAccessibility();
-  renderLocationStatus(); renderHistoryStatus(); renderWeatherStatus(); renderHealthStatus();
+  renderLocationStatus(); renderHistoryStatus(); renderWeatherStatus(); renderHealthStatus(); renderArchiveSettings();
   for (const { element, key } of staticLabels) {
     // Runtime status/controls may have replaced the initial label.
     if (supportedLanguages.some(locale => element.textContent === message(key, locale))) element.textContent = t(key);
