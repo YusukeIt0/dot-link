@@ -45,7 +45,14 @@ async function copyDependency(name,from=root){
  let path=join(from,'node_modules',name);
  try{await lstat(join(path,'package.json'));}catch{path=join(root,'node_modules',name);}
  const relative=path.slice(root.length+1);if(copied.has(relative))return;copied.add(relative);
- const dest=join(payload,relative);await mkdir(dirname(dest),{recursive:true});await cp(path,dest,{recursive:true});
+ const dest=join(payload,relative);await mkdir(dirname(dest),{recursive:true});
+ if(name==='h5wasm'){
+  // Ship only the unmodified in-memory ESM decoder. The Node host-filesystem
+  // build, browser bundle, development sources and upstream test HDFs are unused.
+  await mkdir(join(dest,'dist'),{recursive:true});
+  for(const file of ['package.json','LICENSE.txt','dist/esm'])await cp(join(path,file),join(dest,file),{recursive:true});
+  await cp(join(path,'LICENSE.txt'),join(contents,'Resources/licenses/additional/h5wasm-LICENSE.txt'));
+ }else await cp(path,dest,{recursive:true});
  const meta=JSON.parse(await readFile(join(path,'package.json'),'utf8'));
  for(const dep of Object.keys(meta.dependencies??{}))await copyDependency(dep,path);
 }
