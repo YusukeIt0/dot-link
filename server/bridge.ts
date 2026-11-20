@@ -39,7 +39,12 @@ const outboundInput = z.object({
   utterance_id: z.string().uuid().optional(),
 }).strict();
 const outboundRecord = outboundInput.extend({ createdAt: z.string(), initial_reply: z.boolean().optional(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
-const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(OUTBOUND_LIMIT).default([]) });
+const leaseEvent = z.object({
+  at: z.number(), kind: z.enum(['created', 'renewed', 'unsubscribed', 'callback_gone']),
+  expiresAt: z.number(), requestedTtlMs: z.number().nullable().optional(),
+});
+const LEASE_HISTORY_LIMIT = 16;
+const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), leaseHistory: z.array(leaseEvent).max(LEASE_HISTORY_LIMIT).optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(OUTBOUND_LIMIT).default([]) });
 type State = z.infer<typeof stateSchema>;
 type Subscription = z.infer<typeof subscriptionSchema>;
 
@@ -158,7 +163,11 @@ export class Bridge {
   }
   private active(): Subscription | undefined {
     const sub = this.state.subscription;
-    return sub && sub.expiresAt > Date.now() ? sub : undefined;
+    return sub && sub.expiresAt > this.now() ? sub : undefined;
+  }
+  private leaseHistory(kind: z.infer<typeof leaseEvent>['kind'], sub: Subscription, requestedTtlMs?: number | null) {
+    const event = { at: this.now(), kind, expiresAt: sub.expiresAt, requestedTtlMs };
+    return [...(this.state.leaseHistory ?? []), event].slice(-LEASE_HISTORY_LIMIT);
   }
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
   /** Identity only: callback credentials never leave the transport owner. */
@@ -171,7 +180,7 @@ export class Bridge {
       data: {session_id: SESSION, utterance_id: input.id,
         text: `[Dot Link app control, not a spoken message] The owner enabled ${input.feature === 'health' ? 'Polar health' : input.feature === 'notification' ? 'Mac notification' : 'location'} sharing and requests reception on this same personal-g2 connection. Read get_pending_utterances and carry out the current owner_sharing_control request for ${input.feature === 'health' ? 'health.updated' : input.feature === 'notification' ? 'notification.created' : 'location.updated'}, even if no spoken utterance is pending. Preserve the existing conversation and other feature subscriptions. This app action already authorizes reception; do not ask for a second setup step or send a setup confirmation to G2. If the control item is no longer present, do nothing.`}, cursor: null});
     if (response.status === 410) await this.serial(async () => {
-      if (this.state.subscription === sub) this.save({...this.state, subscription: undefined});
+      if (this.state.subscription === sub) this.save({...this.state, subscription: undefined, leaseHistory: this.leaseHistory('callback_gone', sub)});
     });
     return response.status;
   }
@@ -271,10 +280,11 @@ export class Bridge {
       const active = this.active();
       if (active && active.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: params.delivery.url, secret: params.delivery.secret,
-        expiresAt: Date.now() + (params.ttlMs ?? 3_600_000) };
+        expiresAt: this.now() + (params.ttlMs ?? 3_600_000) };
       // Verify before storing; a rejected callback never becomes an active subscriber.
       await this.sender.verify(sub);
-      this.save({ ...this.state, subscription: sub });
+      const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
+      this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
   }
@@ -282,7 +292,10 @@ export class Bridge {
     return this.serial(async () => {
       const params = subscriptionArguments(z.object({ name: z.literal('utterance.created'), arguments: argsSchema,
         delivery: deliverySchema.omit({ secret: true }) }), input);
-      if (this.state.subscription?.url === params.delivery.url) { this.save({ ...this.state, subscription: undefined }); }
+      const sub = this.state.subscription;
+      if (sub?.url === params.delivery.url) {
+        this.save({ ...this.state, subscription: undefined, leaseHistory: this.leaseHistory('unsubscribed', sub) });
+      }
       return {};
     });
   }
@@ -311,17 +324,20 @@ export class Bridge {
       // One attempt in the initial proof. A timeout is not treated as an unsent message.
       // Client retries with the same ID return its stored status, preventing duplicates.
       let deliveryStatus: 'accepted' | 'failed' = 'failed';
+      let callbackGone = false;
       try {
         this.latency.mark(id, 'webhook_sent');
         const result = await this.sender.send(sub, event.eventId, event);
         this.latency.mark(id, result.status >= 200 && result.status < 300 ? 'webhook_accepted' : 'webhook_failed');
         deliveryStatus = result.status >= 200 && result.status < 300 ? 'accepted' : 'failed';
-        if (result.status === 410) delete this.state.subscription;
+        callbackGone = result.status === 410;
       } catch { this.latency.mark(id, 'webhook_failed'); }
       // A read may expire image bodies while webhook delivery is in flight.
       const current = this.state.messages.find(item => item.id === id)!;
       const updated = { ...current, status: deliveryStatus };
-      this.save({ ...this.state, messages: this.state.messages.map(item => item === current ? updated : item) });
+      this.save({ ...this.state,
+        ...(callbackGone ? { subscription: undefined, leaseHistory: this.leaseHistory('callback_gone', sub) } : {}),
+        messages: this.state.messages.map(item => item === current ? updated : item) });
       return this.publicMessage(updated);
     });
   }

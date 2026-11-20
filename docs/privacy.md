@@ -16,6 +16,8 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 
 Web addresses in conversation messages remain plain text on the phone. Dot Link does not open their destinations or fetch previews. Original URL text remains in the Mac conversation history.
 
+The local conversation relay retains its latest 16 subscription changes for restart diagnostics. Each entry contains the change type, time, granted expiry and, when supplied, requested lifetime. The entries omit callback addresses, signing secrets and conversation content.
+
 ## Optional Polar health context
 
 Health sharing starts off. In **Healthcare settings** on the Mac, each user registers

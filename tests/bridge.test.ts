@@ -54,6 +54,33 @@ test('verified subscription delivers an event and the reply is correlated, persi
   assert.equal(statSync(s.path).mode & 0o777, 0o600);
 });
 
+test('a restart preserves the granted deadline and same-Dot renewal restores delivery after expiry', async t => {
+  let now = Date.now();
+  const clock = { now: () => now };
+  const s = setup(undefined, clock);
+  t.after(s.close);
+  const initial = await s.bridge.subscribe({ ...subscription, ttlMs: 60_000 });
+  s.bridge.close();
+  now += 59_999;
+  const restarted = new Bridge(s.path, s.sender, s.hosts, undefined, clock);
+  t.after(() => restarted.close());
+  const input = () => ({ id: randomUUID(), text: 'restart check' });
+  assert.equal((await restarted.submit(input())).status, 'accepted');
+  now += 1;
+  await assert.rejects(restarted.submit(input()), /not subscribed/);
+  assert.equal(s.events.length, 1);
+  for (let index = 0; index < 17; index++) {
+    const renewed = await restarted.subscribe({ ...subscription, ttlMs: 60_000 });
+    assert.equal(renewed.id, initial.id);
+    assert.equal(Date.parse(renewed.refreshBefore), now + 60_000);
+  }
+  assert.equal((await restarted.submit(input())).status, 'accepted');
+  assert.equal(s.events.length, 2);
+  const history = JSON.parse(readFileSync(s.path, 'utf8')).leaseHistory;
+  assert.equal(history.length, 16);
+  assert.deepEqual(history.at(-1), { at: now, kind: 'renewed', expiresAt: now + 60_000, requestedTtlMs: 60_000 });
+});
+
 test('failed challenge never activates a subscriber and sends no application data', async t => {
   const sent: unknown[] = [];
   const s = setup(async (_url, body) => { sent.push(JSON.parse(body)); return { status: 200, body: '{"challenge":"wrong"}' }; });
