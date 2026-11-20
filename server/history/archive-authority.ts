@@ -183,6 +183,27 @@ export class ArchiveAuthority {
     return this.view(this.state(), owner);
   }
 
+  /** The separately encrypted Polar archive uses the same owner-selected period.
+   * No health category, account identity, archive key or record enters this store. */
+  periodFor(owner: string, epoch?: string): HistoryPeriod | undefined {
+    try {
+      const state = this.state();
+      return (!epoch || state.epoch === epoch) && state.owner === owner ? this.view(state, owner).period : undefined;
+    } catch { return undefined; }
+  }
+
+  async bindPeriod(owner: string, epoch: string) {
+    const before = await this.status(owner);
+    if (before.epoch !== epoch) throw denied();
+    await this.unlock(true);
+    this.transaction(() => {
+      const state = this.state();
+      this.view(state, owner);
+      if (state.epoch !== epoch) throw denied();
+      if (!state.owner) { state.owner = owner; this.save(state); }
+    });
+  }
+
   async control(owner: string, epoch: string, raw: z.infer<typeof change>) {
     const input = change.parse(raw);
     const displayed = await this.status(owner);

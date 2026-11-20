@@ -39,8 +39,9 @@ The Mac allowlists sleep, steps/activity intensity, synced heart rate, nighttime
 HRV/recovery/breathing, exercise summaries without routes, and the latest registered
 height, weight and date of birth. Names, gender, calories, raw GPS routes and arbitrary
 extra profile fields are not retained. API envelopes are processed in memory and
-are not saved. Measurements expire within 168 hours of their source-time boundary;
-offset-free dates use the earliest possible UTC boundary, which can shorten retention.
+are not saved. Ordinary health sharing keeps measurements for up to 168 hours
+from their source-time boundary. Offset-free dates use the earliest possible UTC
+boundary, which can shorten retention.
 The latest profile is retained until deletion/disconnection, without historical
 versions. A profile edit timestamp is not a weight measurement timestamp.
 
@@ -73,6 +74,23 @@ subscription metadata, uses AES-256-GCM authenticated encryption. A separate ran
 256-bit key is held by macOS Keychain through the app. Atomic temporary snapshots
 are encrypted too; there is no plaintext database journal, index or fallback.
 Only the format version, nonce, authentication tag and ciphertext length are visible.
+With a separate Polar history grant, new observations can also enter a protected
+archive for seven days, one month, six months or one year. The chosen duration
+applies when a record is first admitted. Corrections and repeat downloads keep
+its original deadline. The existing profile remains in its original vault.
+Historical reads disclose only the requested fields to the same connected Dot.
+
+The extended archive uses a random generation key protected by the health
+Keychain key. Its index and fixed-size data pages are encrypted. Dates, categories
+and counts stay inside those pages. The file uses about 81 MiB when enrolled.
+Comparing snapshots can reveal which encrypted pages changed and when. The tool
+reports capacity losses for affected categories and periods. Turning off the
+archive blocks its writes and reads. Health sharing can still provide the
+ordinary seven-day context. Deleting Polar history clears both stored observation
+histories and preserves the latest profile. Disconnecting the account or deleting
+health data also removes the archive. A full external backup with the original
+keys and policy can still contain older records.
+
 Health activation retry metadata stays in memory. Missing keys or authentication
 failure block access. Local reset deletes the snapshot and its Keychain key; a new
 connection creates a new key. Existing encrypted filesystem backups are not securely
