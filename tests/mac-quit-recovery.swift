@@ -16,6 +16,27 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: ["notificationSettingsImported": true, "monitoringPaused": true,
             "shareAllMacNotifications": false, "selectedApps": [], "notificationSharingIntentID": UUID().uuidString])
+        #if !BASELINE
+        let quitEvent = NSAppleEventDescriptor(eventClass: AEEventClass(kCoreEventClass),
+            eventID: AEEventID(kAEQuitApplication), targetDescriptor: nil,
+            returnID: AEReturnID(kAutoGenerateReturnID), transactionID: AETransactionID(kAnyTransactionID))
+        precondition(!SetupApp.isSystemSessionEnd(nil) && !SetupApp.isSystemSessionEnd(quitEvent))
+        for reason in [kAEShowRestartDialog, kAERestart, kAEShowShutdownDialog, kAEShutDown, kAEReallyLogOut, kAELogOut] {
+            quitEvent.setAttribute(NSAppleEventDescriptor(enumCode: OSType(reason)), forKeyword: AEKeyword(kAEQuitReason))
+            precondition(SetupApp.isSystemSessionEnd(quitEvent))
+        }
+        // An OS restart can arrive while a background status check or tunnel retry is in flight.
+        quitEvent.setAttribute(NSAppleEventDescriptor(enumCode: OSType(kAERestart)), forKeyword: AEKeyword(kAEQuitReason))
+        sut.appLocationValidated = true
+        precondition(sut.terminationReply(for: quitEvent) == .terminateNow && !sut.quitting)
+        sut.busy = true
+        for action in ["inspect", "recover-startup-tunnel"] {
+            sut.currentAction = action
+            precondition(sut.terminationReply(for: quitEvent) == .terminateNow && !sut.quitting)
+        }
+        sut.busy = false
+        sut.currentAction = ""
+        #endif
         NSApp.setActivationPolicy(.accessory)
         sut.window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 660, height: 740),
             styleMask: [.titled, .closable, .resizable], backing: .buffered, defer: false)
@@ -25,6 +46,9 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
         sut.appLocationValidated = true; sut.appLocationReady = true
         sut.state = ["installed": true, "directory": root.appendingPathComponent("data").path,
             "bridge": true, "device": true, "tunnel": true, "subscribed": true, "step": "pair"]
+        #if !BASELINE
+        checkReconnectMenu()
+        #endif
         sut.connectNotifications()
         sut.notifications?.healthTimer?.invalidate()
         sut.render()
@@ -129,6 +153,25 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
     }
 
     #if !BASELINE
+    func checkReconnectMenu() {
+        let connected = sut.state
+        defer { sut.state = connected; sut.busy = false }
+        func resumeItem() -> NSMenuItem {
+            sut.updateMenu()
+            return sut.statusItem.menu!.item(withTitle: sut.tr("mac.resume"))!
+        }
+        precondition(!resumeItem().isEnabled)
+        sut.state["step"] = "reconnecting"
+        sut.state["servicesConfigured"] = true
+        sut.state["device"] = false
+        sut.render()
+        let repair = resumeItem()
+        precondition(repair.isEnabled && repair.action == #selector(SetupApp.menuResume))
+        precondition(!buttons(sut.stack).contains { $0.title == sut.tr("mac.start_relay") })
+        sut.busy = true
+        precondition(!resumeItem().isEnabled)
+    }
+
     func renderLanguages() {
         for language in Localization.shared.languages {
             sut.language = language; sut.render()

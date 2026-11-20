@@ -16,6 +16,10 @@ Dot Link connects Even G2 to your existing ChatGPT Dot through a relay on a Mac 
 
 Web addresses in conversation messages remain plain text on the phone. Dot Link does not open their destinations or fetch previews. Original URL text remains in the Mac conversation history.
 
+On a verified conversation subscription or renewal, the relay grants up to 24 hours (one hour by default in formal Mac 0.4.40) to the same callback. A shorter requested lifetime is honored. Startup preserves the previously granted deadline. Unsubscribing or receiving a terminal callback response ends the grant. Optional sharing subscriptions keep their own lifetimes and consent controls.
+
+The local conversation relay retains its latest 16 subscription changes or failed renewals for restart diagnostics. Each entry contains the change type, time, granted expiry and, when supplied, requested lifetime. The entries omit callback addresses, signing secrets and conversation content.
+
 ## Optional Polar health context
 
 Health sharing starts off. In **Healthcare settings** on the Mac, each user registers

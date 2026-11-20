@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, access, realpath, symlink, chmod, readdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { lifecycleState, suspendServices, resumeServices, waitForRelay } from '../scripts/lib/app-lifecycle.mjs';
+import { lifecycleState, suspendServices, resumeServices, recoverStartupTunnel, waitForRelay } from '../scripts/lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from '../scripts/lib/app-uninstall.mjs';
 const exists=p=>access(p).then(()=>true,()=>false);
 test('missing managed app blocks resume before enabling jobs or changing pause intent',async t=>{
@@ -179,4 +179,23 @@ test('resume readiness waits for actual service health and preserves a bounded f
  assert.equal(polls,3);assert.equal(state.subscribed,true);
  polls=0;const failed=await waitForRelay(async()=>{polls++;return {bridge:true,device:false,tunnel:false};},{attempts:2,wait:async()=>{}});
  assert.equal(polls,2);assert.equal(failed.device,false);
+});
+
+test('only retry the configured tunnel with a failed catalog after the relay is ready', async t => {
+  const f = await fixture(t);
+  const calls = [];
+  const options = {uid:501, execute: async (...args) => calls.push(args)};
+  const state = {directory:f.directory, step:'reconnecting', servicesConfigured:true, bridge:true, tunnelCatalogFailed:true};
+  for (const patch of [{step:'start'}, {servicesConfigured:false}, {bridge:false}, {tunnelCatalogFailed:false}]) {
+    await recoverStartupTunnel({...state,...patch}, options);
+  }
+  await writeFile(join(f.runtime,'app-update.json'), '{}');
+  await recoverStartupTunnel(state, options);
+  await rm(join(f.runtime,'app-update.json'));
+  await writeFile(join(f.runtime,'lifecycle.json'), JSON.stringify({stopped:true,reason:'pause'}));
+  await recoverStartupTunnel(state, options);
+  assert.deepEqual(calls, []);
+  await rm(join(f.runtime,'lifecycle.json'));
+  await recoverStartupTunnel(state, options);
+  assert.deepEqual(calls, [['/bin/launchctl',['kickstart','-k','gui/501/local.even-g2-dot.tunnel']]]);
 });

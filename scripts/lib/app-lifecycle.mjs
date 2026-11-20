@@ -86,6 +86,20 @@ export async function resumeServices(directory, {home=homedir(),execute=run,wait
   return { stopped:false };
 }
 
+// The caller inspects the registered launch agents' ownership and the authenticated relay first.
+export async function recoverStartupTunnel(state, {execute=run, uid=process.getuid()}={}) {
+  if (state.step !== 'reconnecting' || !state.servicesConfigured || !state.bridge || !state.tunnelCatalogFailed) return;
+  const directory = state.directory;
+  try {
+    await lstat(join(directory, '.runtime/app-update.json'));
+    return;
+  } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if ((await lifecycleState(directory)).lifecycleStopped) return;
+  // An unloaded or disabled job must stay stopped. Never bootstrap or enable here.
+  const target = `gui/${uid}/local.even-g2-dot.tunnel`;
+  await execute('/bin/launchctl', ['kickstart', '-k', target]);
+}
+
 export async function waitForRelay(inspect, {attempts=5,wait=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}) {
   let state;
   for(let i=0;i<attempts;i++) {

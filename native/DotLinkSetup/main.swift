@@ -67,8 +67,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var appLocationValidated = false
     var currentAction = ""
     var lastChecked: Date?
+    private var connectionCheckAt = Date.distantPast
+    private var connectionCheckDelay: TimeInterval = 2
+    private var triedStartupTunnelRecovery = false
     var migratingNotifications = false
     var busy = false
+    private var showFirstTimeSetup = false
     var helper: Process?
     var messageRecord: LocalizedMessage?
     var message: String { messageRecord.map { Localization.shared.text($0, language: language) } ?? "" }
@@ -119,6 +123,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateExpiry()
             self?.refreshVisiblePairing()
+            self?.refreshReturningConnection()
         }
     }
     func locateApp(handoffFailed: Bool = false) {
@@ -261,7 +266,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         menu.addItem(.separator())
         item(tr("mac.pause"), #selector(menuPause), enabled: yes("bridge") || yes("device") || yes("tunnel"))
-        item(tr("mac.resume"), #selector(menuResume), enabled: step == "start" || (yes("lifecycleStopped") && yes("servicesConfigured")))
+        item(tr("mac.resume"), #selector(menuResume), enabled: step == "start" || step == "reconnecting" || (yes("lifecycleStopped") && yes("servicesConfigured")))
         menu.addItem(.separator())
         item(appUpdater?.checkTitle ?? tr("mac.check_for_updates"), #selector(menuCheckUpdate), enabled: appLocationReady)
         if let updater = appUpdater, !updater.message.isEmpty { let update = NSMenuItem(title: updater.message, action: nil, keyEquivalent: ""); update.isEnabled = false; menu.addItem(update) }
@@ -269,7 +274,25 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let quit = NSMenuItem(title: tr("mac.quit_dot_link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
         statusItem.menu = menu
     }
+    static func isSystemSessionEnd(_ event: NSAppleEventDescriptor?) -> Bool {
+        guard let event, event.eventClass == kCoreEventClass, event.eventID == kAEQuitApplication else { return false }
+        let reason = event.attributeDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+            ?? event.paramDescriptor(forKeyword: AEKeyword(kAEQuitReason))
+        switch reason?.enumCodeValue {
+        case OSType(kAERestart), OSType(kAEShowRestartDialog), OSType(kAEShutDown),
+             OSType(kAEShowShutdownDialog), OSType(kAELogOut), OSType(kAEReallyLogOut):
+            return true
+        default:
+            // Some loginwindow requests omit a specific restart or logout reason.
+            guard let pid = event.attributeDescriptor(forKeyword: AEKeyword(keySenderPIDAttr))?.int32Value,
+                  pid > 0 else { return false }
+            return NSRunningApplication(processIdentifier: pid)?.bundleIdentifier == "com.apple.loginwindow"
+        }
+    }
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        terminationReply(for: NSAppleEventManager.shared().currentAppleEvent)
+    }
+    func terminationReply(for event: NSAppleEventDescriptor?) -> NSApplication.TerminateReply {
         // Before location validation this copy must not mutate relay lifecycle.
         if !appLocationValidated && !busy { return .terminateNow }
         if restartingUpdateHost { notifications?.shutdown(); return .terminateNow }
@@ -280,6 +303,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if appUpdater?.blocksActions == true { _ = appUpdater?.cancelForQuit(); return .terminateCancel }
         if allowTermination { notifications?.shutdown(); return .terminateNow }
         if quitting { return .terminateLater }
+        let systemExit = Self.isSystemSessionEnd(event)
+        if systemExit && (!busy || currentAction == "inspect" || currentAction == "recover-startup-tunnel") {
+            // launchd ends the login session. Keep its enabled jobs and the owner's pause/quit intent.
+            notifications?.shutdown()
+            return .terminateNow
+        }
         if busy {
             let alert = NSAlert(); alert.messageText = tr("mac.wait_for_the_current_operation_to_finish")
             alert.informativeText = tr("mac.settings_are_being_updated_you_can_quit_when_the_operation_finishes")
@@ -514,6 +543,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 guard let self else { return }; self.tunnelID = self.tunnelField?.stringValue ?? ""; let key = self.secretField?.stringValue ?? ""; self.secretField?.stringValue = ""
                 self.perform("save-tunnel", input: ["id": self.tunnelID, "secret": key])
             }
+        case "reconnecting":
+            add(tr("even.reconnecting"), size: 23, bold: true)
         case "start":
             add(yes("lifecycleStopped") ? tr("mac.dot_link_is_paused") : tr("mac.start_your_relay"), size: 23, bold: true)
             if yes("lifecycleStopped") {
@@ -523,10 +554,23 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             button(yes("lifecycleStopped") ? tr("mac.resume") : tr("mac.start_relay"), primary: true) { [weak self] in self?.menuResume() }
         case "subscribe":
-            add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
-            initialConnectionCard()
-            space()
-            reconnectHelpCard()
+            if yes("previouslySubscribed") {
+                add(tr("mac.connections"), size: 23, bold: true)
+                reconnectHelpCard()
+                if showFirstTimeSetup {
+                    initialConnectionCard()
+                } else {
+                    button(tr("mac.initial_connection_title")) { [weak self] in
+                        self?.showFirstTimeSetup = true
+                        self?.render()
+                    }
+                }
+            } else {
+                add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
+                initialConnectionCard()
+                space()
+                reconnectHelpCard()
+            }
         case "pair":
             add(tr("mac.connections"), size: 22, bold: true)
             connectionCards()
@@ -578,7 +622,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(tr("mac.check"), primary: true) { [weak self] in self?.inspect() }
         }
         space()
-        if step != "pair" && step != "subscribe" && step != "appLocation" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
+        if step != "pair" && step != "subscribe" && step != "reconnecting" && step != "appLocation" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
         let footer = NSStackView(); footer.orientation = .horizontal; footer.spacing = 10
         if let checked = lastChecked {
             let f = DateFormatter(); f.locale = Locale(identifier: Localization.shared.metadata[language]?.dateLocale ?? "en_US"); f.timeStyle = .medium
@@ -593,6 +637,26 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = Localization.shared.languages[sender.indexOfSelectedItem]; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); notifications?.refreshLanguage(); updateAppMenu(); render() }
     func inspect() { perform("inspect") }
+    private func refreshReturningConnection() {
+        guard step == "reconnecting" || (step == "subscribe" && yes("previouslySubscribed")) else {
+            connectionCheckDelay = 2
+            connectionCheckAt = .distantPast
+            triedStartupTunnelRecovery = false
+            return
+        }
+        guard !busy, !quitting, quitFailure == nil, !showingDetails, !showingHealthcare,
+              !showingSpeech, !showingSpeechOutput, !showingPairing, !showingNotifications,
+              !yes("lifecycleStopped"), appUpdater?.blocksActions != true,
+              Date() >= connectionCheckAt else { return }
+        connectionCheckAt = Date().addingTimeInterval(connectionCheckDelay)
+        connectionCheckDelay = min(60, connectionCheckDelay * 2)
+        if step == "reconnecting" && yes("bridge") && yes("tunnelCatalogFailed") && !triedStartupTunnelRecovery {
+            triedStartupTunnelRecovery = true
+            perform("recover-startup-tunnel")
+        } else {
+            inspect()
+        }
+    }
     func refreshVisiblePairing() {
         guard showingPairing, window.isVisible, yes("installed"), !busy,
               !pairingRefreshPending, appUpdater?.blocksActions != true,

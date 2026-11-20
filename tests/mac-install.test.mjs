@@ -54,3 +54,14 @@ test('setup advances through missing dependencies, network, Dot and pairing', ()
   const ready = {installed:true, dependencies:true, tailscaleConnected:true, tunnelConfigured:true, bridge:true, device:true, tunnel:true, subscribed:true};
   for (const [patch, step] of [[{},'pair'],[{conflict:true},'conflict'],[{installed:false},'install'],[{dependencies:false},'install'],[{tailscaleConnected:false},'network'],[{networkConflict:true},'networkConflict'],[{tunnelConfigured:false},'dot'],[{bridge:false},'start'],[{subscribed:false},'subscribe']]) assert.equal(nextSetupStep({...ready,...patch}), step);
 });
+
+test('configured relay startup returns to the connection without repeating activation', () => {
+  const ready = {installed:true, dependencies:true, tailscaleConnected:true, tunnelConfigured:true,
+    servicesConfigured:true, bridge:true, device:true, tunnel:true, subscribed:true};
+  for (const service of ['bridge', 'device', 'tunnel']) {
+    assert.equal(nextSetupStep({...ready, [service]:false}), 'reconnecting');
+    assert.equal(nextSetupStep({...ready, [service]:false, lifecycleStopped:true}), 'start');
+  }
+  assert.equal(nextSetupStep({...ready, lifecycleStopped:true}), 'start');
+  assert.equal(nextSetupStep(ready), 'pair');
+});
