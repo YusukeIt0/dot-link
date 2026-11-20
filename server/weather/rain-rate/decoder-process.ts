@@ -1,39 +1,40 @@
 import { constants, closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import assert from 'node:assert/strict';
 import { basename } from 'node:path';
 import { crc32 } from 'node:zlib';
-import hdf5, { Attribute, Dataset, File } from 'h5wasm';
+import hdf5, { Dataset, File } from 'h5wasm';
 import { weatherPointSchema } from '../types.ts';
 import type { CheckedRainRateFrame } from './decoder.ts';
 import { frameFromKey } from './discovery.ts';
 import { GRID, summarizeRainRate } from './raster.ts';
 
-function check(value: unknown): asserts value {
-  if (!value) throw new Error('Unsupported precipitation frame');
-}
+class UnsupportedFrame extends Error {}
+function check(value: unknown): asserts value { if (!value) throw new UnsupportedFrame(); }
 
 /** Recheck the cached bytes from a single opened descriptor before entering the virtual HDF5 filesystem. */
 function image(path: string, edition: CheckedRainRateFrame) {
   const frame = frameFromKey(edition.key, edition.etag, edition.size, edition.published);
-  check(frame && frame.start === edition.start && frame.end === edition.end && frame.created === edition.created && frame.inputs === edition.inputs);
+  assert(frame && frame.start === edition.start && frame.end === edition.end && frame.created === edition.created && frame.inputs === edition.inputs);
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = fstatSync(fd);
-    check(info.isFile() && info.size === edition.size);
+    assert(info.isFile() && info.size === edition.size);
     const data = Buffer.alloc(info.size);
     let offset = 0;
     while (offset < data.length) {
       const n = readSync(fd, data, offset, data.length-offset, offset);
-      check(n > 0); offset += n;
+      assert(n > 0); offset += n;
     }
     const crc = Buffer.alloc(4);
     crc.writeUInt32BE(crc32(data));
-    check(crc.toString('base64') === edition.checksum && data.subarray(0,8).toString('hex') === '894844460d0a1a0a');
+    assert(crc.toString('base64') === edition.checksum && data.subarray(0,8).toString('hex') === '894844460d0a1a0a');
     return data;
   } finally { closeSync(fd); }
 }
 
 function attribute(obj: File | Dataset, key: string) {
-  const a = new Attribute(obj.file_id, obj.path, key);
+  const a = obj.attrs[key];
+  check(a);
   const m = a.metadata;
   check(!m.vlen && m.size > 0 && m.size <= 2048 && (a.shape ?? []).reduce((n,v) => n*v, 1) <= 16);
   return a;
@@ -53,6 +54,7 @@ function scalar(obj: File | Dataset, name: string) {
   const values = numbers(obj, name); check(values.length === 1); return values[0];
 }
 function dataset(file: File, name: string) {
+  check(file.keys().includes(name));
   const d = file.get(name); check(d instanceof Dataset); return d;
 }
 function checkVariable(d: Dataset, dtype: string, elementBytes: number) {
@@ -87,11 +89,11 @@ function frameMetadata(f: File, edition: CheckedRainRateFrame) {
 
 async function main() {
   let input = '';
-  for await (const chunk of process.stdin) { check(input.length + chunk.length <= 8192); input += chunk; }
+  for await (const chunk of process.stdin) { assert(input.length + chunk.length <= 8192); input += chunk; }
   const {framePath, edition, point: rawPoint} = JSON.parse(input);
   const point = weatherPointSchema.parse(rawPoint), data = image(framePath, edition);
   const m = await hdf5.ready;
-  m.activate_throwing_error_handler();
+  assert(m.activate_throwing_error_handler() === 0);
   // The ESM build has a private in-memory filesystem. HDF5 links cannot open host paths.
   m.FS.createDataFile('/', 'frame.nc', data, true, false, true);
   const file = new File('/frame.nc', 'r');
@@ -111,4 +113,9 @@ async function main() {
     process.stdout.write(JSON.stringify(summary));
   } finally { file.close(); }
 }
-main().catch(() => { process.exitCode = 1; });
+main().catch((error: unknown) => {
+  // Only an identified product mismatch is a durable edition decision. An IO error,
+  // runtime/resource failure or unclassified parser exception may be transient.
+  if (error instanceof UnsupportedFrame) process.stdout.write('null');
+  else process.exitCode = 1;
+});

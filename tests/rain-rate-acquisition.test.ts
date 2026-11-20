@@ -4,12 +4,12 @@ import {mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, rmdirSync, wr
 import {join} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
-import {crc32} from 'node:zlib';
+import {crc32, gunzipSync} from 'node:zlib';
 import {DatabaseSync} from 'node:sqlite';
 import {RainRateService} from '../server/weather/rain-rate/service.ts';
 import {acquireFrame, chooseEdition, frameFromKey, freshFrame, parseListing, FRAME_AGE, LIST_LIMIT, OBJECT_LIMIT} from '../server/weather/rain-rate/discovery.ts';
 import {COOLDOWN, DAILY_BYTES, FETCH_TIMEOUT, RainRateCache} from '../server/weather/rain-rate/cache.ts';
-import type {decodeRainRate, RainRateSample} from '../server/weather/rain-rate/decoder.ts';
+import type {decodeRainRate, probeRainRateFrame, RainRateSample} from '../server/weather/rain-rate/decoder.ts';
 
 const minute = 60_000;
 const start = Date.UTC(2026, 10, 20, 23, 50);
@@ -61,7 +61,8 @@ function control(t: TestContext) {
   };
   return {
     directory, seen, request, decode, now: () => now, advance: (ms: number) => {now += ms;}, set: (f: Frame[]) => {frames = f;},
-    service: (overrides: {request?: typeof fetch; decode?: typeof decodeRainRate} = {}) => new RainRateService(directory, {request, decode, now: () => now, ...overrides})
+    service: (overrides: {request?: typeof fetch; decode?: typeof decodeRainRate; probe?: typeof probeRainRateFrame} = {}) =>
+      new RainRateService(directory, {request, decode, probe: async () => 'supported', now: () => now, ...overrides})
   };
 }
 test('discovery checks hours, production filename and digest capability, and selects one edition per observation window', () => {
@@ -238,9 +239,11 @@ test('failed index commit and an interrupted publication retain the usable editi
     `import {RainRateCache} from ${JSON.stringify(new URL('../server/weather/rain-rate/cache.ts',import.meta.url).href)};
      const [dir,time,frame,crc,raw]=process.argv.slice(1);
      const cache=new RainRateCache(dir);
-     await cache.acquire(Number(time),async reserve=>{
+     const signal=new AbortController().signal;
+     await cache.acquire(Number(time),signal,async reserve=>{
        const bytes=Buffer.from(raw,'hex');reserve(bytes.length);
-       cache.store(JSON.parse(frame),crc,bytes,Number(time));process.exit(0);
+       await cache.store({...JSON.parse(frame),checksum:crc,retrieved:Number(time)},bytes,async()=>'supported',signal,()=>Number(time));
+       process.exit(0);
      });process.exit(2);`,
     f.directory,String(f.now()),JSON.stringify(late),checksum.toString('base64'),payload.toString('hex')],{timeout:5000});
   assert.equal(child.status,0,child.stderr.toString());
@@ -279,4 +282,90 @@ test('a failed staged rename can never displace the cached same-window edition',
   assert.deepEqual(await seed.read(point,active()),initial);
   rmdirSync(target);
   assert.deepEqual(await f.service().read(point,active()),initial);
+});
+
+test('verified HDF with incompatible source metadata cannot replace a usable same-window edition', async t => {
+  const f = control(t);
+  const bytes = gunzipSync(readFileSync(new URL('./fixtures/rain-rate.nc.gz', import.meta.url)));
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(bytes));
+  const key = 'BLEND/RainRate-Blend-INST/2026/11/20/16/RRQPE-INST-GLB-1_v1r1_blend_s202611201640000_e202611201649599_c202611201654584.nc';
+  const published = Date.parse('2026-11-20T16:55:35Z');
+  const good = frameFromKey(key, etag, bytes.length, published)!;
+  // This valid, checksum-matching HDF5 file contains a single contributing satellite.
+  const incompatible = frameFromKey(key.replace('GLB-1', 'GLB-2'), etag, bytes.length, published + 1000)!;
+  let frames = [good], now = published + minute;
+  const downloads: string[] = [];
+  const request: typeof fetch = async raw => {
+    const url = new URL(String(raw));
+    if (url.search) return new Response(listing(url.searchParams.get('prefix')!, frames));
+    const frame = frames.find(r => r.key === url.pathname.slice(1))!;
+    downloads.push(frame.key);
+    return new Response(bytes, {headers: {...headers(frame), 'x-amz-checksum-crc32': crc.toString('base64')}});
+  };
+  const service = () => new RainRateService(f.directory, {now: () => now, request});
+  assert.equal(await service().refresh(active()), 'updated');
+  const previouslyVerified = await service().read({latitude: 0, longitude: -180}, active());
+  assert.equal(previouslyVerified.length, 1);
+  assert.equal(previouslyVerified[0].frame.key, good.key);
+  frames = [good, incompatible]; now += COOLDOWN;
+  assert.equal(await service().refresh(active()), 'unavailable');
+  assert.deepEqual(await service().read({latitude: 0, longitude: -180}, active()), previouslyVerified);
+  now += COOLDOWN;
+  assert.equal(await service().refresh(active()), 'cached');
+  assert.deepEqual(downloads, [good.key, incompatible.key]);
+  assert.equal(readdirSync(f.directory).filter(name => name.endsWith('.nc')).length, 1);
+  assert.equal(readdirSync(f.directory).includes('.incoming'), false);
+});
+test('transient inspection failures retry after cooldown; canceled and aged verdicts never promote or poison the edition', async t => {
+  const f = control(t);
+  const good = edition(start, 2, minute), newer = edition(start, 5, 12 * minute);
+  f.set([good]);
+  await f.service().refresh(active());
+  const before = (await f.service().read(point, active()))[0];
+  f.advance(COOLDOWN); f.set([good, newer]);
+  assert.equal(await f.service({probe: async () => {throw Error('Worker busy');}}).refresh(active()), 'unavailable');
+  assert.deepEqual((await f.service().read(point, active()))[0], before);
+  let probes = 0;
+  const authority = new AbortController();
+  f.advance(COOLDOWN);
+  const canceled = f.service({probe: async () => {
+    probes++;
+    authority.abort();
+    return 'supported';
+  }});
+  assert.equal(await canceled.refresh(authority.signal), 'unavailable');
+  assert.deepEqual((await f.service().read(point, active()))[0], before);
+  f.advance(COOLDOWN);
+  const delayed = f.service({probe: async () => {
+    probes++;
+    f.advance(FRAME_AGE);
+    return 'supported';
+  }});
+  assert.equal(await delayed.refresh(active()), 'unavailable');
+  assert.equal(probes, 2);
+  const cache = new RainRateCache(f.directory);
+  try {
+    assert.deepEqual(cache.frames(), [before.frame]);
+    assert.equal(cache.supported(newer), undefined);
+  } finally {cache.close();}
+});
+
+test('legacy checksum-only local editions acquire decoder proof without a second object request', async t => {
+  const f = control(t);
+  const seed = f.service();
+  await seed.refresh(active());
+  const saved = (await seed.read(point,active()))[0].frame;
+  const db = new DatabaseSync(join(f.directory, 'frames.sqlite'));
+  db.exec('DROP TABLE inspections'); db.close();
+  f.advance(COOLDOWN);
+  const withChangedSchema = f.service({probe: async () => 'unsupported'});
+  assert.equal(await withChangedSchema.refresh(active()), 'unavailable');
+  assert.deepEqual(await withChangedSchema.read(point,active()), []);
+  const cache = new RainRateCache(f.directory);
+  try {
+    assert.equal(cache.supported(saved), false);
+    assert.equal(cache.frames()[0].retrieved, saved.retrieved);
+  } finally {cache.close();}
+  assert.equal(f.seen.filter(r => !r.url.search).length, 1);
 });

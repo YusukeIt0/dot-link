@@ -1,7 +1,7 @@
 import {lstatSync} from 'node:fs';
 import {RainRateCache, FETCH_TIMEOUT, type StoredFrame} from './cache.ts';
 import {acquireFrame, chooseEdition, discoverFrames, freshFrame} from './discovery.ts';
-import {decodeRainRate, type RainRateSample} from './decoder.ts';
+import {decodeRainRate, probeRainRateFrame, type RainRateSample} from './decoder.ts';
 
 type Point = {latitude: number; longitude: number};
 export interface NearbyRainRead {sample: RainRateSample; frame: StoredFrame}
@@ -13,12 +13,14 @@ export class RainRateService {
   private readonly request: typeof fetch;
   private readonly now: () => number;
   private readonly decode: typeof decodeRainRate;
+  private readonly probe: typeof probeRainRateFrame;
   private stopped = new AbortController();
   private closed = false;
   private acquiring = false;
   private reading = false;
-  constructor(directory: string, options: {request?: typeof fetch; now?: () => number; decode?: typeof decodeRainRate} = {}) {
+  constructor(directory: string, options: {request?: typeof fetch; now?: () => number; decode?: typeof decodeRainRate; probe?: typeof probeRainRateFrame} = {}) {
     this.directory = directory; this.request = options.request ?? fetch; this.now = options.now ?? Date.now; this.decode = options.decode ?? decodeRainRate;
+    this.probe = options.probe ?? probeRainRateFrame;
   }
   cancel() {this.stopped.abort(); this.stopped = new AbortController();}
   close() {this.closed = true; this.cancel();}
@@ -31,23 +33,28 @@ export class RainRateService {
     try {
       cache = new RainRateCache(this.directory);
       const store = cache;
-      await store.acquire(this.now(), async reserve => {
+      await store.acquire(this.now(), signal, async reserve => {
         const candidates = await discoverFrames(this.now(), this.request, reserve, signal);
         signal.throwIfAborted();
-        const frame = chooseEdition(candidates.filter(f => freshFrame(f, this.now())));
+        const frame = chooseEdition(candidates.filter(f => freshFrame(f, this.now()) && store.supported(f) !== false));
         if (!frame) return;
-        const newest = store.frames().find(f => freshFrame(f, this.now()));
+        const newest = store.frames().find(f => freshFrame(f, this.now()) && store.supported(f) !== false);
         if (newest && (newest.start > frame.start || (newest.start === frame.start &&
           (newest.inputs > frame.inputs || (newest.inputs === frame.inputs && newest.created > frame.created))))) return;
         if (newest?.key === frame.key && newest.etag === frame.etag) {
-          if (store.complete(newest)) {result.status = 'cached'; return;}
+          if (store.complete(newest)) {
+            // Older local caches can contain checksum-verified but uninspected editions.
+            if (store.supported(newest) || await store.inspect(store.path(newest), newest, this.probe, signal, this.now))
+              result.status = 'cached';
+            return;
+          }
         }
         const {bytes, checksum} = await acquireFrame(frame, this.request, reserve, signal);
         signal.throwIfAborted();
         if (!freshFrame(frame, this.now())) return;
         const sameEdition = newest?.key === frame.key && newest.etag === frame.etag && newest.checksum === checksum;
-        store.store(frame, checksum, bytes, sameEdition ? newest.retrieved : this.now());
-        result.status = 'updated';
+        const entry = {...frame, checksum, retrieved: sameEdition ? newest.retrieved : this.now()};
+        if (await store.store(entry, bytes, this.probe, signal, this.now)) result.status = 'updated';
       });
       return result.status;
     } catch {return 'unavailable';}
@@ -64,7 +71,7 @@ export class RainRateService {
       cache = new RainRateCache(this.directory);
       const result: NearbyRainRead[] = [];
       for (const frame of cache.frames()) {
-        if (!freshFrame(frame, this.now()) || frame.retrieved > this.now()) continue;
+        if (!freshFrame(frame, this.now()) || frame.retrieved > this.now() || cache.supported(frame) === false) continue;
         signal.throwIfAborted();
         try {
           if (!lstatSync(cache.path(frame), {throwIfNoEntry: false})?.isFile()) continue;

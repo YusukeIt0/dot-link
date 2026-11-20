@@ -3,7 +3,8 @@ import {closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdir
 import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {crc32} from 'node:zlib';
-import {frameFromKey, freshFrame, LIST_LIMIT, OBJECT_LIMIT, type RainRateFrame} from './discovery.ts';
+import {frameFromKey, freshFrame, FRAME_AGE, LIST_LIMIT, OBJECT_LIMIT, type RainRateFrame} from './discovery.ts';
+import type {probeRainRateFrame} from './decoder.ts';
 
 const DAY = 86_400_000;
 export const FETCH_TIMEOUT = 90_000;
@@ -39,7 +40,9 @@ export class RainRateCache {
         CREATE TABLE IF NOT EXISTS transfers (id INTEGER PRIMARY KEY, at INTEGER NOT NULL CHECK(at>=0),
           bytes INTEGER NOT NULL CHECK(bytes>=0 AND bytes<=${OBJECT_LIMIT + 2 * LIST_LIMIT}));
         CREATE TABLE IF NOT EXISTS frames (key TEXT PRIMARY KEY, etag TEXT NOT NULL, size INTEGER NOT NULL,
-          published INTEGER NOT NULL, checksum TEXT NOT NULL, retrieved INTEGER NOT NULL);`);
+          published INTEGER NOT NULL, checksum TEXT NOT NULL, retrieved INTEGER NOT NULL);
+        CREATE TABLE IF NOT EXISTS inspections (key TEXT PRIMARY KEY, etag TEXT NOT NULL, end INTEGER NOT NULL,
+          supported INTEGER NOT NULL CHECK(supported IN(0,1)));`);
     } catch (e) {db.close(); throw e;}
     this.db = db;
     this.reconcile();
@@ -70,6 +73,21 @@ export class RainRateCache {
     if (rows.length > 3) throw Error('Invalid NOAA cache inventory');
     return rows.map(decodeRow).sort((a, b) => b.start - a.start || b.inputs - a.inputs || b.created - a.created);
   }
+  supported(frame: RainRateFrame): boolean | undefined {
+    const row = this.db.prepare('SELECT supported FROM inspections WHERE key=? AND etag=?').get(frame.key, frame.etag);
+    return row && row.supported === 1;
+  }
+  async inspect(path: string, frame: StoredFrame, probe: typeof probeRainRateFrame, signal: AbortSignal, now: () => number) {
+    const verdict = await probe(path, frame, signal);
+    signal.throwIfAborted();
+    if (!freshFrame(frame, now())) return false;
+    // Only definitive decoder verdicts reach this point. Transient worker,
+    // filesystem and authorization failures leave the edition eligible to retry.
+    const supported = verdict === 'supported';
+    this.db.prepare('INSERT OR REPLACE INTO inspections(key,etag,end,supported) VALUES(?,?,?,?)')
+      .run(frame.key, frame.etag, frame.end, supported ? 1 : 0);
+    return supported;
+  }
   private discardOrphans(kept: StoredFrame[]) {
     const names = new Set(kept.map(basename));
     for (const name of readdirSync(this.directory)) {
@@ -87,12 +105,14 @@ export class RainRateCache {
   /** A committed worst-case reservation survives process death. A second,
    * immediate writer transaction serializes network work even across relays.
    * On clean completion refund only unissued requests; a started stream is charged in full. */
-  async acquire(now: number, action: (reserve: (bytes: number) => void) => Promise<void>) {
+  async acquire(now: number, signal: AbortSignal, action: (reserve: (bytes: number) => void) => Promise<void>) {
+    signal.throwIfAborted();
     const db = this.db;
     db.exec('BEGIN IMMEDIATE');
     let reservation = 0; let row: number | bigint = 0;
     try {
       db.prepare('DELETE FROM transfers WHERE at < ?').run(now - DAY - FETCH_TIMEOUT);
+      db.prepare('DELETE FROM inspections WHERE end < ?').run(now - FRAME_AGE);
       const totals = db.prepare('SELECT max(at) AS last, coalesce(sum(bytes),0) AS bytes FROM transfers').get()!;
       const remaining = DAILY_BYTES - Number(totals.bytes);
       if ((totals.last !== null && now - Number(totals.last) < COOLDOWN) || remaining < LIST_LIMIT) {
@@ -111,6 +131,7 @@ export class RainRateCache {
         if (!Number.isSafeInteger(bytes) || bytes <= 0 || charged + bytes > reservation) throw Error('NOAA download budget');
         charged += bytes;
       });
+      signal.throwIfAborted();
       db.prepare('UPDATE transfers SET bytes=? WHERE id=?').run(charged, row);
       db.exec('COMMIT');
     } catch (error) {
@@ -121,14 +142,19 @@ export class RainRateCache {
       throw error;
     } finally {this.reconcile();}
   }
-  store(frame: RainRateFrame, checksum: string, bytes: Buffer, retrieved: number) {
-    if (!freshFrame(frame, retrieved)) throw Error('Expired NOAA object');
+  async store(frame: StoredFrame, bytes: Buffer, probe: typeof probeRainRateFrame, signal: AbortSignal, now: () => number) {
+    signal.throwIfAborted();
+    if (!freshFrame(frame, now())) return false;
+    const {checksum, retrieved} = frame;
     const old = this.frames();
     const keep = old.filter(f => f.start !== frame.start)
       .sort((a, b) => b.start - a.start).slice(0, 2);
     const temporary = join(this.directory, '.incoming');
     writeFileSync(temporary, bytes, {flag: 'wx', mode: 0o600, flush: true});
     try {
+      if (!await this.inspect(temporary, frame, probe, signal, now)) return false;
+      signal.throwIfAborted();
+      if (!freshFrame(frame, now())) return false;
       for (const f of old) if (!keep.includes(f)) {
         this.db.prepare('DELETE FROM frames WHERE key=?').run(f.key);
       }
@@ -139,6 +165,7 @@ export class RainRateCache {
       try {fsyncSync(directory);} finally {closeSync(directory);}
       this.db.prepare('INSERT INTO frames(key,etag,size,published,checksum,retrieved) VALUES(?,?,?,?,?,?)')
         .run(frame.key, frame.etag, frame.size, frame.published, checksum, retrieved);
+      return true;
     } finally {if (existsSync(temporary)) unlinkSync(temporary);}
   }
 }

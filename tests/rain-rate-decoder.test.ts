@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
 import { crc32, gunzipSync } from 'node:zlib';
-import { compareRainRateSamples, decodeRainRate } from '../server/weather/rain-rate/decoder.ts';
+import { compareRainRateSamples, decodeRainRate, probeRainRateFrame } from '../server/weather/rain-rate/decoder.ts';
 import { frameFromKey } from '../server/weather/rain-rate/discovery.ts';
 import { summarizeRainRate } from '../server/weather/rain-rate/raster.ts';
 
@@ -43,6 +43,23 @@ test('wrong CRC, untrusted cache file and mismatched source metadata fail before
   await assert.rejects(decodeRainRate(join(dir,'link'),edition,seam,freshSignal()));
   const earlier = frameFromKey(key.replace('201654584','201654474'),edition.etag,edition.size,edition.published)!;
   await assert.rejects(decodeRainRate(path,{...earlier,checksum:edition.checksum},seam,freshSignal()));
+});
+
+test('staged probe accepts missing local coverage and distinguishes an incompatible grid from an unverifiable file', async t => {
+  const {dir,path,bytes,edition} = await setup(); t.after(() => rm(dir,{recursive:true,force:true}));
+  // The fixture has no rain or quality coverage at the probe city. Its schema and tile still decode.
+  assert.equal(await probeRainRateFrame(path,edition,freshSignal()),'supported');
+  await assert.rejects(probeRainRateFrame(path,{...edition,checksum:'AAAAAA=='},freshSignal()));
+  await assert.rejects(probeRainRateFrame(join(dir,'inaccessible'),edition,freshSignal()));
+  const controller = new AbortController(); controller.abort();
+  await assert.rejects(probeRainRateFrame(path,edition,controller.signal),{name:'AbortError'});
+
+  // This fixed-width HDF attribute changes the grid convention, leaving a readable HDF5 file.
+  const pos = bytes.indexOf('degrees_north'); assert.ok(pos > 0);
+  bytes.write('degrees_south',pos,'ascii');
+  await writeFile(path,bytes);
+  const checksum = Buffer.alloc(4); checksum.writeUInt32BE(crc32(bytes));
+  assert.equal(await probeRainRateFrame(path,{...edition,checksum:checksum.toString('base64')},freshSignal()),'unsupported');
 });
 
 test('an overlapping decode is bounded, cancellation releases the slot, and an unsupported point gives no cells',async t => {
