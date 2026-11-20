@@ -41,7 +41,7 @@ const outboundInput = z.object({
 }).strict();
 const outboundRecord = outboundInput.extend({ createdAt: z.string(), initial_reply: z.boolean().optional(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
 const leaseEvent = z.object({
-  at: z.number(), kind: z.enum(['created', 'renewed', 'unsubscribed', 'callback_gone']),
+  at: z.number(), kind: z.enum(['created', 'renewed', 'unsubscribed', 'callback_gone', 'renewal_failed']),
   expiresAt: z.number(), requestedTtlMs: z.number().nullable().optional(),
 });
 const LEASE_HISTORY_LIMIT = 16;
@@ -286,7 +286,15 @@ export class Bridge {
       const sub = { id, url: params.delivery.url, secret: params.delivery.secret,
         expiresAt: this.now() + (params.ttlMs ?? MAX_CONVERSATION_LEASE_MS) };
       // Verify before storing; a rejected callback never becomes an active subscriber.
-      await this.sender.verify(sub);
+      try {
+        await this.sender.verify(sub);
+      } catch (error) {
+        const existing = this.state.subscription;
+        if (existing?.id === id) {
+          this.save({ ...this.state, leaseHistory: this.leaseHistory('renewal_failed', existing, params.ttlMs) });
+        }
+        throw error;
+      }
       const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
       this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };

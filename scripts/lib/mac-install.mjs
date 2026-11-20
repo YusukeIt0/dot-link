@@ -71,7 +71,8 @@ export function nextSetupStep(state) {
   if (!state.tailscaleConnected) return 'network';
   if (state.networkConflict) return 'networkConflict';
   if (!state.tunnelConfigured) return 'dot';
-  if (!state.bridge || !state.device || !state.tunnel) return 'start';
+  if (state.lifecycleStopped) return 'start';
+  if (!state.bridge || !state.device || !state.tunnel) return state.servicesConfigured ? 'reconnecting' : 'start';
   if (!state.subscribed) return 'subscribe';
   return 'pair';
 }

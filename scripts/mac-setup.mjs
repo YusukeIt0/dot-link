@@ -8,7 +8,7 @@ import { discoverInstallation, installPayload, exists, nextSetupStep } from './l
 import { installMenuApp, registerMenuApp } from './lib/menu-install.mjs';
 import { ensureAppLocation, armAppHandoff, consumeHandoffFailure, isManagedApp } from './lib/app-location.mjs';
 import { prepareUpdate, finishUpdate, initialSetupReady } from './lib/app-update.mjs';
-import { lifecycleState, suspendServices, resumeServices, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
+import { lifecycleState, suspendServices, resumeServices, recoverStartupTunnel, waitForRelay, ownedJobs } from './lib/app-lifecycle.mjs';
 import { uninstallPlan, uninstallApp } from './lib/app-uninstall.mjs';
 import { pairingStatus } from './lib/pairing-status.mjs';
 import { removeEvenPairings } from './lib/pairing-removal.mjs';
@@ -50,6 +50,7 @@ async function inspect() {
   const servicesConfigured = ['bridge','device','tunnel'].every(name => jobs.some(job => job.name === name));
   const state = { ...installation, ...pairing, ...lifecycle, servicesConfigured, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,
     networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured,
+    tunnelCatalogFailed: health.tunnelCatalogFailed === true,
     bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, previouslySubscribed: health.previouslySubscribed === true, subscribed: health.subscribed === true };
   state.legacyNotificationRegistered = installation.installed ? (await legacyNotificationState(directory)).registered : false;
   try { state.sttProvider = await sttSelection(join(directory, '.runtime')); } catch { state.sttProvider = 'unknown'; }
@@ -140,6 +141,11 @@ try {
   }
   else if (action === 'update-abort') { const found = await discoverInstallation(); result = await finishUpdate(found.directory, {rollback:true}); }
   else if (action === 'inspect') result = await inspect();
+  else if (action === 'recover-startup-tunnel') {
+    result = await inspect();
+    await recoverStartupTunnel(result).catch(() => {});
+    result = await inspect();
+  }
   else if (action === 'health') {
     const found = await discoverInstallation();
     if (!found.installed) throw new Error('INSTALL_FIRST');

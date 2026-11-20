@@ -151,6 +151,20 @@ test('returning setup can recognize an expired or removed subscription after res
   assert.equal(restarted.status().subscribed, false);
 });
 
+test('a rejected same-Dot renewal records the attempt and preserves the previous grant', async t => {
+  let accepted = true;
+  const s = setup(async (_url, body) => ({ status: 200, body: JSON.stringify({
+    challenge: accepted ? JSON.parse(body).challenge : 'incorrect',
+  }) }));
+  t.after(s.close);
+  const first = await s.bridge.subscribe({ ...subscription, ttlMs: 60_000 });
+  accepted = false;
+  await assert.rejects(s.bridge.subscribe(subscription));
+  assert.deepEqual(s.bridge.inputDestination(), { id: first.id, expiresAt: Date.parse(first.refreshBefore) });
+  const entry = JSON.parse(readFileSync(s.path, 'utf8')).leaseHistory.at(-1);
+  assert.deepEqual(entry, { at: entry.at, kind: 'renewal_failed', expiresAt: Date.parse(first.refreshBefore) });
+});
+
 test('failed challenge never activates a subscriber and sends no application data', async t => {
   const sent: unknown[] = [];
   const s = setup(async (_url, body) => { sent.push(JSON.parse(body)); return { status: 200, body: '{"challenge":"wrong"}' }; });

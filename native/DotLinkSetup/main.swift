@@ -67,6 +67,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var appLocationValidated = false
     var currentAction = ""
     var lastChecked: Date?
+    private var connectionCheckAt = Date.distantPast
+    private var connectionCheckDelay: TimeInterval = 2
+    private var triedStartupTunnelRecovery = false
     var migratingNotifications = false
     var busy = false
     private var showFirstTimeSetup = false
@@ -120,6 +123,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             self?.updateExpiry()
             self?.refreshVisiblePairing()
+            self?.refreshReturningConnection()
         }
     }
     func locateApp(handoffFailed: Bool = false) {
@@ -515,6 +519,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 guard let self else { return }; self.tunnelID = self.tunnelField?.stringValue ?? ""; let key = self.secretField?.stringValue ?? ""; self.secretField?.stringValue = ""
                 self.perform("save-tunnel", input: ["id": self.tunnelID, "secret": key])
             }
+        case "reconnecting":
+            add(tr("even.reconnecting"), size: 23, bold: true)
         case "start":
             add(yes("lifecycleStopped") ? tr("mac.dot_link_is_paused") : tr("mac.start_your_relay"), size: 23, bold: true)
             if yes("lifecycleStopped") {
@@ -592,7 +598,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             button(tr("mac.check"), primary: true) { [weak self] in self?.inspect() }
         }
         space()
-        if step != "pair" && step != "subscribe" && step != "appLocation" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
+        if step != "pair" && step != "subscribe" && step != "reconnecting" && step != "appLocation" && !yes("lifecycleStopped") { let footer = label(tr("mac.finish_mac_and_dot_setup_before_pairing_your_iphone"), size: 12); footer.textColor = .secondaryLabelColor; stack.addArrangedSubview(footer) }
         let footer = NSStackView(); footer.orientation = .horizontal; footer.spacing = 10
         if let checked = lastChecked {
             let f = DateFormatter(); f.locale = Locale(identifier: Localization.shared.metadata[language]?.dateLocale ?? "en_US"); f.timeStyle = .medium
@@ -607,6 +613,26 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc func changeLanguage(_ sender: NSPopUpButton) { speechEndpointDraft = speechEndpointField?.stringValue ?? speechEndpointDraft; language = Localization.shared.languages[sender.indexOfSelectedItem]; UserDefaults.standard.set(language, forKey: "setupLanguage"); appUpdater?.refreshLanguage(); notifications?.refreshLanguage(); updateAppMenu(); render() }
     func inspect() { perform("inspect") }
+    private func refreshReturningConnection() {
+        guard step == "reconnecting" || (step == "subscribe" && yes("previouslySubscribed")) else {
+            connectionCheckDelay = 2
+            connectionCheckAt = .distantPast
+            triedStartupTunnelRecovery = false
+            return
+        }
+        guard !busy, !quitting, quitFailure == nil, !showingDetails, !showingHealthcare,
+              !showingSpeech, !showingSpeechOutput, !showingPairing, !showingNotifications,
+              !yes("lifecycleStopped"), appUpdater?.blocksActions != true,
+              Date() >= connectionCheckAt else { return }
+        connectionCheckAt = Date().addingTimeInterval(connectionCheckDelay)
+        connectionCheckDelay = min(60, connectionCheckDelay * 2)
+        if step == "reconnecting" && yes("bridge") && yes("tunnelCatalogFailed") && !triedStartupTunnelRecovery {
+            triedStartupTunnelRecovery = true
+            perform("recover-startup-tunnel")
+        } else {
+            inspect()
+        }
+    }
     func refreshVisiblePairing() {
         guard showingPairing, window.isVisible, yes("installed"), !busy,
               !pairingRefreshPending, appUpdater?.blocksActions != true,
