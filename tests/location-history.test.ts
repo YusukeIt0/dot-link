@@ -201,7 +201,8 @@ test('replay capacity evicts old observations honestly; a fresh instance has no 
 
 test('incremental appends invalidate affected pages on capacity eviction and keep unaffected bounded pages', () => {
   const history = new LocationHistoryReplay({now: () => NOW, maximum: 3}); history.setReadable(true);
-  const append = (id: string, time: number) => history.append({...fix(id, time), source: 'synthetic_fixture' as const, recording_epoch: 1});
+  const append = (id: string, time: number) => history.append({...fix(id, time), source: 'synthetic_fixture' as const,
+    recording_epoch: 1, expires_at: time + HISTORY_RETENTION_MS});
   append('a', NOW - 4000); append('b', NOW - 3000); append('c', NOW - 2000);
   const full = read(history, {detail: 'observations', limit: 1});
   const recent = read(history, {start_at: new Date(NOW - 3000).toISOString(), end_at: new Date(NOW - 1000).toISOString(), detail: 'observations', limit: 1});

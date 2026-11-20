@@ -77,7 +77,7 @@ export function phoneTimeEvidence(entries: HistoryEntry[], dates: string[]) {
       provenance: 'Timezone ID and offset were reported by the phone runtime when preparing a history upload. received_at is the Mac receipt time, not the exact clock observation time; location_measured_at timestamps the accompanying location fix. Neither verifies the Polar device clock.',
       interpretation: 'Each source date has a potentially overlapping UTC window, not verified alignment; windows may reuse uploads. Each span groups adjacent uploads with the same reported timezone and offset, at most 120 seconds apart and within one recording session. It does not prove continuous clock coverage. Gaps, missing fields and per-date omissions remain unknown. Use a resolved per-date reference as the normal phone-based interpretation of offset-free health times, including conversation/event comparisons, without routine timezone caveats or user clock management. This is a product convention, not verified Polar synchronization. Preserve source timestamps. For ambiguous references use the dated spans only where the relevant period is distinguishable; otherwise leave event ordering unresolved when it affects the answer. Unavailable references do not inherit the current phone timezone. Gaps do not establish continuous sampling or a maximum clock error. No coordinates or places are included.',
     },
-    earliestMeasurement: retained.size ? Math.min(...[...retained].map(x => Date.parse(x.measured_at))) : undefined,
+    earliestExpiry: retained.size ? Math.min(...[...retained].map(x => x.expires_at)) : undefined,
   };
 }
 export type PhoneTimeEvidence = ReturnType<typeof phoneTimeEvidence>['evidence'];
