@@ -3,6 +3,7 @@ import {randomBytes, randomUUID} from 'node:crypto';
 import {mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {DatabaseSync} from 'node:sqlite';
 import {test, type TestContext} from 'node:test';
 import {Bridge} from '../server/bridge.ts';
 import {HealthContext} from '../server/health/context.ts';
@@ -334,4 +335,68 @@ test('a later successful checkpoint preserves the accepted request after a tempo
   await f.restart();
   assert.equal(f.app.activation.pending()[0].request_id, id);
   assert.deepEqual(f.eventIds, [`evt_${id}`]);
+});
+
+function contendForControlLock(t: TestContext, path: string, releaseAtFirstConflict = false) {
+  const lock = new DatabaseSync(join(path + '.history', 'control.lock'));
+  lock.exec('BEGIN IMMEDIATE');
+  const exec = DatabaseSync.prototype.exec;
+  let busy = 0;
+  // Exercise SQLite's actual writer contention without a three-second wait.
+  const timeout = t.mock.method(DatabaseSync.prototype, 'exec', function(this: DatabaseSync, sql: string) {
+    try { return exec.call(this, sql.replace(/busy_timeout\s*=\s*\d+/, 'busy_timeout=1')); }
+    catch (error) {
+      if ((error as {errcode?: number}).errcode === 5) {
+        busy++;
+        if (releaseAtFirstConflict && busy === 1) exec.call(lock, 'ROLLBACK');
+      }
+      throw error;
+    }
+  });
+  return {failures: () => busy, release: () => { timeout.mock.restore(); lock.close(); }};
+}
+
+test('a busy control lock during a health refresh cannot replay an accepted Polar request', async t => {
+  const f = await fixture(t);
+  const id = f.app.activation.pending()[0].request_id;
+  const lock = contendForControlLock(t, f.path);
+  try {
+    await f.control('refresh');
+    await settle();
+    await f.control('refresh');
+    await settle();
+    assert.ok(lock.failures() >= 2);
+    assert.equal(f.app.health.status(owner).healthHasProfile, true);
+    assert.deepEqual(f.eventIds, [`evt_${id}`]);
+  } finally { lock.release(); }
+  // A known receipt that temporarily disappears is not a new owner choice.
+  const receipt = join(f.path + '.history', 'activation.enc');
+  renameSync(receipt, receipt + '.unavailable');
+  await f.app.activation.sync();
+  assert.deepEqual(f.eventIds, [`evt_${id}`]);
+  renameSync(receipt + '.unavailable', receipt);
+  await f.app.activation.sync();
+  // The first successful delivery-loop check repairs the receipt durably.
+  await f.restart();
+  assert.equal(f.app.activation.pending()[0].request_id, id);
+  assert.deepEqual(f.eventIds, [`evt_${id}`]);
+});
+
+test('a contended activation checkpoint preserves the owner’s stop or deletion across restart', async t => {
+  for (const action of ['disable', 'delete']) await t.test(action, async t => {
+    const f = await fixture(t);
+    const first = f.eventIds[0];
+    assert.ok(first);
+    const lock = contendForControlLock(t, f.path, true);
+    try {
+      await f.control(action);
+      assert.equal(lock.failures(), 1);
+    } finally { lock.release(); }
+    await f.restart();
+    const saved = new HealthVault(f.path).read(f.key) as {enabled: boolean; profileDeleted: boolean};
+    assert.equal(saved.enabled, false);
+    assert.equal(saved.profileDeleted, action === 'delete');
+    assert.deepEqual(f.app.activation.pending(), []);
+    assert.deepEqual(f.eventIds, [first]);
+  });
 });

@@ -4,7 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 
 // The lock spans every companion checkpoint and the primary v1 vault rename.
 // No consent, member or request information is written into the lock database.
-export function lockHealthControl(directory: string, create = false) {
+export function lockHealthControl(directory: string, create = false, waitMs: 0 | 3000 = 3000) {
   if (!lstatSync(directory,{throwIfNoEntry:false}) && !create) return;
   if(create)mkdirSync(directory,{recursive:true,mode:0o700});
   const dir=lstatSync(directory);
@@ -16,7 +16,7 @@ export function lockHealthControl(directory: string, create = false) {
   }
   closeSync(openSync(path,constants.O_RDWR|constants.O_CREAT|constants.O_NOFOLLOW,0o600));
   const lock=new DatabaseSync(path);
-  try{lock.exec('PRAGMA busy_timeout=3000; BEGIN IMMEDIATE');}
+  try{lock.exec(`PRAGMA busy_timeout=${waitMs}; BEGIN IMMEDIATE`);}
   catch(error){lock.close();throw error;}
   return ()=>{try{lock.exec('ROLLBACK');}finally{lock.close();}};
 }

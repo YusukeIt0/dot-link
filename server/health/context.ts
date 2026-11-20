@@ -64,7 +64,7 @@ export class HealthContext {
   private archive:PolarArchiveGrant;
   private readonly activation:PolarActivationJournal;
   readonly activationStore:ActivationStore = {
-    load: () => this.key && this.usable() && !this.state.activationStopped ? this.activation.current(this.key, this.vault).record : undefined,
+    load: () => this.key && this.usable() && !this.state.activationStopped ? this.activation.load(this.key, this.vault) : undefined,
     save: (record, previous) => {
       if (!this.usable() || !this.key || this.state.activationStopped) throw rejected();
       this.activation.save(this.key, this.vault, record, previous);
@@ -105,19 +105,22 @@ export class HealthContext {
       const key = this.key;
       this.vault.write(key,stateSchema.parse(next),pending=>{
         const release = this.archive.checkpoint(next,previous,pending);
-        if (!release) return;
+        if (release === undefined || !previous) return;
         const prior = this.state;
         const sameDecision = prior.enabled && next.enabled && !prior.activationStopped && !next.activationStopped &&
           prior.owner === next.owner && prior.connection?.clientId === next.connection?.clientId &&
           prior.connection?.userId === next.connection?.userId && prior.connection?.accessToken === next.connection?.accessToken;
-        if (sameDecision && previous) {
-          this.activation.checkpoint(key, previous, pending, !!next.subscription && next.subscription !== prior.subscription);
-          return release;
-        }
-        // Retire only once the v1 rename succeeds, while still holding its lock.
+        const subscribed = !!next.subscription && next.subscription !== prior.subscription;
+        if (sameDecision && release && this.activation.checkpoint(key, previous, pending, subscribed)) return release;
+        // A skipped companion update cannot block the live v1 commit. Record a
+        // same-choice transition or retire local state only after it succeeds.
         return () => {
-          try { if (this.vault.fingerprint === pending) this.activation.discard(); }
-          finally { release(); }
+          try {
+            if (this.vault.fingerprint !== pending) return;
+            if (sameDecision) this.activation.defer(previous, pending, subscribed);
+            else if (release) this.activation.discard();
+            else this.activation.forget();
+          } finally { release?.(); }
         };
       });
       this.state=next;

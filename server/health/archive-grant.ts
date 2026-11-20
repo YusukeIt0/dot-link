@@ -116,7 +116,11 @@ export class PolarArchiveGrant {
     if (!old) return;
     let release:(()=>void)|undefined;
     try{release=lockHealthControl(this.directory);}
-    catch{this.fault=true;return;}
+    catch{
+      this.fault=true;
+      if (!this.health.matches(old)) throw denied();
+      return null; // Unlike a missing directory, a present control store could not be locked.
+    }
     if (!release) return;
     try {
       if(!this.health.matches(old))throw denied();
