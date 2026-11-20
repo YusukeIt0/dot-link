@@ -1,7 +1,7 @@
 import { createHmac, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
-import { closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, unlinkSync } from 'node:fs';
+import { lstatSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { lockHealthControl } from './control-lock.ts';
 import { z } from 'zod';
 import { HealthVault } from './vault.ts';
 import { PolarHistoryArchive } from './archive.ts';
@@ -35,26 +35,8 @@ export class PolarArchiveGrant {
     this.policyFile=new HealthVault(join(this.directory,'grant.enc'));
     this.now=now;
   }
-  // No policy or health metadata lives in this database. Its SQLite writer
-  // lock spans the authoritative reread and private record/manifest operation.
-  private lock(create=false) {
-    if (!lstatSync(this.directory,{throwIfNoEntry:false}) && !create) return;
-    if(create)mkdirSync(this.directory,{recursive:true,mode:0o700});
-    const dir=lstatSync(this.directory);
-    if(!dir.isDirectory()||(dir.mode&0o077))throw denied();
-    const path=join(this.directory,'control.lock');
-    for(const suffix of ['','-journal','-wal','-shm']){
-      const info=lstatSync(path+suffix,{throwIfNoEntry:false});
-      if(info&&(!info.isFile()||info.nlink!==1))throw denied();
-    }
-    closeSync(openSync(path,constants.O_RDWR|constants.O_CREAT|constants.O_NOFOLLOW,0o600));
-    const lock=new DatabaseSync(path);
-    try{lock.exec('PRAGMA busy_timeout=3000; BEGIN IMMEDIATE');}
-    catch(error){lock.close();throw error;}
-    return ()=>{try{lock.exec('ROLLBACK');}finally{lock.close();}};
-  }
   private locked<T>(run:()=>T,create=false) {
-    const release=this.lock(create);
+    const release=lockHealthControl(this.directory,create);
     try{return run();}finally{release?.();}
   }
   private sync() {
@@ -133,7 +115,7 @@ export class PolarArchiveGrant {
   checkpoint(next:HealthIdentity, old:string|undefined, pending:string) {
     if (!old) return;
     let release:(()=>void)|undefined;
-    try{release=this.lock();}
+    try{release=lockHealthControl(this.directory);}
     catch{this.fault=true;return;}
     if (!release) return;
     try {
