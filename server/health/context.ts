@@ -176,7 +176,6 @@ export class HealthContext {
   }
   private registerRead(evidenceExpiry:number, phoneTime?:PhoneTimeRead) {
     const now=this.now(), expires=Math.min(now+5*60_000,evidenceExpiry,this.state.connection?.expiresAt??Infinity,phoneTime?.expiresAt??Infinity);
-    if (expires<=now || !this.usable() || (phoneTime?.allowed && !phoneTime.allowed())) throw rejected();
     const read_id=randomUUID();
     this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed});
     while (this.reads.size>40) {const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
@@ -201,17 +200,23 @@ export class HealthContext {
     const revision=this.revision;
     const phoneTime=dates.length?(this.options.phoneTime?.(dates,owner)??{evidence:{status:'unavailable' as const}}):undefined;
     if (this.historyOwner()!==owner || this.revision!==revision) throw rejected();
+    const payload={status:entries.length?'available' as const:'empty' as const,source:'Polar',entries,coverage,units,
+      requested_window:{start_at:query.start_at,end_at:query.end_at},
+      ...(phoneTime?{phone_time_evidence:polarClockReferences(phoneTime)}:{}),
+      ...(query.fields.includes('heart_rate_summary')||query.fields.includes('samples')?{heart_rate_evidence:{
+        source:'Polar period averages on the device clock',
+        summary:'Dot Link summarizes the source record before window selection. Its sample mean is unweighted; hourly entries and their gaps retain the device clock. Missing hours are unknown.'}}:{}),
+      attribution:healthAttributionGuidance};
+    // UUIDs, the expiry instant and the existing response-tool envelope occupy < 512 bytes.
+    if (Buffer.byteLength(JSON.stringify(payload))>48*1024-512) throw new ToolRejection('history_page_too_large','Narrow the Polar field selection for this page.');
     const receipt=this.registerRead(Math.min(earliestExpiry,page?.expires??Infinity),phoneTime);
+    this.responseGuard(receipt.read_id)();
     const next_cursor=nextOffset===null?null:randomUUID();
     if (next_cursor && nextOffset!==null) {
       this.historyPages.set(next_cursor,{query,offset:nextOffset,readId:receipt.read_id,expires:Date.parse(receipt.response_context.expires_no_later_than)});
       while (this.historyPages.size>40) this.historyPages.delete(this.historyPages.keys().next().value!);
     }
-    const result={status:entries.length?'available' as const:'empty' as const,source:'Polar',entries,coverage,units,
-      requested_window:{start_at:query.start_at,end_at:query.end_at},next_cursor,...receipt,
-      ...(phoneTime?{phone_time_evidence:polarClockReferences(phoneTime)}:{}),attribution:healthAttributionGuidance};
-    if (Buffer.byteLength(JSON.stringify(result))>48*1024) throw new ToolRejection('history_page_too_large','Narrow the Polar field selection for this page.');
-    return result;
+    return {...payload,next_cursor,...receipt};
   }
   /** Reused by the combined response; no send or new collection occurs here. */
   responseGuard(readId:string) {
