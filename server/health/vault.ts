@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -9,8 +9,17 @@ const MAX = 8 * 1024 * 1024;
  * Only format/version, nonce and ciphertext length are visible on disk. */
 export class HealthVault {
   readonly path:string;
+  fingerprint?:string;
+  private checked?:{identity:string;digest:string};
   constructor(path: string) {this.path=path;}
   exists() { return existsSync(this.path); }
+  matches(fingerprint:string) {
+    const file=lstatSync(this.path,{throwIfNoEntry:false,bigint:true});
+    if(!file?.isFile()||file.size>MAX)return false;
+    const identity=[file.dev,file.ino,file.size,file.mtimeNs,file.ctimeNs].join('/');
+    if(this.checked?.identity!==identity)this.checked={identity,digest:createHash('sha256').update(readFileSync(this.path)).digest('hex')};
+    return this.checked.digest===fingerprint;
+  }
   private prepare() {
     mkdirSync(dirname(this.path), {recursive:true, mode:0o700});
     for (const path of [dirname(this.path), this.path]) {
@@ -27,9 +36,11 @@ export class HealthVault {
     if (bytes.length < 33 || bytes[0] !== 1) throw new Error('HEALTH_STORAGE_UNAVAILABLE');
     const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(1,13));
     decipher.setAAD(AAD); decipher.setAuthTag(bytes.subarray(13,29));
-    return JSON.parse(Buffer.concat([decipher.update(bytes.subarray(29)), decipher.final()]).toString('utf8'));
+    const result=JSON.parse(Buffer.concat([decipher.update(bytes.subarray(29)), decipher.final()]).toString('utf8'));
+    this.fingerprint=createHash('sha256').update(bytes).digest('hex');
+    return result;
   }
-  write(key: Buffer, value: unknown) {
+  write(key: Buffer, value: unknown, prepared?: (fingerprint:string)=>void|(()=>void)) {
     this.prepare();
     const plain = Buffer.from(JSON.stringify(value));
     if (key.length !== 32 || plain.length > MAX - 29) throw new Error('HEALTH_STORAGE_UNAVAILABLE');
@@ -40,10 +51,17 @@ export class HealthVault {
     finally { plain.fill(0); }
     cipher.getAuthTag().copy(bytes,13);
     const temp = `${this.path}.${randomBytes(8).toString('hex')}.tmp`;
-    try { writeFileSync(temp,bytes,{flag:'wx',mode:0o600}); renameSync(temp,this.path); }
-    finally { if (existsSync(temp)) unlinkSync(temp); }
+    let release:void|(()=>void)=undefined;
+    try {
+      writeFileSync(temp,bytes,{flag:'wx',mode:0o600});
+      const fingerprint=createHash('sha256').update(bytes).digest('hex');
+      release=prepared?.(fingerprint);
+      renameSync(temp,this.path);
+      this.fingerprint=fingerprint;
+    }
+    finally { try {if (existsSync(temp)) unlinkSync(temp);} finally {release?.();} }
   }
-  remove() { this.prepare(); if (this.exists()) unlinkSync(this.path); }
+  remove() { this.prepare(); if (this.exists()) unlinkSync(this.path); this.fingerprint=undefined; }
 }
 
 /** The signed app owns the Keychain item. No secrets in argv, logs or environment. */

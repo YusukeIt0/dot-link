@@ -17,6 +17,10 @@ import { MobilityAcquisition } from './mobility/context.ts';
 import { LocalGeography } from './geography/loader.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 import { LocationHistoryStore } from './history/store.ts';
+import { ArchiveAuthority } from './history/archive-authority.ts';
+import { archiveKeyProvider } from './history/archive-key.ts';
+import { EnvironmentHistory } from './history/environment-history.ts';
+import type { FactorArchives } from './history/archive-controls.ts';
 import { createHash } from 'node:crypto';
 import { SharingActivation } from './sharing-activation.ts';
 
@@ -35,9 +39,36 @@ const bridge = new Bridge(resolve('.runtime/bridge-state.json'), new WebhookSend
 const notifications = tokens.notification ? new NotificationInbox(resolve('.runtime/notification-state.json'), new WebhookSender(safePost(hosts)), hosts) : undefined;
 const pairing = new PairingAuthority(resolve('.runtime/pairing'));
 const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
+const appExecutable = process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../../../MacOS/DotLink', import.meta.url)) : undefined;
+const archiveDirectory = resolve('.runtime/factor-history');
 let history: LocationHistoryStore | undefined;
+let archives: FactorArchives | undefined;
+let archiveTimer: NodeJS.Timeout | undefined;
+if (appExecutable || existsSync(resolve(archiveDirectory, 'authority.sqlite'))) {
+  try {
+    const archive = new ArchiveAuthority(archiveDirectory, archiveKeyProvider(appExecutable), {
+      locationContinuity: () => history?.continuity(),
+      ownerStatus: owner => owner === legacyLocationOwner ? 'authorized' : pairing.subjectStatus(owner),
+    });
+    archives = {authority: archive, environment: new EnvironmentHistory(archive)};
+    let running = false, failed = false;
+    const maintain = async () => {
+      if (running) return;
+      running = true;
+      try { await archive.maintain(); failed = false; }
+      catch {
+        if (!failed) console.error('Protected history maintenance unavailable; ordinary conversation remains available');
+        failed = true;
+      } finally { running = false; }
+    };
+    void maintain();
+    archiveTimer = setInterval(maintain, 60_000);
+    archiveTimer.unref();
+  } catch { console.error('Protected history unavailable; ordinary conversation remains available'); }
+}
 try {
   history = new LocationHistoryStore(resolve('.runtime/location-history'), {
+    archive: () => archives?.authority,
     ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
     ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
     announce: (input, guard) => bridge.sendMessage(input, guard),
@@ -46,17 +77,22 @@ try {
 const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts,
   (input, guard, context) => bridge.sendMessage(input, guard, context), Date.now,
   owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
-  output=>new LocalGeography(resolve('.runtime/geography'),output),()=>new MobilityAcquisition(), {attachGeography: (fix, evidence, owner) => history?.attachGeography(fix, evidence, owner)});
+  output=>new LocalGeography(resolve('.runtime/geography'),output),()=>new MobilityAcquisition(), {
+    attachGeography: (fix, evidence, owner) => history?.attachGeography(fix, evidence, owner),
+    archiveMobility: owner => archives?.environment.capture(owner, 'mobility'),
+  });
 let weather: WeatherContext | undefined;
 try {
   weather = new WeatherContext(resolve('.runtime/weather-consent.json'),
     new WeatherService(resolve('.runtime/weather-cache.json')), locations,
     {ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
+      archive: owner => archives?.environment.capture(owner, 'weather'),
       ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked'});
 } catch { console.error('Weather unavailable; ordinary conversation remains available'); }
 const health = new HealthContext(resolve('.runtime/health/state.enc'), {
+  archivePeriod: owner => archives?.authority.periodFor(owner),
   phoneTime: (dates,owner) => history?.readPhoneTime(dates,owner) ?? {evidence:{status:'unavailable'}},
-  key: healthKeychain(process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../../../MacOS/DotLink',import.meta.url)) : undefined),
+  key: healthKeychain(appExecutable),
   ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
   ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
   announce: (input,guard) => bridge.sendMessage(input,guard), sender: new WebhookSender(safePost(hosts)),hosts,
@@ -70,8 +106,8 @@ if (notifications) {
   try { activation.push(new SharingActivation(resolve('.runtime/notification-sharing-activation.json'), bridge, notifications, Date.now, 'notification')); }
   catch { console.error('Notification activation unavailable; ordinary conversation remains available'); }
 }
-const server = bridgeServer(bridge, tokens, notifications, locations, history, weather, activation, health);
+const server = bridgeServer(bridge, tokens, notifications, locations, history, weather, activation, health, archives);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.listen(port, '127.0.0.1', () => console.log(`Private Dot bridge listening on 127.0.0.1:${port}; Dot connection not verified`));
-for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {weather?.close();history?.close();locations.close();server.close(() => process.exit(0));});
+for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => {clearInterval(archiveTimer);archives?.authority.close();weather?.close();history?.close();locations.close();server.close(() => process.exit(0));});

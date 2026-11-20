@@ -10,10 +10,12 @@ import {WebhookSender} from '../server/webhook.ts';
 import {MobilityNetwork} from '../server/mobility/network.ts';
 import {Bridge} from '../server/bridge.ts';
 import {rpc} from '../server/http.ts';
+import type {CaptureEnvironment, EnvironmentWriter} from '../server/history/environment-fields.ts';
+import type {ArchiveInput} from '../server/history/archive-store.ts';
 const origin={latitude:52,longitude:13};
 const destination={latitude:52.001,longitude:13,source:'user_provided' as const,reference:'Public test fixture'};
 const flush=()=>new Promise<void>(r=>setImmediate(r));
-function fixture(t:{after:(fn:()=>void)=>void}){
+function fixture(t:{after:(fn:()=>void)=>void}, archiveMobility?:CaptureEnvironment){
   const dir=mkdtempSync(join(tmpdir(),'dot-mobility-'));let now=Date.now(),calls=0,clears=0,allowed=true;
   let wait:Promise<void>|undefined,release=()=>{},signal:AbortSignal|undefined,sequence=0;
   const sources:MobilityProviders={walking:{plan:async(_a,_b,s)=>{calls++;signal=s;await wait;return {
@@ -22,7 +24,7 @@ function fixture(t:{after:(fn:()=>void)=>void}){
   };}},terrain:{clear:()=>{clears++;},elevations:async points=>points.map(()=>10),profile:async()=>({status:'available'} as any)}};
   const acquisition=new MobilityAcquisition(()=>sources,()=>now);
   const sender=new WebhookSender(async()=>({status:202,body:'{}'}));
-  const context=new LocationContext(join(dir,'location.json'),sender,[],async()=>({}),()=>now,()=>allowed,undefined,()=>acquisition);
+  const context=new LocationContext(join(dir,'location.json'),sender,[],async()=>({}),()=>now,()=>allowed,undefined,()=>acquisition,{archiveMobility});
   const bridge=new Bridge(join(dir,'bridge.json'),sender,[]);let sharing=randomUUID();
   t.after(()=>{context.close();bridge.close();rmSync(dir,{recursive:true,force:true});});
   const enable=(mobility?:boolean)=>context.control({sharing_id:sharing,enabled:true,...(mobility===undefined?{}:{mobility_enabled:mobility})},'owner');
@@ -49,6 +51,34 @@ test('identical calls deduplicate, short cache reuses evidence, and unrelated re
   const busy=await f.context.readMobility({...p,terrain:true}) as any;assert.equal(busy.status,'busy');
   f.release();assert.deepEqual(await a,await b);await f.context.readMobility(p);assert.equal(f.calls(),1);
   f.advance(30_001);f.update();await f.context.readMobility(f.input());assert.equal(f.calls(),2);
+});
+test('archiving a route requires enrollment before its original request even if it is reused after enrollment', async t => {
+  let writer: EnvironmentWriter | undefined;
+  const rows: ArchiveInput[]=[];
+  const f=fixture(t, id => { assert.equal(id,'owner'); return writer; });
+  f.enable(true); f.update(); f.hold();
+  const first=f.context.readMobility(f.input()); f.advance(5);
+  const since=Date.parse(f.context.read().context!.measured_at)+5;
+  writer=Object.assign((row:ArchiveInput) => {rows.push(row);}, {since});
+  const joined=f.context.readMobility(f.input());
+  f.advance(5); f.release();
+  assert.equal((await first as any).status,'finished'); assert.equal((await joined as any).status,'finished');
+  assert.equal((await f.context.readMobility(f.input()) as any).status,'finished');
+  assert.equal(rows.length,0); assert.equal(f.calls(),1);
+  f.advance(30_001); f.update();
+  const next=await f.context.readMobility(f.input()) as any;
+  assert.equal(next.status,'finished');
+  assert.ok(rows.length); assert.ok(rows.every(r=>(r.payload as any).requested_at===next.requested_at));
+  writer=Object.assign(() => {throw new Error('offline storage');}, {since});
+  assert.equal((await f.context.readMobility(f.input()) as any).status,'finished');
+});
+test('revoking live mobility while a plan is being assembled prevents archival', async t => {
+  const rows:ArchiveInput[]=[];
+  const f=fixture(t, () => Object.assign((row:ArchiveInput) => {rows.push(row);},{since:0}));
+  f.enable(true); f.update(); f.hold();
+  const pending=assert.rejects(f.context.readMobility(f.input()));
+  f.disable(); f.release(); await pending; await flush();
+  assert.equal(rows.length,0);
 });
 test('completed walking retains the agreed admission interval for different follow-up evidence',async t=>{
   const f=fixture(t);f.enable(true);f.update();const input=f.input();

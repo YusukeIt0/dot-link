@@ -9,6 +9,7 @@ import { ChangeSignal } from './changes.ts';
 import { LocationResponseError } from './location-response-error.ts';
 import { ToolRejection } from './tool-response.ts';
 import { MobilityAcquisition, mobilityArguments } from './mobility/context.ts';
+import { captureEnvironment, mobilityArchiveRecords, type CaptureEnvironment } from './history/environment-fields.ts';
 import { BridgeResponseError } from './bridge-response-error.ts';
 import type { GeographyLoader, GeographyState, GeographyUpdate } from './geography/loader.ts';
 import type { GeographicEvidence } from './geography/types.ts';
@@ -98,6 +99,7 @@ export class LocationContext {
   private weatherDirty?:string;
   private weatherEpoch?:string;
   private historyGeography?: (fix: LocationFix, evidence: GeographicEvidence, owner: string) => void;
+  private archiveMobility?: CaptureEnvironment;
   private received = 0;
   private delivered = 0;
   private sent = 0;
@@ -112,8 +114,9 @@ export class LocationContext {
     ownerAuthorized: (owner: string) => boolean = () => true,
     geographyFactory?: (output:(update:GeographyUpdate)=>void)=>GeographyLoader,
     mobilityFactory?:()=>MobilityAcquisition,
-    privateHistory?: {attachGeography: (fix: LocationFix, evidence: GeographicEvidence, owner: string) => void}) {
+    privateHistory?: {attachGeography?: (fix: LocationFix, evidence: GeographicEvidence, owner: string) => void; archiveMobility?: CaptureEnvironment}) {
     this.historyGeography = privateHistory?.attachGeography;
+    this.archiveMobility = privateHistory?.archiveMobility;
     this.path = path; this.sender = sender; this.hosts = hosts; this.announce = announce; this.now = now;
     this.ownerAuthorized = ownerAuthorized;
     mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
@@ -246,10 +249,18 @@ export class LocationContext {
     };
     guard();
     const validUntil=Math.min(this.leaseUntil,Date.parse(read!.fix.measured_at)+LOCATION_FRESH_MS,Date.parse(this.latest!.fix.measured_at)+LOCATION_FRESH_MS);
+    const writer = captureEnvironment(this.archiveMobility, this.owner!);
     try {
       const result=await this.mobility!.query(input,{...read!.fix},validUntil,guard);
       guard();
       if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'finished') return result;
+      // A cached result can be returned under a newer grant. Its original request
+      // must also have started after enrollment, before any evidence is recorded.
+      if (writer && 'requested_at' in result && typeof result.requested_at === 'string' && Date.parse(result.requested_at) > writer.since) {
+        try {
+          for (const record of mobilityArchiveRecords(input, read!.fix.measured_at, result, this.now())) writer(record);
+        } catch { /* Optional recording cannot disable the live route or its reply guard. */ }
+      }
       const existing = [...this.mobilityReads].find(([, read]) => read.evidence === result);
       if (existing) return this.mobilityResult(result, existing[0], existing[1]);
       const mobility_read_id = randomUUID();
@@ -277,7 +288,7 @@ export class LocationContext {
     this.requireResponseContext(read, generation);
     const guard = () => { this.requireResponseContext(read, generation); return true; };
     const decisionId = responseId(contextId, utteranceId);
-    return {guard, decisionId, previous: this.outcomes.get(decisionId), location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
+    return {guard, owner:this.owner!, decisionId, previous: this.outcomes.get(decisionId), location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
       complete: (id: string, decision: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string}, result: unknown) => {
         this.recordResponse(id, read, generation, decision, result);
       }};

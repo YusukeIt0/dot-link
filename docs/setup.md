@@ -124,8 +124,9 @@ bundled English disclosure, support contact and full attribution.
 
 ### Remember recent places
 
-With Mac 0.4.30 or later and Even 0.3.53 or later, open **Sharing settings** and turn
-on **Remember recent places** separately from **Share my location**. This lets Dot
+On compatible versions that offer **Remember recent places** (starting with
+Mac 0.4.30 and Even 0.3.53), open **Sharing settings** and turn it on separately
+from **Share my location**. This lets Dot
 refer to up to seven days of recorded places and movement. Collection needs both
 options; old companions keep ordinary location sharing and do not upload history.
 Refresh your existing ChatGPT connection's tools to add `get_location_history`
@@ -136,6 +137,39 @@ Turning current-location sharing off leaves existing history readable. Turn
 **Remember recent places** off to stop collection and historical access, or choose
 **Delete history** to erase the local history too. A failed control must be retried
 when the Mac is reachable. See [retention and deletion](privacy.md#recent-places).
+
+### Looking back with Dot
+
+The **History** panel is in development for compatible Mac and Even versions.
+Open **Sharing settings → History** on the phone. Choose what the paired Mac can
+save for your existing Dot and how long it can keep new records. The default
+period is seven days. You can also choose one month, six months or one year.
+Changing the period leaves each existing record’s original expiry in place.
+Reopening the app or reconnecting restores the selected Mac’s choices.
+
+| Source | What Dot can look back on |
+| --- | --- |
+| Phone locations and nearby places | Shared phone fixes, accuracy, available motion and phone time, and nearby map references. Recording requires current-location sharing. |
+| Polar health observations | Shared sleep, activity, synced heart rate, recovery and exercise observations. The latest registered profile stays under **Health context**. |
+| Weather forecasts and their revisions | Forecasts already obtained for a shared location or a place you asked about, including which forecast was available at the time. |
+| Planned walks and model terrain | Requested routes, their endpoints, steps, geometry and available terrain estimates. A saved plan does not establish where you walked. |
+
+Turn a history source off to stop recording and block Dot’s access to that
+archive. Previously saved records continue to expire. **Delete** also erases that
+source’s saved history on this Mac. Deleting Polar history clears both the
+seven-day observations and extended history while keeping the latest profile.
+With **Health context** still on, your Mac can collect new seven-day observations.
+Stopping ordinary health sharing also stops extended Polar recording. Authorizing
+a different Polar connection or using an older app that rewrites its health vault
+requires a new choice before that archive can record again.
+Existing seven-day location and health sharing keep their original scope until
+you choose a source in **History**. Weather and walking history each need their
+own opt-in in addition to permission to obtain the live evidence.
+
+In your normal conversation, you might ask “How did my activity compare on those
+two afternoons?” or “What rain was forecast for Saturday when we planned the
+walk on Thursday?” Dot selects relevant fields from available local records.
+Reading history makes no new provider request. [Storage, access and deletion](privacy.md#history-settings).
 
 ## Updates
 

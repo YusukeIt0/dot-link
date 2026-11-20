@@ -39,8 +39,9 @@ The Mac allowlists sleep, steps/activity intensity, synced heart rate, nighttime
 HRV/recovery/breathing, exercise summaries without routes, and the latest registered
 height, weight and date of birth. Names, gender, calories, raw GPS routes and arbitrary
 extra profile fields are not retained. API envelopes are processed in memory and
-are not saved. Measurements expire within 168 hours of their source-time boundary;
-offset-free dates use the earliest possible UTC boundary, which can shorten retention.
+are not saved. Ordinary health sharing keeps measurements for up to 168 hours
+from their source-time boundary. Offset-free dates use the earliest possible UTC
+boundary, which can shorten retention.
 The latest profile is retained until deletion/disconnection, without historical
 versions. A profile edit timestamp is not a weight measurement timestamp.
 
@@ -73,6 +74,23 @@ subscription metadata, uses AES-256-GCM authenticated encryption. A separate ran
 256-bit key is held by macOS Keychain through the app. Atomic temporary snapshots
 are encrypted too; there is no plaintext database journal, index or fallback.
 Only the format version, nonce, authentication tag and ciphertext length are visible.
+With a separate Polar history grant, new observations can also enter a protected
+archive for seven days, one month, six months or one year. The chosen duration
+applies when a record is first admitted. Corrections and repeat downloads keep
+its original deadline. The existing profile remains in its original vault.
+Historical reads disclose only the requested fields to the same connected Dot.
+
+The extended archive uses a random generation key protected by the health
+Keychain key. Its index and fixed-size data pages are encrypted. Dates, categories
+and counts stay inside those pages. The file uses about 81 MiB when enrolled.
+Comparing snapshots can reveal which encrypted pages changed and when. The tool
+reports capacity losses for affected categories and periods. Turning off the
+archive blocks its writes and reads. Health sharing can still provide the
+ordinary seven-day context. Deleting Polar history clears both stored observation
+histories and preserves the latest profile. Disconnecting the account or deleting
+health data also removes the archive. A full external backup with the original
+keys and policy can still contain older records.
+
 Health activation retry metadata stays in memory. Missing keys or authentication
 failure block access. Local reset deletes the snapshot and its Keychain key; a new
 connection creates a new key. Existing encrypted filesystem backups are not securely
@@ -109,6 +127,31 @@ data collection. Accepted answers use the ordinary conversation storage describe
 above; stopping a source does not erase previously shared conversations. These
 checks depend on the AI submitting every source used in its reasoning or text;
 they do not infer provenance by inspecting generated prose.
+
+The unreleased Mac history tool lets the connected AI request selected fields
+from the same paired owner's recent-place, Polar, forecast and walking/terrain
+records. Each request covers up to seven days. The Mac reads local records and
+does not contact any provider or request another phone fix. Each source has its
+own consent, expiry and deletion rules. The latest registered Polar profile
+remains outside historical queries.
+
+Forecast and walking/terrain history each start off. With a separate history grant,
+the Mac encrypts newly acquired evidence for that source on this Mac. A forecast
+can include a specified place and its reference, the rounded model point, model
+values and the time each revision became available. Walking/terrain history can
+include precise endpoints, destination provenance, route geometry, steps and model
+elevations. These records can reveal places you asked about. A walking plan does
+not establish that you took the route. A forecast does not establish what weather
+occurred. Reading saved evidence makes no additional requests to a provider.
+
+The initial retention period is seven days. Changes to seven days, one month, six
+months or one year set deadlines for newly admitted records only. Stopping a
+source's history blocks subsequent recording and access while existing records age
+out. Deleting that source's history also discards its encryption key. A restored
+copy of the evidence file alone cannot recover the data. A full backup including
+both the evidence and earlier key material on the same Mac may retain it. Changing
+a live sharing setting stops the corresponding live acquisition. You can still
+read previously retained evidence while its separate history permission is on.
 
 ## Photos
 
@@ -168,7 +211,7 @@ Location sharing starts off. When enabled in the Even app, the phone location, m
 
 If your connected Dot is receiving conversation input but has not registered for context changes, enabling sharing sends one explicitly identified app-control request through that existing connection. It contains no coordinates and is not stored as a spoken message or answer in conversation history. The existing input list carries it with explicit app-action provenance so older connections can process it. If an older receiver attempts a control reply, the relay returns a non-delivery acknowledgement only after actual subscription; it does not store or display that reply. Dot registers the context subscription through its normal event mechanism; receipt of the request alone does not establish readiness. The Mac keeps only the latest activation identifier, hashed session/destination identity, creation time and bounded delivery-attempt state. Stopping sharing invalidates pending requests.
 
-Without the separate **Remember recent places** opt-in, Dot Link does not save an exact phone-coordinate trail to disk. The latest phone fix and short-lived decision context remain in Mac memory; preferences, subscriptions and revoked identifiers are saved. Optional history is described below. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
+Saving an exact phone-coordinate trail requires a separate location-history opt-in. With history off, the latest phone fix and short-lived decision context remain in Mac memory. Preferences, subscriptions and revoked identifiers are saved. Optional history is described below. Dot's announcements enter ordinary conversation history and may contain place names. OpenAI's handling of locations read by Dot depends on your agreement and settings. Turning sharing off does not delete information already sent. Background operation, actual update intervals and battery impact depend on the device and OS.
 
 While sharing has a fresh measurement and Dot has an active location subscription, the Mac automatically retrieves nearby geographic data from Overture Maps. Coordinates are available immediately; map references can arrive later, be incomplete, or be unavailable. Map proximity is not proof of a visit, road membership or safe passage. References include source attribution and are shared with Dot alongside the coordinates. No paid geocoding, places or search API is used by this component.
 
@@ -178,6 +221,30 @@ Reusable public map bytes and normalized areas are stored in an owner-only cache
 
 Stopping sharing, losing a fresh measurement, ending Dot’s subscription, revoking pairing or stopping the relay cancels acquisition and clears live geographic context. Already cached map files remain until expiry or capacity eviction. Uninstalling Dot Link moves this cache to Trash with the other app data, including for supported development installations. Stopping sharing does not delete that cache, backups or information already read by Dot.
 
+## History settings
+
+The **History** panel in the unreleased Mac and Even clients lets the paired
+owner choose what the Mac saves for their connected Dot to read through
+OpenAI. Each source needs its own recording choice. The phone restores those
+choices from the selected Mac when it reconnects. Existing seven-day location
+and health sharing retain their original scope and deadlines.
+
+| Source | Information available for selected historical periods |
+| --- | --- |
+| Phone locations and nearby places | Precise fixes, available motion and phone clock evidence, plus nearby map references and their attribution. A reference near a phone fix does not establish a visit. |
+| Polar health observations | Shared sleep, activity, heart rate, recovery and exercise data with their original units and source-time uncertainty. The latest registered profile stays outside historical queries. |
+| Weather forecasts | Rounded model coordinates, a requested place and its reference, forecast fields and revisions. Each forecast has an issue time, a local retrieval time and a period it forecasts. |
+| Planned walks and model terrain | Requested endpoints and destination references, route geometry and steps, and modeled elevations. These can reveal places considered for a walk. |
+
+The common period applies to newly recorded evidence. Choose seven days, one
+calendar month, six calendar months or one calendar year. Phone fixes expire
+from measurement time. Polar records expire from the earlier of the source-time
+boundary and first receipt. A forecast edition or plan expires from first local
+retrieval. Stopping an archive blocks recording and historical access. Saved
+records continue to age until expiry or deletion. Deleting a source cannot
+retract information already delivered to Dot, provider logs or external
+backups. [History controls, including Polar observation and profile deletion](setup.md#looking-back-with-dot).
+
 ## Recent places
 
 **Remember recent places** is a separate choice under Location sharing, off by
@@ -186,15 +253,23 @@ sharing does not enable history. When both are enabled, accepted phone measureme
 are saved on the selected Mac: exact coordinates, measurement/receipt times,
 accuracy, available speed/heading, timezone/UTC offset and recording-session
 boundaries. Existing geographic references may be attached; history does not
-start additional map requests or store walking routes or terrain queries.
+start additional map requests. A separate history grant controls walking and terrain results.
 
-The owner-only SQLite database is in the Mac runtime's `location-history`
+The original seven-day, owner-only SQLite database is in the Mac runtime's `location-history`
 directory (directory mode 0700, file mode 0600). It is not separately encrypted by
 Dot Link. It retains at most 168 hours and 50,000 observations, evicting the oldest
 when full; the database has a 256 MiB page limit. Expiry runs at startup, on access
 and every minute while the relay runs. When stopped, cleanup resumes on launch.
 App updates retain this data outside the bundle. Filesystem/device backups may
 retain older copies; local deletion cannot erase those backups.
+
+In the unreleased History panel, separately enabling phone location history
+also protects newly saved fixes and attached references with a source-specific
+encryption key on this Mac. Recent records may have a copy in the original
+seven-day database under its existing limits. The protected archive’s keyed
+indexes can reveal repeated time groups, file size and record counts. A full
+backup of both the authority and evidence on the same Mac can restore records
+that were subsequently deleted.
 
 Your existing Dot can read bounded historical evidence through the normal
 connection when history is enabled. Candidate stays and nearby road references
@@ -248,9 +323,10 @@ One request runs at a time, with no queue. Identical calls can share a request o
 memory-only result for at most 30 seconds, bounded further by the original
 location's freshness. Requests have a 40-second overall limit and provider limits.
 Terrain rasters remain bounded in memory and are discarded at the end of the
-request. Dot Link writes no walking queries, destinations or returned route/terrain
-results to its logs or a disk history. An answer Dot sends may still enter ordinary
-conversation history, and Dot's own data handling is separate.
+request. Dot Link keeps queries and destinations out of logs. With walking/terrain
+history on, the Mac encrypts the returned plan and model-terrain evidence for the
+chosen period. Raw terrain rasters are discarded. An answer Dot sends may also
+enter ordinary conversation history, and Dot's own data handling is separate.
 
 Turning this option off rotates/revokes the location-sharing session and cancels
 pending work on the Mac when the stop arrives. Turning location sharing off,
@@ -316,7 +392,9 @@ three hours between attempts (including failures), and all queries share a
 one-minute minimum; response expiry/backoff can extend these intervals. Cache
 corruption resets it with a persisted 24-hour recovery pause. Off stops use and
 cancels pending requests after the Mac receives the change; the bounded cache
-remains until expiry to preserve service limits. It is not an exact movement trail.
+remains until expiry to preserve service limits. Separately enabling forecast
+history keeps the model values, selected place and revision times described above.
+It does not increase the frequency of forecast requests.
 
 Consent is retained only on the selected Mac for its paired owner. Revocation
 invalidates access and late results; a restart requires fresh phone location for

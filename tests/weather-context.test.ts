@@ -1,17 +1,23 @@
 import test, {type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, rmSync} from 'node:fs';
+import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {randomUUID, randomBytes} from 'node:crypto';
+import {createHash, randomUUID, randomBytes} from 'node:crypto';
 import {WeatherContext, WEATHER_TERMS} from '../server/weather/context.ts';
 import {weatherSource, weatherQueryPoint, type WeatherEvidence, type WeatherPoint} from '../server/weather/types.ts';
 import {LocationContext} from '../server/location.ts';
 import {WebhookSender} from '../server/webhook.ts';
 import {WeatherSharing} from '../src/weather-sharing.ts';
+import type {CaptureEnvironment, EnvironmentWriter} from '../server/history/environment-fields.ts';
+import type {ArchiveInput} from '../server/history/archive-store.ts';
+import {ArchiveAuthority} from '../server/history/archive-authority.ts';
+import {EnvironmentHistory} from '../server/history/environment-history.ts';
+import {WeatherService} from '../server/weather/service.ts';
+import {WeatherCache} from '../server/weather/cache.ts';
 const owner='a'.repeat(64);
 const flush=()=>new Promise<void>(r=>setImmediate(r));
-function fixture(t:TestContext) {
+function fixture(t:TestContext, archive?:CaptureEnvironment) {
  const dir=mkdtempSync(join(tmpdir(),'weather-context-'));let now=Date.parse('2026-11-10T09:20:00Z');let authorized=true;
  const events:unknown[]=[];
  const sender=new WebhookSender(async (_url,raw)=>{const e=JSON.parse(raw);if(e.type==='verification')return {status:200,body:JSON.stringify({challenge:e.challenge})};events.push(e);return {status:202,body:'{}'};});
@@ -20,7 +26,7 @@ function fixture(t:TestContext) {
  let load:undefined|((point:WeatherPoint,signal:AbortSignal)=>Promise<WeatherEvidence>);
  const evidence=(point:WeatherPoint):WeatherEvidence=>({status:'ready',source:weatherSource,data_kind:'model_forecast',query_point:weatherQueryPoint(point),as_of:new Date(now).toISOString(),retrieved_at:new Date(now).toISOString(),checked_at:new Date(now).toISOString(),updated_at:'2026-11-10T09:00:00Z',retry_at:null,elevation_m:0,apparent_temperature_c:null,limitations:[],forecast:[],current:{valid_at:'2026-11-10T09:00:00Z',temperature_c:temp,humidity_percent:humidity,wind_m_s:1,wind_from_degrees:0,pressure_hpa:1000,cloud_percent:20,precipitation:[]}});
  const service={query:async (p:WeatherPoint,s:AbortSignal,g:()=>void)=>{calls++;g();return load?load(p,s):evidence(p);},cancel(){},close(){}};
- const create=()=>new WeatherContext(join(dir,'consent.json'),service,location,{ownerAuthorized:()=>authorized,now:()=>now,automatic:false});
+ const create=()=>new WeatherContext(join(dir,'consent.json'),service,location,{ownerAuthorized:()=>authorized,now:()=>now,automatic:false,archive});
  const weather=create();t.after(()=>{weather.close();location.close();rmSync(dir,{recursive:true,force:true});});
  const consent=(enabled=true)=>weather.control({protocol:1,epoch:weather.status(owner).weatherEpoch,enabled,...(enabled?{terms:WEATHER_TERMS}:{})},owner);
  const update=(latitude=10)=>location.update({sharing_id:sharing,sequence:++seq,fix:{latitude,longitude:20,accuracy:5,measured_at:new Date(now).toISOString()}},owner);
@@ -41,6 +47,110 @@ test('weather consent is independent, default off, terms and current epochs are 
 test('specified places work with location off and never become current location',async t=>{
  const f=fixture(t);f.consent();const r=await f.weather.read(specified);assert.equal(r.mode,'specified');assert.equal(f.location.read().context,null);
  await assert.rejects(f.weather.read({mode:'current'}));await assert.rejects(f.weather.read({mode:'specified',place:{latitude:0,longitude:0}}));
+});
+
+test('weather archive captures only eligible acquisitions while specified and automatic current reads remain independent', async t => {
+ let writer: EnvironmentWriter | undefined;
+ const rows:ArchiveInput[] = [];
+ const f = fixture(t, id => { assert.equal(id, owner); return writer; });
+ f.consent();
+ const original = (await f.weather.read(specified)).evidence;
+ assert.equal(rows.length, 0);
+ const since = Date.parse(original.as_of);
+ writer = Object.assign((row:ArchiveInput) => { rows.push(row); }, {since});
+ f.advance(1);
+ f.setLoad(async () => original);
+ assert.equal((await f.weather.read(specified)).evidence, original);
+ assert.equal(rows.length, 0, 'a cached edition delivered before enrollment stays live-only');
+ f.setLoad(undefined);
+ await f.weather.read(specified);
+ assert.equal((rows[0].payload as any).scope.mode, 'specified');
+ f.enable(); f.update(); await f.subscribe(); await f.weather.refresh();
+ assert.equal((rows.at(-1)!.payload as any).scope.mode, 'current');
+ const count = rows.length;
+ writer = Object.assign(() => { throw new Error('storage unavailable'); }, {since});
+ assert.equal((await f.weather.read(specified)).evidence.status, 'ready');
+ assert.equal(rows.length, count);
+});
+
+test('a legacy recheck after weather history deletion stays live-only until a provably new edition arrives', async t => {
+  const directory = mkdtempSync(join(tmpdir(), 'weather-history-rollback-'));
+  const morning = Date.parse('2026-11-10T09:00:00Z'), hour = 3_600_000;
+  const iso = (time: number) => new Date(time).toISOString();
+  let now = morning - 1;
+  const key = randomBytes(32);
+  const authority = new ArchiveAuthority(join(directory, 'history'), {
+    async create() { return {key: Buffer.from(key), wrapped: 'synthetic-key'}; },
+    async open() { return Buffer.from(key); },
+  }, {now: () => now, ownerStatus: id => id === owner ? 'authorized' : 'revoked'});
+  const history = new EnvironmentHistory(authority, () => now);
+  t.after(() => {authority.close(); key.fill(0); rmSync(directory, {recursive:true, force:true});});
+  const control = async (action: 'enable' | 'delete') => authority.control(owner, (await authority.status(owner)).epoch,
+    action === 'enable' ? {action:'set', source:'weather', enabled:true} : {action:'delete', source:'weather'});
+  await control('enable');
+  now = morning + hour;
+  await control('delete');
+  await control('enable');
+
+  // A legacy client received the 09:00 edition again at noon and replaced retrievedAt.
+  now = morning + 3 * hour;
+  const point = weatherQueryPoint(specified.place);
+  const path = join(directory,'weather.json');
+  const f = fixture(t, id => history.capture(id, 'weather'));
+  const forecast = {provider:'met-norway-locationforecast-2' as const, point, elevation_m:0, updated_at:iso(morning),
+    samples:[3, 6, 7].map(h => ({...f.evidence(point).current!, valid_at:iso(morning + h * hour), temperature_c:21}))};
+  const oldKey = createHash('sha256').update(JSON.stringify([forecast.provider, point])).digest('hex');
+  writeFileSync(path, JSON.stringify({version:1, nextRequestAt:now + 60_000, entries:[{
+    key:oldKey, nextRequestAt:now + 3 * hour, retrievedAt:now, checkedAt:now, deprecated:false, refreshFailed:false, forecast,
+  }]}));
+  let calls = 0;
+  const service = new WeatherService(path, {cache:new WeatherCache(path, () => now), now:() => now, random:() => 0,
+    provider:{id:forecast.provider, load:async () => {
+      calls++;
+      return {notModified:false, deprecated:false, forecast:{...forecast, edition:'b'.repeat(64),
+        samples:forecast.samples.map(sample => ({...sample, temperature_c:25}))}};
+    }}});
+  t.after(() => service.close());
+  f.setLoad((p, signal) => service.query(p, signal, () => {}));
+  f.advance(now - Date.parse(f.evidence(point).as_of));
+  f.consent();
+  const period = {start_at:iso(morning + 7 * hour), end_at:iso(morning + 7 * hour + 1), fields:['temperature'], limit:10};
+  const reader = history.reader('weather');
+  const cached = (await f.weather.read(specified)).evidence;
+  assert.equal(cached.current?.temperature_c, 21);
+  assert.equal(cached.retrieved_at, iso(now));
+  assert.equal(calls, 0);
+  assert.equal(reader.readSelectedHistory(period).status, 'empty');
+
+  now += 3 * hour + 1;
+  f.advance(3 * hour + 1);
+  const revised = (await f.weather.read(specified)).evidence;
+  assert.equal(revised.current?.temperature_c, 25);
+  assert.equal(calls, 1);
+  assert.equal(reader.readSelectedHistory({...period, known_at:iso(now - 1)}).status, 'empty');
+  const page = reader.readSelectedHistory({...period, known_at:iso(now)});
+  assert.equal(page.status, 'available');
+  assert.equal(page.entries.length, 1);
+  assert.equal((page.entries[0] as {forecast:{temperature_c:number}[]}).forecast[0].temperature_c, 25);
+});
+
+test('enrolling during a coalesced weather request does not archive the earlier acquisition', async t => {
+ let writer:EnvironmentWriter | undefined;
+ const rows:ArchiveInput[] = [];
+ const f = fixture(t, () => writer);
+ f.consent();
+ let finish!:(e:WeatherEvidence)=>void;
+ f.setLoad(() => new Promise(r => { finish=r; }));
+ const first=f.weather.read(specified);
+ await flush(); f.advance(1);
+ writer=Object.assign((row:ArchiveInput)=>{rows.push(row);}, {since:Date.parse(f.evidence(specified.place).as_of)});
+ const second=f.weather.read(specified);
+ f.advance(1); finish(f.evidence(specified.place));
+ assert.equal((await first).evidence.status,'ready');
+ assert.equal((await second).evidence.status,'ready');
+ assert.equal(f.calls(),1); assert.equal(rows.length,0);
+ f.setLoad(undefined); await f.weather.read(specified);
+ assert.ok(rows.length);
 });
 test('temperature and humidity changes create new decisions after silence, identical evidence does not',async t=>{
  const f=fixture(t);f.enable();f.update();f.consent();await f.weather.read({mode:'current'});await f.subscribe();await flush();

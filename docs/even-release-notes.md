@@ -2,6 +2,13 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## Unreleased
+
+- Choose which phone locations, Polar observations, weather forecasts and walking plans your Mac saves for your Dot in **Sharing settings → History**.
+- Keep new records for seven days, one month, six months or one year. Stop or delete each source separately.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.3.63
 
 - Added optional Polar health sharing, data deletion and profile refresh in Sharing settings.

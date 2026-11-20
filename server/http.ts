@@ -16,7 +16,10 @@ import { PHOTO_REQUEST_BYTES } from '../src/photo-attachments.ts';
 import { toolResponse, rpcResponse, ToolRejection } from './tool-response.ts';
 import { ReadResponseError } from './read-response-error.ts';
 import { subscriptionResponse } from './subscription-response-error.ts';
-import { locationHistoryTool, historyResponseTool, type HistoryReader } from './history/tool.ts';
+import { locationHistoryTool, historyResponseTool, supportsSelectedHistory, type HistoryReader } from './history/tool.ts';
+import { factorHistoryTool, readFactorHistory } from './history/factor-tool.ts';
+import { archiveSettings, changeArchiveSettings, type FactorArchives } from './history/archive-controls.ts';
+import type { EnvironmentHistory } from './history/environment-history.ts';
 
 import type { LocationHistoryStore } from './history/store.ts';
 import { historyUploadSchema } from './history/store.ts';
@@ -28,14 +31,19 @@ const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(),
 
 const contextResponders = new WeakMap<Bridge, ContextResponder>();
 
-export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext): Promise<unknown> {
+export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext, archives?: EnvironmentHistory): Promise<unknown> {
   // Register factor definition and reader together: catalog and calls use this path.
+  const locationHistory = supportsSelectedHistory(history) ? history : undefined;
+  const polarHistory = health?.readSelectedHistory ? health : undefined;
   const factors = [
     {tool: healthTool, read: health ? (args: unknown) => health.read(args) : undefined},
     {tool: weatherContextTool, read: weather ? (args: unknown) => weather.read(args) : undefined},
     {tool: locationContextTool, read: locations ? (args: unknown) => locations.read(args) : undefined},
     {tool: mobilityContextTool, read: locations ? (args: unknown) => locations.readMobility(args) : undefined},
     {tool: locationHistoryTool, read: history ? (args: unknown) => history.read(args) : undefined},
+    {tool: factorHistoryTool, read: locationHistory || polarHistory || archives
+      ? (args: unknown) => readFactorHistory(args, {location: locationHistory, polar: polarHistory,
+        weather: archives?.reader('weather'), mobility: archives?.reader('mobility')}) : undefined},
   ];
   const activations = activation ? (Array.isArray(activation) ? activation : [activation]) : [];
   const acknowledge = (name: 'reply_to_g2' | 'send_message_to_g2', args: unknown) => {
@@ -65,7 +73,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         return { jsonrpc: '2.0', id, ...await subscriptionResponse(() =>
           method === 'events/subscribe' ? feature.subscribe(params) : feature.unsubscribe(params)) };
       }
-      case 'tools/list': result = { tools: [...factors.filter(factor => factor.read).map(factor => factor.tool), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationResponseTool] : []), ...(history?.respond ? [historyResponseTool] : []), ...(health ? [healthResponseTool] : []), ...(locations || health || history?.responseGuard || weather ? [contextResponseTool] : [])] }; break;
+      case 'tools/list': result = { tools: [...factors.filter(factor => factor.read).map(factor => factor.tool), statusTool, pendingTool, replyTool, sendMessageTool, ...(notifications ? [pendingNotificationsTool, announceNotificationTool, notificationDispositionTool] : []), ...(locations ? [locationResponseTool] : []), ...(history?.respond ? [historyResponseTool] : []), ...(health ? [healthResponseTool] : []), ...(locations || health || history?.responseGuard || weather || archives ? [contextResponseTool] : [])] }; break;
       case 'tools/call': {
         // MCP envelopes may contain _meta/progressToken; feature arguments stay strict.
         const parsedCall = z.object({ name: z.string().min(1), arguments: z.unknown().optional() }).safeParse(params);
@@ -105,7 +113,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
             case 'respond_to_context': {
               let responder = contextResponders.get(bridge);
               if (!responder) { responder = new ContextResponder(bridge.sendMessage.bind(bridge)); contextResponders.set(bridge, responder); }
-              return responder.respond(args, {locations, health, history, weather});
+              return responder.respond(args, {locations, health, history, weather, archives});
             }
             case 'send_message_to_g2': return acknowledge(name, args) ?? bridge.sendMessage(args);
             case 'reply_to_g2': return acknowledge(name, args) ?? bridge.reply(args);
@@ -147,7 +155,7 @@ async function body(request: IncomingMessage, limit = 32768): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string; healthAdmin?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext) {
+export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string; healthAdmin?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext, archives?: FactorArchives) {
   if (tokens.mcp.length < 32 || tokens.device.length < 32 || tokens.mcp === tokens.device) throw new Error('Use distinct bridge tokens of at least 32 characters');
   if (notifications && (!tokens.notification || tokens.notification.length < 32 || [tokens.mcp, tokens.device].includes(tokens.notification))) throw new Error('Use a distinct notification ingestion token');
   if (health && (!tokens.healthAdmin || tokens.healthAdmin.length < 32 || [tokens.mcp,tokens.device,tokens.notification].includes(tokens.healthAdmin))) throw new Error('Use a distinct health settings token');
@@ -164,7 +172,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
   const cursor = () => `${instance}:${revision}`;
   const history = () => [...bridge.history(), ...bridge.outboundHistory(), ...(notifications?.history() ?? [])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-100);
-  const deviceStatus = (owner?: string) => ({ ...bridge.status(), previouslySubscribed: bridge.hasPreviousSubscription(), photoAttachments: 1, ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}), ...(weather?.status(owner) ?? {}), ...(health?.status(owner) ?? {}) });
+  const deviceStatus = (owner?: string) => ({ ...bridge.status(), previouslySubscribed: bridge.hasPreviousSubscription(), photoAttachments: 1, ...(archives && owner ? {factorHistoryProtocol: 1} : {}), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}), ...(weather?.status(owner) ?? {}), ...(health?.status(owner) ?? {}) });
   const snapshot = (owner?: string) => ({ revision: cursor(), status: deviceStatus(owner), messages: history() });
   const server = createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -175,7 +183,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     if (request.headers.origin) { send(403, { error: 'Browser origin not enabled' }); return; }
     // This bridge uses static credentials, not OAuth. Missing metadata and
     // other unknown routes must be 404 rather than an authentication challenge.
-    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications', '/api/notifications/status'] : []), ...(locations ? ['/api/location/control', '/api/location/update', '/api/location/revoke'] : []), ...(histories ? ['/api/location/history'] : []), ...(weather ? ['/api/weather'] : []), ...(health ? ['/api/health', '/api/health/setup'] : [])].includes(request.url ?? '')) {
+    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications', '/api/notifications/status'] : []), ...(locations ? ['/api/location/control', '/api/location/update', '/api/location/revoke'] : []), ...(histories ? ['/api/location/history'] : []), ...(weather ? ['/api/weather'] : []), ...(health ? ['/api/health', '/api/health/setup'] : []), ...(archives ? ['/api/factor-history'] : [])].includes(request.url ?? '')) {
       send(404, { error: 'Not found' }); return;
     }
     const token = request.url === '/api/health/setup' ? (tokens.healthAdmin ?? '') : request.url === '/mcp' ? tokens.mcp : ['/api/notifications', '/api/notifications/status'].includes(request.url ?? '') ? tokens.notification! : tokens.device;
@@ -183,6 +191,15 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     try {
       const subject = request.headers['x-g2-location-owner'];
       const historyOwner = typeof subject === 'string' && /^[a-f0-9]{64}$/.test(subject) ? subject : undefined;
+      if (archives && request.url === '/api/factor-history') {
+        if (!historyOwner) { send(400, {error: 'Device subject required'}); return; }
+        if (request.method === 'GET') { send(200, await archiveSettings(archives.authority, historyOwner, health, histories)); return; }
+        if (request.method === 'POST') {
+          const value = await changeArchiveSettings(archives.authority, historyOwner, await body(request), health, histories);
+          changed(); send(200, value); return;
+        }
+        send(405, {error: 'Method not allowed'}); return;
+      }
       if (health && request.url === '/api/health/setup' && request.method === 'POST') { send(200, await health.setup(await body(request))); return; }
       if (health && request.url === '/api/health' && request.method === 'POST') {
         if (!historyOwner) {send(400, {error:'Device subject required'});return;}
@@ -201,7 +218,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
         const owner = request.headers['x-g2-location-owner'];
         if (typeof owner !== 'string' || !/^[a-f0-9]{64}$/.test(owner)) { send(400, { error: 'Device subject required' }); return; }
         const input = await body(request);
-        if (request.url === '/api/location/revoke') { z.object({}).strict().parse(input); histories?.revokeOwner(owner); try {health?.revokeOwner(owner);} catch {} try {weather?.revokeOwner(owner);} catch { /* Optional persistence cannot prevent live-location revocation. */ } send(200, locations.revokeOwner(owner)); return; }
+        if (request.url === '/api/location/revoke') { z.object({}).strict().parse(input); histories?.revokeOwner(owner); try {health?.revokeOwner(owner);} catch {} try {weather?.revokeOwner(owner);} catch { /* Optional persistence cannot prevent live-location revocation. */ } try {await archives?.authority.revoke(owner);} catch { /* Archive reads also check pairing, and maintenance retries erasure. */ } send(200, locations.revokeOwner(owner)); return; }
         if (request.url === '/api/location/control') { send(200, locations.control(input, owner)); return; }
         const envelope = input as Record<string, unknown>;
         const hasHistory = envelope && Object.hasOwn(envelope, 'history');
@@ -246,7 +263,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       if (request.url === '/api/utterances' && request.method === 'POST') { send(200, await bridge.submit(await body(request, PHOTO_REQUEST_BYTES))); return; }
       if (notifications && request.url === '/api/notifications' && request.method === 'POST') { send(200, await notifications.submit(await body(request))); return; }
       if (request.url === '/mcp' && request.method === 'POST') {
-        const result = await rpc(bridge, await body(request), notifications, locations, histories, weather, activation, health); send(result === undefined ? 202 : 200, result); return;
+        const result = await rpc(bridge, await body(request), notifications, locations, histories, weather, activation, health, archives?.environment); send(result === undefined ? 202 : 200, result); return;
       }
       if (request.url === '/mcp') { response.setHeader('Allow', 'POST'); send(405, { error: 'Method not allowed' }); return; }
       send(404, { error: 'Not found' });

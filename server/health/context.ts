@@ -7,9 +7,12 @@ import { subscriptionArguments, subscriptionDelivery, SubscriptionResponseError 
 import { contextActivityGuidance, decisionFactorTool } from '../context-guidance.ts';
 import type { WebhookSender } from '../webhook.ts';
 import { HealthVault } from './vault.ts';
+import { PolarArchiveGrant, type PolarArchiveChoice, type PolarArchiveLease } from './archive-grant.ts';
+import { type HistoryPeriod } from '../history/retention.ts';
 import { categories, observationSchema, profileSchema, RETENTION, type Observation } from './data.ts';
-import { heartRateGuidance, readHeartRateSummary, summarizeHeartRates, type HeartRateSummary } from './heart-rate.ts';
+import { heartRateGuidance, type HeartRateSummary } from './heart-rate.ts';
 import { connectionSchema, PolarAPI, POLAR_REDIRECT, PolarError, type PolarConnection } from './polar.ts';
+import { needsPhoneClock, parsePolarHistoryQuery, polarQueryCategories, polarClockReferences, projectHeartRates, selectPolarHistory, type PolarHistoryQuery, type PolarHistoryInput } from './history.ts';
 import type { PhoneTimeRead } from '../history/phone-time.ts';
 /** Shared by tool discovery and each available read, not dependent on chat memory. */
 export const healthInterpretationPurpose = 'Use permitted health context to understand possible fatigue, tension, energy and other relevant states, and let that understanding inform how you engage with the person. Do not wait for an explicit report of feeling tired or tense. Read only categories and periods that can help the current conversation or a worthwhile autonomous action. The returned interpretation_guidance gives examples, not a classifier or mandatory checklist.';
@@ -46,6 +49,7 @@ export const healthResponseTool={name:'respond_to_health',description:'For combi
   inputSchema:{type:'object',properties:{read_id:{type:'string',format:'uuid'},disposition:{type:'string',enum:['silent','announce']},utterance_id:{type:'string',format:'uuid'},text:{type:'string',minLength:1,maxLength:1800}},required:['read_id','disposition'],additionalProperties:false},annotations:{readOnlyHint:false,destructiveHint:false,idempotentHint:true,openWorldHint:false}};
 
 export interface HealthOptions {
+  archivePeriod?:(owner:string)=>HistoryPeriod | undefined;
   phoneTime?:(dates:string[],owner:string)=>PhoneTimeRead;
   key:(operation:'read'|'create'|'delete'|'authorize')=>Promise<Buffer|undefined>;
   ownerAuthorized:(owner:string)=>boolean; ownerRevoked:(owner:string)=>boolean;
@@ -55,34 +59,48 @@ export interface HealthOptions {
 export class HealthContext {
   readonly changes=new ChangeSignal();
   private vault:HealthVault;private options:HealthOptions;private api:PolarAPI;private now:()=>number;
+  private archive:PolarArchiveGrant;
+  private archiveCaptureFault?:string;
   private state=empty();private key?:Buffer;private epoch=randomUUID();private revision=randomUUID();private generation=0;
   private ready:Promise<void>;private closed=false;private healthy=true;private fault='';private busy=false;
   private abort?:AbortController;private oauth?:{state:string;client:PolarConnection;expires:number;generation:number;server:Server;timer:ReturnType<typeof setTimeout>};
   private timer:ReturnType<typeof setInterval>;private nextPoll=0;private syncAt?:string;private profileRefreshAt?:string;
-  private reads=new Map<string,{generation:number;revision:string;expires:number;phoneTimeAllowed?:()=>boolean}>();
+  private reads=new Map<string,{generation:number;revision:string;expires:number;phoneTimeAllowed?:()=>boolean;archiveLease?:PolarArchiveLease}>();
+  private historyPages=new Map<string,{query:PolarHistoryQuery;offset:number;readId:string;expires:number;phase:'legacy'|'archive';archiveCursor?:string}>();
   private decisions=new Map<string,{signature:string;result:unknown}>();
   private responseTail:Promise<unknown>=Promise.resolve();private subscriptionTail:Promise<unknown>=Promise.resolve();
   private setupTail:Promise<unknown>=Promise.resolve();
   private eventTimer?:ReturnType<typeof setTimeout>;private lastEvent?:string;
   constructor(path:string,options:HealthOptions) {
     this.vault=new HealthVault(path);this.options=options;this.api=options.api??new PolarAPI({now:options.now});this.now=options.now??Date.now;
+    this.archive=new PolarArchiveGrant(this.vault,this.now);
     this.ready=this.load();
     this.timer=setInterval(()=>{void this.tick();},30_000);this.timer.unref();
   }
   private async load() {
-    if(!this.vault.exists())return;
-    try {const key=await this.options.key('read');if(!key)throw new Error();if(this.closed){key.fill(0);return;}this.state=stateSchema.parse(this.vault.read(key));this.key=key;this.maintain();}
+    if(!this.vault.exists()){
+      // An older app may have reset the legacy vault and its Keychain key.
+      // Without that vault there is no authority to reopen its archive.
+      try{this.archive.reset();}catch{}
+      return;
+    }
+    try {const key=await this.options.key('read');if(!key)throw new Error();if(this.closed){key.fill(0);return;}this.state=stateSchema.parse(this.vault.read(key));this.key=key;this.archive.restore(key,this.state,this.vault.fingerprint!);this.maintain();}
     catch {this.healthy=false;if(this.fault!=='HEALTH_STORAGE_UNAVAILABLE')this.fault='HEALTH_KEY_UNAVAILABLE';}
   }
   private save(next:State) {
     if(!this.key||!this.healthy)throw rejected();
-    try {this.vault.write(this.key,stateSchema.parse(next));this.state=next;}
+    try {
+      const previous=this.vault.fingerprint;
+      this.vault.write(this.key,stateSchema.parse(next),pending=>this.archive.checkpoint(next,previous,pending));
+      this.state=next;
+      if (!previous) this.archive.restore(this.key,next,this.vault.fingerprint!);
+    }
     catch {this.healthy=false;this.fault='HEALTH_STORAGE_UNAVAILABLE';this.invalidate();throw new Error('HEALTH_STORAGE_UNAVAILABLE');}
   }
-  private invalidate() {this.generation++;this.epoch=randomUUID();this.revision=randomUUID();this.reads.clear();this.decisions.clear();this.abort?.abort();clearTimeout(this.eventTimer);this.lastEvent=undefined;this.changes.emit();}
-  private usable() {const s=this.state;return !this.closed&&this.healthy&&s.enabled&&!s.disconnectPending&&!!s.owner&&this.options.ownerAuthorized(s.owner)&&!!s.connection?.accessToken&&!!s.connection.expiresAt&&s.connection.expiresAt>this.now();}
+  private invalidate() {this.historyPages.clear();this.generation++;this.epoch=randomUUID();this.revision=randomUUID();this.reads.clear();this.decisions.clear();this.abort?.abort();clearTimeout(this.eventTimer);this.lastEvent=undefined;this.changes.emit();}
+  private usable() {const s=this.state;return !this.closed&&this.healthy&&s.enabled&&!s.disconnectPending&&!!s.owner&&this.options.ownerAuthorized(s.owner)&&!!s.connection?.accessToken&&!!s.connection.expiresAt&&s.connection.expiresAt>this.now()&&this.archive.liveSnapshotCurrent();}
   private maintain() {
-    if(!this.healthy||!this.key)return;
+    if(!this.healthy||!this.key||!this.archive.liveSnapshotCurrent())return;
     for(const [id,read] of this.reads)if(read.expires<=this.now()){this.reads.delete(id);this.decisions.delete(id);}
     if(this.state.owner&&this.options.ownerRevoked(this.state.owner)) {this.save({...this.state,owner:undefined,enabled:false,observations:[],profile:undefined,profileDeleted:true,deletedBefore:this.now()});this.invalidate();return;}
     const observations=this.state.observations.filter(x=>x.retention_anchor>this.now()-RETENTION&&x.retention_anchor<=this.now());
@@ -95,7 +113,32 @@ export class HealthContext {
       healthPending:owns&&this.busy,healthStatus:!owns?'unavailable':!this.healthy?(this.fault==='HEALTH_STORAGE_UNAVAILABLE'?this.fault:'locked'):this.state.disconnectPending?'disconnect_pending':this.connectionFault()||(!this.state.connection?.accessToken?'not_connected':this.usable()?'sharing':'off'),
       healthLastSync:owns?this.syncAt??null:null,healthProfileRefreshAt:owns?this.profileRefreshAt??null:null,healthHasProfile:owns&&!!this.state.profile};
   }
-  private async tick() {await this.ready;if(this.closed)return;try {this.maintain();if(this.usable()&&!this.busy&&this.now()>=this.nextPoll)await this.acquire(false);}catch{/* Sanitized state only; never log health/API values. */}}
+  private async tick() {await this.ready;if(this.closed)return;try {this.maintain();try{this.archive.maintain();}catch{}if(this.usable()&&!this.busy&&this.now()>=this.nextPoll)await this.acquire(false);}catch{/* Sanitized state only; never log health/API values. */}}
+  async archiveStatus(owner:string) {
+    await this.ready;
+    this.maintain();
+    const owns=this.state.owner===owner&&this.options.ownerAuthorized(owner);
+    const status=this.archive.status(owns&&this.usable());
+    return {...status,epoch:owns?status.epoch:null};
+  }
+  async archiveControl(owner:string,epoch:string,choice:PolarArchiveChoice,authorize?:()=>boolean) {
+    const status=await this.archiveStatus(owner);
+    const change=z.discriminatedUnion('action',[z.object({action:z.literal('set'),enabled:z.boolean()}).strict(),z.object({action:z.literal('delete')}).strict()]).parse(choice);
+    if (!this.healthy||!this.key||!status.epoch||status.epoch!==epoch||this.state.owner!==owner||!this.options.ownerAuthorized(owner)||
+        (change.action==='set'&&change.enabled&&(!this.usable()||!this.options.archivePeriod?.(owner)))) throw rejected();
+    this.archive.control(this.state,this.vault.fingerprint!,epoch,change,authorize);
+    if (change.action==='delete') {
+      this.invalidate();
+      this.save({...this.state,observations:[],deletedBefore:Math.max(this.now(),this.state.deletedBefore)});
+    }
+    this.historyPages.clear();this.changes.emit();
+    return this.archiveStatus(owner);
+  }
+  private archiveLease() {
+    try {
+      if (this.usable()) return this.archive.capture(this.state,this.options.archivePeriod?.(this.state.owner!));
+    } catch { /* Separate archive availability never blocks the seven-day vault. */ }
+  }
   async control(raw:unknown,owner:string) {
     await this.ready;
     const input=z.object({protocol:z.literal(1),epoch:z.string().uuid(),action:z.enum(['enable','disable','delete','refresh'])}).strict().parse(raw);
@@ -105,6 +148,7 @@ export class HealthContext {
     const next={...this.state,owner,enabled:input.action==='enable',activationStopped:false};
     if(input.action==='delete'){next.observations=[];next.profile=undefined;next.profileDeleted=true;next.deletedBefore=this.now();}
     this.invalidate();this.save(next);this.fault='';this.changes.emit();
+    if(input.action==='delete')this.archive.reset();
     if(next.enabled){this.nextPoll=0;void this.tick();}return this.status(owner);
   }
   revokeOwner(owner:string) {if(this.state.owner!==owner)return;this.invalidate();this.save({...this.state,enabled:false,owner:undefined,observations:[],profile:undefined,profileDeleted:true,deletedBefore:this.now()});}
@@ -114,6 +158,7 @@ export class HealthContext {
     this.nextPoll=this.now()+30*60_000;
     try {
       const c=this.state.connection!;
+      const lease=profileOnly?undefined:this.archiveLease();
       const fetched=profileOnly?{observations:[] as Observation[],profile:await this.api.profile(c,abort.signal)}:await this.api.collect(c,abort.signal,!this.state.profileDeleted);
       if(!this.usable()||generation!==this.generation||abort.signal.aborted)return;
       const map=new Map(this.state.observations.map(x=>[x.id,x]));
@@ -122,7 +167,24 @@ export class HealthContext {
       const next={...this.state,observations,profile:profileOnly||!this.state.profileDeleted?(fetched.profile??this.state.profile):this.state.profile,profileDeleted:profileOnly?false:this.state.profileDeleted};
       const signature=(s:State)=>JSON.stringify([s.observations.map(({retrieved_at,...rest})=>rest),s.profile?(({retrieved_at,...rest})=>rest)(s.profile):null]);
       const changed=signature(next)!==signature(this.state);
-      this.save(next);this.syncAt=new Date(this.now()).toISOString();if(profileOnly)this.profileRefreshAt=this.syncAt;this.fault='';
+      const prior=this.state.observations;
+      this.save(next);this.historyPages.clear();this.syncAt=new Date(this.now()).toISOString();if(profileOnly)this.profileRefreshAt=this.syncAt;this.fault='';
+      const current=lease&&this.archiveLease();
+      if (lease && current?.epoch===lease.epoch && current.period===lease.period) {
+        const rows=fetched.observations.filter(x=>x.retention_anchor>lease.deletedBefore);
+        if (rows.length) {
+          const ids=new Set(rows.map(x=>x.id));
+          try {
+            this.archive.use(lease,store=>{
+              // A previously retained row keeps its original seven-day deadline.
+              // The store preserves the assigned period of rows already archived.
+              const existing=prior.filter(x=>ids.has(x.id));
+              if (existing.length) store.put(existing,'7d');
+              store.put(rows,lease.period);
+            });
+          } catch {this.archiveCaptureFault=lease.epoch;}
+        }
+      }
       if(changed){this.revision=randomUUID();this.reads.clear();this.decisions.clear();this.maybeEvent();}
     }catch(e){if(generation===this.generation){this.fault=e instanceof PolarError?e.code:'HEALTH_REQUEST_FAILED';if(this.fault==='HEALTH_RECONNECT_REQUIRED'){this.invalidate();this.save({...this.state,enabled:false});}}}
     finally {this.busy=false;if(this.abort===abort)this.abort=undefined;this.changes.emit();}
@@ -144,10 +206,7 @@ export class HealthContext {
       if(x.category==='heart_rate') {
         // Old encrypted records remain readable, but cannot claim that their
         // original first-2500 sample cap covered the full provider response.
-        const stored=readHeartRateSummary(x.values);
-        const legacy=stored?undefined:summarizeHeartRates(x.samples??[],'legacy_stored_samples',null);
-        const summary=stored??legacy?.summary;
-        const samples=legacy?.samples??x.samples??[];
+        const {summary,samples}=projectHeartRates(x);
         return {...x,values:{},samples,...(summary?{heart_rate_summary:summary,samples_total:summary.sample_count,samples_reduced:samples.length<summary.sample_count}:{} )};
       }
       if(x.category!=='activity')return x;
@@ -159,9 +218,8 @@ export class HealthContext {
     }).map(x=>x.samples&&x.samples.length>96?{...x,samples:x.samples.filter((_,i)=>i%Math.ceil(x.samples!.length/96)===0),samples_total:x.samples.length,samples_reduced:true}:x);
     const dates=observations.filter(x=>(x.category==='heart_rate'||x.category==='activity')&&x.source_local_date).map(x=>x.source_local_date!);
     const phoneTime=dates.length?(this.options.phoneTime?.(dates,this.state.owner!)??{evidence:{status:'unavailable' as const}}):undefined;
-    const read_id=randomUUID();const expires=Math.min(this.now()+5*60_000,...observations.map(x=>x.retention_anchor+RETENTION));
-    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed});while(this.reads.size>40){const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
-    return {status:'available',read_id,response_context:{tool:'respond_to_context',arguments:{health_read_ids:[read_id]},expires_no_later_than:new Date(expires).toISOString()},source:'Polar',reference_time:new Date(referenceTime).toISOString(),
+    const receipt=this.registerRead(Math.min(...observations.map(x=>x.retention_anchor+RETENTION)), phoneTime);
+    return {status:'available',...receipt,source:'Polar',reference_time:new Date(referenceTime).toISOString(),
       requested_window:{start_at:new Date(cutoff).toISOString(),end_at:new Date(referenceTime).toISOString(),
         heart_rate_selection:'potentially_overlapping_device_dates',exact_heart_rate_utc_filter:false,
         local_date_selection:'potentially_overlapping_source_dates',exact_local_date_utc_filter:false,
@@ -176,12 +234,109 @@ export class HealthContext {
       interpretation_guidance:healthInterpretationGuidance,
       activity_guidance:contextActivityGuidance,response_tool:'respond_to_health',attribution:healthAttributionGuidance};
   }
+  private registerRead(evidenceExpiry:number, phoneTime?:PhoneTimeRead, archiveLease?:PolarArchiveLease) {
+    const now=this.now(), expires=Math.min(now+5*60_000,evidenceExpiry,this.state.connection?.expiresAt??Infinity,phoneTime?.expiresAt??Infinity);
+    const read_id=randomUUID();
+    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed,archiveLease});
+    while (this.reads.size>40) {const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
+    return {read_id,response_context:{tool:'respond_to_context',arguments:{health_read_ids:[read_id]},expires_no_later_than:new Date(expires).toISOString()}};
+  }
+  historyOwner(): string | undefined {
+    try { this.maintain(); return this.usable()?this.state.owner:undefined; }
+    catch { return undefined; }
+  }
+  readSelectedHistory(input:PolarHistoryInput) {
+    const owner=this.historyOwner();
+    if (!owner) return {status:'unavailable' as const,entries:[],next_cursor:null};
+    const page='cursor' in input?this.historyPages.get(input.cursor):undefined;
+    if ('cursor' in input) {
+      if (!page || page.expires<=this.now() || !this.reads.has(page.readId))
+        throw new ToolRejection('history_cursor_expired','This Polar history page expired. Start a fresh bounded read if still useful.');
+      this.responseGuard(page.readId)();
+    }
+    const lease=this.archiveLease();
+    const query=page?.query??parsePolarHistoryQuery(input,366*86_400_000);
+    const offset=page?.offset??0;
+    const legacy=selectPolarHistory(this.state.observations,query,page?.phase==='archive'?0:offset);
+    const units=legacy.units;
+    let entries=legacy.entries, earliestExpiry=legacy.earliestExpiry;
+    let coverage:Record<string,unknown>=legacy.coverage;
+    let continuation:{phase:'legacy'|'archive';offset:number;archiveCursor?:string}|undefined;
+    let partial=false;
+    if (lease) {
+      const archivePhase=page?.phase==='archive' || !legacy.entries.length;
+      if (archivePhase) {
+        const legacyIds=new Set(this.state.observations.map(row=>row.id));
+        const startMs=Date.parse(query.start_at), endMs=Date.parse(query.end_at);
+        const categories=polarQueryCategories(query);
+        let cursor=page?.archiveCursor, skipped=page?.phase==='archive'?offset:0;
+        entries=[]; earliestExpiry=Infinity;
+        let capacity=false;
+        try {
+          this.archive.use(lease,store=>{
+            // Avoid returning an empty page for a few recent legacy duplicates,
+            // with a firm work bound when the two stores overlap densely.
+            for(let scan=0;scan<3;scan++){
+              const batch=store.read({startMs,endMs,categories,limit:query.limit,cursor});
+              capacity ||= batch.capacityOmitted;
+              const rows=batch.records.filter(r=>!legacyIds.has(r.observation.id));
+              const retained=new Map(rows.map(r=>[r.observation.id,r]));
+              const projected=selectPolarHistory(rows.map(r=>r.observation),query,skipped,
+                row=>retained.get(row.id)!.expiresAtMs);
+              entries=projected.entries.map(e=>{
+                const r=retained.get(e.id)!;
+                return {...e,retention:{period:r.period,first_received_at:new Date(r.firstReceivedMs).toISOString(),
+                  expires_at:new Date(r.expiresAtMs).toISOString()}};
+              });
+              earliestExpiry=Math.min(earliestExpiry,projected.earliestExpiry,batch.validUntilMs);
+              if(projected.nextOffset!==null){continuation={phase:'archive',offset:projected.nextOffset,archiveCursor:cursor};break;}
+              continuation=batch.nextCursor?{phase:'archive',offset:0,archiveCursor:batch.nextCursor}:undefined;
+              if(entries.length||!batch.nextCursor)break;
+              cursor=batch.nextCursor;skipped=0;
+            }
+          });
+        } catch {
+          if(page)throw rejected();
+          partial=true;continuation=undefined;
+        }
+        partial ||= capacity||this.archiveCaptureFault===lease.epoch||(!entries.length&&!!continuation);
+        coverage={returned_records:entries.length,scope:'extended_retention',completeness:'unknown',capacity_omitted:capacity,
+          capture_error_this_grant_since_restart:this.archiveCaptureFault===lease.epoch,
+          date_only_selection:legacy.coverage.date_only_selection};
+      } else {
+        continuation=legacy.nextOffset===null?{phase:'archive',offset:0}:{phase:'legacy',offset:legacy.nextOffset};
+        coverage={...legacy.coverage,scope:'seven_day_vault',extended_archive_follows:true};
+      }
+    } else if(legacy.nextOffset!==null){continuation={phase:'legacy',offset:legacy.nextOffset};}
+    const dates=entries.flatMap(row=>needsPhoneClock(row)&&row.source_local_date?[row.source_local_date]:[]);
+    const revision=this.revision;
+    const phoneTime=dates.length?(this.options.phoneTime?.(dates,owner)??{evidence:{status:'unavailable' as const}}):undefined;
+    if (this.historyOwner()!==owner || this.revision!==revision) throw rejected();
+    const payload={status:partial?'partial' as const:entries.length?'available' as const:'empty' as const,source:'Polar',entries,coverage,units,
+      requested_window:{start_at:query.start_at,end_at:query.end_at},
+      ...(phoneTime?{phone_time_evidence:polarClockReferences(phoneTime)}:{}),
+      ...(query.fields.includes('heart_rate_summary')||query.fields.includes('samples')?{heart_rate_evidence:{
+        source:'Polar period averages on the device clock',
+        summary:'Dot Link summarizes the source record before window selection. Its sample mean is unweighted; hourly entries and their gaps retain the device clock. Missing hours are unknown.'}}:{}),
+      attribution:healthAttributionGuidance};
+    // UUIDs, the expiry instant and the existing response-tool envelope occupy < 512 bytes.
+    if (Buffer.byteLength(JSON.stringify(payload))>48*1024-512) throw new ToolRejection('history_page_too_large','Narrow the Polar field selection for this page.');
+    const receipt=this.registerRead(Math.min(earliestExpiry,page?.expires??Infinity),phoneTime,lease);
+    this.responseGuard(receipt.read_id)();
+    const next_cursor=continuation?randomUUID():null;
+    if (next_cursor && continuation) {
+      this.historyPages.set(next_cursor,{query,...continuation,readId:receipt.read_id,expires:Date.parse(receipt.response_context.expires_no_later_than)});
+      while (this.historyPages.size>40) this.historyPages.delete(this.historyPages.keys().next().value!);
+    }
+    return {...payload,next_cursor,...receipt};
+  }
   /** Reused by the combined response; no send or new collection occurs here. */
   responseGuard(readId:string) {
     const read=this.reads.get(readId);
     return ()=>{
       this.maintain();
       if(!this.usable()||!read||read.generation!==this.generation||read.revision!==this.revision||read.expires<=this.now())throw rejected();
+      if(read.archiveLease){const current=this.archiveLease();if(current?.epoch!==read.archiveLease.epoch||current.period!==read.archiveLease.period)throw rejected();}
       if(read.phoneTimeAllowed&&!read.phoneTimeAllowed())throw new ToolRejection('history_access_changed','The phone-clock evidence is no longer authorized. Re-read health context and reconsider the response.');
       return true;
     };
@@ -259,7 +414,7 @@ export class HealthContext {
       this.save({...this.state,enabled:false});this.fault='';this.maintain();this.changes.emit();return this.setupStatus();
     }
     if(p.action==='unlock'){try{await this.options.key('authorize');}catch{throw new Error('HEALTH_KEY_UNAVAILABLE');}this.healthy=true;this.fault='';await this.load();this.changes.emit();return this.setupStatus();}
-    if(p.action==='reset'){this.stopOAuth();this.invalidate();this.vault.remove();await this.options.key('delete');this.key?.fill(0);this.key=undefined;this.state=empty();this.healthy=true;this.fault='';return this.setupStatus();}
+    if(p.action==='reset'){this.stopOAuth();this.invalidate();this.archive.reset();this.archive.close();this.vault.remove();await this.options.key('delete');this.key?.fill(0);this.key=undefined;this.state=empty();this.healthy=true;this.fault='';return this.setupStatus();}
     if(p.action==='disconnect'&&!this.state.connection){return this.setupStatus();}
     if(p.action==='disconnect'){
       this.stopOAuth();this.invalidate();if(!this.healthy)throw rejected();
@@ -294,5 +449,5 @@ export class HealthContext {
     this.oauth={state,client,expires,generation,server,timer};this.fault='';return {...this.setupStatus(),authorizationURL:this.api.authorization(client.clientId,state)};
   }
   private stopOAuth(){if(this.oauth){clearTimeout(this.oauth.timer);this.oauth.server.close();this.oauth=undefined;}}
-  close(){this.closed=true;clearInterval(this.timer);this.stopOAuth();this.invalidate();this.key?.fill(0);this.key=undefined;}
+  close(){this.closed=true;clearInterval(this.timer);this.stopOAuth();this.invalidate();this.archive.close();this.key?.fill(0);this.key=undefined;}
 }

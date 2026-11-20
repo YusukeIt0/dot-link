@@ -120,6 +120,84 @@ reply or silence separately from policy delivery. Reuse unchanged acquisition an
 transport evidence; brief relevant caveats remain acceptable. Do not paste the new
 policy into the test prompt or alter a personal activity to make the test pass.
 
+## Selective history (unreleased Mac and Even feature)
+
+In the Even companion’s **Sharing settings → History**, the paired owner can
+choose whether to retain phone locations, Polar observations, forecasts and
+planned walks with model terrain. Changing the common period assigns a
+deadline only to newly admitted records. Reopening the companion reads the
+Mac’s choices. Existing seven-day grants keep their original scope and expiry.
+[User-facing controls and examples](setup.md#looking-back-with-dot).
+
+For non-health sources, a separate encrypted
+authority holds the owner, duration and a random key for each source. The Mac
+opens its authority key with the Secure Enclave after first unlock. A stop
+invalidates outstanding reads. Deletion retires the source key before removing
+the evidence files. On restart the relay finishes interrupted cleanup and
+expires records even when recording is off. A code downgrade leaves these
+files outside the app bundle.
+
+The non-health archive encrypts source fields, timestamps and identities.
+Its on-disk indexes expose opaque grouping, row counts and ciphertext lengths.
+Polar keeps its own protected storage. Restoring an old evidence file alone
+cannot recover a deleted generation. Restoring both the old authority and
+evidence from a full backup on the same Mac can recover it. Local deletion
+cannot retract information already sent to Dot.
+
+`get_factor_history` selects fields from saved phone, Polar, weather or
+walking/terrain evidence. Each request covers up to seven days within the
+retained history. Give `start_at` and `end_at` as instants with explicit UTC
+offsets. The start is inclusive and the end is exclusive. Observation windows
+stop at the time of the read. For weather alone, a forecast known in the past
+can have a validity time in the future.
+An existing recent-place grant keeps its seven-day scope. A new location archive
+can include newly accepted phone fixes and subsequently attached geographic
+references. A single location setting updates both grants together. Reading an
+overlapping period returns each fix once. Stopping location history in an older
+app leaves the extended grant off. Deleting it there retires the previous
+generation. Phone clock lookups use upload time, which can differ from measurement
+time, and report an unresolved clock when the retained coverage is incomplete.
+
+Under `fields.location`, select from `position`, `motion`, `clock` and `geography`. Under `fields.polar`,
+select the relevant metrics by name. A comparison
+of two periods can start with a narrow selection for each, followed by a request
+for more detail only where it matters.
+
+For weather, select fields such as `temperature` or `precipitation`. To ask
+what the forecast said at a particular time, pass that instant as `known_at`.
+The requested interval selects forecast validity and the cutoff limits which
+editions were available. A forecast for a requested place gives no evidence
+that the person went there. For mobility, ask for `plan` to compare planned
+walks or `terrain` to compare derived terrain estimates. Further detail can
+include endpoints, steps, geometry and terrain samples. Acquisition happens
+only through the existing live source. Historical reads contact no provider.
+
+Weather and route archives start off. The paired owner's separate archive grant
+allows the connected Dot to read saved evidence. An inactive phone or a stale
+position does not prevent those historical reads. Turning off the history
+source blocks reading and recording. Deleting the source also erases its
+retained records. Live weather and directions can still work with their
+archives off.
+
+Location history describes recorded phone fixes and any saved geographic
+references. Polar observations retain their own timestamps or source-local
+dates. A date-only record can overlap the requested hours without identifying
+the hour of a measurement. Each source reports its own coverage and missing
+values. An empty period, a stopped source or a gap can be handled in the
+conversation using whatever evidence is available. The latest registered Polar
+profile remains accessible through its separate current-profile read.
+
+Version 1 returns a separate page for each requested source. To continue one
+selection, send only its `source` and its `next_cursor` as `cursor`.
+For a combined G2 answer, supply the contributing sources' response references
+to `respond_to_context`. The Mac rechecks their authorization and expiry.
+An answer based on recent-place, forecast or route history requires the existing G2 question and its
+`utterance_id`. A history read neither acquires new source data nor sends a
+message. The contract can be exercised with synthetic records through MCP.
+For connected-Dot acceptance, compare the requested periods and fields in the
+synthetic server's trace with the answer in the conversation. Include a follow-up
+and a period in which only one source provides evidence.
+
 ## Polar health context
 
 `get_health_context` selects categories and a time window of 1–168 hours; the latest

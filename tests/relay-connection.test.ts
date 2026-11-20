@@ -16,6 +16,7 @@ test('paired destination is retained with its credential and expired or malforme
   assert.throws(()=>settings.save({...credentials,token:'bad'}));
   assert.throws(()=>apiAddress('//evil.example',credentials.origin));
   assert.equal(apiAddress('/api/updates',credentials.origin),'https://mac.tailtest.ts.net/api/updates');
+  assert.equal(apiAddress('/api/factor-history',credentials.origin),'https://mac.tailtest.ts.net/api/factor-history');
   settings.forget(); assert.equal(settings.read(),undefined);
 });
 test('an uncertain delivery reuses its id after relaunch without persisting message text', async () => {
