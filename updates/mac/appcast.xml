@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.4.40</title><sparkle:version>120</sparkle:version><sparkle:shortVersionString>0.4.40</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Added optional Polar health context, with guided account connection in Healthcare settings.
-- Let Dot use shared sleep, activity, heart-rate and recovery information in everyday conversations and suggestions.
-- Improved answers that combine health, weather, location and other shared context.
-- Added five activity-intensity levels and clearer timing for heart-rate and activity records using your phone history when available.
-- Protected health-based replies when sharing stops or their source information is no longer current.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.4.40-120/Dot-Link-0.4.40-120-arm64.zip" sparkle:installationType="application" sparkle:edSignature="BRZS/Dl1AuueUJHgcDLYL/d5fTC7C0YIqHEHu9jaOhGGj1zQXUyVkCLuNpn1GOP3HM0rTAauuycTltTnxdf/CA==" length="68540650" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 8TXf8ZwYt4jXtG7gyS3SCaMZD/pprDSLSVtJlfO0iaRaI1gG2ng5jxgesReM79N+bAXl5LcCtMFfnxyt9e4zAQ==
-length: 1565
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.0</title><sparkle:version>121</sparkle:version><sparkle:shortVersionString>0.5.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Improved automatic reconnection to your existing Dot conversation after a Mac restart.
+- Keep a pending Polar sharing request across restarts so Dot Link does not ask you to set it up again for the same request.
+- Choose which shared locations, Polar observations, weather forecasts and walking plans your Mac saves. Dot can use them to compare past and current information. Set a retention period or delete records by source in a compatible Even companion.
+- Add nearby rain estimates in Weather settings on a compatible Even companion. Dot can use recent NOAA satellite estimates alongside MET Norway forecasts. Your existing forecast sharing continues automatically.
+- Updated bundled components with security fixes.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.0-121/Dot-Link-0.5.0-121-arm64.zip" sparkle:installationType="application" sparkle:edSignature="2o6ZRe98Znn12S/GDeuE3I2Ed+eKT1JiKJr8dd9zqXKU/+Bw2lsi7gjbusWb5/ENUTwAy1xMdVnxcuw9BKKlBw==" length="69779346" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: h2GdgpskKb0gIh95p/eGkc9BwXYbvqE07Yn1YY34yOTDz0JcRnJDp4cbyG1Gbbz3En+Kwd+5QxQLPBaYzwlzDA==
+length: 1751
 -->
