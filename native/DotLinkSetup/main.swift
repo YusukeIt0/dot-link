@@ -948,6 +948,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 }
+if CommandLine.arguments.dropFirst().first == "--history-archive-key" { runHistoryArchiveKeyHelper() }
 if CommandLine.arguments.contains("--health-credential") { runHealthCredentialHelper() }
 if CommandLine.arguments.contains("--stt-credential") { runSTTCredentialHelper() }
 if NSRunningApplication.runningApplications(withBundleIdentifier: "app.tripsurf.dotlink.mac").contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) { exit(0) }

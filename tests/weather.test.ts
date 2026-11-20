@@ -116,6 +116,36 @@ test('Expires and conditional response maintain fetch time separately from valid
   assert.equal(result.retrieved_at, new Date(NOW).toISOString()); assert.equal(result.checked_at, new Date(f.now()).toISOString());
 });
 
+test('an equal 200 revalidates the same normalized edition across restart; a changed 200 with the same issue time is a new delivery', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'dot-weather-edition-'));
+  t.after(() => rm(directory, {recursive:true, force:true}));
+  const path=join(directory,'cache.json');
+  let now=NOW, calls=0, change=0;
+  const provider:WeatherProvider={id:'met-norway-locationforecast-2', load:async point => {
+    calls++;
+    const raw=fixture(point,NOW);
+    raw.properties.timeseries[0].data.instant.details.air_temperature+=change;
+    return {forecast:parseMetForecast(raw,point,now),notModified:false,deprecated:false};
+  }};
+  const make=()=>new WeatherService(path,{cache:new WeatherCache(path,()=>now),provider,now:()=>now,random:()=>0});
+  const query=(s:WeatherService)=>s.query(POINT,new AbortController().signal,()=>{});
+  const first=make(); t.after(()=>first.close());
+  const initial=await query(first); now+=3*HOUR+1;
+  const equal=await query(first); first.close();
+  assert.equal(equal.retrieved_at,initial.retrieved_at); assert.equal(equal.updated_at,initial.updated_at);
+  assert.equal(equal.checked_at,new Date(now).toISOString()); assert.equal(equal.status,'ready');
+  const next=make(); t.after(()=>next.close());
+  const cached=await query(next); assert.equal(calls,2); assert.equal(cached.status,'ready');
+  assert.equal(cached.checked_at,equal.checked_at); assert.equal(cached.retrieved_at,initial.retrieved_at);
+  now+=3*HOUR+1; change=2;
+  const revised=await query(next);
+  assert.equal(revised.updated_at,initial.updated_at); assert.equal(revised.retrieved_at,new Date(now).toISOString());
+  now+=3*HOUR+1; change=0;
+  assert.equal((await query(next)).retrieved_at,new Date(now).toISOString());
+  now+=10*HOUR; const old=await query(next);
+  assert.equal(old.checked_at,new Date(now).toISOString()); assert.equal(old.status,'stale');
+});
+
 test('refresh failure stays stale on later cache reads and respects provider retry-after', async t => {
   const f = serviceFixture(t); await f.query(); f.advance(3 * HOUR + 1);
   f.setLoad(async () => {throw new WeatherSourceError('fixture failure', f.now() + 5 * HOUR);});
