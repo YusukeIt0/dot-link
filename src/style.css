@@ -103,5 +103,6 @@ main:has(#display-settings[open]) { padding-bottom: calc(160px + env(safe-area-i
 #conversation-controls .photo-remove { position: absolute; right: -3px; top: -3px; width: 32px; height: 32px; padding: 0; margin: 0; border: 1px solid #79847c; border-radius: 50%; background: #141817; color: #ebeee9; display: grid; place-items: center; font-size: 21px; }
 
 .weather-settings { margin-block: 24px; padding-block-start: 20px; border-block-start: 1px solid #343737; }
+#weather-mode { display: block; max-width: 100%; margin-block-start: 6px; }
 #weather-upgrade { margin-block: 16px; padding: 14px 16px; border: 1px solid #435446; border-radius: 12px; }
 #weather-upgrade p { margin: 0 0 8px; line-height: 1.5; }

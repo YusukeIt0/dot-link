@@ -272,7 +272,14 @@ function renderWeatherStatus() {
   if (exited) return;
   const s = weatherSharing.status();
   const toggle = el<HTMLInputElement>('weather-share'); toggle.checked = s.weatherEnabled === true;
-  toggle.disabled = !s.supported || s.pending;
+  toggle.disabled = !s.supported || s.pending || (s.awaitingSatelliteStatus && !s.weatherEnabled);
+  const forecastsOnly = s.satelliteSupported && s.weatherEnabled === true && s.satelliteEnabled === false;
+  el('weather-checkbox-field').hidden = forecastsOnly;
+  el('weather-mode-field').hidden = !forecastsOnly;
+  const mode = el<HTMLSelectElement>('weather-mode');
+  mode.disabled = !forecastsOnly || s.pending;
+  el<HTMLOptionElement>('weather-mode-combined').disabled = s.awaitingSatelliteStatus;
+  mode.value = 'forecast';
   el('weather-satellite-disclosure').hidden = !s.satelliteSupported;
   const offer = weatherSharing.upgradeOffer();
   el('weather-upgrade').hidden = !offer;
@@ -290,6 +297,14 @@ el<HTMLInputElement>('weather-share').onchange = () => {
   const combined = enabled && weatherSharing.status().satelliteSupported;
   if (enabled && !confirm(t(combined ? 'even.weather_accept_combined' : 'even.weather_accept'))) {renderWeatherStatus(); return;}
   void weatherSharing.control(enabled, combined);
+};
+el<HTMLSelectElement>('weather-mode').onchange = event => {
+  const mode = event.currentTarget as HTMLSelectElement;
+  const selection = mode.value;
+  mode.value = 'forecast';
+  if (mode.disabled) return;
+  if (selection === 'off') void weatherSharing.control(false);
+  if (selection === 'combined' && confirm(t('even.weather_upgrade_prompt'))) void weatherSharing.control(true, true);
 };
 renderWeatherStatus();
 const healthSharing = new HealthSharing({

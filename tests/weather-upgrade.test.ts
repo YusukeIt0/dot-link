@@ -98,6 +98,8 @@ test('a lost response waits for current status before accepting an explicit retr
     assert.equal(f.sharing.status().failed, true);
     assert.equal(f.sharing.upgradeOffer(), undefined);
     await offer.accept();
+    await f.sharing.control(true, true); // The settings entry point also waits for fresh status.
+    assert.equal(f.sharing.status().awaitingSatelliteStatus, true);
     f.sharing.receive(result);
     assert.equal(f.requests.length, 1);
     if (result.satelliteEnabled) assert.equal(f.sharing.upgradeOffer(), undefined);

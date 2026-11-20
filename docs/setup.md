@@ -234,10 +234,12 @@ rainfall nearby. Weather starts off.
 If you were already sharing forecasts only, forecasts continue. The first time
 you use the updated companion in the foreground and it can confirm that setting
 with your paired Mac, choose **Use nearby rain estimates** or **Keep forecasts
-only** in the prompt. Choosing forecasts only keeps that choice for this pairing
-and these terms on this installation. If you already share both, or have Weather
-off, the companion keeps your setting. Earlier versions that support forecasts
-continue to work with their existing Weather settings.
+only** in the prompt. If you keep forecasts only or leave the prompt, you can add
+nearby rain later in **Sharing settings → Weather context**. Choose **Forecasts
+and nearby rain** and confirm. Your forecasts stay on while you make this change.
+If you already share both, or have Weather off, the companion keeps your setting.
+Earlier versions that support forecasts continue to work with their existing
+Weather settings.
 
 Your Mac sends rounded coordinates to MET Norway. It downloads a global NOAA
 file from Amazon S3 and estimates nearby rain locally. Both services see the

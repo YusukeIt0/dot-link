@@ -392,9 +392,12 @@ the Mac already has permission for forecasts only, it continues to use only MET.
 Once the updated companion confirms that setting with the paired Mac while the
 app is in the foreground, it asks whether to include nearby rain or keep forecasts
 only. Only choosing to include nearby rain authorizes the Mac to fetch NOAA
-files. Choosing forecasts only suppresses the prompt on this companion
-installation for the same pairing and terms. The Mac keeps the actual Weather
-permission. Existing combined permissions and Weather-off settings carry over.
+files. Once shown, the prompt is remembered for the same pairing and terms on
+this companion installation. If you keep forecasts only or leave the prompt,
+you can include nearby rain later in **Sharing settings → Weather context**.
+Your Mac keeps forecast sharing active and records the additional permission
+only when you choose to share nearby rain. Existing combined permissions and
+Weather-off settings carry over.
 
 When Dot requests weather and your permission includes nearby rain, the Mac can
 download a global frame from the NOAA-managed Amazon S3 bucket. S3

@@ -9,7 +9,7 @@ type NativeStorage = {
   setLocalStorage(key: string, value: string): Promise<boolean>;
 };
 type UpgradeOffer = {accept: () => Promise<void>; dismiss: () => void};
-type Presentation = {epoch: string; retryAt: number; key?: string; offer?: UpgradeOffer; awaitStatus?: boolean};
+type Presentation = {epoch: string; retryAt: number; key?: string; offer?: UpgradeOffer};
 const STORAGE_RETRY = 30_000;
 
 async function nativeResult<T>(operation: Promise<T>): Promise<T | undefined> {
@@ -30,6 +30,7 @@ export class WeatherSharing {
   private pending?: symbol;
   private failed = false;
   private satelliteFailedFor?: string;
+  private awaitingSatelliteStatus = false;
   private native?: NativeStorage;
   private presentation?: Presentation;
   // A visible card and its explicit dismissal do not depend on the lifetime of
@@ -47,7 +48,7 @@ export class WeatherSharing {
   receive(value: WeatherStatus) {
     if (!this.sameSession()) {this.presentation = undefined; this.pending = undefined; this.satelliteFailedFor = undefined;}
     if (this.presentation && (value.weatherEpoch !== this.presentation.epoch || !value.weatherEnabled || value.satelliteEnabled !== false)) this.presentation = undefined;
-    if (this.presentation) this.presentation.awaitStatus = false;
+    this.awaitingSatelliteStatus = false;
     this.value = value; this.origin = this.options.target(); this.received = this.now(); this.failed = false;
     this.pairing = this.options.upgrade?.pairing(); this.sessionVersion = this.options.upgrade?.sessionVersion();
     if (this.satelliteFailedFor !== this.origin || !value.weatherEnabled || value.satelliteEnabled) this.satelliteFailedFor = undefined;
@@ -56,14 +57,15 @@ export class WeatherSharing {
   private now() {return (this.options.now ?? Date.now)();}
   reset() {
     this.value = {}; this.origin = undefined; this.received = -Infinity; this.satelliteFailedFor = undefined;
-    this.presentation = undefined; this.pending = undefined; this.options.changed();
+    this.presentation = undefined; this.pending = undefined; this.awaitingSatelliteStatus = false; this.options.changed();
   }
   status() {
     const connected = !!this.origin && this.sameSession() && this.now() - this.received < 45_000;
     const supported = connected && this.value.weatherProtocol === 1 && typeof this.value.weatherEpoch === 'string' && this.value.weatherTerms === WEATHER_TERMS;
     const satelliteSupported = supported && this.value.satelliteTerms === SATELLITE_TERMS && typeof this.value.satelliteEnabled === 'boolean';
     return {...(connected ? this.value : {}), supported, satelliteSupported, pending: !!this.pending, failed: this.failed,
-      satelliteFailed: satelliteSupported && this.satelliteFailedFor === this.origin};
+      satelliteFailed: satelliteSupported && this.satelliteFailedFor === this.origin,
+      awaitingSatelliteStatus: this.awaitingSatelliteStatus};
   }
 
   attachUpgradeStorage(native: NativeStorage) {
@@ -84,9 +86,8 @@ export class WeatherSharing {
   upgradeOffer(): UpgradeOffer | undefined {
     if (!this.native || !this.options.upgrade?.foreground()) return;
     for (const [key, retry] of this.shown) if (retry <= this.now()) this.persistShown(key, this.native);
-    if (!this.upgradeEligible() || this.pending) return;
+    if (!this.upgradeEligible() || this.pending || this.awaitingSatelliteStatus) return;
     const presentation = this.presentation ??= {epoch: this.value.weatherEpoch!, retryAt: 0};
-    if (presentation.awaitStatus) return;
     if (presentation.offer && presentation.key) {
       // This synchronous return is the first paint of the foreground card.
       // A process killed during native setup has not consumed its only offer.
@@ -114,12 +115,12 @@ export class WeatherSharing {
       if (ready !== true) throw Error('Native store unavailable');
       if (!current()) return;
       presentation.key = key;
-      const validChoice = () => current() && !this.pending && !presentation.awaitStatus &&
+      const validChoice = () => current() && !this.pending && !this.awaitingSatelliteStatus &&
         presentation.offer === offer && !!this.options.upgrade?.foreground();
       const offer: UpgradeOffer = {
         accept: async () => {
           if (!validChoice()) return;
-          await this.sendControl(true, true, presentation);
+          await this.control(true, true);
         },
         dismiss: () => {
           if (!validChoice()) return;
@@ -134,12 +135,10 @@ export class WeatherSharing {
       if (this.presentation === presentation && !this.upgradeEligible()) this.presentation = undefined;
     }
   }
-  control(enabled: boolean, includeSatellite = false) {
-    return this.sendControl(enabled, includeSatellite);
-  }
-  private async sendControl(enabled: boolean, includeSatellite: boolean, presentation?: Presentation) {
+  async control(enabled: boolean, includeSatellite = false) {
     const state = this.status(), target = this.options.target();
-    if (this.pending) return;
+    if (this.pending || (includeSatellite && this.awaitingSatelliteStatus)) return;
+    const presentation = this.presentation;
     if (!state.supported || !target || (includeSatellite && (!enabled || !state.satelliteSupported))) {
       this.failed = true; this.options.changed(); return;
     }
@@ -162,7 +161,7 @@ export class WeatherSharing {
         this.failed = true;
         // An unconfirmed POST may already have succeeded. Wait for a normal
         // status read, then allow only an explicit retry if MET is still alone.
-        if (presentation) presentation.awaitStatus = true;
+        if (includeSatellite) this.awaitingSatelliteStatus = true;
       }
     }
     finally {if (this.pending === request) this.pending = undefined; this.options.changed();}

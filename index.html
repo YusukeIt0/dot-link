@@ -46,7 +46,14 @@
       <label class="display-checkbox"><input id="location-share" type="checkbox"> <span data-i18n="even.share_my_location">Share my location</span></label>
       <p class="note" data-i18n="even.share_your_phone_s_current_location_with_your_existing_dot">Share your phone's location with your Dot through your Mac. Stop sharing anytime. Nearby map data stays on your Mac until unused for 30 days and can reveal past areas.</p>
       <div class="weather-settings">
-      <label class="display-checkbox"><input id="weather-share" type="checkbox"> <span data-i18n="even.weather">Weather context</span></label>
+      <label id="weather-checkbox-field" class="display-checkbox"><input id="weather-share" type="checkbox"> <span data-i18n="even.weather">Weather context</span></label>
+      <label id="weather-mode-field" hidden><span data-i18n="even.weather">Weather context</span>
+        <select id="weather-mode">
+          <option value="forecast" data-i18n="even.weather_mode_forecast">Forecasts only</option>
+          <option id="weather-mode-combined" value="combined" data-i18n="even.weather_mode_combined">Forecasts and nearby rain</option>
+          <option value="off" data-i18n="even.weather_mode_off">Off</option>
+        </select>
+      </label>
       <p class="note"><span data-i18n="even.weather_disclosure">Your Mac sends rounded coordinates to api.met.no for forecasts. The service also receives its IP address.</span> <a href="https://api.met.no/doc/TermsOfService" target="_blank" rel="noopener noreferrer" data-i18n="even.weather_terms">Read service terms</a> · <a href="./weather-sources.html" target="_blank" rel="noopener noreferrer" data-i18n="even.walking_terrain_privacy">Data sources and privacy</a></p>
       <p id="weather-satellite-disclosure" class="note" data-i18n="even.weather_satellite_disclosure" hidden>For nearby rain estimates, your Mac downloads global NOAA satellite data from AWS. AWS sees your IP address. Your coordinates stay on your Mac for this lookup. If weather history is on, it also saves these estimates, the place and when they became available for your selected period.</p>
       <p id="weather-status" class="note" role="status"></p>
