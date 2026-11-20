@@ -54,10 +54,10 @@ test('stored phone time matches the dated projection with delayed, overlapping, 
   assert.deepEqual(readStoredPhoneTime(db, []), phoneTimeEvidence([], []));
 });
 
-test('invalid requested dates withhold just this clock response without disabling the store', t => {
+test('invalid request dates preserve the store while corrupted selected clock evidence fails closed', t => {
   const dir = mkdtempSync(join(tmpdir(), 'phone-clock-input-'));
-  const owner = 'a'.repeat(64);
-  const store = new LocationHistoryStore(dir, {ownerAuthorized: () => true, announce: async () => {}});
+  const owner = 'a'.repeat(64), now = Date.parse('2026-11-09T12:00:00Z');
+  const store = new LocationHistoryStore(dir, {now: () => now, ownerAuthorized: () => true, announce: async () => {}});
   t.after(() => { store.close(); rmSync(dir, {recursive:true, force:true}); });
   store.control({protocol: 1, epoch: store.status(owner).historyEpoch, action: 'enable'}, owner);
   for (const dates of [['2026-02-29'], ['invalid'], Array(81).fill('2026-11-09')]) {
@@ -65,6 +65,16 @@ test('invalid requested dates withhold just this clock response without disablin
     assert.equal(store.status(owner).historyEnabled, true);
     assert.equal(store.readPhoneTime(['2026-11-09'], owner).evidence.status, 'empty');
   }
+  const measured_at = new Date(now).toISOString();
+  const db = new DatabaseSync(join(dir, 'history.sqlite'));
+  try {
+    const data = {id:'broken-clock', source:'phone_location', measured_at, received_at:measured_at,
+      recording_epoch:1, timezone:'unexpected clock label', utc_offset_minutes:0};
+    db.prepare('INSERT INTO observations(id, measured, data, expires_at) VALUES(?,?,?,?)')
+      .run(data.id, now, JSON.stringify(data), now + HISTORY_RETENTION_MS);
+  } finally { db.close(); }
+  assert.equal(store.readPhoneTime([measured_at.slice(0,10)], owner).evidence.status, 'unavailable');
+  assert.equal(store.status(owner).historyProtocol, 0);
 });
 
 test('the actual clock query uses a receipt index range at 50,000 rows and excludes out-of-window payloads', t => {
