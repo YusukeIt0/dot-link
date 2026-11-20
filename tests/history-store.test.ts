@@ -63,6 +63,72 @@ test('expiry and session boundaries survive restart and cannot be extended by la
   h.advance(HISTORY_RETENTION_MS); h.restart(); assert.equal(h.store.status(owner).historyCount, 0);
   assert.equal(h.store.read().status, 'empty');
 });
+test('v1 history migration and rollback writes preserve the original measurement-based deadline', t => {
+  const h = setup(t);
+  h.control('enable');
+  const fix = h.fix(), measured = Date.parse(fix.measured_at);
+  h.advance(60_000);
+  const upload = () => h.store.ingest(fix, 'session-a', {protocol: 1, epoch: h.store.status(owner).historyEpoch}, owner);
+  assert.equal(upload(), true);
+  const path = join(h.directory, 'history/history.sqlite');
+  h.store.close();
+  const before = new DatabaseSync(path);
+  assert.equal(before.prepare('SELECT expires_at FROM observations').get()?.expires_at, measured + HISTORY_RETENTION_MS);
+  // Recreate the schema and bytes that the previous build actually wrote.
+  before.exec(`ALTER TABLE observations RENAME TO modern;
+    CREATE TABLE observations (id TEXT PRIMARY KEY, measured INTEGER NOT NULL, data TEXT NOT NULL, geography TEXT);
+    INSERT INTO observations SELECT id, measured, data, geography FROM modern;
+    DROP TABLE modern;`);
+  before.close();
+  h.restart();
+  assert.equal(upload(), false);
+  const db = new DatabaseSync(path);
+  const saved = db.prepare('SELECT data, expires_at FROM observations').get()!;
+  assert.equal(saved.expires_at, measured + HISTORY_RETENTION_MS);
+  const original = JSON.parse(saved.data as string);
+  assert.equal('expires_at' in original, false);
+  assert.equal(db.prepare('PRAGMA user_version').get()?.user_version, 1);
+  const later = {...original, id: 'older-writer', measured_at: h.fix().measured_at};
+  db.prepare('INSERT INTO observations(id,measured,data) VALUES(?,?,?)').run(later.id, Date.parse(later.measured_at), JSON.stringify(later));
+  assert.equal(db.prepare('SELECT expires_at FROM observations WHERE id=?').get(later.id)?.expires_at, Date.parse(later.measured_at) + HISTORY_RETENTION_MS);
+  db.close();
+  h.advance(HISTORY_RETENTION_MS - 60_000);
+  h.restart();
+  const entries = h.store.read({detail: 'observations'}).entries;
+  assert.deepEqual(entries.map(row => row.id), [later.id]);
+  assert.equal('expires_at' in entries[0], false);
+});
+
+test('paged history and joined phone clocks expire at the earliest contributing deadline', t => {
+  const h = setup(t);
+  h.control('enable'); h.ingest();
+  const first = Date.parse(h.fix().measured_at);
+  h.advance(1_000); h.ingest();
+  const second = Date.parse(h.fix().measured_at);
+  h.store.close();
+  const db = new DatabaseSync(join(h.directory, 'history/history.sqlite'));
+  const update = db.prepare('UPDATE observations SET expires_at=? WHERE measured=?');
+  update.run(first + 2 * HISTORY_RETENTION_MS, first);
+  update.run(second + 2_000, second);
+  db.close();
+  h.restart();
+  const read = h.store.read({detail: 'observations', limit: 1});
+  assert.ok(read.next_cursor);
+  assert.ok('response_context' in read);
+  assert.equal(read.response_context.expires_no_later_than, new Date(second + 2_000).toISOString());
+  const clock = h.store.readPhoneTime(['2026-11-02'], owner);
+  assert.equal(clock.allowed?.(), true);
+  h.advance(2_000);
+  assert.throws(h.store.responseGuard(read.history_context_id));
+  assert.equal(clock.allowed?.(), false);
+  assert.equal(h.store.status(owner).historyCount, 1);
+  h.advance(HISTORY_RETENTION_MS - 3_001);
+  const capped = h.store.read();
+  assert.ok('response_context' in capped);
+  assert.equal(capped.response_context.expires_no_later_than, new Date(first + HISTORY_RETENTION_MS).toISOString());
+  h.advance(1);
+  assert.equal(h.store.status(owner).historyCount, 0);
+});
 test('production runtime rejects all former test controls', t => {
   const h = setup(t); h.control('enable');
   for (const action of ['simulate', 'finish_simulation']) assert.throws(() => h.control(action, 'walk'));
@@ -217,7 +283,7 @@ const base=Date.parse('2026-11-14T00:00:00Z');
 function row(minutes:number, timezone:string|undefined='Asia/Tokyo', offset:number|undefined=540, epoch=1):HistoryEntry {
  return {id:String(minutes),source:'phone_location',latitude:10,longitude:10,accuracy:8,
   measured_at:new Date(base+minutes*60_000-5000).toISOString(),received_at:new Date(base+minutes*60_000).toISOString(),
-  timezone,utc_offset_minutes:offset,recording_epoch:epoch};
+  timezone,utc_offset_minutes:offset,recording_epoch:epoch,expires_at:base+minutes*60_000-5000+HISTORY_RETENTION_MS};
 }
 test('dated phone spans retain alternative offsets, upload times, gaps and recording boundaries',()=>{
  const entries=[row(0),row(1),row(10),row(11,'Asia/Bangkok',420),row(12,'Asia/Bangkok',420,2),
@@ -235,7 +301,7 @@ test('dated phone spans retain alternative offsets, upload times, gaps and recor
 test('phone evidence is bounded with explicit omissions and never fills absent history',()=>{
  const result=phoneTimeEvidence(Array.from({length:100},(_,i)=>row(i*3)),['2026-11-14']);
  assert.equal(result.evidence.by_source_date[0].spans.length,96);assert.equal(result.evidence.by_source_date[0].omitted_spans,4);
- assert.equal(result.earliestMeasurement,base-5000);
+ assert.equal(result.earliestExpiry,base-5000+HISTORY_RETENTION_MS);
  const empty=phoneTimeEvidence([] ,['2026-11-14']);assert.equal(empty.evidence.status,'empty');assert.deepEqual(empty.evidence.by_source_date[0].spans,[]);
 });
 

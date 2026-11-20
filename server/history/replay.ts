@@ -4,8 +4,9 @@ import { distanceMeters, type LocationFix } from '../../src/location-fix.ts';
 import type { GeographicEvidence } from '../geography/types.ts';
 import { ToolRejection } from '../tool-response.ts';
 import type { HistoryReader } from './tool.ts';
+import { historyExpiry, SEVEN_DAYS_MS } from './retention.ts';
 
-export const HISTORY_RETENTION_MS = 7 * 86_400_000;
+export const HISTORY_RETENTION_MS = SEVEN_DAYS_MS;
 export const HISTORY_REPLAY_LIMIT = 10_000;
 export const HISTORY_PAGE_BYTES = 48 * 1024;
 const instant = z.string().datetime({ offset: true }).refine(value => Number.isFinite(Date.parse(value)));
@@ -24,7 +25,7 @@ export const historyObservationSchema = z.object({
 }).strict();
 export type HistoryObservation = z.infer<typeof historyObservationSchema>;
 type Observation = HistoryObservation;
-export type HistoryEntry = Observation & { recording_epoch: number };
+export type HistoryEntry = Observation & { recording_epoch: number; expires_at: number };
 type Entry = HistoryEntry;
 const querySchema = z.object({
   start_at: instant.optional(), end_at: instant.optional(), detail: z.enum(['summary', 'observations']).optional(),
@@ -36,6 +37,10 @@ type Section = { kind: 'candidate_stay' | 'movement_observations' | 'observation
 const stamp = (point: Entry) => Date.parse(point.measured_at);
 const point = ({ latitude, longitude, accuracy }: Entry) => ({ latitude, longitude, accuracy });
 const invalid = () => new ToolRejection('invalid_arguments', 'Use a bounded time interval with UTC offsets and valid history detail/limit, or only a returned cursor.');
+function grantedExpiry(measured: number, stored: number) {
+  if (!Number.isSafeInteger(stored)) throw new Error('Invalid history expiry');
+  return Math.min(stored, historyExpiry(measured, '7d'));
+}
 
 /**
  * Bounded query index shared by durable phone history and isolated fixtures.
@@ -81,12 +86,12 @@ export class LocationHistoryIndex implements HistoryReader {
   private changed() { this.revision++; this.cursors.clear(); }
   private prune() {
     if (this.now() < this.nextExpiry) return;
-    const cutoff = this.now() - HISTORY_RETENTION_MS;
+    const now = this.now();
     let changed = false;
     this.nextExpiry = Infinity;
     for (const [id, value] of this.records) {
-      if (stamp(value) <= cutoff) { this.records.delete(id); changed = true; }
-      else this.nextExpiry = Math.min(this.nextExpiry, stamp(value) + HISTORY_RETENTION_MS);
+      if (value.expires_at <= now) { this.records.delete(id); changed = true; }
+      else this.nextExpiry = Math.min(this.nextExpiry, value.expires_at);
     }
     if (changed) this.changed();
   }
@@ -98,15 +103,16 @@ export class LocationHistoryIndex implements HistoryReader {
     this.prune();
     const value = parsed.data;
     value.measured_at = new Date(Date.parse(value.measured_at)).toISOString();
-    if (Date.parse(value.measured_at) <= this.now() - HISTORY_RETENTION_MS) return { accepted: false, reason: 'expired' };
+    const expires_at = historyExpiry(Date.parse(value.measured_at), '7d');
+    if (expires_at <= this.now()) return { accepted: false, reason: 'expired' };
     const previous = this.records.get(value.id);
     if (previous) {
-      const { recording_epoch: _, ...original } = previous;
+      const { recording_epoch: _, expires_at: _expiry, ...original } = previous;
       if (JSON.stringify(original) !== JSON.stringify(value)) throw new ToolRejection('observation_conflict', 'An observation ID cannot identify different measurements.');
       return { accepted: false, reason: 'duplicate' };
     }
-    this.records.set(value.id, { ...value, recording_epoch: this.epoch });
-    this.nextExpiry = Math.min(this.nextExpiry, Date.parse(value.measured_at) + HISTORY_RETENTION_MS);
+    this.records.set(value.id, { ...value, recording_epoch: this.epoch, expires_at });
+    this.nextExpiry = Math.min(this.nextExpiry, expires_at);
     if (this.records.size > this.maximum) {
       const oldest = this.sorted()[0]; this.records.delete(oldest.id); this.capacityOmitted = true;
     }
@@ -119,13 +125,13 @@ export class LocationHistoryIndex implements HistoryReader {
     if (entries.length > this.maximum || !Number.isSafeInteger(epoch) || epoch < 0) throw new Error('Invalid history snapshot');
     this.clear(); this.epoch = epoch; this.capacityOmitted = capacityOmitted;
     for (const entry of entries) {
-      const { recording_epoch, ...raw } = entry;
+      const { recording_epoch, expires_at: storedExpiry, ...raw } = entry;
       const value = historyObservationSchema.parse(raw);
       if (value.source !== this.source || !Number.isSafeInteger(recording_epoch) || recording_epoch < 0 || recording_epoch > epoch) throw new Error('Invalid history snapshot');
-      const time = Date.parse(value.measured_at);
-      if (time <= this.now() - HISTORY_RETENTION_MS || time > this.now()) continue;
-      this.records.set(value.id, { ...value, recording_epoch });
-      this.nextExpiry = Math.min(this.nextExpiry, time + HISTORY_RETENTION_MS);
+      const time = Date.parse(value.measured_at), expires_at = grantedExpiry(time, storedExpiry);
+      if (expires_at <= this.now() || time > this.now()) continue;
+      this.records.set(value.id, { ...value, recording_epoch, expires_at });
+      this.nextExpiry = Math.min(this.nextExpiry, expires_at);
     }
   }
   snapshot() { this.prune(); return this.sorted(); }
@@ -134,14 +140,15 @@ export class LocationHistoryIndex implements HistoryReader {
 
   /** Append a committed phone fix without invalidating unrelated bounded reads. */
   append(entry: HistoryEntry) {
-    const {recording_epoch, ...raw} = entry;
+    const {recording_epoch, expires_at: storedExpiry, ...raw} = entry;
     const value = historyObservationSchema.parse(raw), time = stamp(entry);
     if (value.source !== this.source || !Number.isSafeInteger(recording_epoch) || recording_epoch < 0 || time > this.now()) throw invalid();
+    const expires_at = grantedExpiry(time, storedExpiry);
     this.prune();
-    if (time <= this.now() - HISTORY_RETENTION_MS || this.records.has(value.id)) return;
-    this.records.set(value.id, {...value, recording_epoch});
+    if (expires_at <= this.now() || this.records.has(value.id)) return;
+    this.records.set(value.id, {...value, recording_epoch, expires_at});
     this.epoch = Math.max(this.epoch, recording_epoch);
-    this.nextExpiry = Math.min(this.nextExpiry, time + HISTORY_RETENTION_MS);
+    this.nextExpiry = Math.min(this.nextExpiry, expires_at);
     let evicted: Entry | undefined;
     if (this.records.size > this.maximum) {
       evicted = this.sorted()[0]; this.records.delete(evicted.id); this.capacityOmitted = true;
@@ -204,7 +211,7 @@ export class LocationHistoryIndex implements HistoryReader {
   private present(section: Section, detail: Query['detail']) {
     const first = section.points[0], last = section.points.at(-1)!;
     if (detail === 'observations') {
-      const { recording_epoch: _, ...observation } = first;
+      const { recording_epoch: _, expires_at: _expiry, ...observation } = first;
       return { ...observation, geography: this.mapEvidence(first) };
     }
     const samples = [...new Set([first, section.points[Math.floor(section.points.length / 2)], last])];
@@ -221,6 +228,10 @@ export class LocationHistoryIndex implements HistoryReader {
   }
 
   read(raw: unknown = {}) {
+    return this.readWithExpiry(raw).result;
+  }
+
+  readWithExpiry(raw: unknown = {}) {
     const parsed = querySchema.safeParse(raw);
     if (!parsed.success) throw invalid();
     const input = parsed.data;
@@ -232,7 +243,7 @@ export class LocationHistoryIndex implements HistoryReader {
       retention_start_at: new Date(now - HISTORY_RETENTION_MS).toISOString(),
       interpretation: (this.source === 'synthetic_fixture' ? 'Test data only, not the owner’s actual movements. ' : '') + 'Optional reference: absent information does not prevent ordinary conversation. A gap does not require a disclaimer or question. Stays/roads are candidates, not visits or continuous routes.',
     };
-    if (!this.readable) return { ...base, status: 'unavailable' as const, entries: [], next_cursor: null };
+    if (!this.readable) return { result: { ...base, status: 'unavailable' as const, entries: [], next_cursor: null }, expiresAt: Infinity };
     let query: Query, offset = 0;
     if (input.cursor) {
       const page = this.cursors.get(input.cursor);
@@ -273,7 +284,8 @@ export class LocationHistoryIndex implements HistoryReader {
       while (this.cursors.size > 50) this.cursors.delete(this.cursors.keys().next().value!);
       result.next_cursor = cursor;
     }
-    return result;
+    // Coverage and gaps include all matching observations, even on a paged read.
+    return {result, expiresAt: points.reduce((earliest, row) => Math.min(earliest, row.expires_at), Infinity)};
   }
 }
 
