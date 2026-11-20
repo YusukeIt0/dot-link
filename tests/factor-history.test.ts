@@ -54,8 +54,17 @@ async function fixture(t: TestContext, polarOwner = owner) {
 
 test('MCP discovery, selected historical fields, exclusive end, independent pages and legacy response guards', async t => {
   const f = await fixture(t);
-  const tools = (await f.invoke('tools/list')).result.tools.map((tool: {name: string}) => tool.name);
-  for (const name of ['get_factor_history', 'get_location_history', 'get_health_context', 'respond_to_context']) assert.ok(tools.includes(name));
+  const tools = (await f.invoke('tools/list')).result.tools;
+  const names = tools.map((tool: {name: string}) => tool.name);
+  for (const name of ['get_factor_history', 'get_location_history', 'get_health_context', 'respond_to_context']) assert.ok(names.includes(name));
+  const schema = tools.find((tool: {name: string}) => tool.name === 'get_factor_history').inputSchema;
+  assert.equal(schema.type, 'object');
+  assert.deepEqual(schema.required ?? [], []);
+  for (const branch of ['oneOf', 'anyOf', 'allOf']) assert.ok(!(branch in schema));
+  assert.equal(schema.additionalProperties, false);
+  assert.ok(schema.properties.fields.properties.polar.items.enum.includes('steps'));
+  assert.ok(schema.properties.source.enum.includes('polar'));
+  assert.equal(schema.properties.cursor.format, 'uuid');
   const response = await f.call('get_factor_history', {...window, fields: selection, limit: 1});
   const page = response.result.structuredContent;
   assert.equal(page.version, 1);
@@ -101,7 +110,8 @@ test('different owners cannot return or use mixed receipts, while each authorize
 
 test('strict requests reject undeclared fields, long or offset-free intervals and attempts to widen a continuation', async t => {
   const f = await fixture(t);
-  for (const input of [{}, {...window, fields: {}}, {...window, fields: {polar: ['profile']}},
+  for (const input of [{}, window, {source: 'polar'}, {cursor: randomUUID()}, {...window, fields: selection, cursor: randomUUID()},
+    {...window, fields: {}}, {...window, fields: {polar: ['profile']}},
     {...window, fields: {location: ['motion', 'motion']}}, {...window, fields: selection, end_at: window.start_at},
     {...window, fields: selection, start_at: '2026-10-01T00:00:00Z'}, {...window, fields: selection, end_at: '2026-11-11T00:00:00'},
     {source: 'location', cursor: randomUUID(), fields: {location: ['geography']}}]) {

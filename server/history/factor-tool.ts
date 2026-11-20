@@ -40,7 +40,7 @@ const fieldSchema = (values: readonly string[]) => ({
 });
 export const factorHistoryTool = decisionFactorTool({
   name: 'get_factor_history',
-  description: 'Read only the selected fields of saved location and/or Polar evidence for the same explicit interval (up to seven days). Use another bounded query to compare periods. Select location position for coordinates/accuracy, motion for speed/heading, clock for phone time evidence, or geography for attributed nearby map references. Select Polar metrics by name. Result version 1 gives each requested source its own entries, coverage and guarded response_context. An offset-free Polar date can partially overlap the interval; a daily total is for its source day. Missing records and stopped sharing are normal. Do not ask the person to fill gaps. To continue one source, send only its source and next_cursor. No provider request, setup, live fix or message is triggered by this read. Use the receipts of contributing sources with respond_to_context. Location history still requires an existing question for a G2 reply. Use Polar attribution when its data contributes.',
+  description: 'Read only the selected fields of saved location and/or Polar evidence for the same explicit interval (up to seven days). For the first call, supply start_at, end_at and fields for the period of interest. For example, {"start_at":"2026-11-10T00:00:00Z","end_at":"2026-11-11T00:00:00Z","fields":{"polar":["steps"]}}. Use another bounded query to compare periods. Select location position for coordinates/accuracy, motion for speed/heading, clock for phone time evidence, or geography for attributed nearby map references. Select Polar metrics by name. Result version 1 gives each requested source its own entries, coverage and guarded response_context. An offset-free Polar date can partially overlap the interval; a daily total is for its source day. Missing records and stopped sharing are normal. Do not ask the person to fill gaps. To continue a source with a non-null next_cursor, send only source and cursor, copying next_cursor into cursor. No provider request, setup, live fix or message is triggered by this read. Use the receipts of contributing sources with respond_to_context. Location history still requires an existing question for a G2 reply. Use Polar attribution when its data contributes.',
   inputSchema: {type: 'object', properties: {
     start_at: {type: 'string', format: 'date-time', maxLength: 40, description: 'Inclusive instant with explicit offset.'},
     end_at: {type: 'string', format: 'date-time', maxLength: 40, description: 'Exclusive instant with explicit offset.'},
@@ -48,11 +48,8 @@ export const factorHistoryTool = decisionFactorTool({
       minProperties: 1, additionalProperties: false},
     limit: {type: 'integer', minimum: 1, maximum: limit, default: 10, description: 'Maximum entries per selected source.'},
     source: {type: 'string', enum: sources, description: 'Only for continuing one source page.'},
-    cursor: {type: 'string', format: 'uuid'},
-  }, oneOf: [
-    {required: ['start_at', 'end_at', 'fields'], properties: {source: false, cursor: false}},
-    {required: ['source', 'cursor'], properties: {start_at: false, end_at: false, fields: false, limit: false}},
-  ], additionalProperties: false},
+    cursor: {type: 'string', format: 'uuid', description: 'Only for continuation. Copy next_cursor from the requested source page.'},
+  }, additionalProperties: false},
   annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false},
 });
 
