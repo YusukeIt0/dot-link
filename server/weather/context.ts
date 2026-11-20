@@ -7,7 +7,7 @@ import { ChangeSignal } from '../changes.ts';
 import { ToolRejection } from '../tool-response.ts';
 import { LocationContext } from '../location.ts';
 import { WeatherService } from './service.ts';
-import { weatherPointSchema, weatherQueryPoint, type WeatherEvidence, type WeatherPoint } from './types.ts';
+import { archiveRetrievalConfirmed, weatherPointSchema, weatherQueryPoint, type WeatherEvidence, type WeatherPoint } from './types.ts';
 import { captureEnvironment, weatherArchiveRecords, type CaptureEnvironment, type EnvironmentWriter, type WeatherScope } from '../history/environment-fields.ts';
 
 export const WEATHER_TERMS = 'met-2026-11-05';
@@ -136,9 +136,8 @@ export class WeatherContext {
     return writer;
   }
   private record(writer: EnvironmentWriter | undefined, evidence: WeatherEvidence, scope: WeatherScope) {
-    if (!writer) return;
-    // An old cached edition cannot be enrolled by deleting and granting again.
-    if (Date.parse(evidence.retrieved_at ?? evidence.as_of) <= writer.since) return;
+    // Older clients may have refreshed a pre-grant edition and overwritten its first retrieval time.
+    if (!writer || !archiveRetrievalConfirmed(evidence) || Date.parse(evidence.retrieved_at ?? evidence.as_of) <= writer.since) return;
     try {
       for (const record of weatherArchiveRecords(evidence, scope, this.now())) writer(record);
     } catch { /* Archival availability is independent of the authorized live read. */ }

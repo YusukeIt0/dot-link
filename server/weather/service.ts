@@ -19,7 +19,7 @@ function useful(sample: WeatherEvidence['current']) {
 function sameEdition(before: WeatherForecast | undefined, after: WeatherForecast) {
   if (!before) return false;
   if (before.edition && after.edition) return before.edition === after.edition;
-  if (!after.edition) return isDeepStrictEqual(before, after);
+  if (!after.edition && !before.first_retrieval_unverified) return isDeepStrictEqual(before, after);
   // Older caches lack an edition digest. Never renew their first retrieval
   // merely because the retained time window moved on the first upgraded read.
   if (before.updated_at !== after.updated_at || before.elevation_m !== after.elevation_m || !isDeepStrictEqual(before.point, after.point)) return false;
@@ -121,8 +121,10 @@ export class WeatherService {
       // A repeated 200 for the same normalized edition validates it again.
       // Keep its first retrieval clock, including across a Mac restart.
       if (response.forecast) {
-        if (!sameEdition(entry.forecast, response.forecast)) entry.retrievedAt = this.now();
-        entry.forecast = response.forecast;
+        const unchanged = sameEdition(entry.forecast, response.forecast);
+        if (!unchanged) entry.retrievedAt = this.now();
+        entry.forecast = unchanged && entry.forecast?.first_retrieval_unverified
+          ? {...response.forecast, first_retrieval_unverified: true} : response.forecast;
       }
       entry.checkedAt = this.now(); entry.deprecated = response.deprecated; entry.refreshFailed = false;
       if (response.lastModified) entry.lastModified = response.lastModified;
