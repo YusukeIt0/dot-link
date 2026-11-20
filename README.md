@@ -38,8 +38,8 @@
 | **Surroundings** | Search when needed | Nearby roads and places |
 | **Walking routes** | Separate requests | Routes from your location |
 | **Terrain** | General information | Elevation and slopes |
-| **Recent places** | Conversation and memory | 7 days of recorded history |
-| **Weather** | Forecast on request | Location-linked forecasts, satellite rain estimates (in development) |
+| **Recent places** | Conversation and memory | Recorded locations and nearby places |
+| **Weather** | Forecast on request | Location-linked forecasts and optional nearby rain estimates |
 | **Health** | What you share | Polar data for context-aware suggestions |
 | **Proactive help** | Conversation and connected context | Real-world context too |
 
@@ -61,13 +61,13 @@ Choose what to share in the iPhone companion's **Sharing settings**. These featu
 - **Your location and surroundings:** share your location as you move, with nearby streets, paths and places.
 - **Walking routes:** ask about a destination and get estimated walking routes and travel times.
 - **Terrain:** understand elevation and slopes, including hills along a route.
-- **Recent places:** let Dot refer to recorded movement and places, with up to seven days of history stored on your Mac.
-- **Weather:** forecasts for your shared location or another place you ask about, including temperature, humidity and precipitation. Satellite-based estimates of nearby rainfall are in development. Requires a compatible Mac client and the **Weather context** option in your Even companion.
+- **Recent places:** let Dot refer to recorded movement and places. The default history period is seven days.
+- **Weather:** get forecasts for temperature, humidity and precipitation at your shared location or a place you ask about. With Mac 0.5.0 and an Even companion that lists NOAA in **Weather context**, you can also share satellite estimates of recent rainfall nearby.
 - **Health:** let Dot use shared Polar sleep, activity, heart rate, and recovery data to make more context-aware suggestions. Connect Polar in the Mac app's **Healthcare settings**, then turn on **Health context** in your Even companion.
 
 See [location and history setup](docs/setup.md#location-sharing), [weather setup](docs/setup.md#optional-weather-context), and [Polar health setup](docs/setup.md#polar-health-context) for sharing controls and compatible versions.
 
-**In development:** The companion’s **History** settings let you choose which phone locations, Polar observations, forecasts and walking plans your Mac keeps for your existing Dot. You can choose seven days, one month, six months or one year for new records and delete a source’s history separately. [History settings and examples](docs/setup.md#looking-back-with-dot).
+With Mac 0.5.0 and an Even companion that includes **Sharing settings → History**, you can choose which phone locations, Polar observations, weather evidence and walking plans your Mac keeps for Dot. You can keep new records for seven days, one month, six months or one year and delete each source’s history separately. [History settings and examples](docs/setup.md#looking-back-with-dot).
 
 ## Real-world example
 

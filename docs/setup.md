@@ -140,8 +140,8 @@ when the Mac is reachable. See [retention and deletion](privacy.md#recent-places
 
 ### Looking back with Dot
 
-The **History** panel is in development for compatible Mac and Even versions.
-Open **Sharing settings → History** on the phone. Choose what the paired Mac can
+With Mac 0.5.0 and an Even companion that includes **Sharing settings → History**,
+open that panel on the phone. Choose what the paired Mac can
 save for your existing Dot and how long it can keep new records. The default
 period is seven days. You can also choose one month, six months or one year.
 Changing the period leaves each existing record’s original expiry in place.
@@ -227,11 +227,12 @@ configuration, or the wake phrase.
 ## Optional weather context
 
 Open **Sharing settings → Weather context** on the companion for your selected Mac.
-Read the disclosure and MET Norway service terms. On a compatible Mac, enabling
-Weather covers the forecast and recent nearby satellite rain estimates. If you
-already share MET forecasts, they continue working after an update or restart.
-Choose **Add nearby rain estimates** in the same settings whenever you want to
-add NOAA. An older Mac continues to offer forecasts.
+Read the disclosure and MET Norway service terms. With Mac 0.5.0 and a companion
+that lists NOAA here, enabling Weather for the first time covers forecasts and
+satellite estimates of recent rainfall nearby. If you already share MET forecasts,
+that choice carries over after an update or restart. You can choose **Add nearby
+rain estimates** in the same settings to include NOAA. Earlier Mac and companion
+versions that support weather can continue to share forecasts.
 
 Your Mac sends rounded coordinates to MET Norway. It downloads a global NOAA
 file from Amazon S3 and estimates nearby rain locally. Both services see the
