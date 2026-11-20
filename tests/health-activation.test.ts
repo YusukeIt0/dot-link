@@ -190,6 +190,65 @@ test('an old client switching consent off and back on cannot reuse an earlier ac
   assert.equal(f.eventIds.length, 2);
 });
 
+test('a legacy Polar reset and reconnection under a new key preserves an explicit stop and requests fresh enrollment once', async t => {
+  const f = await fixture(t);
+  const original = f.eventIds[0];
+  assert.ok(original);
+  f.app.close();
+  const vault = new HealthVault(f.path);
+  const old = vault.read(f.key) as {connection: Record<string, unknown>};
+  // The older client knows only the v1 vault. Its reset deletes that file
+  // and replaces the Keychain key; the new client's encrypted receipt remains.
+  vault.remove();
+  randomBytes(32).copy(f.key);
+  const connection = {...old.connection, accessToken: 'new-fixture-token'};
+  const state = {version: 1, connection, owner, enabled: true, deletedBefore: 0, profileDeleted: false, observations: []};
+  vault.write(f.key, {...state, activationStopped: true});
+  await f.restart();
+  assert.equal(f.app.health.setupStatus().sharing, true);
+  assert.deepEqual(f.app.activation.pending(), []);
+  assert.deepEqual(f.eventIds, [original]);
+
+  // The same person makes a fresh sharing choice in the older client.
+  f.app.close();
+  vault.write(f.key, {...state, enabled: false});
+  vault.write(f.key, {...state, activationStopped: false});
+  await f.restart();
+  assert.equal(f.app.health.setupStatus().sharing, true);
+  assert.equal(f.eventIds.length, 2);
+  const replacement = f.eventIds[1];
+  assert.notEqual(replacement, original);
+  await f.restart();
+  assert.equal(`evt_${f.app.activation.pending()[0].request_id}`, replacement);
+  assert.deepEqual(f.eventIds, [original, replacement]);
+});
+
+test('temporary receipt read denial leaves its ciphertext and accepted request untouched', async t => {
+  const f = await fixture(t);
+  const first = f.eventIds[0];
+  assert.ok(first);
+  const receipt = join(f.path + '.history', 'activation.enc');
+  const before = readFileSync(receipt);
+  const read = HealthVault.prototype.read;
+  let denials = 0;
+  const fault = t.mock.method(HealthVault.prototype, 'read', function(this: HealthVault, key: Buffer) {
+    if (this.path === receipt) {
+      denials++;
+      throw Object.assign(new Error('synthetic read denial'), {code: 'EACCES'});
+    }
+    return read.call(this, key);
+  });
+  await f.restart();
+  assert.ok(denials > 0);
+  assert.deepEqual(f.app.activation.pending(), []);
+  assert.deepEqual(f.eventIds, [first]);
+  assert.deepEqual(readFileSync(receipt), before);
+  fault.mock.restore();
+  await f.restart();
+  assert.equal(`evt_${f.app.activation.pending()[0].request_id}`, first);
+  assert.deepEqual(f.eventIds, [first]);
+});
+
 test('switching conversation destinations creates one new Polar request for the new destination', async t => {
   const f = await fixture(t);
   const first = f.eventIds[0];

@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { z } from 'zod';
 import { activationRecordSchema, type ActivationRecord } from '../sharing-activation.ts';
-import { HealthVault } from './vault.ts';
+import { HealthVault, InvalidHealthVaultPayload } from './vault.ts';
 import { lockHealthControl } from './control-lock.ts';
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -35,7 +35,18 @@ export class PolarActivationJournal {
   private binding(healthKey: Buffer, snapshot: string) {
     if (!this.file.exists()) { this.cached = undefined; return; }
     if (!this.cached || !this.file.fingerprint || !this.file.matches(this.file.fingerprint)) {
-      this.cached = this.withKey(healthKey, key => schema.parse(this.file.read(key)));
+      // A legacy reset can replace the health key and vault while leaving this
+      // file behind. A usable primary vault still carries the owner's choice.
+      // save() rereads under the writer lock before atomically replacing it.
+      this.cached = undefined;
+      try {
+        const parsed = this.withKey(healthKey, key => schema.safeParse(this.file.read(key)));
+        if (!parsed.success) return;
+        this.cached = parsed.data;
+      } catch (error) {
+        if (error instanceof InvalidHealthVaultPayload) return;
+        throw error;
+      }
     }
     return this.cached.bindings.find(entry => entry.snapshot === snapshot);
   }
