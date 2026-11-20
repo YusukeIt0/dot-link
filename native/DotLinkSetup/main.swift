@@ -69,6 +69,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var lastChecked: Date?
     var migratingNotifications = false
     var busy = false
+    private var showFirstTimeSetup = false
     var helper: Process?
     var messageRecord: LocalizedMessage?
     var message: String { messageRecord.map { Localization.shared.text($0, language: language) } ?? "" }
@@ -523,10 +524,23 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             button(yes("lifecycleStopped") ? tr("mac.resume") : tr("mac.start_relay"), primary: true) { [weak self] in self?.menuResume() }
         case "subscribe":
-            add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
-            initialConnectionCard()
-            space()
-            reconnectHelpCard()
+            if yes("previouslySubscribed") {
+                add(tr("mac.connections"), size: 23, bold: true)
+                reconnectHelpCard()
+                if showFirstTimeSetup {
+                    initialConnectionCard()
+                } else {
+                    button(tr("mac.initial_connection_title")) { [weak self] in
+                        self?.showFirstTimeSetup = true
+                        self?.render()
+                    }
+                }
+            } else {
+                add(tr("mac.set_up_the_connection_in_chatgpt"), size: 23, bold: true)
+                initialConnectionCard()
+                space()
+                reconnectHelpCard()
+            }
         case "pair":
             add(tr("mac.connections"), size: 22, bold: true)
             connectionCards()

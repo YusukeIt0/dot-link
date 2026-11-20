@@ -169,6 +169,9 @@ export class Bridge {
     const event = { at: this.now(), kind, expiresAt: sub.expiresAt, requestedTtlMs };
     return [...(this.state.leaseHistory ?? []), event].slice(-LEASE_HISTORY_LIMIT);
   }
+  hasPreviousSubscription(): boolean {
+    return !!this.state.subscription || !!this.state.leaseHistory?.length || this.state.messages.length > 0;
+  }
   status() { return { subscribed: !!this.active(), messageCount: this.state.messages.length, sessionId: SESSION }; }
   /** Identity only: callback credentials never leave the transport owner. */
   inputDestination() { const sub = this.active(); return sub ? { id: sub.id, expiresAt: sub.expiresAt } : undefined; }

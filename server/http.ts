@@ -164,7 +164,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
   const cursor = () => `${instance}:${revision}`;
   const history = () => [...bridge.history(), ...bridge.outboundHistory(), ...(notifications?.history() ?? [])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-100);
-  const deviceStatus = (owner?: string) => ({ ...bridge.status(), photoAttachments: 1, ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}), ...(weather?.status(owner) ?? {}), ...(health?.status(owner) ?? {}) });
+  const deviceStatus = (owner?: string) => ({ ...bridge.status(), previouslySubscribed: bridge.hasPreviousSubscription(), photoAttachments: 1, ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}), ...(weather?.status(owner) ?? {}), ...(health?.status(owner) ?? {}) });
   const snapshot = (owner?: string) => ({ revision: cursor(), status: deviceStatus(owner), messages: history() });
   const server = createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json; charset=utf-8');

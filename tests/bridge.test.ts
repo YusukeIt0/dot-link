@@ -81,6 +81,24 @@ test('a restart preserves the granted deadline and same-Dot renewal restores del
   assert.deepEqual(history.at(-1), { at: now, kind: 'renewed', expiresAt: now + 60_000, requestedTtlMs: 60_000 });
 });
 
+test('returning setup can recognize an expired or removed subscription after restart', async t => {
+  let now = Date.now();
+  const clock = { now: () => now };
+  const s = setup(undefined, clock);
+  t.after(s.close);
+  assert.equal(s.bridge.hasPreviousSubscription(), false);
+  await s.bridge.subscribe({ ...subscription, ttlMs: 1_000 });
+  now += 1_001;
+  assert.equal(s.bridge.status().subscribed, false);
+  assert.equal(s.bridge.hasPreviousSubscription(), true);
+  await s.bridge.unsubscribe({ ...subscription, delivery: { mode: 'webhook', url: subscription.delivery.url } });
+  s.bridge.close();
+  const restarted = new Bridge(s.path, s.sender, s.hosts, undefined, clock);
+  t.after(() => restarted.close());
+  assert.equal(restarted.hasPreviousSubscription(), true);
+  assert.equal(restarted.status().subscribed, false);
+});
+
 test('failed challenge never activates a subscriber and sends no application data', async t => {
   const sent: unknown[] = [];
   const s = setup(async (_url, body) => { sent.push(JSON.parse(body)); return { status: 200, body: '{"challenge":"wrong"}' }; });

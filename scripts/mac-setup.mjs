@@ -50,7 +50,7 @@ async function inspect() {
   const servicesConfigured = ['bridge','device','tunnel'].every(name => jobs.some(job => job.name === name));
   const state = { ...installation, ...pairing, ...lifecycle, servicesConfigured, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,
     networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured,
-    bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, subscribed: health.subscribed === true };
+    bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, previouslySubscribed: health.previouslySubscribed === true, subscribed: health.subscribed === true };
   state.legacyNotificationRegistered = installation.installed ? (await legacyNotificationState(directory)).registered : false;
   try { state.sttProvider = await sttSelection(join(directory, '.runtime')); } catch { state.sttProvider = 'unknown'; }
   try { state.sttMicrosoftEndpoint = await sttMicrosoftEndpoint(join(directory, '.runtime')); } catch { state.sttMicrosoftEndpoint = ''; }
