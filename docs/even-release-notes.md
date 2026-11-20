@@ -2,6 +2,13 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.4.1
+
+- Turn on Weather to share forecasts and nearby satellite rain estimates with your Dot. If you already share forecasts only, choose once whether to include nearby rain.
+- Choose which locations, Polar data, forecasts and walking plans your Mac saves. Keep new records for 7 days to 1 year and delete by source.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.0
 
 - Add nearby rain estimates from NOAA in **Sharing settings → Weather context** on a compatible Mac. You can keep your current MET Norway forecasts or add the new source when you want it.

@@ -261,6 +261,12 @@ renderArchiveSettings();
 const weatherSharing = new WeatherSharing({
   target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
   api: input => session.location('/api/weather', input), changed: () => renderWeatherStatus(),
+  upgrade: {
+    pairing: () => session.credentials?.resumeToken ?? session.token,
+    sessionVersion: () => session.version,
+    foreground: () => !exited && pageActive && !document.hidden && navigator.onLine !== false &&
+      relayRestored && progress.connection === 'online',
+  },
 });
 function renderWeatherStatus() {
   if (exited) return;
@@ -268,9 +274,13 @@ function renderWeatherStatus() {
   const toggle = el<HTMLInputElement>('weather-share'); toggle.checked = s.weatherEnabled === true;
   toggle.disabled = !s.supported || s.pending;
   el('weather-satellite-disclosure').hidden = !s.satelliteSupported;
-  const upgrade = el<HTMLButtonElement>('weather-add-rain');
-  upgrade.hidden = !s.satelliteSupported || !s.weatherEnabled || s.satelliteEnabled === true;
-  upgrade.disabled = s.pending;
+  const offer = weatherSharing.upgradeOffer();
+  el('weather-upgrade').hidden = !offer;
+  const upgradeError = el('weather-upgrade-error');
+  upgradeError.hidden = !offer || !s.satelliteFailed;
+  upgradeError.textContent = upgradeError.hidden ? '' : t('even.weather_satellite_failed');
+  el<HTMLButtonElement>('weather-upgrade-accept').onclick = offer ? () => { void offer.accept(); } : null;
+  el<HTMLButtonElement>('weather-upgrade-keep').onclick = offer ? () => offer.dismiss() : null;
   el('weather-status').textContent = s.failed ? t('even.weather_failed') : !s.supported ? t('even.weather_unavailable') :
     s.satelliteFailed ? t('even.weather_satellite_failed') : !s.weatherEnabled ? t('even.weather_off') :
     s.satelliteSupported ? t(s.satelliteEnabled ? 'even.weather_combined_on' : 'even.weather_forecast_on') : t('even.weather_on');
@@ -281,7 +291,6 @@ el<HTMLInputElement>('weather-share').onchange = () => {
   if (enabled && !confirm(t(combined ? 'even.weather_accept_combined' : 'even.weather_accept'))) {renderWeatherStatus(); return;}
   void weatherSharing.control(enabled, combined);
 };
-el<HTMLButtonElement>('weather-add-rain').onclick = () => {void weatherSharing.control(true, true);};
 renderWeatherStatus();
 const healthSharing = new HealthSharing({
   target: () => session.token ? session.credentials?.origin ?? location.origin : undefined,
@@ -706,7 +715,7 @@ function renderConnectionHint(): void {
   if (offline) el('dot-status').textContent = `${hostName} · ${connectionFailureCaption(progress.connectionFailure)}`;
 }
 function updateRuntime(sendToG2 = true): void {
-  syncRuntimeEffects(); refreshStatus(sendToG2);
+  syncRuntimeEffects(); renderWeatherStatus(); refreshStatus(sendToG2);
 }
 function hudCaption(): string {
   return recorder.source === 'wake' && recorder.state === 'recording' ? t('even.go_ahead') : progress.caption(baseStatus, conversation.visibleId, wakeNamePreferences.assistantName);
@@ -1123,6 +1132,7 @@ async function connect(): Promise<void> {
   void exitDiagnostics.attach(runtimeNative.storage(appBridge));
   void restoreRelay(appBridge);
   const nativeStorage = runtimeNative.storage(appBridge);
+  weatherSharing.attachUpgradeStorage(nativeStorage);
   void languagePreferences.attach(nativeStorage).then(() => { if (!exited) applyLanguage(); });
   bridge = appBridge;
   startupStage = 'page';
