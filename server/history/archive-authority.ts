@@ -16,6 +16,7 @@ const period = z.enum(['7d', '1m', '6m', '1y']);
 const ownerId = z.string().regex(/^[a-f0-9]{64}$/);
 const grant = z.object({
   enabled: z.boolean(), stamp: z.uuid(), generation: z.uuid(), key: z.string().regex(/^[A-Za-z0-9+/]{43}=$/),
+  since: z.number().int().nonnegative().optional(),
 }).strict();
 const policy = z.object({
   version: z.literal(1), owner: ownerId.nullable(), epoch: z.uuid(), period,
@@ -27,7 +28,7 @@ const change = z.discriminatedUnion('action', [
   z.object({action: z.literal('period'), period}).strict(),
   z.object({action: z.literal('delete'), source}).strict(),
 ]);
-type Lease = {owner: string; source: ArchiveSource; stamp: string};
+export type ArchiveLease = {readonly owner: string; readonly source: ArchiveSource; readonly stamp: string; readonly since: number};
 type Row = {wrapped: string; sealed: Uint8Array};
 type Options = {ownerStatus: (owner: string) => 'authorized' | 'unavailable' | 'revoked'; now?: () => number};
 const aad = 'dot-link:history:archive-authority:v1';
@@ -163,7 +164,17 @@ export class ArchiveAuthority {
     await this.unlock(false);
     const state = this.state();
     if (state.owner && this.options.ownerStatus(state.owner) === 'revoked') await this.revoke(state.owner);
-    else if (this.needsCleanup) this.collect();
+    else {
+      // Old grants already authorize their stored rows. Set an acquisition
+      // boundary once so an older cache cannot be mistaken for new evidence.
+      if (Object.values(state.sources).some(g => g.since === undefined)) this.transaction(() => {
+        const current = this.state();
+        const now = (this.options.now ?? Date.now)();
+        for (const g of Object.values(current.sources)) g.since ??= now;
+        this.save(current);
+      });
+      if (this.needsCleanup) this.collect();
+    }
   }
 
   async status(owner: string) {
@@ -189,7 +200,8 @@ export class ArchiveAuthority {
       state.epoch = randomUUID();
       if (input.action === 'period') {
         state.period = input.period;
-        for (const g of Object.values(state.sources)) g.stamp = randomUUID();
+        const now = (this.options.now ?? Date.now)();
+        for (const g of Object.values(state.sources)) { g.stamp = randomUUID(); g.since = now; }
       } else if (input.action === 'delete') {
         delete state.sources[input.source];
       } else {
@@ -200,7 +212,7 @@ export class ArchiveAuthority {
           try { new HistoryArchiveStore(this.path(g.generation), key, this.options).close(); }
           finally { key.fill(0); }
         }
-        state.sources[input.source] = {...g, enabled: input.enabled, stamp: randomUUID()};
+        state.sources[input.source] = {...g, enabled: input.enabled, stamp: randomUUID(), since: (this.options.now ?? Date.now)()};
       }
       this.save(state);
       return this.view(state, owner);
@@ -218,19 +230,36 @@ export class ArchiveAuthority {
     this.collect();
   }
 
-  capture(owner: string, source: ArchiveSource): Lease | undefined {
+  historyOwner(source: ArchiveSource): string | undefined {
+    try {
+      const state = this.state();
+      const grant = state.sources[source];
+      if (state.owner && grant?.enabled && grant.since !== undefined && this.active(state.owner)) return state.owner;
+    } catch { /* Locked, missing or corrupt authority cannot authorize history. */ }
+  }
+
+  capture(owner: string, source: ArchiveSource): ArchiveLease | undefined {
     if (!this.active(owner)) return;
     const state = this.state();
     const g = state.sources[source];
-    if (state.owner === owner && g?.enabled) return {owner, source, stamp: g.stamp};
+    if (state.owner === owner && g?.enabled && g.since !== undefined) return {owner, source, stamp: g.stamp, since: g.since};
+  }
+
+  allows(lease: ArchiveLease): boolean {
+    try {
+      const current = this.capture(lease.owner, lease.source);
+      return current?.stamp === lease.stamp && current.since === lease.since;
+    }
+    catch { return false; }
   }
 
   /** Synchronous read/write under the current policy. Never cache the key or the store outside this call. */
-  use<T>(lease: Lease, run: (key: Buffer, generation: string, period: HistoryPeriod) => T): T {
+  use<T>(lease: ArchiveLease, run: (key: Buffer, generation: string, period: HistoryPeriod) => T): T {
     return this.transaction(() => {
       const state = this.state();
       const g = state.sources[lease.source];
-      if (state.owner !== lease.owner || !this.active(lease.owner) || !g?.enabled || g.stamp !== lease.stamp) throw denied();
+      if (state.owner !== lease.owner || !this.active(lease.owner) || !g?.enabled || g.stamp !== lease.stamp || g.since !== lease.since)
+        throw denied();
       const key = Buffer.from(g.key, 'base64');
       try {
         const result = run(key, g.generation, state.period);
@@ -267,15 +296,18 @@ export class ArchiveAuthority {
     });
   }
 
-  private withStore<T>(lease: Lease, run: (store: HistoryArchiveStore, period: HistoryPeriod) => T) {
+  private withStore<T>(lease: ArchiveLease, run: (store: HistoryArchiveStore, period: HistoryPeriod) => T) {
     return this.use(lease, (key, generation, period) => {
       const store = this.existingStore(key, generation);
       try { return run(store, period); } finally { store.close(); }
     });
   }
 
-  put(lease: Lease, record: ArchiveInput) { return this.withStore(lease, (store, period) => store.put(record, period)); }
-  read(lease: Lease, query: ArchiveQuery) { return this.withStore(lease, store => store.read(query)); }
+  put(lease: ArchiveLease, record: ArchiveInput) {
+    if (record.availableAtMs < lease.since) return 'before_grant' as const;
+    return this.withStore(lease, (store, period) => store.put(record, period));
+  }
+  read(lease: ArchiveLease, query: ArchiveQuery) { return this.withStore(lease, store => store.read(query)); }
 
   close() {
     if (this.closed) return;

@@ -111,11 +111,29 @@ checks depend on the AI submitting every source used in its reasoning or text;
 they do not infer provenance by inspecting generated prose.
 
 The unreleased Mac history tool lets the connected AI request selected fields
-from the same paired owner's already-shared recent-place and Polar records for
-an explicit period within the past seven days. Each source keeps its own consent,
-storage, expiry and deletion rules. The Mac answers from local records without
-requesting a fresh phone location or contacting Polar. The latest registered
-Polar profile remains outside historical queries.
+from the same paired owner's recent-place, Polar, forecast and walking/terrain
+records. Each request covers up to seven days. The Mac reads local records and
+does not contact any provider or request another phone fix. Each source has its
+own consent, expiry and deletion rules. The latest registered Polar profile
+remains outside historical queries.
+
+Forecast and walking/terrain history each start off. With a separate history grant,
+the Mac encrypts newly acquired evidence for that source on this Mac. A forecast
+can include a specified place and its reference, the rounded model point, model
+values and the time each revision became available. Walking/terrain history can
+include precise endpoints, destination provenance, route geometry, steps and model
+elevations. These records can reveal places you asked about. A walking plan does
+not establish that you took the route. A forecast does not establish what weather
+occurred. Reading saved evidence makes no additional requests to a provider.
+
+The initial retention period is seven days. Changes to seven days, one month, six
+months or one year set deadlines for newly admitted records only. Stopping a
+source's history blocks subsequent recording and access while existing records age
+out. Deleting that source's history also discards its encryption key. A restored
+copy of the evidence file alone cannot recover the data. A full backup including
+both the evidence and earlier key material on the same Mac may retain it. Changing
+a live sharing setting stops the corresponding live acquisition. You can still
+read previously retained evidence while its separate history permission is on.
 
 ## Photos
 
@@ -193,7 +211,7 @@ sharing does not enable history. When both are enabled, accepted phone measureme
 are saved on the selected Mac: exact coordinates, measurement/receipt times,
 accuracy, available speed/heading, timezone/UTC offset and recording-session
 boundaries. Existing geographic references may be attached; history does not
-start additional map requests or store walking routes or terrain queries.
+start additional map requests. A separate history grant controls walking and terrain results.
 
 The owner-only SQLite database is in the Mac runtime's `location-history`
 directory (directory mode 0700, file mode 0600). It is not separately encrypted by
@@ -255,9 +273,10 @@ One request runs at a time, with no queue. Identical calls can share a request o
 memory-only result for at most 30 seconds, bounded further by the original
 location's freshness. Requests have a 40-second overall limit and provider limits.
 Terrain rasters remain bounded in memory and are discarded at the end of the
-request. Dot Link writes no walking queries, destinations or returned route/terrain
-results to its logs or a disk history. An answer Dot sends may still enter ordinary
-conversation history, and Dot's own data handling is separate.
+request. Dot Link keeps queries and destinations out of logs. With walking/terrain
+history on, the Mac encrypts the returned plan and model-terrain evidence for the
+chosen period. Raw terrain rasters are discarded. An answer Dot sends may also
+enter ordinary conversation history, and Dot's own data handling is separate.
 
 Turning this option off rotates/revokes the location-sharing session and cancels
 pending work on the Mac when the stop arrives. Turning location sharing off,
@@ -323,7 +342,9 @@ three hours between attempts (including failures), and all queries share a
 one-minute minimum; response expiry/backoff can extend these intervals. Cache
 corruption resets it with a persisted 24-hour recovery pause. Off stops use and
 cancels pending requests after the Mac receives the change; the bounded cache
-remains until expiry to preserve service limits. It is not an exact movement trail.
+remains until expiry to preserve service limits. Separately enabling forecast
+history keeps the model values, selected place and revision times described above.
+It does not increase the frequency of forecast requests.
 
 Consent is retained only on the selected Mac for its paired owner. Revocation
 invalidates access and late results; a restart requires fresh phone location for

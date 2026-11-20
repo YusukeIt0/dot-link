@@ -15,6 +15,7 @@ import {weatherSource, type WeatherEvidence} from '../server/weather/types.ts';
 import {MobilityAcquisition} from '../server/mobility/context.ts';
 import {WebhookSender} from '../server/webhook.ts';
 import {rpc} from '../server/http.ts';
+import {ContextResponder} from '../server/context-response.ts';
 
 const owner = 'a'.repeat(64), NOW = Date.parse('2026-11-14T12:00:00Z');
 const settle = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -252,4 +253,65 @@ test('combined decisions reserve every used health read, not just the first', as
     assert.equal((await f.call('respond_to_context', {health_read_ids: [read], disposition: 'silent'})).error.data.reason, 'context_decision_conflict');
   }
   assert.equal(f.bridge.outboundHistory().length, 0);
+});
+
+test('archived weather and route receipts allow silence and one existing question without a live location receipt', async t => {
+  const f = await fixture(t);
+  const responder = new ContextResponder(f.bridge.sendMessage.bind(f.bridge));
+  const a = randomUUID(), b = randomUUID(), unknown = randomUUID();
+  const sources = {archives: {responseContext(id: string) {
+    return id === a || id === b ? {owner, guard: () => true} : undefined;
+  }}};
+  await assert.rejects(responder.respond({archive_read_ids:[unknown], disposition:'silent'}, sources), {reason: 'archive_context_unknown'});
+  const silent = await responder.respond({archive_read_ids:[a,b], disposition:'silent'}, sources);
+  assert.deepEqual(silent, {disposition:'silent', stored_for_g2:false});
+  await assert.rejects(responder.respond({archive_read_ids:[a], disposition:'announce', text:'Unsolicited'}, sources), {reason: 'history_question_required'});
+  const reply = {archive_read_ids:[a,b], disposition:'announce', text:'This was the earlier forecast.', utterance_id:f.question};
+  const sent = await responder.respond(reply, sources);
+  assert.deepEqual(await responder.respond({...reply, archive_read_ids:[b,a]}, sources), sent);
+  assert.equal(f.bridge.history().find(q => q.id === f.question)?.reply, reply.text);
+  assert.equal(f.bridge.outboundHistory().length, 0);
+});
+
+test('existing receipt sets retain their persisted v1 retry identity when archive receipts are added to the protocol', async () => {
+  const responder = new ContextResponder(async (input, guard) => {
+    assert.ok(guard?.());
+    const {message_id} = input as {message_id: string};
+    return {message_id, stored_for_g2: true, physical_display_confirmed: false};
+  });
+  const history = {read: () => undefined, responseGuard: () => () => true, historyOwner: () => owner};
+  const fields = {history_context_ids: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'], disposition: 'announce',
+    utterance_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', text: 'Fixture reply'};
+  const old = await responder.respond(fields, {history});
+  assert.deepEqual(old, {message_id: 'a4c6feb2-b43b-812e-be3c-e939baa0e24d', stored_for_g2: true, physical_display_confirmed: false});
+  const archives = {responseContext: () => ({owner, guard: () => true})};
+  const expanded = await responder.respond({...fields, archive_read_ids: [randomUUID()]}, {history, archives});
+  assert.notDeepEqual(expanded, old);
+});
+
+test('archive responses enforce the same owner with other archive, history, Polar, live location and specified weather receipts', async t => {
+  const f = await fixture(t);
+  const responder = new ContextResponder(f.bridge.sendMessage.bind(f.bridge));
+  const same = randomUUID(), other = randomUUID();
+  const sources = {locations: f.location, health: f.health, history: f.history, weather: f.weather,
+    archives: {responseContext(id: string) { return {owner: id === other ? 'b'.repeat(64) : owner, guard: () => true}; }}};
+  const refs = f.receipts();
+  const place = {latitude: 1, longitude: 2, label: 'Fixture', source: 'user_provided', reference: 'Fixture place'};
+  const weather = (await f.call('get_weather_context', {mode: 'specified', place})).result.structuredContent;
+  for (const receipt of [
+    {archive_read_ids: [other,same]}, {archive_read_ids: [other], history_context_ids: refs.history_context_ids},
+    {archive_read_ids: [other], health_read_ids: refs.health_read_ids}, {archive_read_ids: [other], context_id: refs.context_id},
+    {archive_read_ids: [other], weather_read_ids: [weather.weather_read_id]},
+  ]) await assert.rejects(responder.respond({...receipt, disposition: 'silent'}, sources), {reason: 'context_access_changed'});
+
+  let valid = true;
+  const guarded = {...sources, archives: {responseContext: () => ({owner, guard: () => valid})}};
+  const hold = await f.holdBridge();
+  const pending = responder.respond({archive_read_ids: [same], health_read_ids: refs.health_read_ids, disposition: 'announce',
+    utterance_id: f.question, text: 'Revoked during delivery.'}, guarded);
+  await settle();
+  valid = false;
+  hold.release(); await hold.pending;
+  await assert.rejects(pending, {reason: 'context_access_changed'});
+  assert.equal(f.bridge.history().find(q => q.id === f.question)?.reply, undefined);
 });

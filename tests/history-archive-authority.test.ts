@@ -232,7 +232,7 @@ test('deletion unlinks the source file and an old evidence backup cannot reopen 
   const lease = activeWeather(a);
   const at = Date.now() - 1000;
   const window = {fromMs: at, toMs: at + 1};
-  const record = {...window, id: 'fictional-forecast', availableAtMs: at, anchorMs: at, version: 1, payload: {temperature: 21}};
+  const record = {...window, id: 'fictional-forecast', availableAtMs: Date.now(), anchorMs: at, version: 1, payload: {temperature: 21}};
   assert.equal(a.put(lease, record), 'stored');
   assert.deepEqual(a.read(lease, window).records.map(row => row.payload), [record.payload]);
   const generationPath = (id: string) => join(f.directory, 'sources', id + '.sqlite');
@@ -319,5 +319,6 @@ test('unattended maintenance erases expired payloads and time indexes while reco
   await restarted.control(owner, longer.epoch, recordWeather);
   const current = activeWeather(restarted);
   assert.deepEqual(restarted.read(current, window).records, []);
-  assert.equal(restarted.put(current, record), 'expired');
+  assert.equal(restarted.put(current, record), 'before_grant');
+  assert.equal(restarted.put(current, {...record, availableAtMs: clock}), 'expired');
 });

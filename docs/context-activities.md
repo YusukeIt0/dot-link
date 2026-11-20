@@ -138,16 +138,33 @@ cannot recover a deleted generation. Restoring both the old authority and
 evidence from a full backup on the same Mac can recover it. Local deletion
 cannot retract information already sent to Dot.
 
-`get_factor_history` lets the connected Dot choose fields from recent-place
-history, Polar observations or both for one explicit interval within the past
-seven days. Give `start_at` and `end_at` as instants with explicit UTC offsets.
-The start is inclusive and the end is exclusive. A window ending later today
-stops at the time of the read. A window entirely in the future is rejected.
+`get_factor_history` selects fields from saved phone, Polar, weather or
+walking/terrain evidence. Each request covers up to seven days within the
+retained history. Give `start_at` and `end_at` as instants with explicit UTC
+offsets. The start is inclusive and the end is exclusive. Observation windows
+stop at the time of the read. For weather alone, a forecast known in the past
+can have a validity time in the future.
 Under `fields.location`,
 select from `position`, `motion`, `clock` and `geography`. Under `fields.polar`,
 select the relevant metrics by name. A comparison
 of two periods can start with a narrow selection for each, followed by a request
 for more detail only where it matters.
+
+For weather, select fields such as `temperature` or `precipitation`. To ask
+what the forecast said at a particular time, pass that instant as `known_at`.
+The requested interval selects forecast validity and the cutoff limits which
+editions were available. A forecast for a requested place gives no evidence
+that the person went there. For mobility, ask for `plan` to compare planned
+walks or `terrain` to compare derived terrain estimates. Further detail can
+include endpoints, steps, geometry and terrain samples. Acquisition happens
+only through the existing live source. Historical reads contact no provider.
+
+Weather and route archives start off. The paired owner's separate archive grant
+allows the connected Dot to read saved evidence. An inactive phone or a stale
+position does not prevent those historical reads. Turning off the history
+source blocks reading and recording. Deleting the source also erases its
+retained records. Live weather and directions can still work with their
+archives off.
 
 Location history describes recorded phone fixes and any saved geographic
 references. Polar observations retain their own timestamps or source-local
@@ -161,7 +178,7 @@ Version 1 returns a separate page for each requested source. To continue one
 selection, send only its `source` and its `next_cursor` as `cursor`.
 For a combined G2 answer, supply the contributing sources' response references
 to `respond_to_context`. The Mac rechecks their authorization and expiry.
-An answer based on recent-place history still requires the existing G2 question and its
+An answer based on recent-place, forecast or route history requires the existing G2 question and its
 `utterance_id`. A history read neither acquires new source data nor sends a
 message. The contract can be exercised with synthetic records through MCP.
 For connected-Dot acceptance, compare the requested periods and fields in the
