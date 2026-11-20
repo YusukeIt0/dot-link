@@ -73,6 +73,36 @@ test('an overlapping decode is bounded, cancellation releases the slot, and an u
   assert.equal(unsupported.status,'outside_extent'); assert.deepEqual(unsupported.areas,[]);
 });
 
+test('a pending promotion gets the next worker before a follow-up read and only one probe may wait', async t => {
+  const {dir,path,edition} = await setup(); t.after(() => rm(dir,{recursive:true,force:true}));
+  const read = decodeRainRate(path,edition,seam,freshSignal());
+  const [verdict] = await Promise.all([
+    probeRainRateFrame(path,edition,freshSignal()),
+    (async () => {
+      await assert.rejects(probeRainRateFrame(path,edition,freshSignal()));
+      await assert.rejects(decodeRainRate(path,edition,seam,freshSignal()));
+      await read;
+      await assert.rejects(decodeRainRate(path,edition,seam,freshSignal()));
+    })(),
+  ]);
+  assert.equal(verdict,'supported');
+  assert.equal((await decodeRainRate(path,edition,seam,freshSignal())).status,'partial');
+});
+
+test('an expired queued probe frees its place, and aborting the current read hands off to its replacement', async t => {
+  const {dir,path,edition} = await setup(); t.after(() => rm(dir,{recursive:true,force:true}));
+  const reader = new AbortController(), waiter = new AbortController();
+  const read = decodeRainRate(path,edition,seam,reader.signal);
+  const canceledRead = assert.rejects(read,{name:'AbortError'});
+  const probe = probeRainRateFrame(path,edition,waiter.signal);
+  waiter.abort(new DOMException('Deadline reached','TimeoutError'));
+  await assert.rejects(probe,{name:'TimeoutError'});
+  const replacement = probeRainRateFrame(path,edition,freshSignal());
+  reader.abort();
+  await canceledRead;
+  assert.equal(await replacement,'supported');
+});
+
 const meta = {coverage_start:'2026-11-20T16:40:00Z',coverage_end:'2026-11-20T16:49:00Z',created:'2026-11-20T16:54:58Z',
   sensors:['ABI-g19'],missing_inputs:4,pixel_observed_at:null};
 test('changes compare only nominal cohorts in the same sector, place and input constellation across distinct windows',() => {

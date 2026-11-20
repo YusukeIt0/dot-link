@@ -6,10 +6,10 @@ import {spawnSync} from 'node:child_process';
 import {tmpdir} from 'node:os';
 import {crc32, gunzipSync} from 'node:zlib';
 import {DatabaseSync} from 'node:sqlite';
-import {RainRateService} from '../server/weather/rain-rate/service.ts';
+import {RainRateService, type NearbyRainRead} from '../server/weather/rain-rate/service.ts';
 import {acquireFrame, chooseEdition, frameFromKey, freshFrame, parseListing, FRAME_AGE, LIST_LIMIT, OBJECT_LIMIT} from '../server/weather/rain-rate/discovery.ts';
 import {COOLDOWN, DAILY_BYTES, FETCH_TIMEOUT, RainRateCache} from '../server/weather/rain-rate/cache.ts';
-import type {decodeRainRate, probeRainRateFrame, RainRateSample} from '../server/weather/rain-rate/decoder.ts';
+import {decodeRainRate, probeRainRateFrame, type RainRateSample} from '../server/weather/rain-rate/decoder.ts';
 
 const minute = 60_000;
 const start = Date.UTC(2026, 10, 20, 23, 50);
@@ -284,16 +284,13 @@ test('a failed staged rename can never displace the cached same-window edition',
   assert.deepEqual(await f.service().read(point,active()),initial);
 });
 
-test('verified HDF with incompatible source metadata cannot replace a usable same-window edition', async t => {
-  const f = control(t);
+function hdfSource() {
   const bytes = gunzipSync(readFileSync(new URL('./fixtures/rain-rate.nc.gz', import.meta.url)));
   const crc = Buffer.alloc(4);
   crc.writeUInt32BE(crc32(bytes));
   const key = 'BLEND/RainRate-Blend-INST/2026/11/20/16/RRQPE-INST-GLB-1_v1r1_blend_s202611201640000_e202611201649599_c202611201654584.nc';
   const published = Date.parse('2026-11-20T16:55:35Z');
   const good = frameFromKey(key, etag, bytes.length, published)!;
-  // This valid, checksum-matching HDF5 file contains a single contributing satellite.
-  const incompatible = frameFromKey(key.replace('GLB-1', 'GLB-2'), etag, bytes.length, published + 1000)!;
   let frames = [good], now = published + minute;
   const downloads: string[] = [];
   const request: typeof fetch = async raw => {
@@ -303,19 +300,58 @@ test('verified HDF with incompatible source metadata cannot replace a usable sam
     downloads.push(frame.key);
     return new Response(bytes, {headers: {...headers(frame), 'x-amz-checksum-crc32': crc.toString('base64')}});
   };
-  const service = () => new RainRateService(f.directory, {now: () => now, request});
+  return {good, downloads, request, now: () => now, publish: (next: Frame[]) => {frames = next; now += COOLDOWN;}};
+}
+
+test('verified HDF with incompatible source metadata cannot replace a usable same-window edition', async t => {
+  const f = control(t);
+  const source = hdfSource();
+  const {good, downloads} = source;
+  // This valid, checksum-matching HDF5 file contains a single contributing satellite.
+  const incompatible = frameFromKey(good.key.replace('GLB-1', 'GLB-2'), etag, good.size, good.published + 1000)!;
+  const service = () => new RainRateService(f.directory, source);
   assert.equal(await service().refresh(active()), 'updated');
   const previouslyVerified = await service().read({latitude: 0, longitude: -180}, active());
   assert.equal(previouslyVerified.length, 1);
   assert.equal(previouslyVerified[0].frame.key, good.key);
-  frames = [good, incompatible]; now += COOLDOWN;
+  source.publish([good, incompatible]);
   assert.equal(await service().refresh(active()), 'unavailable');
   assert.deepEqual(await service().read({latitude: 0, longitude: -180}, active()), previouslyVerified);
-  now += COOLDOWN;
+  source.publish([good, incompatible]);
   assert.equal(await service().refresh(active()), 'cached');
   assert.deepEqual(downloads, [good.key, incompatible.key]);
   assert.equal(readdirSync(f.directory).filter(name => name.endsWith('.nc')).length, 1);
   assert.equal(readdirSync(f.directory).includes('.incoming'), false);
+});
+
+test('a real regional read in progress lets the already downloaded edition pass inspection on that refresh', async t => {
+  const f = control(t);
+  const source = hdfSource();
+  // Same genuine HDF grid, with a newly published S3 object identity.
+  const newer = {...source.good, etag: '"' + 'a'.repeat(32) + '-2"', published: source.good.published + 1000};
+  const region = {latitude: 0, longitude: -180};
+  let ongoing: Promise<NearbyRainRead[]> | undefined;
+  let regionalDecodes = 0;
+  const service: RainRateService = new RainRateService(f.directory, {...source,
+    decode: (...args) => {regionalDecodes++; return decodeRainRate(...args);},
+    probe: (path, candidate, signal) => {
+      if (candidate.etag === newer.etag) {
+        // The regional child takes the process-wide slot synchronously, before the probe starts.
+        ongoing = service.read(region, active());
+        assert.equal(regionalDecodes, 1);
+      }
+      return probeRainRateFrame(path, candidate, signal);
+    },
+  });
+  assert.equal(await service.refresh(active()), 'updated');
+  source.publish([newer]);
+  const refreshed = await service.refresh(active());
+  const prior = await ongoing;
+  assert.equal(prior?.[0].frame.etag, source.good.etag);
+  assert.equal(prior?.[0].sample.status, 'partial');
+  assert.equal(refreshed, 'updated');
+  assert.equal((await service.read(region, active()))[0].frame.etag, newer.etag);
+  assert.deepEqual(source.downloads, [source.good.key, newer.key]);
 });
 test('transient inspection failures retry after cooldown; canceled and aged verdicts never promote or poison the edition', async t => {
   const f = control(t);

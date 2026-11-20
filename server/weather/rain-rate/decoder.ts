@@ -8,14 +8,26 @@ export { compareRainRateSamples, inRainRateExtent, type RainRateSample } from '.
 export type CheckedRainRateFrame = RainRateFrame & {checksum: string};
 
 let active = false;
+let waitingProbe: (() => void) | undefined;
 const unavailable = () => new Error('Satellite precipitation decoder unavailable');
 
 /** The child gets the location through stdin, has no network task, and owns the entire HDF5 runtime. */
-async function runDecoder(framePath: string, edition: CheckedRainRateFrame, point: WeatherPoint, signal: AbortSignal): Promise<RainRateSample | null> {
+async function runDecoder(framePath: string, edition: CheckedRainRateFrame, point: WeatherPoint, signal: AbortSignal, waitForSlot = false): Promise<RainRateSample | null> {
   signal.throwIfAborted();
-  if (active) throw unavailable();
-  active = true;
+  if (active) {
+    if (!waitForSlot || waitingProbe) throw unavailable();
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => { waitingProbe = undefined; reject(signal.reason); };
+      waitingProbe = () => {
+        signal.removeEventListener('abort', abort);
+        waitingProbe = undefined;
+        resolve();
+      };
+      signal.addEventListener('abort', abort, {once: true});
+    });
+  } else { active = true; }
   try {
+    signal.throwIfAborted();
     return await new Promise<RainRateSample | null>((resolve, reject) => {
       const args = ['--wasm-max-mem-pages=1024', '--max-old-space-size=64',
         fileURLToPath(new URL('./decoder-process.ts', import.meta.url))];
@@ -36,7 +48,12 @@ async function runDecoder(framePath: string, edition: CheckedRainRateFrame, poin
       child.stdin?.end(JSON.stringify({framePath, edition, point}));
       if (signal.aborted) abort();
     });
-  } finally { active = false; }
+  } finally {
+    // Transfer ownership before the completed read can request another frame.
+    // The slot stays active throughout handoff, including after a failed read.
+    if (waitingProbe) waitingProbe();
+    else active = false;
+  }
 }
 
 export async function decodeRainRate(framePath: string, edition: CheckedRainRateFrame, point: WeatherPoint, signal: AbortSignal): Promise<RainRateSample> {
@@ -48,6 +65,6 @@ export async function decodeRainRate(framePath: string, edition: CheckedRainRate
 /** Validate an edition before promotion by decoding both variables around a fixed public city.
  * Missing or degraded rain at this location is a permissible result for a partial satellite mosaic. */
 export async function probeRainRateFrame(framePath: string, edition: CheckedRainRateFrame, signal: AbortSignal): Promise<'supported' | 'unsupported'> {
-  const sample = await runDecoder(framePath, edition, {latitude: 13.7563, longitude: 100.5018}, signal);
+  const sample = await runDecoder(framePath, edition, {latitude: 13.7563, longitude: 100.5018}, signal, true);
   return sample ? 'supported' : 'unsupported';
 }
