@@ -4,7 +4,7 @@
 // Every count comes from records the requester cannot delete or rewrite: item
 // creation times, workflow-run history and the PR timeline.
 export const publicReviewLimits = Object.freeze({itemsPerDay: 10, itemsPerAuthorPerDay: 3, commandsPerAuthorPerDay: 5, readyPerItemPerDay: 3});
-const DAY = 86_400_000, PAGES = 3, PAGE_SIZE = 100, MAX_UNFINISHED = 20;
+const DAY = 86_400_000, PAGES = 3, PAGE_SIZE = 100, MAX_INSPECTED = 30;
 const time = value => { const t = Date.parse(value ?? ''); return Number.isFinite(t) ? t : NaN; };
 const denied = reason => ({allowed: false, reason});
 
@@ -31,12 +31,18 @@ export function publicReviewDecision({request, item, actor, listItems, listComma
       complete = batch.workflow_runs.length < PAGE_SIZE;
     }
     if (!complete) return denied('Unusually many review requests by this author in the last 24 hours.');
-    const recent = runs.filter(run => time(run.created_at) >= since && run.id !== currentRunId);
-    const unfinished = recent.filter(run => run.status !== 'completed');
-    if (unfinished.length > MAX_UNFINISHED) return denied('Unusually many review requests by this author are still running.');
-    // An unfinished run counts unless its intake job was already skipped.
-    const admitted = recent.filter(run => run.status === 'completed' ? run.conclusion !== 'skipped'
-      : !listRunJobs(run.id).some(job => job.name === 'intake' && job.conclusion === 'skipped')).length + 1;
+    // Only requests that started (or may still start) a model review count. Paused,
+    // refused, coalesced or cancelled requests cost nothing and do not count.
+    const candidates = runs.filter(run => time(run.created_at) >= since && run.id !== currentRunId &&
+      !(run.status === 'completed' && ['skipped', 'cancelled'].includes(run.conclusion)));
+    if (candidates.length > MAX_INSPECTED) return denied('Unusually many review requests by this author in the last 24 hours.');
+    const reviewed = run => {
+      const jobs = listRunJobs(run.id);
+      const job = name => jobs.find(row => row.name === name);
+      if (job('intake')?.conclusion === 'skipped' || job('review')?.conclusion === 'skipped') return false;
+      return run.status !== 'completed' || !!job('review');
+    };
+    const admitted = candidates.filter(reviewed).length + 1;
     return admitted > publicReviewLimits.commandsPerAuthorPerDay
       ? denied(`This author already requested ${publicReviewLimits.commandsPerAuthorPerDay} reviews in the last 24 hours.`)
       : {allowed: true};
@@ -49,6 +55,8 @@ export function publicReviewDecision({request, item, actor, listItems, listComma
       return denied(`This pull request was marked ready more than ${publicReviewLimits.readyPerItemPerDay} times in the last 24 hours.`);
   }
   const created = Number.isFinite(time(item.created_at)) ? time(item.created_at) : now;
+  // A PR opened more than a day ago was already ranked when it was opened.
+  if (request === 'ready' && created < since) return {allowed: true};
   const windowStart = created - DAY;
   const rows = [];
   let complete = false;
@@ -59,7 +67,7 @@ export function publicReviewDecision({request, item, actor, listItems, listComma
     complete = batch.length < PAGE_SIZE || batch.some(row => time(row.created_at) < windowStart);
   }
   // More than PAGES full pages in one day is far beyond every limit: fail closed.
-  if (!complete) return denied('Unusually many new issues and pull requests were opened in the last 24 hours.');
+  if (!complete) return denied('Unusually many new issues and pull requests were opened in the 24 hours before this item.');
   const window = rows.filter(row => row.number !== item.number && isPublic(row.user) &&
     time(row.created_at) >= windowStart && (time(row.created_at) < created || (time(row.created_at) === created && row.number < item.number)));
   if (window.length >= publicReviewLimits.itemsPerDay)
