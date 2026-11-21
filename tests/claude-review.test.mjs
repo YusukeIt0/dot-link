@@ -48,6 +48,8 @@ if(a.includes('--input')) {
 } else if(a.includes('Accept: application/vnd.github.diff')) { if(f.failDiff) process.exit(1); process.stdout.write(f.diff); }
 else if(p.endsWith('/commits/main')) { f.mainReads=(f.mainReads||0)+1; if(f.changeAfterMainReads && f.mainReads>f.changeAfterMainReads) f.main='c'.repeat(40); fs.writeFileSync('fixture.json',JSON.stringify(f)); console.log(JSON.stringify({sha:f.main})); }
 else if(p.includes('/commits/')) { console.log(JSON.stringify({sha:f.baseSha || f.pr.base.sha})); }
+else if(p.includes('/actions/workflows/claude-review.yml/runs')) console.log(JSON.stringify(f.reviewRuns || {total_count:1,workflow_runs:[{conclusion:null,created_at:new Date().toISOString()}]}));
+else if(p.includes('/timeline?')) console.log(JSON.stringify([f.timeline || []]));
 else if(p.includes('/events?')) console.log(JSON.stringify([f.events || []]));
 else if(p.includes('/pulls/') && p.includes('/comments?')) console.log(JSON.stringify([f.inlineComments || []]));
 else if(p.includes('/reviews?')) console.log(JSON.stringify([f.reviews || []]));
@@ -783,4 +785,21 @@ test('public review bounds stop before the model or comment while normal and mai
   const maintainer = {id: 213780070, login: 'YusukeIt0', type: 'User'};
   const own = use(t, {issue: {...late, user: maintainer}, related: recent, event: {action: 'opened', issue: {...late, user: maintainer}, sender: maintainer}});
   success(own.run('intake')); assert.equal(own.read().comments.length, 1, 'trusted maintainers are never limited');
+});
+
+test('deleted or edited commands and draft toggles cannot reset public re-request bounds', t => {
+  const now = Date.now(), at = minutes => new Date(now - minutes * 60_000).toISOString();
+  const command = {id:77,user,body:'/dotlink review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+  const runs = n => ({total_count:n,workflow_runs:Array.from({length:n},(_,i)=>({conclusion:i ? 'success' : null,created_at:at(i)}))});
+  const commandEvent = {eventName:'issue_comment',event:{action:'created',issue,comment:command,sender:user},command,comments:[command]};
+  // Only one surviving comment, but six admitted runs in the history (edits/deletions leave runs behind).
+  const busy = use(t, {...commandEvent, reviewRuns: runs(6)});
+  const paused = busy.run('intake'); success(paused); assert.equal(paused.outputs.accepted, 'false'); assert.equal(busy.writes().length, 0);
+  const normal = use(t, {...commandEvent, reviewRuns: runs(2)});
+  success(normal.run('intake')); assert.equal(normal.read().comments.filter(x => x.user.login === 'dotsweeper[bot]').length, 1);
+  const ready = (count) => ({issue:{...issue,pull_request:{},created_at:at(600)}, eventName:'pull_request_target',
+    event:{action:'ready_for_review',pull_request:pr,sender:user},
+    timeline:Array.from({length:count},(_,i)=>({event:'ready_for_review',actor:user,created_at:at(i * 10)}))});
+  const toggled = use(t, ready(4)); const r = toggled.run('intake'); success(r); assert.equal(r.outputs.accepted, 'false');
+  const first = use(t, ready(1)); success(first.run('intake')); assert.equal(first.read().comments.length, 1, 'a normal draft-then-ready PR is reviewed');
 });

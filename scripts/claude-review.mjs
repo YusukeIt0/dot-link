@@ -143,9 +143,14 @@ function publicQuota(s) {
   if (!command && !['issues', 'pull_request_target'].includes(name)) return {allowed: true};
   const permission = get(`${root}/collaborators/${encodeURIComponent(actor.login)}/permission`).permission;
   if (['admin', 'maintain', 'write'].includes(permission)) return {allowed: true};
-  return publicReviewDecision({request: command ? 'command' : 'opened', item: s.issue, actor, comments: s.rows,
+  const since = encodeURIComponent('>=' + new Date(Date.now() - 86_400_000).toISOString());
+  const request = command ? 'command' : name === 'pull_request_target' && event.action === 'ready_for_review' ? 'ready' : 'opened';
+  return publicReviewDecision({request, item: s.issue, actor,
     isPublic: user => user?.type === 'User' && !trustedUser(user),
-    listItems: page => get(`${root}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`)});
+    listItems: page => get(`${root}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`),
+    // Includes this run. Comment events skipped by the job filter never reached intake.
+    listCommandRuns: () => get(`${root}/actions/workflows/claude-review.yml/runs?actor=${encodeURIComponent(actor.login)}&event=issue_comment&created=${since}&per_page=100`),
+    listTimeline: () => JSON.parse(gh(['api', `${endpoint}/timeline?per_page=100`, '--paginate', '--slurp'])).flat()});
 }
 function boundedInput(s) {
   const input = JSON.stringify(s.data, null, 2);

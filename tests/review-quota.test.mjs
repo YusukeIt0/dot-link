@@ -37,13 +37,31 @@ test('a normal public issue is reviewed exactly as before', () => {
   assert.deepEqual(calls, [1], 'one bounded API page');
 });
 
-test('author re-requests on one item are bounded per day; older requests and other people do not count', () => {
+test('author commands are counted from admitted run history, not surviving comments', () => {
   const author = person(9);
-  const command = (id, minutes, user = author, body = '/dotlink review') => ({id, user, body, created_at: at(minutes)});
-  const base = [command(1, 2000), command(2, 30, person(8)), command(3, 20, author, 'please /dotlink review')];
-  const decide = comments => publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author, comments, listItems: () => assert.fail('no list needed'), isPublic, now});
-  assert.equal(decide([...base, command(4, 10), command(5, 5), command(6, 1)]).allowed, true);
-  assert.equal(decide([...base, command(4, 10), command(5, 5), command(6, 2), command(7, 1)]).allowed, false);
+  const runs = rows => ({total_count: rows.length, workflow_runs: rows});
+  const decide = list => publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author,
+    listCommandRuns: () => list, listItems: () => assert.fail('no list needed'), isPublic, now});
+  const admitted = n => Array.from({length: n}, (_, i) => ({conclusion: i ? 'success' : null, created_at: at(i)}));
+  assert.equal(decide(runs(admitted(publicReviewLimits.commandsPerAuthorPerDay))).allowed, true);
+  assert.equal(decide(runs(admitted(publicReviewLimits.commandsPerAuthorPerDay + 1))).allowed, false);
+  // Comment events rejected by the job filter and runs older than a day do not count.
+  const ignored = [...Array.from({length: 20}, () => ({conclusion: 'skipped', created_at: at(1)})), {conclusion: 'success', created_at: at(2000)}];
+  assert.equal(decide(runs([...admitted(2), ...ignored])).allowed, true);
+  assert.equal(decide({total_count: 101, workflow_runs: []}).allowed, false, 'an oversized history fails closed');
+  assert.throws(() => decide({}), /Invalid workflow run/);
+});
+
+test('marking a draft ready repeatedly is bounded per item, while the first ready is reviewed', () => {
+  const author = person(9);
+  const item = {number: 12, user: author, created_at: at(600)};
+  const ready = n => Array.from({length: n}, (_, i) => ({event: 'ready_for_review', actor: author, created_at: at(i * 5)}));
+  const decide = events => publicReviewDecision({request: 'ready', item, actor: author, listTimeline: () => events,
+    listItems: () => [item], isPublic, now});
+  assert.equal(decide(ready(1)).allowed, true);
+  assert.equal(decide([...ready(publicReviewLimits.readyPerItemPerDay), {event: 'convert_to_draft', actor: author, created_at: at(1)}]).allowed, true);
+  assert.equal(decide(ready(publicReviewLimits.readyPerItemPerDay + 1)).allowed, false);
+  assert.equal(decide([...ready(1), ...Array.from({length: 5}, () => ({event: 'ready_for_review', actor: author, created_at: at(3000)}))]).allowed, true);
 });
 
 test('more items in a day than the bounded listing can show fails closed', () => {

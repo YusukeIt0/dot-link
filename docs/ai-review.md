@@ -20,10 +20,12 @@ next steps; maintainers decide what to adopt, close or merge.
 
 - Public requests have daily bounds that do not affect normal use: up to 10 newly
   opened public issues/PRs and 3 per author in 24 hours start an automatic review
-  (the earliest in a burst are reviewed), and an author can request another review
-  of the same item up to 3 times in 24 hours. Requests beyond these bounds stop
-  before the model starts and leave the existing comment unchanged; the run summary
-  records why. Maintainers with write access, trusted maintainers, Dependabot and the
+  (the earliest in a burst are reviewed). A public author can request reviews by
+  comment up to 5 times in 24 hours, and a PR can be marked ready up to 3 times in
+  24 hours. These counts use workflow-run history and the PR timeline, so deleting
+  or editing comments or toggling draft does not reset them. Requests beyond these
+  bounds stop before the model starts and leave the existing comment unchanged; the
+  run summary records why. Maintainers with write access, trusted maintainers, Dependabot and the
   pinned-runtime watch are not limited, so a maintainer can still request any review.
 
 The `dotsweeper` bot, using the Dot Link icon, updates one comment to show reviewing, complete, outdated, skipped, cancelled or failed.
