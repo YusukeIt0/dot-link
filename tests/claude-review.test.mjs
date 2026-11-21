@@ -803,3 +803,22 @@ test('deleted or edited commands and draft toggles cannot reset public re-reques
   const toggled = use(t, ready(4)); const r = toggled.run('intake'); success(r); assert.equal(r.outputs.accepted, 'false');
   const first = use(t, ready(1)); success(first.run('intake')); assert.equal(first.read().comments.length, 1, 'a normal draft-then-ready PR is reviewed');
 });
+
+test('an acceptance-marker event edited into a command is counted against public bounds (#425)', t => {
+  const now = Date.now(), at = minutes => new Date(now - minutes * 60_000).toISOString();
+  const marker = {id:78,user,body:'/dotlink review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
+  const history = {total_count:5,workflow_runs:Array.from({length:5},(_,i)=>({id:6000+i,event:'issue_comment',status:'completed',conclusion:'success',created_at:at(i + 1)}))};
+  // The event payload carried the marker; the live comment (read by authorization) is the review command.
+  const f = use(t, {eventName:'issue_comment', event:{action:'created',issue,comment:{...marker,body:acceptanceMarker+'\n```json\n{}\n```'},sender:user},
+    command:marker, comments:[marker], reviewRuns:history});
+  const r = f.run('intake'); success(r);
+  assert.equal(r.outputs.accepted, 'false');
+  assert.equal(f.writes().length, 0, 'nothing is published');
+  assert.match(readFileSync(join(f.dir, 'summary'), 'utf8'), /paused before model execution/);
+});
+
+test('workflow admits acceptance-marker comments only from the trusted maintainer (#425)', () => {
+  const intake = workflow.split('\n  intake:\n')[1].split('\n    runs-on:')[0];
+  assert.match(intake, /startsWith\(github\.event\.comment\.body, '<!-- dot-link-acceptance:v1 -->'\) && github\.event\.sender\.id == 213780070/);
+  assert.equal(policy.trustedMaintainers.some(x => x.id === 213780070), true);
+});

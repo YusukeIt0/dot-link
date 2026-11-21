@@ -53,7 +53,8 @@ jobs:
       github.repository == 'YusukeIt0/dot-link' &&
       (github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main') &&
       (github.event_name != 'pull_request_target' || github.event.pull_request.draft == false) &&
-      (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/dotlink review') || startsWith(github.event.comment.body, '<!-- dot-link-acceptance:v1 -->')) &&
+      (github.event_name != 'issue_comment' || startsWith(github.event.comment.body, '/dotlink review') ||
+        (startsWith(github.event.comment.body, '<!-- dot-link-acceptance:v1 -->') && github.event.sender.id == 213780070)) &&
       (github.event.sender.type == 'User' ||
         (github.event_name == 'pull_request_target' && github.event.sender.type == 'Bot' &&
           github.event.sender.id == 49699333 && github.event.sender.login == 'dependabot[bot]') ||
