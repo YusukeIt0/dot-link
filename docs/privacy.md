@@ -45,6 +45,10 @@ boundary, which can shorten retention.
 The latest profile is retained until deletion/disconnection, without historical
 versions. A profile edit timestamp is not a weight measurement timestamp.
 
+On a sleep read, the Mac can sum the light, deep and REM durations already
+included in the response. It computes that total for the read only. A
+field-selected history request must select all three stages to receive the sum.
+
 For activity intensity, the Mac retains provider classifications and source sample
 timestamps (up to 2,500 per day), plus counts across all valid distinct returned
 samples. Tool responses share a 96-sample detail budget across returned days and mark

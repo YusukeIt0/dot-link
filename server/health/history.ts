@@ -16,7 +16,7 @@ export const polarHistoryFields = [...sleep, ...activity, ...recovery, ...exerci
 type Field = typeof polarHistoryFields[number];
 const groups: Record<Observation['category'], readonly Field[]> = {sleep, activity, recovery, exercise, heart_rate:heartRate};
 const units: Record<Field,string> = {
-  sleep_start_time:'source timestamp',sleep_end_time:'source timestamp',interval_seconds:'s (derived from source endpoints)',
+  sleep_start_time:'source timestamp',sleep_end_time:'source timestamp',interval_seconds:'s, recorded start-to-end window including interruptions',
   light_sleep:'s',deep_sleep:'s',rem_sleep:'s',unrecognized_sleep_stage:'s',sleep_score:'Polar sleep score',sleep_charge:'Polar rating',
   total_interruption_duration:'s',short_interruption_duration:'s',long_interruption_duration:'s',continuity:'Polar score',
   continuity_class:'Polar classification',sleep_cycles:'cycles',steps:'steps',activity_goal_completion_percent:'% of daily activity goal',
@@ -44,6 +44,17 @@ export function parsePolarHistoryQuery(input: PolarHistoryInput, maximumMs = RET
 
 export function polarQueryCategories(query: PolarHistoryQuery): Category[] {
   return categories.filter(category=>query.fields.some(field=>groups[category].includes(field)));
+}
+
+const classifiedStages = ['light_sleep', 'deep_sleep', 'rem_sleep'] as const;
+
+/** Only summarize stages returned by this read, including for older vault records. */
+export function classifiedSleep(values: Record<string, unknown>, fields?: readonly string[]) {
+  if (fields && !classifiedStages.every(stage => fields.includes(stage))) return {};
+  const stages = classifiedStages.map(stage => values[stage]);
+  const total = stages.every((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0)
+    ? stages.reduce((sum, value) => sum + value, 0) : 0;
+  return {classified_sleep_seconds: total > 0 ? total : null};
 }
 
 export function projectHeartRates(row: Observation) {
@@ -118,6 +129,7 @@ function renderEntry(row: Observation, fields: Field[], start: number, end: numb
     temporal_scope:sourceDay(row)?'whole_source_day_possibly_overlapping_window':row.category==='sleep'?'source_sleep_interval':'recorded_start_in_window',
     ...(row.category==='sleep' && typeof row.values.sleep_end_time==='string'?{interval_end_at:row.values.sleep_end_time}:{}),
     fields:values,missing_fields:missing,
+    ...(row.category==='sleep' ? classifiedSleep(values, fields) : {}),
     ...(activityZones?{activity_zone_coverage:row.activity_zone_samples?'counts_of_returned_source_samples; continuity unknown':'legacy_count_only_subset_unknown'}:{}),
     ...(detailCoverage?{sample_coverage:detailCoverage}:{})};
 }
