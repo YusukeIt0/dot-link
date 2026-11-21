@@ -4,7 +4,10 @@ import {mkdtempSync, rmSync, readFileSync, renameSync, mkdirSync} from 'node:fs'
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
-import {HealthContext, healthTool, healthEvent, type HealthOptions} from '../server/health/context.ts';
+import {HealthContext, healthTool, healthEvent, healthResponseTool, type HealthOptions} from '../server/health/context.ts';
+import {healthCheckIn, healthReadSelection, healthUpdateRead, polarHistorySelection} from '../server/health/guidance.ts';
+import {contextResponseTool} from '../server/context-response.ts';
+import {factorHistoryTool} from '../server/history/factor-tool.ts';
 import {healthInterpretationPurpose, healthInterpretationGuidance} from '../server/health/context.ts';
 import {LocationHistoryStore} from '../server/history/store.ts';
 import {HealthVault} from '../server/health/vault.ts';
@@ -40,6 +43,8 @@ test('OFF is authoritative, consent cannot cross owners, reads expire and revoca
 
 test('interpretation travels through discovery and selected reads without fabricating state or requiring extra categories',async t=>{
  assert.ok(healthTool.description.includes(healthInterpretationPurpose));
+ assert.ok(healthTool.description.includes(healthReadSelection));
+ for (const tool of [healthTool,factorHistoryTool]) assert.ok(tool.description.includes(polarHistorySelection));
  assert.ok(healthEvent.description.includes(healthInterpretationPurpose));
  const f=await fixture(t,true);
  const r=f.h.read({categories:['recovery'],hours:168});assert.ok('observations' in r);
@@ -48,7 +53,10 @@ test('interpretation travels through discovery and selected reads without fabric
  assert.equal('inferred_state' in r,false);assert.equal(f.sent(),0);
  const absent=f.h.read({categories:['sleep']});assert.ok('observations' in absent);
  assert.deepEqual(absent.observations,[]);assert.deepEqual(absent.interpretation_guidance,healthInterpretationGuidance);
- await f.control('disable');assert.equal(f.h.read({}).status,'unavailable');
+ await f.control('disable');
+ const off=f.h.read({});assert.equal(off.status,'unavailable');
+ assert.ok('presentation' in off && off.presentation===healthInterpretationGuidance.presentation);
+ assert.equal('read_id' in off,false);
 });
 
 test('date-only activity and recovery overlap 24h without using the retention anchor as measurement time',async t=>{
@@ -80,6 +88,11 @@ test('health events and activation direct combined evidence through the combined
  const activation=new SharingActivation(f.h.activationStore,bridge,f.h,()=>NOW,'health');t.after(()=>activation.close());
  await settle();await settle();
  const pending=activation.pending();assert.equal(pending.length,1);
+ for(const text of [healthResponseTool.description,contextResponseTool.description]) {
+  assert.ok(text.includes(healthCheckIn));
+ }
+ assert.ok(healthEvent.description.includes(healthUpdateRead));
+ assert.deepEqual(Object.keys(healthEvent.payloadSchema.properties).sort(),['session_id','update_id']);
  for(const text of [healthEvent.description,pending[0].text]) {
   assert.match(text,/respond_to_context when other sources contribute/);
   assert.match(text,/respond_to_health only for health-only/);

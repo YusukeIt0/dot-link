@@ -30,6 +30,33 @@ async function fixture(t:TestContext,observations:Observation[],phoneTime?:Healt
 const act=(start:string,more:Record<string,unknown>)=>normalize('activity',[{start_time:start,...more}],now)[0];
 const heart=(day:string)=>normalize('heart_rate',[{date:day,heart_rate_samples:[{sample_time:'10:00:00',heart_rate:61},{sample_time:'14:30:00',heart_rate:88}]}],now)[0];
 
+test('current and selected sleep reads distinguish recorded windows from zero or missing stages', async t => {
+  const nights = normalize('sleep', {nights: [
+    {sleep_start_time:'2026-11-14T23:00:00Z', sleep_end_time:'2026-11-15T06:30:00Z', light_sleep:0, deep_sleep:0, rem_sleep:0},
+    {sleep_start_time:'2026-11-13T23:00:00Z', sleep_end_time:'2026-11-14T05:00:00Z', light_sleep:7200},
+    {sleep_start_time:'2026-11-12T23:00:00Z', sleep_end_time:'2026-11-13T04:00:00Z', light_sleep:9000, deep_sleep:3600, rem_sleep:0},
+  ]}, now);
+  const f = await fixture(t, [...nights, act('2026-11-15T00:00:00Z', {steps:1200})]);
+  const current = f.context.read({categories:['sleep'], hours:72});
+  assert.ok('observations' in current && current.sleep_metrics);
+  assert.match(current.sleep_metrics.interval_seconds, /start_time to sleep_end_time, including interruptions/);
+  assert.match(current.sleep_metrics.stages, /all-zero stages leave time asleep unknown/);
+  assert.deepEqual(current.observations.map(row=>row.values), nights.map(row=>row.values));
+  assert.deepEqual(current.observations.map(row=>row.classified_sleep_seconds), [null, null, 12600]);
+
+  const history = f.read(['interval_seconds','light_sleep','deep_sleep','rem_sleep']);
+  assert.deepEqual(history.sleep_metrics, current.sleep_metrics);
+  assert.equal(history.presentation, current.interpretation_guidance.presentation);
+  assert.equal(history.on_health_update, current.interpretation_guidance.on_health_update);
+  assert.deepEqual(history.entries.map(row=>row.classified_sleep_seconds), [null, null, 12600]);
+  assert.deepEqual(history.entries[0].fields, {interval_seconds:27000, light_sleep:0, deep_sleep:0, rem_sleep:0});
+  assert.deepEqual(history.entries[1].fields, {interval_seconds:21600, light_sleep:7200});
+  assert.deepEqual(history.entries[1].missing_fields, ['deep_sleep','rem_sleep']);
+  assert.ok(f.read(['interval_seconds','light_sleep']).entries.every(row=>!('classified_sleep_seconds' in row)));
+  assert.equal('sleep_metrics' in f.read(['steps']), false);
+  assert.equal('sleep_metrics' in f.context.read({categories:['activity']}), false);
+});
+
 test('shared historical window selects whole provider days, overlapping sleep and only recorded exercise starts',async t=>{
   const start=Date.parse('2026-11-12T12:00:00Z'),end=start+hour;
   const sleep=normalize('sleep',{nights:[{sleep_start_time:'2026-11-12T07:30:00-04:00',sleep_end_time:'2026-11-12T08:30:00-04:00',sleep_score:83}]},now);

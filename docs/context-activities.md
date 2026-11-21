@@ -218,14 +218,32 @@ registered profile is separately opt-in per read. Use it within the current acti
 when sleep, activity, recovery or physiology helps the person's question or situation.
 Combine useful evidence with conversation, current place, weather or mobility; do not
 fetch every factor or force a report. Missing data, source dates and provider-derived
-scores are reasoning inputs, not a routine disclaimer. Silence remains valid.
+scores help Dot decide what the record adds to the conversation. For example,
+a remark about poor sleep can lead to a sleep read, while fatigue after a walk
+can lead to an activity read. For a named calendar period or a physical
+heart-rate sensation at a known time, `get_factor_history` can select the
+relevant fields and interval. A figurative remark can simply receive a reply.
+When a read adds nothing, Dot can acknowledge the person without mentioning Polar.
+
+Current and historical sleep reads explain the recorded window between start
+and end, the seconds classified as light, deep or REM sleep, and recorded
+interruptions. `classified_sleep_seconds` sums the three returned stages. A
+field-selected history read includes the sum only when it selects all three.
+If stage durations are missing or all zero, the sum is null and the window can still
+be compared with another window. It cannot establish how long the person
+slept. Compare like measures, and use numbers or limitations when they matter
+to the conversation. [Polar sleep fields](https://www.polar.com/accesslink-api/#sleep)
 
 Enabling health sharing in Even requests `health.updated` reception from the existing
 Dot through the same owner-control mechanism as other sharing choices. If the
 host accepted the request and registration is still pending, restarting the Mac
 relay keeps the same request. Ordinary conversation can continue while it is pending.
 The event contains an opaque update identifier, not health values. Acquisition only notifies
-normalized changes. No second user-managed subscription switch is introduced.
+normalized changes. Dot decides whether the new evidence makes a brief check-in
+more useful now than later. Routine exercise, weak evidence and a change already
+mentioned can stay quiet. Dot is instructed to omit raw health values from the
+entire unsolicited message, which may be visible on G2. The relay forwards the
+chosen text. No second user-managed subscription switch is introduced.
 
 Health-derived G2 output uses `respond_to_health` and the returned short-lived read
 receipt. The response rechecks consent, owner authorization, revision and expiry.
