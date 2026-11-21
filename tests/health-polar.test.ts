@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {PolarAPI, POLAR_REDIRECT} from '../server/health/polar.ts';
+import {HEART_RATE_RANGE_DAYS, HEART_RATE_RESPONSE_LIMIT, RESPONSE_LIMIT, PolarAPI, POLAR_REDIRECT} from '../server/health/polar.ts';
+import {RETENTION, normalize} from '../server/health/data.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const signal=()=>new AbortController().signal;
 const token=()=>new Response(JSON.stringify({access_token:'fixture-access',token_type:'bearer',expires_in:3600,x_user_id:123}));
@@ -17,8 +18,10 @@ test('rate limiting blocks immediate retries; revoked credentials do not trigger
   for(let n=0;n<2;n++)await assert.rejects(api.exchange({clientId:'id',clientSecret:'secret'},'code',signal()),/HEALTH_RATE_LIMITED/);assert.equal(count,1);
   const revoked=new PolarAPI({now:()=>NOW,fetch:async()=>new Response('private',{status:401})});await assert.rejects(revoked.exchange({clientId:'id',clientSecret:'secret'},'code',signal()),/HEALTH_RECONNECT_REQUIRED/);
 });
+// Like Polar, a range request returns only days inside its own from..to range.
+const inRange=(url:unknown,date:string)=>{const u=new URL(String(url));return date>=u.searchParams.get('from')!&&date<=u.searchParams.get('to')!;};
 test('collection excludes routes and can skip a deleted profile; singular heart-rate response remains usable',async()=>{
-  const urls:string[]=[];const api=new PolarAPI({now:()=>NOW,fetch:async(url)=>{urls.push(String(url));if(String(url).includes('continuous-heart-rate'))return new Response(JSON.stringify({date:'2026-11-14',heart_rate_samples:[{sample_time:'08:00:00',heart_rate:60}]}));return new Response(null,{status:204});}});
+  const urls:string[]=[];const api=new PolarAPI({now:()=>NOW,fetch:async(url)=>{urls.push(String(url));if(String(url).includes('continuous-heart-rate')&&inRange(url,'2026-11-14'))return new Response(JSON.stringify({date:'2026-11-14',heart_rate_samples:[{sample_time:'08:00:00',heart_rate:60}]}));return new Response(null,{status:204});}});
   const result=await api.collect({clientId:'id',clientSecret:'secret',accessToken:'token',userId:123,expiresAt:NOW+3600_000},signal(),false);
   assert.equal(result.observations.length,1);assert.equal(result.observations[0].category,'heart_rate');assert.equal(result.profile,undefined);assert.equal(urls.some(x=>x.includes('physical-info')),false);assert.ok(urls.some(x=>x.includes('route=false')));
 });
@@ -28,7 +31,7 @@ test('optional profile failures preserve collected measurements; revoked consent
  for(const status of [200,204,404,500,401]) {
   const api=new PolarAPI({now:()=>NOW,fetch:async url=>{
    if(String(url).includes('physical-info'))return new Response(status===204?null:'{}',{status});
-   if(String(url).includes('continuous-heart-rate'))return new Response(JSON.stringify({date:'2026-11-14',heart_rate_samples:[{sample_time:'08:00:00',heart_rate:60}]}));
+   if(String(url).includes('continuous-heart-rate')&&inRange(url,'2026-11-14'))return new Response(JSON.stringify({date:'2026-11-14',heart_rate_samples:[{sample_time:'08:00:00',heart_rate:60}]}));
    return new Response(null,{status:204});
   }});
   if(status===401){await assert.rejects(api.collect(c,signal()),/HEALTH_RECONNECT_REQUIRED/);continue;}
@@ -42,11 +45,56 @@ test('range heart-rate envelope preserves multiple days and filters invalid or e
   {sample_time:'08:00:00',heart_rate:60},{sample_time:'08:05:00',heart_rate:300},
  ]});
  const api=new PolarAPI({now:()=>NOW,fetch:async url=>String(url).includes('continuous-heart-rate')
-  ?new Response(JSON.stringify({heart_rates:[day('2026-11-13'),day('2026-11-14'),day('2026-10-01')]}))
+  ?new Response(JSON.stringify({heart_rates:[day('2026-11-13'),day('2026-11-14'),day('2026-10-01')].filter(row=>inRange(url,row.date)||row.date==='2026-10-01')}))
   :new Response(null,{status:204})});
  const result=await api.collect({clientId:'id',clientSecret:'secret',accessToken:'token',expiresAt:NOW+3600_000},signal(),false);
  assert.equal(result.observations.length,2);
  assert.deepEqual(result.observations.map(x=>x.source_local_date),['2026-11-13','2026-11-14']);
  for(const row of result.observations){assert.equal(row.category,'heart_rate');assert.deepEqual(row.samples,[{time:'08:00:00',value:60}]);assert.equal(row.measured_at,null);}
  assert.equal(JSON.stringify(result).includes('private-provider-id'),false);
+});
+
+test('continuous heart rate is fetched in bounded date ranges so a large week still updates (#429)', async () => {
+  const day = (date: string, count: number) => ({date, heart_rate_samples: Array.from({length: count}, (_, i) => ({sample_time: new Date(i * 5000).toISOString().slice(11, 19), heart_rate: 60 + (i % 40)}))});
+  const ranges: [string, string][] = []; let largest = 0;
+  const api = new PolarAPI({now: () => NOW, fetch: async url => {
+    const u = new URL(String(url));
+    if (!u.pathname.endsWith('/continuous-heart-rate')) return new Response(null, {status: 204});
+    const from = u.searchParams.get('from')!, to = u.searchParams.get('to')!; ranges.push([from, to]);
+    const days = []; for (let t = Date.parse(from + 'T00:00:00Z'); t <= Date.parse(to + 'T00:00:00Z'); t += 86_400_000) days.push(day(new Date(t).toISOString().slice(0, 10), 17_000));
+    const body = JSON.stringify({heart_rates: days}); largest = Math.max(largest, Buffer.byteLength(body));
+    return new Response(body);
+  }});
+  const result = await api.collect({clientId: 'id', clientSecret: 'secret', accessToken: 'token', userId: 123, expiresAt: NOW + 3600_000}, signal(), false);
+  // About 0.75 MB per day: a single request for the whole window would exceed the 4 MB bound.
+  assert.ok(ranges.length > 1 && largest <= 4 * 1024 * 1024, `bounded ranges (${ranges.length}, largest ${largest})`);
+  for (const [from, to] of ranges) assert.ok((Date.parse(to) - Date.parse(from)) / 86_400_000 < HEART_RATE_RANGE_DAYS);
+  for (let i = 1; i < ranges.length; i++) assert.equal(Date.parse(ranges[i][0]) - Date.parse(ranges[i - 1][1]), 86_400_000, 'contiguous, non-overlapping ranges');
+  // The ranges start at the collection window's first date and end at its last.
+  const windowFrom = new Date(NOW - RETENTION).toISOString().slice(0, 10), windowTo = new Date(NOW + 14 * 3600_000).toISOString().slice(0, 10);
+  assert.equal(ranges[0][0], windowFrom); assert.equal(ranges.at(-1)![1], windowTo);
+  const requested = ranges.reduce((days, [from, to]) => days + (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1, 0);
+  assert.equal(requested, (Date.parse(windowTo) - Date.parse(windowFrom)) / 86_400_000 + 1, 'each day requested exactly once');
+  const covered = new Set(result.observations.filter(o => o.category === 'heart_rate').map(o => o.source_local_date));
+  const retained = new Set(normalize('heart_rate', {heart_rates: ranges.map(([day]) => ({date: day, heart_rate_samples: [{sample_time: '08:00:00', heart_rate: 60}]}))}, NOW).map(o => o.source_local_date));
+  assert.deepEqual([...covered].sort(), [...retained].sort(), 'every retained day is normalized once');
+});
+
+test('one day recorded every second still updates, while responses beyond their bounds are rejected (#429)', async () => {
+  const c = {clientId: 'id', clientSecret: 'secret', accessToken: 'token', userId: 123, expiresAt: NOW + 3600_000};
+  const second = (i: number) => new Date(i * 1000).toISOString().slice(11, 19);
+  const dense = (url: unknown) => { const date = new URL(String(url)).searchParams.get('from')!;
+    return JSON.stringify({heart_rates: [{date, heart_rate_samples: Array.from({length: 86_400}, (_, i) => ({sample_time: second(i), heart_rate: 60 + (i % 40)}))}]}); };
+  const ok = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('continuous-heart-rate') ? new Response(dense(url)) : new Response(null, {status: 204})});
+  const sample = Buffer.byteLength(dense('https://x/?from=2026-11-14'));
+  // About 3.7 MB: almost no headroom under the general 4 MB bound, more than 4x under the heart-rate bound.
+  assert.ok(sample > RESPONSE_LIMIT * 0.85 && sample * 4 < HEART_RATE_RESPONSE_LIMIT, `1 Hz day is ${sample} bytes`);
+  const result = await ok.collect(c, signal(), false);
+  assert.ok(result.observations.some(o => o.category === 'heart_rate'));
+  const huge = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('continuous-heart-rate')
+    ? new Response('x'.repeat(HEART_RATE_RESPONSE_LIMIT + 1)) : new Response(null, {status: 204})});
+  await assert.rejects(huge.collect(c, signal(), false), /HEALTH_INVALID_RESPONSE/);
+  const otherTooLarge = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('/users/sleep')
+    ? new Response('x'.repeat(RESPONSE_LIMIT + 1)) : new Response(null, {status: 204})});
+  await assert.rejects(otherTooLarge.collect(c, signal(), false), /HEALTH_INVALID_RESPONSE/);
 });

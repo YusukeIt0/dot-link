@@ -9,12 +9,19 @@ export class PolarError extends Error {
   readonly code:string;
   constructor(code:string) {super(code);this.code=code;}
 }
+/** Continuous heart rate is requested one day at a time. Polar documents 5-minute
+ * samples, but real accounts record far more often (measured about 20,000 samples,
+ * 0.86 MB, in one day). Even one sample per second all day is about 3.8 MB, so a
+ * one-day response gets a larger bound than other Polar responses. The request
+ * count stays far below Polar's rate limits. */
+export const HEART_RATE_RANGE_DAYS=1;
+export const RESPONSE_LIMIT=4*1024*1024, HEART_RATE_RESPONSE_LIMIT=16*1024*1024;
 export class PolarAPI {
   private fetcher:typeof fetch;
   private now:()=>number;
   private retryAt=0;
   constructor(options:{fetch?:typeof fetch;now?:()=>number}={}) {this.fetcher=options.fetch??fetch;this.now=options.now??Date.now;}
-  private async request(url:string,init:RequestInit,signal?:AbortSignal,empty=false):Promise<unknown> {
+  private async request(url:string,init:RequestInit,signal?:AbortSignal,empty=false,limit=RESPONSE_LIMIT):Promise<unknown> {
     if(this.now()<this.retryAt)throw new PolarError('HEALTH_RATE_LIMITED');
     let r:Response;
     try {r=await this.fetcher(url,{...init,redirect:'error',signal:AbortSignal.any([AbortSignal.timeout(15_000),...(signal?[signal]:[])])});}
@@ -26,7 +33,7 @@ export class PolarAPI {
     if(!r.ok){await r.body?.cancel();throw new PolarError('HEALTH_REQUEST_FAILED');}
     if(!r.body)return undefined;
     const chunks:Uint8Array[]=[];let size=0;
-    try {for await(const bytes of r.body as unknown as AsyncIterable<Uint8Array>){size+=bytes.length;if(size>4*1024*1024)throw new Error();chunks.push(bytes);}return size?JSON.parse(Buffer.concat(chunks).toString('utf8')):undefined;}
+    try {for await(const bytes of r.body as unknown as AsyncIterable<Uint8Array>){size+=bytes.length;if(size>limit)throw new Error();chunks.push(bytes);}return size?JSON.parse(Buffer.concat(chunks).toString('utf8')):undefined;}
     catch {throw new PolarError('HEALTH_INVALID_RESPONSE');}
   }
   authorization(clientId:string,state:string) {
@@ -46,9 +53,9 @@ export class PolarAPI {
     catch(e) {if(!(e instanceof PolarError)||e.code!=='HEALTH_ALREADY_REGISTERED')throw e;await this.call(connection,`/users/${token.x_user_id}`,{},signal);}
     return connection;
   }
-  private call(c:PolarConnection,path:string,init:RequestInit={},signal?:AbortSignal,empty=false) {
+  private call(c:PolarConnection,path:string,init:RequestInit={},signal?:AbortSignal,empty=false,limit=RESPONSE_LIMIT) {
     if(!c.accessToken||!c.expiresAt||c.expiresAt<=this.now())throw new PolarError('HEALTH_RECONNECT_REQUIRED');
-    return this.request(`https://www.polaraccesslink.com/v3${path}`,{...init,headers:{Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${c.accessToken}`}},signal,empty);
+    return this.request(`https://www.polaraccesslink.com/v3${path}`,{...init,headers:{Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${c.accessToken}`}},signal,empty,limit);
   }
   async profile(c:PolarConnection,signal:AbortSignal):Promise<Profile> {return normalizeProfile(await this.call(c,'/users/physical-info',{},signal),this.now());}
   async collect(c:PolarConnection,signal:AbortSignal,includeProfile=true):Promise<{observations:Observation[];profile?:Profile}> {
@@ -56,11 +63,18 @@ export class PolarAPI {
     const observations:Observation[]=[];
     // Bounded pull; no public webhook receiver or extra cloud service. Empty
     // categories are ordinary gaps, not fabricated observations.
+    // Continuous heart rate is requested per day so a growing week never becomes one
+    // oversized response. Days normalize independently; retention is unchanged.
+    const heartRateRanges:string[]=[];
+    for(let start=Date.parse(`${from}T00:00:00Z`),end=Date.parse(`${to}T00:00:00Z`);start<=end;start+=HEART_RATE_RANGE_DAYS*86_400_000) {
+      const last=Math.min(end,start+(HEART_RATE_RANGE_DAYS-1)*86_400_000);
+      heartRateRanges.push(`/users/continuous-heart-rate?from=${new Date(start).toISOString().slice(0,10)}&to=${new Date(last).toISOString().slice(0,10)}`);
+    }
     for(const [category,path] of [
       ['sleep','/users/sleep'],['activity',`/users/activities?from=${from}&to=${to}&activity_zones=true`],
-      ['heart_rate',`/users/continuous-heart-rate?from=${from}&to=${to}`],
+      ...heartRateRanges.map(range=>['heart_rate',range] as const),
       ['recovery','/users/nightly-recharge'],['exercise','/exercises?samples=false&zones=false&route=false'],
-    ] as const) {const raw=await this.call(c,path,{},signal,true);if(raw)observations.push(...normalize(category,raw,now));}
+    ] as const) {const raw=await this.call(c,path,{},signal,true,category==='heart_rate'?HEART_RATE_RESPONSE_LIMIT:RESPONSE_LIMIT);if(raw)observations.push(...normalize(category,raw,now));}
     let profile:Profile|undefined;
     if(includeProfile)try{profile=await this.profile(c,signal);}catch(error){
       // Optional profile gaps must not discard already fetched measurements.
