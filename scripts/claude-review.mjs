@@ -252,7 +252,7 @@ if (mode === 'intake') {
   if (!quota.allowed) {
     // No comment is claimed or edited: an existing completed review stays intact,
     // and a burst cannot turn into a burst of bot comments.
-    summary(`Review paused before model execution: ${quota.reason} A maintainer can still request it with \`/dotlink review\` or a manual dispatch.`);
+    summary(`Review paused before model execution: ${quota.reason} A maintainer can still request it with \`/dotlink review\` or a manual dispatch; the author can request it by comment within their own daily limit.`);
     process.exit(0);
   }
   output('number', number);

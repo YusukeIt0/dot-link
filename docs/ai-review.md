@@ -25,7 +25,10 @@ next steps; maintainers decide what to adopt, close or merge.
   24 hours. These counts use workflow-run history (only requests that started a
   model review; ordinary comments and paused or refused requests do not count)
   and the PR timeline, so deleting or editing
-  comments or toggling draft does not reset them. Requests beyond these
+  comments or toggling draft does not reset them. An author whose new item
+  was paused can still request its review by comment within their own limit,
+  so each public account gets at most about 8 model reviews per day; the
+  repository-wide bound applies to newly opened items. Requests beyond these
   bounds stop before the model starts and leave the existing comment unchanged; the
   run summary records why. Maintainers with write access, trusted maintainers, Dependabot and the
   pinned-runtime watch are not limited, so a maintainer can still request any review.
