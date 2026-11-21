@@ -1,20 +1,21 @@
 // Maintainer-only rebuild. npm build uses the checked-in, hash-verified runtime.
-import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { preparePinnedCheckout } from './lib/pinned-checkout.mjs';
 const root=resolve('.'), work=resolve('.runtime/wake-runtime-build');
 const manifestPath=join(root,'distribution/wake/manifest.json');
 const manifest=JSON.parse(await readFile(manifestPath,'utf8'));
 const source=join(work,'source'), sdk=join(work,'emsdk'), build=join(work,'build');
 function run(command,args,cwd=work,env=process.env){const r=spawnSync(command,args,{cwd,env,stdio:'inherit'});if(r.status!==0)throw new Error(`${command} failed`);}
-async function exists(path){try{await access(path);return true;}catch{return false;}}
 await mkdir(work,{recursive:true});
-if(!await exists(source))run('git',['clone','--depth','1','--branch',`v${manifest.sherpaVersion}`,'https://github.com/k2-fsa/sherpa-onnx.git',source]);
-const actual=spawnSync('git',['rev-parse','HEAD'],{cwd:source,encoding:'utf8'});
-if(actual.status!==0||actual.stdout.trim()!==manifest.sourceCommit)throw new Error('Unexpected sherpa source revision');
-if(!await exists(sdk))run('git',['clone','--depth','1','--branch',manifest.emsdkVersion,'https://github.com/emscripten-core/emsdk.git',sdk]);
+await preparePinnedCheckout({name:'sherpa-onnx',repository:'https://github.com/k2-fsa/sherpa-onnx.git',
+  ref:`v${manifest.sherpaVersion}`,commit:manifest.sourceCommit,directory:source});
+// emsdk is executed directly, so a version tag alone is not enough: pin and verify its commit first.
+await preparePinnedCheckout({name:'emsdk',repository:'https://github.com/emscripten-core/emsdk.git',
+  ref:manifest.emsdkVersion,commit:manifest.emsdkCommit,directory:sdk,clean:true});
 run(join(sdk,'emsdk'),['install',manifest.emsdkVersion]);run(join(sdk,'emsdk'),['activate',manifest.emsdkVersion]);
 const patch=join(root,'distribution/wake/runtime.patch');
 const applied=spawnSync('git',['apply','--reverse','--check',patch],{cwd:source,stdio:'ignore'}).status===0;
