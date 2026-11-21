@@ -229,6 +229,8 @@ For `events/subscribe` and `events/unsubscribe`, all three event domains use:
 | `invalid_signing_secret` | Supply a valid webhook signing secret. |
 | `subscription_conflict` | Another callback is active. Unsubscribe it only if replacement is intended. |
 | `challenge_failed` | Callback verification failed; inspect the callback endpoint before retrying. This retains code `-32015` and message `CallbackEndpointError`. |
+| `subscription_changed` | The subscription was removed while its callback was being verified, so the result was not stored. Subscribe again only if reception is still intended. |
+| `verification_busy` | Too many callback verifications are already running (code `-32016`). Nothing changed; retry the same subscription shortly. |
 | `internal_error` | An unexpected failure occurred; the outcome is unconfirmed. |
 
 The destination, secret, conflict and challenge reasons apply to subscription

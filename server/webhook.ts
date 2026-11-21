@@ -1,6 +1,6 @@
 import { lookup } from 'node:dns/promises';
 import { request } from 'node:https';
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import ipaddr from 'ipaddr.js';
 import { Webhook } from 'standardwebhooks';
 
@@ -10,6 +10,15 @@ export type Post = (url: string, body: string, headers: Record<string, string>) 
 export class CallbackVerificationError extends Error {
   constructor() { super('Callback verification failed'); }
 }
+
+/** Raised before any network work when too many callback checks are already running. */
+export class CallbackVerificationBusyError extends Error {}
+
+// One relay process serves a single MCP principal. Each subscribe/renew waits for a
+// callback check of up to 10 seconds; bound how many may run at once across all
+// event features, and let identical concurrent renewals share one check.
+export const MAX_CALLBACK_VERIFICATIONS = 4;
+let verificationsInFlight = 0;
 export class CallbackDestinationError extends Error {
   readonly hostname: string;
   constructor(hostname: string) {
@@ -88,7 +97,18 @@ export class WebhookSender {
       'webhook-signature': signature, 'X-MCP-Subscription-Id': destination.id,
     });
   }
-  async verify(destination: Destination): Promise<void> {
+  private readonly verifications = new Map<string, Promise<void>>();
+  verify(destination: Destination): Promise<void> {
+    const key = createHash('sha256').update(JSON.stringify([destination.id, destination.url, destination.secret])).digest('hex');
+    const shared = this.verifications.get(key);
+    if (shared) return shared;
+    if (verificationsInFlight >= MAX_CALLBACK_VERIFICATIONS) return Promise.reject(new CallbackVerificationBusyError());
+    verificationsInFlight++;
+    const run = this.challenge(destination).finally(() => { verificationsInFlight--; this.verifications.delete(key); });
+    this.verifications.set(key, run);
+    return run;
+  }
+  private async challenge(destination: Destination): Promise<void> {
     const challenge = randomUUID();
     let response: Delivery;
     try { response = await this.send(destination, `verify_${randomUUID()}`, { type: 'verification', challenge }); }
