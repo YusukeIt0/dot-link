@@ -65,6 +65,9 @@ export class NotificationInbox {
   readonly changes = new ChangeSignal();
   private state: State;
   private operation: Promise<unknown> = Promise.resolve();
+  private readonly subscribing = new Set<Promise<unknown>>();
+  private readonly verifyingUrls = new Map<string, number>();
+  private subscriptionRemovals = 0;
   private path: string;
   private sender: WebhookSender;
   private hosts: string[];
@@ -175,28 +178,52 @@ export class NotificationInbox {
       text: n.title, reply: n.announcement!, status: 'replied', createdAt: n.announced_at!,
     }));
   }
-  subscribe(input: unknown) {
+  // Verification runs outside the queue shared with notification intake and
+  // announcements; the queue only rechecks and commits the result.
+  subscribe(input: unknown): Promise<{ id: string; refreshBefore: string; cursor: null; truncated: false }> {
+    const operation = this.verifyThenCommit(input);
+    this.subscribing.add(operation);
+    const settled = () => { this.subscribing.delete(operation); };
+    operation.then(settled, settled);
+    return operation;
+  }
+  private verified(url: string) {
+    const remaining = (this.verifyingUrls.get(url) ?? 1) - 1;
+    if (remaining) this.verifyingUrls.set(url, remaining); else this.verifyingUrls.delete(url);
+  }
+  private async verifyThenCommit(input: unknown) {
+    const p = subscriptionArguments(subscribe, input);
+    subscriptionDelivery(p.delivery, this.hosts);
+    const id = 'sub_' + createHash('sha256').update(JSON.stringify([session, eventName, p.delivery.url])).digest('hex').slice(0, 32);
+    if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
+    const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
+    const removals = this.subscriptionRemovals;
+    this.verifyingUrls.set(sub.url, (this.verifyingUrls.get(sub.url) ?? 0) + 1);
+    try { await this.sender.verify(sub); } finally { this.verified(sub.url); }
     return this.serial(async () => {
-      const p = subscriptionArguments(subscribe, input);
-      subscriptionDelivery(p.delivery, this.hosts);
-      const id = 'sub_' + createHash('sha256').update(JSON.stringify([session, eventName, p.delivery.url])).digest('hex').slice(0, 32);
       if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
-      const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
-      await this.sender.verify(sub); this.save(true, { ...this.state, subscription: sub, activationStoppedFor: undefined });
-      return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
+      if (this.subscriptionRemovals !== removals) throw new SubscriptionResponseError('subscription_changed');
+      this.save(true, { ...this.state, subscription: sub, activationStoppedFor: undefined });
+      return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
     });
   }
   unsubscribe(input: unknown) {
     return this.serial(async () => {
       const p = subscriptionArguments(z.object({ name: z.literal(eventName), arguments: args, delivery: delivery.omit({ secret: true }) }), input);
+      // Also cancels a pending (re)subscription of the same callback.
+      if (this.verifyingUrls.has(p.delivery.url)) this.subscriptionRemovals++;
       if (this.state.subscription?.url === p.delivery.url) {
+        this.subscriptionRemovals++;
         const intent = this.sharingControl(false);
         this.save(true, { ...this.state, subscription: undefined, activationStoppedFor: intent?.id ?? this.state.activationStoppedFor });
       }
       return {};
     });
   }
-  submit(input: unknown) {
+  async submit(input: unknown) {
+    // Keep the previous outcome of waiting for an in-flight first subscription,
+    // without ever waiting behind verification while a subscription is active.
+    if (!this.active() && this.subscribing.size) await Promise.allSettled([...this.subscribing]);
     return this.serial(async () => {
       // Admission metadata is transport-only. Keep the saved notification format
       // readable by the previous app during a verified update rollback.
@@ -224,7 +251,7 @@ export class NotificationInbox {
       try {
         const result = await this.sender.send(sub, event.eventId, event);
         n.status = result.status >= 200 && result.status < 300 ? 'accepted' : 'failed';
-        if (result.status === 410) delete this.state.subscription;
+        if (result.status === 410) { this.subscriptionRemovals++; delete this.state.subscription; }
       } catch { n.status = 'failed'; }
       this.save(); return { notification_id: p.id, status: n.status };
     });

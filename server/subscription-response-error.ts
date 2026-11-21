@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import { ToolRejection, rpcResponse } from './tool-response.ts';
-import { callbackUrl, signingSecret, CallbackDestinationError, CallbackVerificationError } from './webhook.ts';
+import { callbackUrl, signingSecret, CallbackDestinationError, CallbackVerificationError, CallbackVerificationBusyError } from './webhook.ts';
 
 const messages = {
   invalid_arguments: 'Subscription arguments are invalid. Use the selected event schema to correct them.',
   callback_destination_rejected: 'The callback URL is invalid or not allowed. Use an allowed HTTPS callback destination.',
   invalid_signing_secret: 'The webhook signing secret is invalid. Supply a valid webhook signing secret.',
   subscription_conflict: 'Another callback is already subscribed. Keep the existing subscription unless replacing it is intended; unsubscribe it before replacing it.',
+  subscription_changed: 'The subscription was removed while this callback was being verified, so it was not stored. Subscribe again only if reception is still intended.',
 } as const;
 
 export class SubscriptionResponseError extends ToolRejection {
@@ -39,6 +40,9 @@ export function subscriptionResponse(action: () => unknown | Promise<unknown>) {
     catch (error) {
       if (error instanceof CallbackVerificationError) {
         throw new ToolRejection('challenge_failed', 'CallbackEndpointError', -32015);
+      }
+      if (error instanceof CallbackVerificationBusyError) {
+        throw new ToolRejection('verification_busy', 'Too many callback verifications are in progress. Nothing changed; retry the same subscription shortly.', -32016);
       }
       throw error;
     }
