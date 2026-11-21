@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {HEART_RATE_RANGE_DAYS, HEART_RATE_RESPONSE_LIMIT, RESPONSE_LIMIT, PolarAPI, POLAR_REDIRECT} from '../server/health/polar.ts';
+import {RETENTION, normalize} from '../server/health/data.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const signal=()=>new AbortController().signal;
 const token=()=>new Response(JSON.stringify({access_token:'fixture-access',token_type:'bearer',expires_in:3600,x_user_id:123}));
@@ -69,8 +70,14 @@ test('continuous heart rate is fetched in bounded date ranges so a large week st
   assert.ok(ranges.length > 1 && largest <= 4 * 1024 * 1024, `bounded ranges (${ranges.length}, largest ${largest})`);
   for (const [from, to] of ranges) assert.ok((Date.parse(to) - Date.parse(from)) / 86_400_000 < HEART_RATE_RANGE_DAYS);
   for (let i = 1; i < ranges.length; i++) assert.equal(Date.parse(ranges[i][0]) - Date.parse(ranges[i - 1][1]), 86_400_000, 'contiguous, non-overlapping ranges');
+  // The ranges start at the collection window's first date and end at its last.
+  const windowFrom = new Date(NOW - RETENTION).toISOString().slice(0, 10), windowTo = new Date(NOW + 14 * 3600_000).toISOString().slice(0, 10);
+  assert.equal(ranges[0][0], windowFrom); assert.equal(ranges.at(-1)![1], windowTo);
+  const requested = ranges.reduce((days, [from, to]) => days + (Date.parse(to) - Date.parse(from)) / 86_400_000 + 1, 0);
+  assert.equal(requested, (Date.parse(windowTo) - Date.parse(windowFrom)) / 86_400_000 + 1, 'each day requested exactly once');
   const covered = new Set(result.observations.filter(o => o.category === 'heart_rate').map(o => o.source_local_date));
-  assert.ok(covered.size >= 6, 'every retained day is normalized');
+  const retained = new Set(normalize('heart_rate', {heart_rates: ranges.map(([day]) => ({date: day, heart_rate_samples: [{sample_time: '08:00:00', heart_rate: 60}]}))}, NOW).map(o => o.source_local_date));
+  assert.deepEqual([...covered].sort(), [...retained].sort(), 'every retained day is normalized once');
 });
 
 test('one day recorded every second still updates, while responses beyond their bounds are rejected (#429)', async () => {
