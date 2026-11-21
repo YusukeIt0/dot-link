@@ -2,6 +2,7 @@
   "sherpaVersion": "1.13.8",
   "sourceCommit": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
   "emsdkVersion": "4.0.23",
+  "emsdkCommit": "c0bb220cb6e6f4e0fabb6f6db9efd53390ef5e56",
   "initialMemoryMiB": 64,
   "maximumMemoryMiB": 256,
   "downloads": {
