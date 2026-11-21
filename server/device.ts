@@ -31,7 +31,13 @@ export function deviceServer(options: { token: string; origin: string; directory
   const root = resolve(options.directory);
   const bridgeURL = options.bridgeURL ?? 'http://127.0.0.1:3460';
   const appOrigins = new Set((options.appOrigins ?? []).map(appOrigin));
-  let pairingWindow = Date.now(); let pairingAttempts = 0;
+  // Failed pair/resume attempts share one process budget, but a presented
+  // 256-bit capability is validated before that budget can reject it, so
+  // unrelated peers cannot lock out a legitimate pairing or recovery. Valid
+  // capabilities are bounded separately, per capability, to keep the previous
+  // rate limit for a misbehaving client that holds real credentials.
+  let pairingWindow = Date.now(); let pairingFailures = 0;
+  const pairingSuccesses = new Map<string, number>();
   let revokeWindow = Date.now(); let revokeAttempts = 0;
   return createServer(async (request, response) => {
     response.setHeader('Cache-Control', 'no-store');
@@ -86,9 +92,16 @@ export function deviceServer(options: { token: string; origin: string; directory
         }
         if (['/api/pair', '/api/pair/resume'].includes(path) && request.method === 'POST' && options.pairing) {
           if (request.headers['content-type'] !== 'application/json' || requestOrigin === undefined) { json(415, { error: 'JSON and Origin required' }); return; }
-          if (Date.now() - pairingWindow >= 60000) { pairingWindow = Date.now(); pairingAttempts = 0; }
-          const withinBudget = ++pairingAttempts <= 30;
-          const value = JSON.parse((await boundedBody(request, 1024)).toString('utf8'));
+          if (Date.now() - pairingWindow >= 60000) { pairingWindow = Date.now(); pairingFailures = 0; pairingSuccesses.clear(); }
+          const limited = () => { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); };
+          // Over budget, only an envelope that can carry a capability is examined.
+          const exhausted = pairingFailures >= 30;
+          let value: any;
+          try { value = JSON.parse((await boundedBody(request, 1024)).toString('utf8')); } catch (error) {
+            pairingFailures++;
+            if (exhausted) { limited(); return; }
+            throw error;
+          }
           const key = path === '/api/pair/resume' ? 'resumeToken' : 'code';
           const hasRuntime = key === 'resumeToken' && value && Object.hasOwn(value, 'runtime');
           const runtime = hasRuntime ? runtimeRecoveryRequest(value.runtime) : undefined;
@@ -96,20 +109,34 @@ export function deviceServer(options: { token: string; origin: string; directory
           // Retained old code must not exhaust the acquisition budget for the
           // new owner by repeatedly attempting unsupported legacy recovery.
           if (validEnvelope && key === 'resumeToken' && !runtime && options.pairing.managedRuntime(value[key])) {
-            pairingAttempts--;
             json(409, { code: RUNTIME_SUPERSEDED }); return;
           }
-          if (!withinBudget) { response.setHeader('Retry-After', '60'); json(429, { error: 'Try again later' }); return; }
-          if (!validEnvelope) { json(400, { error: 'Invalid pairing request' }); return; }
+          // Responses for invalid input are unchanged: 400/401 within budget, 429 beyond it.
+          const failed = (status: number, body: unknown) => {
+            pairingFailures++;
+            if (pairingFailures > 30) { limited(); return; }
+            json(status, body);
+          };
+          if (!validEnvelope) { failed(400, { error: 'Invalid pairing request' }); return; }
+          // Only capabilities that already validated are tracked, so the map
+          // stays bounded by real invitations/recoveries and cannot be filled by guesses.
+          const capability = createHash('sha256').update(`${key}:${value[key]}`).digest('hex');
+          if ((pairingSuccesses.get(capability) ?? 0) >= 30) { limited(); return; }
+          const accepted = () => pairingSuccesses.set(capability, (pairingSuccesses.get(capability) ?? 0) + 1);
+          // A handler error (device limit, storage failure) still counts against this
+          // capability, so retrying it is bounded like any other use.
+          const attempt = <T>(run: () => T): T => { try { return run(); } catch (error) { accepted(); throw error; } };
           if (runtime) {
-            const result = options.pairing.recoverRuntime(value[key], requestOrigin, runtime);
-            if (result.kind === 'invalid') { json(401, { error: 'Pairing invitation invalid or expired' }); return; }
+            const result = attempt(() => options.pairing!.recoverRuntime(value[key], requestOrigin, runtime));
+            if (result.kind === 'invalid') { failed(401, { error: 'Pairing invitation invalid or expired' }); return; }
+            accepted();
             if (result.kind === 'superseded') { json(409, { code: RUNTIME_SUPERSEDED }); return; }
             json(200, { protocol: RUNTIME_RECOVERY_PROTOCOL, generation: result.generation,
               ...(result.kind === 'resumed' ? result.credentials : {}) }); return;
           }
-          const result = key === 'resumeToken' ? options.pairing.resume(value.resumeToken, requestOrigin) : options.pairing.exchange(value.code, requestOrigin);
-          if (!result) { json(401, { error: 'Pairing invitation invalid or expired' }); return; }
+          const result = attempt(() => key === 'resumeToken' ? options.pairing!.resume(value.resumeToken, requestOrigin) : options.pairing!.exchange(value.code, requestOrigin));
+          if (!result) { failed(401, { error: 'Pairing invitation invalid or expired' }); return; }
+          accepted();
           json(200, result); return;
         }
         const credential = request.headers.authorization?.match(/^Bearer ([A-Za-z0-9_-]{43})$/)?.[1] ?? '';
