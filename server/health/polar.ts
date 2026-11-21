@@ -9,6 +9,8 @@ export class PolarError extends Error {
   readonly code:string;
   constructor(code:string) {super(code);this.code=code;}
 }
+/** Days per continuous heart-rate request; about 0.5 MB per day keeps each response well within the bound. */
+export const HEART_RATE_RANGE_DAYS=2;
 export class PolarAPI {
   private fetcher:typeof fetch;
   private now:()=>number;
@@ -56,9 +58,16 @@ export class PolarAPI {
     const observations:Observation[]=[];
     // Bounded pull; no public webhook receiver or extra cloud service. Empty
     // categories are ordinary gaps, not fabricated observations.
+    // A week of continuous heart rate can exceed the per-response bound, so it is
+    // requested in short, non-overlapping date ranges. Days normalize independently.
+    const heartRateRanges:string[]=[];
+    for(let start=Date.parse(`${from}T00:00:00Z`),end=Date.parse(`${to}T00:00:00Z`);start<=end;start+=HEART_RATE_RANGE_DAYS*86_400_000) {
+      const last=Math.min(end,start+(HEART_RATE_RANGE_DAYS-1)*86_400_000);
+      heartRateRanges.push(`/users/continuous-heart-rate?from=${new Date(start).toISOString().slice(0,10)}&to=${new Date(last).toISOString().slice(0,10)}`);
+    }
     for(const [category,path] of [
       ['sleep','/users/sleep'],['activity',`/users/activities?from=${from}&to=${to}&activity_zones=true`],
-      ['heart_rate',`/users/continuous-heart-rate?from=${from}&to=${to}`],
+      ...heartRateRanges.map(range=>['heart_rate',range] as const),
       ['recovery','/users/nightly-recharge'],['exercise','/exercises?samples=false&zones=false&route=false'],
     ] as const) {const raw=await this.call(c,path,{},signal,true);if(raw)observations.push(...normalize(category,raw,now));}
     let profile:Profile|undefined;
