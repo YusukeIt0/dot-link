@@ -148,7 +148,7 @@ function publicQuota(s) {
   return publicReviewDecision({request, item: s.issue, actor,
     isPublic: user => user?.type === 'User' && !trustedUser(user),
     listItems: page => get(`${root}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`),
-    listCommandRuns: page => get(`${root}/actions/workflows/claude-review.yml/runs?actor=${encodeURIComponent(actor.login)}&event=issue_comment&created=${since}&per_page=100&page=${page}`),
+    listRequestRuns: page => get(`${root}/actions/workflows/claude-review.yml/runs?actor=${encodeURIComponent(actor.login)}&created=${since}&per_page=100&page=${page}`),
     listRunJobs: id => JSON.parse(gh(['api', `${root}/actions/runs/${id}/jobs?filter=latest&per_page=100`, '--paginate', '--slurp'])).flatMap(page => page.jobs ?? []),
     currentRunId: Number(process.env.GITHUB_RUN_ID),
     listTimeline: () => JSON.parse(gh(['api', `${endpoint}/timeline?per_page=100`, '--paginate', '--slurp'])).flat()});

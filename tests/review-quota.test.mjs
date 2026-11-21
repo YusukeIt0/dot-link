@@ -42,12 +42,12 @@ test('author commands are counted only from runs that reached intake, not surviv
   const decide = (rows, jobs = () => []) => {
     const pages = []; for (let i = 0; i < rows.length || i === 0; i += 100) pages.push(rows.slice(i, i + 100));
     return publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author, currentRunId: 1,
-      listCommandRuns: page => ({workflow_runs: pages[page - 1] ?? []}), listRunJobs: jobs,
+      listRequestRuns: page => ({workflow_runs: (pages[page - 1] ?? []).map(run => ({event: 'issue_comment', ...run}))}), listRunJobs: jobs,
       listItems: () => assert.fail('no list needed'), isPublic, now});
   };
   const current = {id: 1, status: 'in_progress', conclusion: null, created_at: at(0)};
   const done = n => Array.from({length: n}, (_, i) => ({id: 100 + i, status: 'completed', conclusion: 'success', created_at: at(i + 1)}));
-  const limit = publicReviewLimits.commandsPerAuthorPerDay;
+  const limit = publicReviewLimits.requestsPerAuthorPerDay;
   const reviewedJobs = () => [{name: 'intake', conclusion: 'success'}, {name: 'review', conclusion: 'success'}];
   assert.equal(decide([current, ...done(limit - 1)], reviewedJobs).allowed, true, 'the current request plus earlier ones up to the limit');
   assert.equal(decide([current, ...done(limit)], reviewedJobs).allowed, false);
@@ -65,7 +65,7 @@ test('author commands are counted only from runs that reached intake, not surviv
   assert.equal(decide([current, ...finished(limit, 'cancelled')], () => assert.fail('cancelled runs need no lookup')).allowed, true);
   assert.equal(decide([current, ...Array.from({length: 31}, (_, i) => ({id: 700 + i, status: 'queued', created_at: at(1)}))]).allowed, false, 'too many runs to inspect fails closed');
   assert.equal(decide(Array.from({length: 300}, (_, i) => ({id: 2000 + i, status: 'completed', conclusion: 'skipped', created_at: at(1)}))).allowed, false, 'beyond the bounded history fails closed');
-  assert.throws(() => publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author, listCommandRuns: () => ({}), isPublic, now}), /Invalid workflow run/);
+  assert.throws(() => publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author, listRequestRuns: () => ({}), isPublic, now}), /Invalid workflow run/);
 });
 
 test('marking a draft ready repeatedly is bounded per item, while the first ready is reviewed', () => {
@@ -73,7 +73,7 @@ test('marking a draft ready repeatedly is bounded per item, while the first read
   const item = {number: 12, user: author, created_at: at(600)};
   const ready = n => Array.from({length: n}, (_, i) => ({event: 'ready_for_review', actor: author, created_at: at(i * 5)}));
   const decide = events => publicReviewDecision({request: 'ready', item, actor: author, listTimeline: () => events,
-    listItems: () => [item], isPublic, now});
+    listRequestRuns: () => ({workflow_runs: []}), listRunJobs: () => [], listItems: () => [item], isPublic, now});
   assert.equal(decide(ready(1)).allowed, true);
   assert.equal(decide([...ready(publicReviewLimits.readyPerItemPerDay), {event: 'convert_to_draft', actor: author, created_at: at(1)}]).allowed, true);
   assert.equal(decide(ready(publicReviewLimits.readyPerItemPerDay + 1)).allowed, false);
@@ -85,8 +85,23 @@ test('a long-lived draft marked ready is not ranked again against newer items', 
   const item = {number: 12, user: author, created_at: at(60 * 24 * 30)};
   const result = publicReviewDecision({request: 'ready', item, actor: author, now, isPublic,
     listTimeline: () => [{event: 'ready_for_review', actor: author, created_at: at(1)}],
+    listRequestRuns: () => ({workflow_runs: []}), listRunJobs: () => [],
     listItems: () => assert.fail('an item opened over a day ago was ranked when it opened')});
   assert.deepEqual(result, {allowed: true});
+});
+
+test('marking many long-lived drafts ready shares the per-author budget with comment requests', () => {
+  const author = person(9), limit = publicReviewLimits.requestsPerAuthorPerDay;
+  const reviewedJobs = () => [{name: 'intake', conclusion: 'success'}, {name: 'review', conclusion: 'success'}];
+  // Earlier ready transitions of other old drafts that started reviews, plus synchronize pushes that did not.
+  const earlier = n => Array.from({length: n}, (_, i) => ({id: 300 + i, event: 'pull_request_target', status: 'completed', conclusion: 'success', created_at: at(i + 1)}));
+  const pushes = Array.from({length: 10}, (_, i) => ({id: 600 + i, event: 'pull_request_target', status: 'completed', conclusion: 'success', created_at: at(2)}));
+  const jobs = id => id >= 600 ? [{name: 'intake', conclusion: 'success'}, {name: 'review', conclusion: 'skipped'}] : reviewedJobs();
+  const decide = runs => publicReviewDecision({request: 'ready', item: {number: 40, user: author, created_at: at(60 * 24 * 10)}, actor: author, now, isPublic,
+    listTimeline: () => [{event: 'ready_for_review', actor: author, created_at: at(0)}],
+    listRequestRuns: () => ({workflow_runs: runs}), listRunJobs: jobs, listItems: () => assert.fail('not ranked')});
+  assert.equal(decide([...earlier(limit - 1), ...pushes]).allowed, true, 'pushes that did not start a review do not count');
+  assert.equal(decide(earlier(limit)).allowed, false);
 });
 
 test('more items in a day than the bounded listing can show fails closed', () => {

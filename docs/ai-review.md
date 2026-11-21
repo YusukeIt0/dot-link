@@ -21,12 +21,12 @@ next steps; maintainers decide what to adopt, close or merge.
 - Public requests have daily bounds that do not affect normal use: up to 10 newly
   opened public issues/PRs and 3 per author in 24 hours start an automatic review
   (the earliest in a burst are reviewed). A public author can request reviews by
-  comment up to 5 times in 24 hours, and a PR can be marked ready up to 3 times in
-  24 hours. These counts use workflow-run history (only requests that started a
+  comment or by marking a draft ready up to 5 times in 24 hours in total across
+  items, and a PR can be marked ready up to 3 times in 24 hours. These counts use workflow-run history (only requests that started a
   model review; ordinary comments and paused or refused requests do not count)
   and the PR timeline, so deleting or editing
   comments or toggling draft does not reset them. An author whose new item
-  was paused can still request its review by comment within their own limit,
+  was paused can still request its review within their own limit,
   so each public account gets at most about 8 model reviews per day; the
   repository-wide bound applies to newly opened items. Requests beyond these
   bounds stop before the model starts and leave the existing comment unchanged; the
