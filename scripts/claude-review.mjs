@@ -139,7 +139,10 @@ function publicQuota(s) {
   const name = process.env.GITHUB_EVENT_NAME, actor = event.sender;
   if (actor?.type !== 'User' || trustedUser(actor) || name === 'workflow_dispatch') return {allowed: true};
   const command = name === 'issue_comment';
-  if (command && (actor.id !== s.issue.user?.id || event.comment?.body?.startsWith(acceptanceMarker))) return {allowed: true};
+  // Classify from what authorization accepted, never the original event body: a
+  // public author's only authorized comment request is the live review command.
+  // Non-authors are authorized only with write access, checked below.
+  if (command && actor.id !== s.issue.user?.id) return {allowed: true};
   if (!command && !['issues', 'pull_request_target'].includes(name)) return {allowed: true};
   const permission = get(`${root}/collaborators/${encodeURIComponent(actor.login)}/permission`).permission;
   if (['admin', 'maintain', 'write'].includes(permission)) return {allowed: true};
