@@ -32,3 +32,28 @@ test('HUD placeholders retain URL positions and Markdown labels without changing
   assert.equal(withMessageUrlPlaceholders('https://example.com',hint),hint);
   assert.equal(withoutMessageUrls('Guide https://example.com'),'Guide');
 });
+
+test('Trailing closer trimming stays linear for messages at the 8,000-character relay limit', () => {
+  // Square brackets end a non-IPv6 match before trimming, so only () and {} can accumulate here.
+  for (const [open, close] of [['(', ')'], ['{', '}']]) {
+    const address = `https://example.com/${open}`;
+    const text = address + close.repeat(8000 - address.length);
+    assert.equal(text.length, 8000);
+    const originalSplit = String.prototype.split;
+    let splits = 0;
+    String.prototype.split = function (this: string, ...args: Parameters<typeof originalSplit>) { splits++; return originalSplit.apply(this, args); } as typeof originalSplit;
+    let link: string | undefined;
+    try { link = messageParts(text).find(part => part.href)?.text; } finally { String.prototype.split = originalSplit; }
+    assert.equal(link, `${address}${close}`);
+    assert.equal(splits, 0, 'trimming must not re-split the remaining address for each removed closer');
+  }
+});
+
+test('Balanced and unbalanced URL delimiters keep their established boundaries', () => {
+  const links = (text: string) => messageParts(text).filter(part => part.href).map(part => part.text);
+  assert.deepEqual(links('https://en.wikipedia.org/wiki/Example_(disambiguation)'), ['https://en.wikipedia.org/wiki/Example_(disambiguation)']);
+  assert.deepEqual(links('(see https://example.com/a_(b)_{c})'), ['https://example.com/a_(b)_{c}']);
+  assert.deepEqual(links('{https://example.com/path}}'), ['https://example.com/path']);
+  assert.deepEqual(links('(https://example.com/a.)'), ['https://example.com/a.']);
+  assert.equal(withoutMessageUrls('Map (https://example.com/a_(b)) here.'), 'Map () here.');
+});
