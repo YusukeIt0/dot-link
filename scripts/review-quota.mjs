@@ -21,6 +21,8 @@ export function publicReviewDecision({request, item, actor, listItems, listReque
   const since = now - DAY;
   // Re-requests (comments and draft-to-ready) share one per-author budget across
   // items, counted from this author's workflow runs that started a model review.
+  // Run history does not record the PR action, so reviews of PRs this author
+  // opened count too; this errs on the cost-safe side (see docs/ai-review.md).
   // Paused, refused, coalesced, cancelled or filtered runs cost nothing and do not count.
   const requestBudget = () => {
     const runs = [];

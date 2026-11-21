@@ -22,7 +22,8 @@ next steps; maintainers decide what to adopt, close or merge.
   opened public issues/PRs and 3 per author in 24 hours start an automatic review
   (the earliest in a burst are reviewed). A public author can request reviews by
   comment or by marking a draft ready up to 5 times in 24 hours in total across
-  items, and a PR can be marked ready up to 3 times in 24 hours. These counts use workflow-run history (only requests that started a
+  items; automatic reviews of PRs they opened in that period count toward the
+  same 5 (issue reviews do not). A PR can be marked ready up to 3 times in 24 hours. These counts use workflow-run history (only requests that started a
   model review; ordinary comments and paused or refused requests do not count)
   and the PR timeline, so deleting or editing
   comments or toggling draft does not reset them. An author whose new item
