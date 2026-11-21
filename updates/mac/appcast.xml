@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.1</title><sparkle:version>122</sparkle:version><sparkle:shortVersionString>0.5.1</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Resetting Polar health data now stops sharing immediately, even while macOS is still removing the saved key.
-- Pairing a phone and reconnecting after an app update keep working even when other devices make repeated failed attempts.
-- Conversations with Dot no longer pause while Dot renews its connection to your Mac.
-- Security and reliability improvements.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.1-122/Dot-Link-0.5.1-122-arm64.zip" sparkle:installationType="application" sparkle:edSignature="G8lPOAGf/6XVbMDN43PExb3sGUbqwRuFESUYQL5y0xERolYqYcT684XA97YfC5KB7N/arsKhOK1hyFG3NBqvCw==" length="69787772" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: WU70wyWVeTI8inBPl4MhlfQ4r1LH9ewJwvT772uIQSt4FvPoIpI9T+bii04bXuW2mGzwe/kKJjQpHHdKZTG+BA==
-length: 1390
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.2</title><sparkle:version>123</sparkle:version><sparkle:shortVersionString>0.5.2</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Polar health updates keep working as your recorded data grows.
+- If a Polar update fails temporarily, Dot Link says so and retries automatically.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.2-123/Dot-Link-0.5.2-123-arm64.zip" sparkle:installationType="application" sparkle:edSignature="BQv55fVcVQcyQ/RTRAPLaMaIGcCNjfL6QZ6u4qdORfpLIodv1o4KAy478FLBC71B+J8G8sYJIaw0bwpW2KkkCA==" length="69789267" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: CayAayvIpOwV/u2QrtqDVKvbliGOGjpdPFEuegoQJvjh8FL1AhMrP2sSlDZJuM9pBriBa6RUQvOGMBgZdlatBQ==
+length: 1177
 -->
