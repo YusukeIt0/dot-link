@@ -451,7 +451,17 @@ export class HealthContext {
       this.save({...this.state,enabled:false});this.fault='';this.maintain();this.changes.emit();return this.setupStatus();
     }
     if(p.action==='unlock'){try{await this.options.key('authorize');}catch{throw new Error('HEALTH_KEY_UNAVAILABLE');}this.healthy=true;this.fault='';await this.load();this.changes.emit();return this.setupStatus();}
-    if(p.action==='reset'){this.stopOAuth();this.invalidate();this.archive.reset();this.archive.close();this.activation.discard();this.vault.remove();await this.options.key('delete');this.key?.fill(0);this.key=undefined;this.state=empty();this.healthy=true;this.fault='';return this.setupStatus();}
+    if(p.action==='reset'){
+      // Close live access synchronously, before any await: reads, events, polling and
+      // saves all require the key and state. Keychain deletion does not need the old
+      // key, so it is zeroed before waiting, even if local cleanup throws. With the
+      // vault removed first, a restart after a failed deletion also starts empty.
+      const key=this.key;this.key=undefined;this.state=empty();
+      try{this.stopOAuth();this.invalidate();this.archive.reset();this.archive.close();this.activation.discard();this.vault.remove();}
+      finally{key?.fill(0);}
+      await this.options.key('delete');
+      this.healthy=true;this.fault='';return this.setupStatus();
+    }
     if(p.action==='disconnect'&&!this.state.connection){return this.setupStatus();}
     if(p.action==='disconnect'){
       this.stopOAuth();this.invalidate();if(!this.healthy)throw rejected();
