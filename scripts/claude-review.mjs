@@ -148,8 +148,9 @@ function publicQuota(s) {
   return publicReviewDecision({request, item: s.issue, actor,
     isPublic: user => user?.type === 'User' && !trustedUser(user),
     listItems: page => get(`${root}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`),
-    // Includes this run. Comment events skipped by the job filter never reached intake.
-    listCommandRuns: () => get(`${root}/actions/workflows/claude-review.yml/runs?actor=${encodeURIComponent(actor.login)}&event=issue_comment&created=${since}&per_page=100`),
+    listCommandRuns: page => get(`${root}/actions/workflows/claude-review.yml/runs?actor=${encodeURIComponent(actor.login)}&event=issue_comment&created=${since}&per_page=100&page=${page}`),
+    listRunJobs: id => get(`${root}/actions/runs/${id}/jobs?per_page=100`).jobs ?? [],
+    currentRunId: Number(process.env.GITHUB_RUN_ID),
     listTimeline: () => JSON.parse(gh(['api', `${endpoint}/timeline?per_page=100`, '--paginate', '--slurp'])).flat()});
 }
 function boundedInput(s) {

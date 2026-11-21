@@ -790,10 +790,10 @@ test('public review bounds stop before the model or comment while normal and mai
 test('deleted or edited commands and draft toggles cannot reset public re-request bounds', t => {
   const now = Date.now(), at = minutes => new Date(now - minutes * 60_000).toISOString();
   const command = {id:77,user,body:'/dotlink review',issue_url:'https://api.github.com/repos/YusukeIt0/dot-link/issues/12'};
-  const runs = n => ({total_count:n,workflow_runs:Array.from({length:n},(_,i)=>({conclusion:i ? 'success' : null,created_at:at(i)}))});
+  const runs = n => ({total_count:n,workflow_runs:Array.from({length:n},(_,i)=>({id:5000+i,status:'completed',conclusion:'success',created_at:at(i + 1)}))});
   const commandEvent = {eventName:'issue_comment',event:{action:'created',issue,comment:command,sender:user},command,comments:[command]};
-  // Only one surviving comment, but six admitted runs in the history (edits/deletions leave runs behind).
-  const busy = use(t, {...commandEvent, reviewRuns: runs(6)});
+  // Only one surviving comment, but five earlier admitted runs in the history (edits/deletions leave runs behind).
+  const busy = use(t, {...commandEvent, reviewRuns: runs(5)});
   const paused = busy.run('intake'); success(paused); assert.equal(paused.outputs.accepted, 'false'); assert.equal(busy.writes().length, 0);
   const normal = use(t, {...commandEvent, reviewRuns: runs(2)});
   success(normal.run('intake')); assert.equal(normal.read().comments.filter(x => x.user.login === 'dotsweeper[bot]').length, 1);

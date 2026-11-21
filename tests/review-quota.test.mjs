@@ -37,19 +37,29 @@ test('a normal public issue is reviewed exactly as before', () => {
   assert.deepEqual(calls, [1], 'one bounded API page');
 });
 
-test('author commands are counted from admitted run history, not surviving comments', () => {
+test('author commands are counted only from runs that reached intake, not surviving comments', () => {
   const author = person(9);
-  const runs = rows => ({total_count: rows.length, workflow_runs: rows});
-  const decide = list => publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author,
-    listCommandRuns: () => list, listItems: () => assert.fail('no list needed'), isPublic, now});
-  const admitted = n => Array.from({length: n}, (_, i) => ({conclusion: i ? 'success' : null, created_at: at(i)}));
-  assert.equal(decide(runs(admitted(publicReviewLimits.commandsPerAuthorPerDay))).allowed, true);
-  assert.equal(decide(runs(admitted(publicReviewLimits.commandsPerAuthorPerDay + 1))).allowed, false);
-  // Comment events rejected by the job filter and runs older than a day do not count.
-  const ignored = [...Array.from({length: 20}, () => ({conclusion: 'skipped', created_at: at(1)})), {conclusion: 'success', created_at: at(2000)}];
-  assert.equal(decide(runs([...admitted(2), ...ignored])).allowed, true);
-  assert.equal(decide({total_count: 101, workflow_runs: []}).allowed, false, 'an oversized history fails closed');
-  assert.throws(() => decide({}), /Invalid workflow run/);
+  const decide = (rows, jobs = () => []) => {
+    const pages = []; for (let i = 0; i < rows.length || i === 0; i += 100) pages.push(rows.slice(i, i + 100));
+    return publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author, currentRunId: 1,
+      listCommandRuns: page => ({workflow_runs: pages[page - 1] ?? []}), listRunJobs: jobs,
+      listItems: () => assert.fail('no list needed'), isPublic, now});
+  };
+  const current = {id: 1, status: 'in_progress', conclusion: null, created_at: at(0)};
+  const done = n => Array.from({length: n}, (_, i) => ({id: 100 + i, status: 'completed', conclusion: 'success', created_at: at(i + 1)}));
+  const limit = publicReviewLimits.commandsPerAuthorPerDay;
+  assert.equal(decide([current, ...done(limit - 1)]).allowed, true, 'the current request plus earlier ones up to the limit');
+  assert.equal(decide([current, ...done(limit)]).allowed, false);
+  // 250 ordinary comment events (skipped by the job filter) and an old run never use up requests.
+  const ordinary = Array.from({length: 250}, (_, i) => ({id: 1000 + i, status: 'completed', conclusion: 'skipped', created_at: at(1)}));
+  assert.equal(decide([current, ...ordinary, ...done(2), {id: 9, status: 'completed', conclusion: 'success', created_at: at(2000)}]).allowed, true);
+  // An unfinished run counts unless its intake job was skipped.
+  const pending = Array.from({length: limit}, (_, i) => ({id: 500 + i, status: 'in_progress', conclusion: null, created_at: at(1)}));
+  assert.equal(decide([current, ...pending], () => [{name: 'intake', conclusion: 'skipped'}]).allowed, true);
+  assert.equal(decide([current, ...pending], () => [{name: 'intake', conclusion: null}]).allowed, false);
+  assert.equal(decide([current, ...Array.from({length: 21}, (_, i) => ({id: 700 + i, status: 'queued', created_at: at(1)}))]).allowed, false, 'too many unfinished runs fails closed');
+  assert.equal(decide(Array.from({length: 300}, (_, i) => ({id: 2000 + i, status: 'completed', conclusion: 'skipped', created_at: at(1)}))).allowed, false, 'beyond the bounded history fails closed');
+  assert.throws(() => publicReviewDecision({request: 'command', item: {number: 12, user: author}, actor: author, listCommandRuns: () => ({}), isPublic, now}), /Invalid workflow run/);
 });
 
 test('marking a draft ready repeatedly is bounded per item, while the first ready is reviewed', () => {

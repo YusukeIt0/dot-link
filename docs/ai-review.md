@@ -22,8 +22,9 @@ next steps; maintainers decide what to adopt, close or merge.
   opened public issues/PRs and 3 per author in 24 hours start an automatic review
   (the earliest in a burst are reviewed). A public author can request reviews by
   comment up to 5 times in 24 hours, and a PR can be marked ready up to 3 times in
-  24 hours. These counts use workflow-run history and the PR timeline, so deleting
-  or editing comments or toggling draft does not reset them. Requests beyond these
+  24 hours. These counts use workflow-run history (only runs that reached intake;
+  ordinary comments do not count) and the PR timeline, so deleting or editing
+  comments or toggling draft does not reset them. Requests beyond these
   bounds stop before the model starts and leave the existing comment unchanged; the
   run summary records why. Maintainers with write access, trusted maintainers, Dependabot and the
   pinned-runtime watch are not limited, so a maintainer can still request any review.
