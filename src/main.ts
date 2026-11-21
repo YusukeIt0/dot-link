@@ -1,5 +1,5 @@
 import { FactorHistorySettings, historySources, historyPeriods, type HistoryPeriod, type HistorySource } from './factor-history-settings.ts';
-import { HealthSharing, type HealthStatus } from './health-sharing.ts';
+import { HealthSharing, healthStatusKey, type HealthStatus } from './health-sharing.ts';
 import { connectionFailure, connectionFailureCaption, connectionFailureHint } from './connection-failure.ts';
 import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
@@ -318,10 +318,7 @@ function renderHealthStatus() {
   toggle.disabled = !s.supported || !s.healthConfigured || s.pending;
   el<HTMLButtonElement>('health-delete').disabled = !s.supported || !s.healthConfigured || s.pending;
   el<HTMLButtonElement>('health-refresh').disabled = !s.supported || !s.healthEnabled || s.pending || s.healthPending === true;
-  el('health-status').textContent = t(s.failed ? 'even.health_failed' : !s.supported ? 'even.health_unavailable' :
-    s.healthStatus === 'locked' ? 'even.health_locked' : !s.healthConfigured ? 'even.health_setup' :
-    s.healthStatus?.startsWith('HEALTH_') || s.healthStatus === 'disconnect_pending' ? 'even.health_error' :
-    s.pending || s.healthPending ? 'even.health_pending' : s.refreshed ? 'even.health_refreshed' : s.healthEnabled ? 'even.health_on' : 'even.health_off');
+  el('health-status').textContent = t(healthStatusKey(s));
 }
 el<HTMLInputElement>('health-share').onchange = () => { void healthSharing.control(el<HTMLInputElement>('health-share').checked ? 'enable' : 'disable'); };
 el<HTMLButtonElement>('health-delete').onclick = () => { if (confirm(t('even.health_delete_confirm'))) void healthSharing.control('delete'); };

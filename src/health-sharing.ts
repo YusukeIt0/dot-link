@@ -1,6 +1,19 @@
+import type { TranslationKey } from './i18n.ts';
 export interface HealthStatus {
   healthProtocol?: number; healthEpoch?: string | null; healthEnabled?: boolean; healthConfigured?: boolean;
   healthProfileRefreshAt?: string | null; healthPending?: boolean; healthStatus?: string; healthHasProfile?: boolean;
+}
+/** Temporary Polar or network failures that the Mac retries automatically. */
+const RETRYING = ['HEALTH_REQUEST_FAILED', 'HEALTH_INVALID_RESPONSE', 'HEALTH_NETWORK_UNAVAILABLE', 'HEALTH_RATE_LIMITED'];
+/** Message key for the companion's health status. Only failures that need the
+ * owner point to the Mac's Healthcare settings; temporary ones say Dot Link retries. */
+export function healthStatusKey(s: ReturnType<HealthSharing['status']>): TranslationKey {
+  return s.failed ? 'even.health_failed' : !s.supported ? 'even.health_unavailable' :
+    s.healthStatus === 'locked' ? 'even.health_locked' : !s.healthConfigured ? 'even.health_setup' :
+    // Retries run only while sharing is on; a failed connect leaves it off.
+    s.healthEnabled === true && RETRYING.includes(s.healthStatus ?? '') ? 'even.health_retrying' :
+    s.healthStatus?.startsWith('HEALTH_') || s.healthStatus === 'disconnect_pending' ? 'even.health_error' :
+    s.pending || s.healthPending ? 'even.health_pending' : s.refreshed ? 'even.health_refreshed' : s.healthEnabled ? 'even.health_on' : 'even.health_off';
 }
 /** Acknowledged Mac consent only; never infer success while offline. */
 export class HealthSharing {

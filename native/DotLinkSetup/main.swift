@@ -896,7 +896,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
             }
         case "error":
-            if currentAction == "health" { busy = false; helper = nil; healthState["status"] = value["code"] as? String ?? "unavailable"; healthPoll?.invalidate(); render(); return }
+            // A failed setup action is not confirmed sharing; never imply an automatic retry.
+            if currentAction == "health" { busy = false; helper = nil; healthState["status"] = value["code"] as? String ?? "unavailable"; healthState["sharing"] = false; healthPoll?.invalidate(); render(); return }
             busy = false; helper = nil; automaticResumePending = false
             if currentAction == "update-recover" { appUpdater?.startupRecoveryFinished(success: false); appUpdater?.resumeAfterHostRestart(ready: false) }
             if quitting { quitting = false; NSApp.reply(toApplicationShouldTerminate: false); showWindow() }
