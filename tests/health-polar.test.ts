@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {HEART_RATE_RANGE_DAYS, PolarAPI, POLAR_REDIRECT} from '../server/health/polar.ts';
+import {HEART_RATE_RANGE_DAYS, HEART_RATE_RESPONSE_LIMIT, RESPONSE_LIMIT, PolarAPI, POLAR_REDIRECT} from '../server/health/polar.ts';
 const NOW=Date.parse('2026-11-14T12:00:00Z');
 const signal=()=>new AbortController().signal;
 const token=()=>new Response(JSON.stringify({access_token:'fixture-access',token_type:'bearer',expires_in:3600,x_user_id:123}));
@@ -73,8 +73,21 @@ test('continuous heart rate is fetched in bounded date ranges so a large week st
   assert.ok(covered.size >= 6, 'every retained day is normalized');
 });
 
-test('a single oversized heart-rate range is still rejected as invalid (#429)', async () => {
-  const api = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('continuous-heart-rate')
-    ? new Response('x'.repeat(4 * 1024 * 1024 + 1)) : new Response(null, {status: 204})});
-  await assert.rejects(api.collect({clientId: 'id', clientSecret: 'secret', accessToken: 'token', userId: 123, expiresAt: NOW + 3600_000}, signal(), false), /HEALTH_INVALID_RESPONSE/);
+test('one day recorded every second still updates, while responses beyond their bounds are rejected (#429)', async () => {
+  const c = {clientId: 'id', clientSecret: 'secret', accessToken: 'token', userId: 123, expiresAt: NOW + 3600_000};
+  const second = (i: number) => new Date(i * 1000).toISOString().slice(11, 19);
+  const dense = (url: unknown) => { const date = new URL(String(url)).searchParams.get('from')!;
+    return JSON.stringify({heart_rates: [{date, heart_rate_samples: Array.from({length: 86_400}, (_, i) => ({sample_time: second(i), heart_rate: 60 + (i % 40)}))}]}); };
+  const ok = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('continuous-heart-rate') ? new Response(dense(url)) : new Response(null, {status: 204})});
+  const sample = Buffer.byteLength(dense('https://x/?from=2026-11-14'));
+  // About 3.7 MB: almost no headroom under the general 4 MB bound, more than 4x under the heart-rate bound.
+  assert.ok(sample > RESPONSE_LIMIT * 0.85 && sample * 4 < HEART_RATE_RESPONSE_LIMIT, `1 Hz day is ${sample} bytes`);
+  const result = await ok.collect(c, signal(), false);
+  assert.ok(result.observations.some(o => o.category === 'heart_rate'));
+  const huge = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('continuous-heart-rate')
+    ? new Response('x'.repeat(HEART_RATE_RESPONSE_LIMIT + 1)) : new Response(null, {status: 204})});
+  await assert.rejects(huge.collect(c, signal(), false), /HEALTH_INVALID_RESPONSE/);
+  const otherTooLarge = new PolarAPI({now: () => NOW, fetch: async url => String(url).includes('/users/sleep')
+    ? new Response('x'.repeat(RESPONSE_LIMIT + 1)) : new Response(null, {status: 204})});
+  await assert.rejects(otherTooLarge.collect(c, signal(), false), /HEALTH_INVALID_RESPONSE/);
 });
