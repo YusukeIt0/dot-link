@@ -13,6 +13,9 @@ extension SetupApp {
         add(tr("mac.health_settings"), size: 23, bold: true)
         let configured = healthState["configured"] as? Bool == true
         let status = healthState["status"] as? String ?? "loading"
+        // "Retries automatically" only while sharing is on: background polling retries;
+        // a failed connect or setup error leaves sharing off and needs the owner.
+        let sharing = healthState["sharing"] as? Bool == true
         let body = NSStackView(); body.orientation = .vertical; body.alignment = .leading; body.spacing = 12
         body.edgeInsets = NSEdgeInsets(top: 18, left: 18, bottom: 18, right: 18)
         let heading = NSStackView(); heading.orientation = .horizontal; heading.spacing = 10
@@ -27,10 +30,10 @@ extension SetupApp {
         case "HEALTH_RECONNECT_REQUIRED": statusKey = "mac.health_authorization_error"
         case "HEALTH_CREDENTIALS_REQUIRED": statusKey = "mac.health_credentials_error"
         case "HEALTH_CALLBACK_UNAVAILABLE": statusKey = "mac.health_callback_error"
-        case "HEALTH_RATE_LIMITED": statusKey = "mac.health_rate_limit"
+        case "HEALTH_RATE_LIMITED": statusKey = sharing ? "mac.health_rate_limit_retrying" : "mac.health_rate_limit"
         case "HEALTH_NETWORK_UNAVAILABLE": statusKey = "mac.health_network_error"
         case "HEALTH_STORAGE_UNAVAILABLE": statusKey = "mac.health_storage_error"
-        case "HEALTH_REQUEST_FAILED", "HEALTH_INVALID_RESPONSE": statusKey = "mac.health_request_error"
+        case "HEALTH_REQUEST_FAILED", "HEALTH_INVALID_RESPONSE": statusKey = sharing ? "mac.health_request_retrying" : "mac.health_request_error"
         default: statusKey = "mac.health_error"
         }
         let locked = status == "locked" || status == "HEALTH_KEY_UNAVAILABLE"

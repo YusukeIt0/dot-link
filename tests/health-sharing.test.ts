@@ -12,3 +12,9 @@ test('temporary Polar failures say Dot Link retries; only owner-actionable failu
   assert.equal(healthStatusKey({...base, healthStatus: 'sharing'}), 'even.health_on');
   assert.equal(healthStatusKey({...base, healthConfigured: false}), 'even.health_setup');
 });
+
+test('a failed connect with sharing off never says Dot Link retries automatically (#431)', () => {
+  const base = {supported: true, pending: false, failed: false, refreshed: false, healthConfigured: true, healthEnabled: false};
+  for (const code of ['HEALTH_REQUEST_FAILED', 'HEALTH_INVALID_RESPONSE', 'HEALTH_NETWORK_UNAVAILABLE', 'HEALTH_RATE_LIMITED'])
+    assert.equal(healthStatusKey({...base, healthStatus: code}), 'even.health_error', code);
+});
