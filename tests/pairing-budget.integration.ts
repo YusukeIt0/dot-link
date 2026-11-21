@@ -68,3 +68,13 @@ test('a client that holds a valid capability is still rate limited per capabilit
   const other = await post('/api/pair', source(2), JSON.stringify({ code: authority.issue(relay).code }));
   assert.equal(other.status, 200, "one capability's own loop does not block another device");
 });
+
+test('a valid invitation that the handler rejects is still bounded per capability', async t => {
+  const { authority, post } = await fixture(t);
+  for (let n = 0; n < 16; n++) assert.equal((await post('/api/pair', source(20 + n), JSON.stringify({ code: authority.issue(relay).code }))).status, 200);
+  const extra = JSON.stringify({ code: authority.issue(relay).code });
+  const statuses = [];
+  for (let n = 0; n < 31; n++) statuses.push((await post('/api/pair', source(50), extra)).status);
+  assert.deepEqual(statuses.slice(0, 30), Array(30).fill(400), 'the device-limit error is unchanged');
+  assert.equal(statuses[30], 429, 'repeating it is limited like other uses');
+});

@@ -123,15 +123,18 @@ export function deviceServer(options: { token: string; origin: string; directory
           const capability = createHash('sha256').update(`${key}:${value[key]}`).digest('hex');
           if ((pairingSuccesses.get(capability) ?? 0) >= 30) { limited(); return; }
           const accepted = () => pairingSuccesses.set(capability, (pairingSuccesses.get(capability) ?? 0) + 1);
+          // A handler error (device limit, storage failure) still counts against this
+          // capability, so retrying it is bounded like any other use.
+          const attempt = <T>(run: () => T): T => { try { return run(); } catch (error) { accepted(); throw error; } };
           if (runtime) {
-            const result = options.pairing.recoverRuntime(value[key], requestOrigin, runtime);
+            const result = attempt(() => options.pairing!.recoverRuntime(value[key], requestOrigin, runtime));
             if (result.kind === 'invalid') { failed(401, { error: 'Pairing invitation invalid or expired' }); return; }
             accepted();
             if (result.kind === 'superseded') { json(409, { code: RUNTIME_SUPERSEDED }); return; }
             json(200, { protocol: RUNTIME_RECOVERY_PROTOCOL, generation: result.generation,
               ...(result.kind === 'resumed' ? result.credentials : {}) }); return;
           }
-          const result = key === 'resumeToken' ? options.pairing.resume(value.resumeToken, requestOrigin) : options.pairing.exchange(value.code, requestOrigin);
+          const result = attempt(() => key === 'resumeToken' ? options.pairing!.resume(value.resumeToken, requestOrigin) : options.pairing!.exchange(value.code, requestOrigin));
           if (!result) { failed(401, { error: 'Pairing invitation invalid or expired' }); return; }
           accepted();
           json(200, result); return;
