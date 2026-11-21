@@ -18,6 +18,14 @@ next steps; maintainers decide what to adopt, close or merge.
   /dotlink review
   ```
 
+- Public requests have daily bounds that do not affect normal use: up to 10 newly
+  opened public issues/PRs and 3 per author in 24 hours start an automatic review
+  (the earliest in a burst are reviewed), and an author can request another review
+  of the same item up to 3 times in 24 hours. Requests beyond these bounds stop
+  before the model starts and leave the existing comment unchanged; the run summary
+  records why. Maintainers with write access, trusted maintainers, Dependabot and the
+  pinned-runtime watch are not limited, so a maintainer can still request any review.
+
 The `dotsweeper` bot, using the Dot Link icon, updates one comment to show reviewing, complete, outdated, skipped, cancelled or failed.
 If content or `main` changes during a review, its findings are withheld; request
 another review after the changes settle. Actions concurrency serializes each

@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync, mkdirSync, readFileSync, writeFileSync} from 'node:fs';
 import {latestReceipt, assertReviewRun} from './review-receipt.mjs';
 import {collectPriorReviews} from './review-provenance.mjs';
+import {publicReviewDecision} from './review-quota.mjs';
 import {marker as watchMarker} from './check-pinned-runtimes.mjs';
 import {hash, reviewInput, acceptanceMarker, trustedUser, dependencyBot, gatherContext, validateAssessment, acceptanceBlockers, scopeRevision, reviewDiscussion, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
 
@@ -133,6 +134,19 @@ function equivalentCompletedReview(s) {
   try { assertReviewRun(receipt, run, jobs); } catch { return null; }
   return receipt;
 }
+// Public requests share durable daily bounds before the model or comment is claimed (docs/ai-review.md).
+function publicQuota(s) {
+  const name = process.env.GITHUB_EVENT_NAME, actor = event.sender;
+  if (actor?.type !== 'User' || trustedUser(actor) || name === 'workflow_dispatch') return {allowed: true};
+  const command = name === 'issue_comment';
+  if (command && (actor.id !== s.issue.user?.id || event.comment?.body?.startsWith(acceptanceMarker))) return {allowed: true};
+  if (!command && !['issues', 'pull_request_target'].includes(name)) return {allowed: true};
+  const permission = get(`${root}/collaborators/${encodeURIComponent(actor.login)}/permission`).permission;
+  if (['admin', 'maintain', 'write'].includes(permission)) return {allowed: true};
+  return publicReviewDecision({request: command ? 'command' : 'opened', item: s.issue, actor, comments: s.rows,
+    isPublic: user => user?.type === 'User' && !trustedUser(user),
+    listItems: page => get(`${root}/issues?state=all&sort=created&direction=desc&per_page=100&page=${page}`)});
+}
 function boundedInput(s) {
   const input = JSON.stringify(s.data, null, 2);
   if (Buffer.byteLength(input) > 150_000) throw new RangeError('Discussion exceeds review input limit');
@@ -226,6 +240,13 @@ if (mode === 'intake') {
   const completed = equivalentCompletedReview(s);
   if (completed) {
     summary(`Review coalesced: already reviewed for identical input by run ${completed.runId}. The completed comment and its owner are unchanged; merge gates still verify current evidence.`);
+    process.exit(0);
+  }
+  const quota = publicQuota(s);
+  if (!quota.allowed) {
+    // No comment is claimed or edited: an existing completed review stays intact,
+    // and a burst cannot turn into a burst of bot comments.
+    summary(`Review paused before model execution: ${quota.reason} A maintainer can still request it with \`/dotlink review\` or a manual dispatch.`);
     process.exit(0);
   }
   output('number', number);
