@@ -7,9 +7,7 @@ export function messageParts(text: string): MessagePart[] {
   let offset = 0;
   for (const match of text.matchAll(pattern)) {
     let address = match[0].replace(/[.,;:!?]+$/u, '');
-    for (const [open, close] of [['(', ')'], ['[', ']'], ['{', '}']]) {
-      while (address.endsWith(close) && address.split(close).length > address.split(open).length) address = address.slice(0, -1);
-    }
+    address = withoutUnbalancedTrailingClosers(address);
     let url: URL;
     try { url = new URL(/^www\./i.test(address) ? `https://${address}` : address); } catch { continue; }
     if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) continue;
@@ -19,6 +17,20 @@ export function messageParts(text: string): MessagePart[] {
   }
   if (offset < text.length) parts.push({ text: text.slice(offset) });
   return parts;
+}
+
+/** Drop trailing closers that have no matching opener, counting each delimiter once (linear time). */
+function withoutUnbalancedTrailingClosers(address: string): string {
+  let end = address.length;
+  for (const [open, close] of [['(', ')'], ['[', ']'], ['{', '}']]) {
+    let excess = 0;
+    for (let index = 0; index < end; index++) {
+      if (address[index] === close) excess++;
+      else if (address[index] === open) excess--;
+    }
+    while (excess > 0 && address[end - 1] === close) { end--; excess--; }
+  }
+  return address.slice(0, end);
 }
 
 /** Keep a Markdown link's human label, but omit its destination on G2 and in speech. */
