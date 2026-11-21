@@ -2,6 +2,15 @@
 
 Version history describes app changes. Check Even Hub for the version currently available to you.
 
+## 0.4.2
+
+- Turn on Weather to share forecasts and nearby satellite rain estimates with your Dot. If you already share forecasts only, you can include nearby rain when asked or later in Sharing settings.
+- Choose which locations, Polar data, forecasts and walking plans your Mac saves. Keep new records for 7 days to 1 year and delete by source.
+- If a Polar update fails temporarily, the app says so and your Mac retries automatically.
+- Long messages with links appear faster.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.1
 
 - Turn on Weather to share forecasts and nearby satellite rain estimates with your Dot. If you already share forecasts only, you can include nearby rain when asked or later in Sharing settings.
