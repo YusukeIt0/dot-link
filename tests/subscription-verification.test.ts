@@ -124,3 +124,35 @@ test('an utterance sent during the first subscription still waits for it, as bef
   assert.equal((await submitted).status, 'accepted');
   assert.equal(s.events.length, 1);
 });
+
+test('removing an expired or different callback never cancels an unrelated pending subscription', async t => {
+  let now = Date.now();
+  const dir = mkdtempSync(join(tmpdir(), 'g2-subscription-unrelated-'));
+  const held: (() => void)[] = [];
+  let hold = false;
+  const sender = new WebhookSender(async (_url, body) => {
+    const payload = JSON.parse(body);
+    const answer = { status: 200, body: JSON.stringify({ challenge: payload.challenge }) };
+    return hold && payload.type === 'verification' ? new Promise(resolve => held.push(() => resolve(answer))) : answer;
+  });
+  const hosts = ['callback.example.test'];
+  const bridge = new Bridge(join(dir, 'voice.json'), sender, hosts, undefined, { now: () => now });
+  const inbox = new NotificationInbox(join(dir, 'notifications.json'), sender, hosts, () => now);
+  t.after(() => { for (const release of held.splice(0)) release(); bridge.close(); inbox.close(); rmSync(dir, { recursive: true, force: true }); });
+  for (const [target, make, subscribed] of [
+    [bridge, voice, () => bridge.status().subscribed],
+    [inbox, notification, () => inbox.status().notificationSubscribed],
+  ] as const) {
+    const a = make('https://callback.example.test/a'), b = make('https://callback.example.test/b');
+    hold = false;
+    await target.subscribe({ ...a, ttlMs: 1000 });
+    now += 2000; // A is stored but expired, so B passes the conflict check.
+    hold = true;
+    const pendingB = target.subscribe(b);
+    await settle();
+    await target.unsubscribe({ name: a.name, arguments: a.arguments, delivery: { mode: 'webhook', url: a.delivery.url } });
+    for (const release of held.splice(0)) release();
+    assert.match((await pendingB).id, /^sub_/);
+    assert.equal(subscribed(), true, 'B stays active');
+  }
+});

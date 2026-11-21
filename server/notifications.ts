@@ -66,8 +66,9 @@ export class NotificationInbox {
   private state: State;
   private operation: Promise<unknown> = Promise.resolve();
   private readonly subscribing = new Set<Promise<unknown>>();
-  private readonly verifyingUrls = new Map<string, number>();
-  private subscriptionRemovals = 0;
+  // Subscriptions verifying or waiting to commit. Removing a callback cancels only
+  // pending subscriptions of that same callback URL, never unrelated ones.
+  private readonly pendingChecks = new Set<{ url: string; cancelled: boolean }>();
   private path: string;
   private sender: WebhookSender;
   private hosts: string[];
@@ -187,33 +188,31 @@ export class NotificationInbox {
     operation.then(settled, settled);
     return operation;
   }
-  private verified(url: string) {
-    const remaining = (this.verifyingUrls.get(url) ?? 1) - 1;
-    if (remaining) this.verifyingUrls.set(url, remaining); else this.verifyingUrls.delete(url);
-  }
+  private cancelPending(url: string) { for (const check of this.pendingChecks) if (check.url === url) check.cancelled = true; }
   private async verifyThenCommit(input: unknown) {
     const p = subscriptionArguments(subscribe, input);
     subscriptionDelivery(p.delivery, this.hosts);
     const id = 'sub_' + createHash('sha256').update(JSON.stringify([session, eventName, p.delivery.url])).digest('hex').slice(0, 32);
     if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
     const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
-    const removals = this.subscriptionRemovals;
-    this.verifyingUrls.set(sub.url, (this.verifyingUrls.get(sub.url) ?? 0) + 1);
-    try { await this.sender.verify(sub); } finally { this.verified(sub.url); }
-    return this.serial(async () => {
-      if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
-      if (this.subscriptionRemovals !== removals) throw new SubscriptionResponseError('subscription_changed');
-      this.save(true, { ...this.state, subscription: sub, activationStoppedFor: undefined });
-      return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
-    });
+    const check = { url: sub.url, cancelled: false };
+    this.pendingChecks.add(check);
+    try {
+      await this.sender.verify(sub);
+      return await this.serial(async () => {
+        if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
+        if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
+        this.save(true, { ...this.state, subscription: sub, activationStoppedFor: undefined });
+        return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
+      });
+    } finally { this.pendingChecks.delete(check); }
   }
   unsubscribe(input: unknown) {
     return this.serial(async () => {
       const p = subscriptionArguments(z.object({ name: z.literal(eventName), arguments: args, delivery: delivery.omit({ secret: true }) }), input);
       // Also cancels a pending (re)subscription of the same callback.
-      if (this.verifyingUrls.has(p.delivery.url)) this.subscriptionRemovals++;
+      this.cancelPending(p.delivery.url);
       if (this.state.subscription?.url === p.delivery.url) {
-        this.subscriptionRemovals++;
         const intent = this.sharingControl(false);
         this.save(true, { ...this.state, subscription: undefined, activationStoppedFor: intent?.id ?? this.state.activationStoppedFor });
       }
@@ -251,7 +250,7 @@ export class NotificationInbox {
       try {
         const result = await this.sender.send(sub, event.eventId, event);
         n.status = result.status >= 200 && result.status < 300 ? 'accepted' : 'failed';
-        if (result.status === 410) { this.subscriptionRemovals++; delete this.state.subscription; }
+        if (result.status === 410) { this.cancelPending(sub.url); delete this.state.subscription; }
       } catch { n.status = 'failed'; }
       this.save(); return { notification_id: p.id, status: n.status };
     });

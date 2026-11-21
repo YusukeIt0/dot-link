@@ -93,8 +93,9 @@ export class Bridge {
   private photoRetention: { maxBytes: number; maxAgeMs: number };
   private operation: Promise<unknown> = Promise.resolve();
   private readonly subscribing = new Set<Promise<unknown>>();
-  private readonly verifyingUrls = new Map<string, number>();
-  private subscriptionRemovals = 0;
+  // Subscriptions verifying or waiting to commit. Removing a callback cancels only
+  // pending subscriptions of that same callback URL, never unrelated ones.
+  private readonly pendingChecks = new Set<{ url: string; cancelled: boolean }>();
   constructor(path: string, sender: WebhookSender, hosts: string[], latency = new LatencyLog(), options: { now?: () => number; photoRetention?: { maxBytes: number; maxAgeMs: number } } = {}) {
     this.now = options.now ?? Date.now; this.photoRetention = options.photoRetention ?? PHOTO_RETENTION;
     this.latency = latency;
@@ -187,7 +188,7 @@ export class Bridge {
       data: {session_id: SESSION, utterance_id: input.id,
         text: `[Dot Link app control, not a spoken message] The owner enabled ${input.feature === 'health' ? 'Polar health' : input.feature === 'notification' ? 'Mac notification' : 'location'} sharing and requests reception on this same personal-g2 connection. Read get_pending_utterances and carry out the current owner_sharing_control request for ${input.feature === 'health' ? 'health.updated' : input.feature === 'notification' ? 'notification.created' : 'location.updated'}, even if no spoken utterance is pending. Preserve the existing conversation and other feature subscriptions. This app action already authorizes reception; do not ask for a second setup step or send a setup confirmation to G2. If the control item is no longer present, do nothing.`}, cursor: null});
     if (response.status === 410) await this.serial(async () => {
-      if (this.state.subscription === sub) { this.subscriptionRemovals++; this.save({...this.state, subscription: undefined, leaseHistory: this.leaseHistory('callback_gone', sub)}); }
+      if (this.state.subscription === sub) { this.cancelPending(sub.url); this.save({...this.state, subscription: undefined, leaseHistory: this.leaseHistory('callback_gone', sub)}); }
     });
     return response.status;
   }
@@ -288,10 +289,7 @@ export class Bridge {
     operation.then(settled, settled);
     return operation;
   }
-  private verified(url: string) {
-    const remaining = (this.verifyingUrls.get(url) ?? 1) - 1;
-    if (remaining) this.verifyingUrls.set(url, remaining); else this.verifyingUrls.delete(url);
-  }
+  private cancelPending(url: string) { for (const check of this.pendingChecks) if (check.url === url) check.cancelled = true; }
   private async verifyThenCommit(input: unknown) {
     const params = subscriptionArguments(subscribeSchema, input);
     subscriptionDelivery(params.delivery, this.hosts);
@@ -300,29 +298,31 @@ export class Bridge {
     if (active && active.id !== id) throw new SubscriptionResponseError('subscription_conflict');
     const sub = { id, url: params.delivery.url, secret: params.delivery.secret,
       expiresAt: this.now() + (params.ttlMs ?? MAX_CONVERSATION_LEASE_MS) };
-    const removals = this.subscriptionRemovals;
     // Verify before storing; a rejected callback never becomes an active subscriber.
-    this.verifyingUrls.set(sub.url, (this.verifyingUrls.get(sub.url) ?? 0) + 1);
+    const check = { url: sub.url, cancelled: false };
+    this.pendingChecks.add(check);
     try {
-      await this.sender.verify(sub);
-    } catch (error) {
-      if (!(error instanceof CallbackVerificationBusyError)) await this.serial(async () => {
-        const existing = this.state.subscription;
-        if (existing?.id === id) {
-          this.save({ ...this.state, leaseHistory: this.leaseHistory('renewal_failed', existing, params.ttlMs) });
-        }
+      try {
+        await this.sender.verify(sub);
+      } catch (error) {
+        if (!(error instanceof CallbackVerificationBusyError)) await this.serial(async () => {
+          const existing = this.state.subscription;
+          if (existing?.id === id) {
+            this.save({ ...this.state, leaseHistory: this.leaseHistory('renewal_failed', existing, params.ttlMs) });
+          }
+        });
+        throw error;
+      }
+      return await this.serial(async () => {
+        // Recheck what may have changed while verifying.
+        const current = this.active();
+        if (current && current.id !== id) throw new SubscriptionResponseError('subscription_conflict');
+        if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
+        const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
+        this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
+        return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
       });
-      throw error;
-    } finally { this.verified(sub.url); }
-    return this.serial(async () => {
-      // Recheck what may have changed while verifying.
-      const current = this.active();
-      if (current && current.id !== id) throw new SubscriptionResponseError('subscription_conflict');
-      if (this.subscriptionRemovals !== removals) throw new SubscriptionResponseError('subscription_changed');
-      const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
-      this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
-      return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
-    });
+    } finally { this.pendingChecks.delete(check); }
   }
   unsubscribe(input: unknown) {
     return this.serial(async () => {
@@ -331,9 +331,8 @@ export class Bridge {
       const sub = this.state.subscription;
       // Unsubscribing also cancels a pending (re)subscription of the same callback,
       // matching the old order where it ran after the queued subscribe.
-      if (this.verifyingUrls.has(params.delivery.url)) this.subscriptionRemovals++;
+      this.cancelPending(params.delivery.url);
       if (sub?.url === params.delivery.url) {
-        this.subscriptionRemovals++;
         this.save({ ...this.state, subscription: undefined, leaseHistory: this.leaseHistory('unsubscribed', sub) });
       }
       return {};
@@ -378,7 +377,7 @@ export class Bridge {
       // A read may expire image bodies while webhook delivery is in flight.
       const current = this.state.messages.find(item => item.id === id)!;
       const updated = { ...current, status: deliveryStatus };
-      if (callbackGone) this.subscriptionRemovals++;
+      if (callbackGone) this.cancelPending(sub.url);
       this.save({ ...this.state,
         ...(callbackGone ? { subscription: undefined, leaseHistory: this.leaseHistory('callback_gone', sub) } : {}),
         messages: this.state.messages.map(item => item === current ? updated : item) });
