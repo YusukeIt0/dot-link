@@ -24,6 +24,6 @@ Geographic map data is downloaded separately from Overture Maps and retains its 
 
 The Mac bundle includes license texts in `Contents/Resources/licenses` and within the unmodified npm packages in its payload. Frontend license texts are also in `public/THIRD_PARTY_NOTICES.txt`. The Mac transcription model and Tailscale app are not bundled. The Even wake-detection models are bundled.
 
-`standardwebhooks`' npm metadata declares MIT but its package omits a license file (checked at 1.1.1; recheck the package's license files when it changes), while its upstream repository has an Apache-2.0 license. We include that upstream license and preserve a separate Deno MIT notice for its timing-safe comparison implementation. The implementation is unmodified. See `distribution/licenses/` for the original texts and provenance.
+`standardwebhooks`' npm metadata declares MIT but its package omits a license file (checked at 1.3.0; recheck the package's license files when it changes), while its upstream repository has an Apache-2.0 license. We include that upstream license and preserve a separate Deno MIT notice for its timing-safe comparison implementation. The implementation is unmodified. See `distribution/licenses/` for the original texts and provenance.
 
 No OcuClaw/OpenClaw source or artwork is included. Dot Link is not affiliated with OpenAI, Even Realities, or Tailscale.
