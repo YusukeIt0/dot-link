@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget, reviewState, materiallyActionable, withReviewState, readReviewState, pinnedLookupTransient } from '../scripts/check-pinned-runtimes.mjs';
+import { compareVersions, parseVersion, readPins, nodeStatus, releaseStatus, renderIssue, decide, marker, sources, nodeWorkflows, eolWarningDays, reviewTarget, reviewState, materiallyActionable, withReviewState, readReviewState, pinnedLookupTransient, readAssessments, assessmentFile } from '../scripts/check-pinned-runtimes.mjs';
 
 const index = [
   { version: 'v24.11.0', npm: '11.6.0', lts: 'Krypton', security: false },
@@ -166,4 +166,70 @@ test('only a missing release (404) for the pinned tag widens the advisory window
   const state = reviewState([unknown], previous);
   assert.equal(state[source.id].security, false);
   assert.deepEqual(state[source.id].advisories, []);
+});
+
+test('assessed advisories are recorded individually and invalid records fail loudly (#443)', () => {
+  const real = readAssessments();
+  const sparkleAdvisory = real.find(entry => entry.runtime === 'sparkle' && entry.id === 'GHSA-gcjm-h3jh-p2vc');
+  assert.equal(sparkleAdvisory?.record, 'https://github.com/YusukeIt0/dot-link/issues/442');
+  const entry = { runtime: 'sparkle', id: 'GHSA-gcjm-h3jh-p2vc', decision: 'not-applicable',
+    reason: 'Affects only package updates; Dot Link ships app zip updates.', record: 'https://github.com/YusukeIt0/dot-link/issues/442', assessedAt: '2026-11-23' };
+  const read = file => () => JSON.stringify(file);
+  assert.deepEqual(readAssessments(read({ version: 1, assessed: [entry] })), [entry]);
+  assert.deepEqual(readAssessments(read({ version: 1, assessed: [] })), []);
+  for (const [file, pattern] of [
+    [{ version: 2, assessed: [] }, /must be/],
+    [{ version: 1 }, /must be/],
+    [{ version: 1, assessed: [], extra: true }, /must be/],
+    [{ version: 1, assessed: [{ ...entry, note: 'x' }] }, /exactly/],
+    [{ version: 1, assessed: [{ ...entry, reason: undefined }] }, /exactly/],
+    [{ version: 1, assessed: [{ ...entry, runtime: 'node' }] }, /unknown runtime/],
+    [{ version: 1, assessed: [{ ...entry, id: 'CVE-2026-0001' }] }, /invalid advisory ID/],
+    [{ version: 1, assessed: [{ ...entry, decision: 'accepted' }] }, /not-applicable/],
+    [{ version: 1, assessed: [{ ...entry, reason: 'n/a' }] }, /reason/],
+    [{ version: 1, assessed: [{ ...entry, record: 'https://example.test/442' }] }, /record/],
+    [{ version: 1, assessed: [{ ...entry, assessedAt: '2026-13-45' }] }, /assessedAt/],
+    [{ version: 1, assessed: [entry, { ...entry }] }, /duplicate/],
+  ]) assert.throws(() => readAssessments(read(file)), pattern, JSON.stringify(file));
+  assert.equal(assessmentFile, 'config/runtime-advisories.json');
+});
+
+test('an assessed advisory is shown but no longer keeps the tracking issue open (#443)', () => {
+  const advisory = (id, published_at = '2026-11-17T04:00:24Z') => ({ ghsa_id: id, state: 'published', severity: 'medium', summary: 'Package downgrade', published_at, html_url: `https://example.test/${id}` });
+  const assessed = [{ runtime: 'sparkle', id: 'GHSA-2222-3333-4444', decision: 'not-applicable', reason: 'Only package updates are affected.', record: 'https://github.com/YusukeIt0/dot-link/issues/442', assessedAt: '2026-11-23' }];
+  const latest = { tag_name: '2.10.1', html_url: 'https://example.test/rel' };
+  const quiet = releaseStatus(sparkle, '2.10.1', latest, [advisory('GHSA-2222-3333-4444')], '2026-10-25T14:36:36Z', assessed);
+  assert.equal(quiet.security, false);
+  assert.deepEqual(quiet.advisories, []);
+  assert.deepEqual(quiet.assessed.map(a => [a.id, a.record]), [['GHSA-2222-3333-4444', 'https://github.com/YusukeIt0/dot-link/issues/442']]);
+  const quietReport = renderIssue([quiet], '2026-11-30');
+  assert.equal(quietReport.actionable, 0);
+  assert.match(quietReport.body, /\| Sparkle \| 2\.10\.1 \| 2\.10\.1 \| no \(1 assessed\) \|/);
+  assert.deepEqual(decide({ number: 442, body: 'old' }, quietReport), { action: 'close', number: 442 });
+  assert.equal(materiallyActionable(reviewState([quiet])), false);
+  // The assessment matches one advisory for one runtime: a new advisory, or the same ID on another runtime, still reports.
+  const mixed = releaseStatus(sparkle, '2.10.1', latest, [advisory('GHSA-2222-3333-4444'), advisory('GHSA-5555-6666-7777')], '2026-10-25T14:36:36Z', assessed);
+  assert.equal(mixed.security, true);
+  assert.deepEqual(mixed.advisories.map(a => a.id), ['GHSA-5555-6666-7777']);
+  assert.deepEqual(reviewState([mixed]).sparkle.advisories, ['GHSA-5555-6666-7777']);
+  const tunnel = sources.find(source => source.id === 'tunnel');
+  assert.equal(releaseStatus(tunnel, 'v0.0.21', { tag_name: 'v0.0.21', html_url: 'x' }, [advisory('GHSA-2222-3333-4444')], null, assessed).security, true);
+  // A failed lookup stays unknown regardless of assessments.
+  assert.equal(releaseStatus(sparkle, '2.10.1', latest, null, null, assessed).security, null);
+  // While the issue is open for another reason, the assessed advisory stays visible.
+  const open = renderIssue([mixed], '2026-11-30');
+  assert.match(open.body, /- Assessed as not applicable: \[GHSA-2222-3333-4444\]\(https:\/\/example\.test\/GHSA-2222-3333-4444\)\. See https:\/\/github\.com\/YusukeIt0\/dot-link\/issues\/442\./);
+});
+
+test('an advisory without a newer release asks for an assessment, not a version update (#443)', () => {
+  const advisory = { ghsa_id: 'GHSA-2222-3333-4444', state: 'published', severity: 'medium', summary: 'x', published_at: '2026-11-17T00:00:00Z', html_url: 'https://example.test/a' };
+  const securityOnly = renderIssue([releaseStatus(sparkle, '2.10.1', { tag_name: '2.10.1', html_url: 'x' }, [advisory], '2026-10-25T00:00:00Z')], '2026-11-23');
+  assert.equal(securityOnly.actionable, 1);
+  assert.match(securityOnly.body, /Next action: no newer release exists\. Check whether Dot Link uses the affected path\..*config\/runtime-advisories\.json/);
+  assert.doesNotMatch(securityOnly.body, /prepare a PR that updates the version/);
+  assert.doesNotMatch(securityOnly.body, /Why no automatic PR/);
+  const both = renderIssue([releaseStatus(sparkle, '2.10.0', { tag_name: '2.10.1', html_url: 'x' }, [advisory], '2026-06-01T00:00:00Z')], '2026-11-23');
+  assert.match(both.body, /Update available: 2\.10\.0 → 2\.10\.1/);
+  assert.match(both.body, /Next action: prepare a PR that updates the version/);
+  assert.doesNotMatch(both.body, /no newer release exists/);
 });

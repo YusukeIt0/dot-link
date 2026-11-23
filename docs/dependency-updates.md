@@ -94,6 +94,17 @@ why no automatic PR is generated (the version must change together with its
 URL/checksum and be verified against upstream), and the next action. An advisory
 is reported upstream; it does not establish exposure in Dot Link.
 
+An advisory with no newer release asks for an exposure assessment, not a version
+update. If the assessment shows that Dot Link doesn't use the affected path, record
+it in `config/runtime-advisories.json`. Each entry covers one advisory ID for one
+runtime, with `"decision": "not-applicable"`, the reason, the issue that holds the
+assessment and the date (#443). The watch then shows the advisory as assessed and
+no longer keeps the tracking issue open because of it. Newer versions, other
+advisories and failed lookups are still reported. An invalid entry fails the watch.
+Remove an entry once the pin moves past the advisory, or if its reason stops
+holding, for example if Dot Link starts shipping package updates. The file is
+protected configuration, so changing it needs the maintainer's merge decision.
+
 The watch never edits pins, checksums or code, and it needs only `contents: read`
 and `issues: write`. Version pins and integrity checks stay; floating versions are
 not a substitute for maintenance. Run `node scripts/check-pinned-runtimes.mjs`

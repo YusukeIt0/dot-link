@@ -77,15 +77,48 @@ export function nodeStatus(index, pinned, ci, schedule = null, today = new Date(
   };
 }
 
+// Advisories the maintainer has assessed as not applicable (#443). Each entry names one
+// advisory for one runtime, with the reason and the issue holding the assessment. An
+// assessed advisory is shown but no longer keeps the tracking issue open; any other
+// advisory, a newer version or a failed lookup still does. Invalid entries fail loudly.
+export const assessmentFile = 'config/runtime-advisories.json';
+const assessmentKeys = ['runtime', 'id', 'decision', 'reason', 'record', 'assessedAt'];
+export function readAssessments(read = path => readFileSync(path, 'utf8')) {
+  const file = JSON.parse(read(assessmentFile));
+  if (file?.version !== 1 || !Array.isArray(file.assessed) || Object.keys(file).sort().join() !== 'assessed,version') {
+    throw new Error(`${assessmentFile} must be {"version": 1, "assessed": [...]}`);
+  }
+  const seen = new Set();
+  return file.assessed.map((entry, index) => {
+    const where = `${assessmentFile} assessed[${index}]`;
+    if (!entry || typeof entry !== 'object' || Object.keys(entry).sort().join() !== [...assessmentKeys].sort().join()) {
+      throw new Error(`${where} must have exactly: ${assessmentKeys.join(', ')}`);
+    }
+    if (!sources.some(source => source.id === entry.runtime)) throw new Error(`${where}: unknown runtime ${entry.runtime}`);
+    if (!/^GHSA(-[23456789cfghjmpqrvwx]{4}){3}$/.test(entry.id)) throw new Error(`${where}: invalid advisory ID ${entry.id}`);
+    if (entry.decision !== 'not-applicable') throw new Error(`${where}: decision must be not-applicable`);
+    if (typeof entry.reason !== 'string' || entry.reason.trim().length < 20) throw new Error(`${where}: reason must explain why it does not apply`);
+    if (!/^https:\/\/github\.com\/YusukeIt0\/dot-link\/issues\/[1-9]\d*$/.test(entry.record)) throw new Error(`${where}: record must link the issue holding the assessment`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(entry.assessedAt) || Number.isNaN(Date.parse(entry.assessedAt))) throw new Error(`${where}: assessedAt must be YYYY-MM-DD`);
+    const key = `${entry.runtime}:${entry.id}`;
+    if (seen.has(key)) throw new Error(`${where}: duplicate assessment for ${key}`);
+    seen.add(key);
+    return entry;
+  });
+}
+
 // `advisories === null` means the lookup failed: security status is unknown, never "no".
-export function releaseStatus(source, pinned, latest, advisories, pinnedPublishedAt) {
+export function releaseStatus(source, pinned, latest, advisories, pinnedPublishedAt, assessments = []) {
   if (!latest?.tag_name) throw new Error(`No latest release for ${source.repo}`);
   const relevant = (advisories ?? []).filter(a => a.state === 'published' && (!pinnedPublishedAt || a.published_at > pinnedPublishedAt))
     .map(a => ({ id: a.ghsa_id, severity: a.severity ?? 'unknown', summary: String(a.summary ?? '').slice(0, 160), url: a.html_url }));
+  const assessment = advisory => assessments.find(entry => entry.runtime === source.id && entry.id === advisory.id);
+  const unassessed = relevant.filter(advisory => !assessment(advisory));
   return {
     id: source.id, name: source.name, pinned, latest: latest.tag_name,
     outdated: compareVersions(latest.tag_name, pinned) > 0,
-    security: advisories === null ? null : relevant.length > 0, advisories: relevant,
+    security: advisories === null ? null : unassessed.length > 0, advisories: unassessed,
+    assessed: relevant.filter(assessment).map(advisory => ({ ...advisory, record: assessment(advisory).record })),
     link: latest.html_url, integrity: source.integrity,
     findings: advisories === null ? ['Advisory lookup failed, so security status is unknown. Rerun the watch or check upstream advisories manually.'] : [],
   };
@@ -98,18 +131,22 @@ export function renderIssue(rows, checkedAt) {
     '| Runtime | Pinned | Latest | Security | Upstream |', '| --- | --- | --- | --- | --- |'];
   for (const row of rows) {
     const npm = row.npm ? ` (npm ${row.npm.pinned} → ${row.npm.latest})` : '';
-    const security = row.security === null ? 'unknown' : row.security ? 'yes' : 'no';
+    const assessed = row.assessed?.length ? ` (${row.assessed.length} assessed)` : '';
+    const security = `${row.security === null ? 'unknown' : row.security ? 'yes' : 'no'}${assessed}`;
     lines.push(`| ${cell(row.name)} | ${cell(row.pinned)}${npm} | ${cell(row.latest)}${row.outdated ? ' (newer)' : ''} | ${security} | [release](${row.link}) |`);
   }
   for (const row of actionable) {
     lines.push('', `### ${row.name}`);
     if (row.outdated) lines.push(`- Update available: ${row.pinned} → ${row.latest}.`);
     for (const advisory of row.advisories ?? []) lines.push(`- Advisory [${advisory.id}](${advisory.url}) (${advisory.severity}): ${cell(advisory.summary)}. Reported upstream; exposure in Dot Link is not established by this watch.`);
+    for (const advisory of row.assessed ?? []) lines.push(`- Assessed as not applicable: [${advisory.id}](${advisory.url}). See ${advisory.record}.`);
     if (row.id === 'node' && row.security) lines.push('- A newer release on this line is marked as a security release.');
     for (const finding of row.findings) lines.push(`- ${finding}`);
-    if (row.outdated || row.security) {
+    if (row.outdated) {
       lines.push(`- Why no automatic PR: ${row.integrity} must change together and be verified against upstream before review.`);
       lines.push('- Next action: prepare a PR that updates the version and integrity data, run the existing checks, and record the source/build identity for the maintainer decision.');
+    } else if (row.security) {
+      lines.push(`- Next action: no newer release exists. Check whether Dot Link uses the affected path. If it does not, record the assessment in \`${assessmentFile}\` with the reason and the issue that holds it. If it does, mitigate now and update once a fixed release is published.`);
     }
   }
   return { body: lines.join('\n') + '\n', actionable: actionable.length };
@@ -176,6 +213,7 @@ async function json(url, token) {
 async function main() {
   const token = process.env.GH_TOKEN;
   const pins = readPins();
+  const assessments = readAssessments();
   let schedule = null;
   try { schedule = await json('https://raw.githubusercontent.com/nodejs/Release/main/schedule.json'); } catch { /* Unknown, reported as a finding. */ }
   const rows = [nodeStatus(await json('https://nodejs.org/dist/index.json'), pins.node, pins.nodeCi, schedule)];
@@ -188,7 +226,7 @@ async function main() {
     try { pinnedRelease = await json(`${api}/releases/tags/${encodeURIComponent(pins[source.id])}`, token); } catch (error) { windowUnknown = pinnedLookupTransient(error); }
     let advisories = null;
     if (!windowUnknown) try { advisories = await json(`${api}/security-advisories?state=published&per_page=50`, token); } catch { /* Unknown, reported as a finding; never treated as no advisories. */ }
-    rows.push(releaseStatus(source, pins[source.id], latest, advisories, pinnedRelease?.published_at));
+    rows.push(releaseStatus(source, pins[source.id], latest, advisories, pinnedRelease?.published_at, assessments));
   }
   const rendered = renderIssue(rows, new Date().toISOString().slice(0, 10));
   if (!process.argv.includes('--issue')) { console.log(rendered.body); return; }
@@ -203,7 +241,7 @@ async function main() {
   const decision = decide(open, report);
   const created = decision.action === 'create' ? gh(['issue', 'create', '--title', title, '--body', report.body]) : '';
   if (decision.action === 'update') gh(['issue', 'edit', String(decision.number), '--body', report.body]);
-  if (decision.action === 'close') gh(['issue', 'close', String(decision.number), '--comment', `All pinned runtimes are current as of ${new Date().toISOString().slice(0, 10)}.`]);
+  if (decision.action === 'close') gh(['issue', 'close', String(decision.number), '--comment', `All pinned runtimes are current, with no unassessed advisories, as of ${new Date().toISOString().slice(0, 10)}.`]);
   console.log(`Tracking issue: ${decision.action}${decision.number ? ` #${decision.number}` : ''}`);
   const review = reviewTarget(decision, created, previous, state);
   if (!review && ['create', 'update'].includes(decision.action)) console.log('Review not requested: no material change, or the created issue number could not be read.');
