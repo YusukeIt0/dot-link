@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "assessed": [
+    {
+      "runtime": "sparkle",
+      "id": "GHSA-gcjm-h3jh-p2vc",
+      "decision": "not-applicable",
+      "reason": "Affects only .pkg/.mpkg package updates. Dot Link ships application (.app) zip updates only, which Sparkle refuses to downgrade, and requires a signed feed. Recheck if Dot Link ever ships package updates.",
+      "record": "https://github.com/YusukeIt0/dot-link/issues/442",
+      "assessedAt": "2026-11-23"
+    }
+  ]
+}
