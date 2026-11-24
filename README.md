@@ -6,7 +6,8 @@
   <a href="https://yusukeit0.github.io/dot-link/">Website</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Even Hub</a> ·
-  <a href="docs/setup.md">User guide</a>
+  <a href="docs/setup.md">User guide</a> ·
+  <a href="docs/why.md">Why I built Dot Link</a>
 </p>
 
 <p align="center">
