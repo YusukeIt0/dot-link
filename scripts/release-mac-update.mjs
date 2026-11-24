@@ -1,4 +1,5 @@
 import {macAppcast} from './lib/mac-appcast.mjs';
+import {developerIDProblems,developerTeam} from './lib/mac-signing.mjs';
 // Publisher only. The client does not run gh or receive this signing key.
 import {readFile,writeFile,mkdir,stat} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
@@ -19,6 +20,13 @@ const metadata=JSON.parse(run('/usr/bin/plutil',['-convert','json','-o','-',info
 if(metadata.DotLinkBeta===true)throw new Error('Private Beta builds cannot be published; prepare and review a stable release build first');
 if(!/^\d+\.\d+\.\d+$/.test(version)||!/^\d+$/.test(build)||field('SUPublicEDKey')!==config.publicKey||field('CFBundleIdentifier')!=='app.tripsurf.dotlink.mac')throw new Error('Unexpected bundle identity or key');
 run('/usr/bin/codesign',['--verify','--deep','--strict',app]);
+// Releases must be Developer ID signed, notarized and stapled (scripts/notarize-mac-app.mjs).
+const codeSignature=spawnSync('/usr/bin/codesign',['-dvv',app],{encoding:'utf8'});
+const signingProblems=codeSignature.status===0?developerIDProblems(codeSignature.stderr,developerTeam(config)):['unreadable signature'];
+if(signingProblems.length)throw new Error('Not a release signature: '+signingProblems.join('; '));
+run('/usr/bin/xcrun',['stapler','validate',app]);
+const assessment=spawnSync('/usr/sbin/spctl',['--assess','--type','execute','--verbose=2',app],{encoding:'utf8'});
+if(assessment.status!==0||!/source=Notarized Developer ID/.test(assessment.stderr))throw new Error('Gatekeeper does not accept the app as notarized; run scripts/notarize-mac-app.mjs first');
 const repository=JSON.parse(run('gh',['api','repos/'+config.repository]));
 if(repository.private!==config.private)throw new Error('Repository visibility differs from configured channel');
 const notes=await readFile(notesFile,'utf8');
