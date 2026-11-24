@@ -114,7 +114,7 @@ curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh |
 
 Installs the latest stable release in `~/Applications` and opens it. Choose **Prepare this Mac** and follow the app's Tailscale setup. The first run downloads about 490 MB for local speech recognition.
 
-The app is not Apple-notarized: if macOS blocks the first launch, see [Open Anyway](docs/setup.md#first-launch). Prefer a ZIP? See [manual installation](docs/setup.md#manual-installation).
+The app is signed with a Developer ID and notarized by Apple. Prefer a ZIP? See [manual installation](docs/setup.md#manual-installation).
 
 ### 2. Connect your Dot
 

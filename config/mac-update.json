@@ -10,5 +10,6 @@
     "sha256": "1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27"
   },
   "downloadRepository": "YusukeIt0/dot-link-app",
-  "automaticUpdatesEnabled": false
+  "automaticUpdatesEnabled": false,
+  "developerTeamID": "27K9A27SGR"
 }

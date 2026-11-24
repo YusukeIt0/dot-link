@@ -105,6 +105,45 @@ The native Beta label follows that validated build channel. Rebuild after any
 source change; stale or dirty web artifacts are rejected. Both app packagers
 reject fictional-history test controls and fixture assets.
 
+### Developer ID signing and notarization
+
+Without signing settings, the builder signs ad hoc, as a local test build.
+Official releases are signed with the maintainer's Developer ID (team
+`developerTeamID` in `config/mac-update.json`) and notarized. A stable Developer
+ID signature lets macOS keep Accessibility access across updates; ad-hoc
+signatures change with every build.
+
+```sh
+export DOTLINK_SIGNING_IDENTITY='Developer ID Application: <name> (<team>)'
+export DOTLINK_SIGNING_KEYCHAIN=/path/to/signing.keychain-db  # optional
+node scripts/build-mac-app.mjs
+DOTLINK_NOTARY_PROFILE=<notarytool profile> node scripts/notarize-mac-app.mjs
+```
+
+The keychain must be unlocked first. Use a keychain that does not require an
+interactive password prompt: tools started from a terminal cannot show macOS
+keychain dialogs. The builder re-signs the bundled `node`, `tunnel-client`,
+`whisper-cli` and Sparkle components inside-out, then the app, all with hardened
+runtime and a secure timestamp. `node` receives only
+`native/DotLinkSetup/node-runtime.entitlements` (`allow-jit` for V8); the
+debugging entitlement in the upstream binary is dropped because notarization
+rejects it. The build fails if the bundle contains a Mach-O file outside the
+signing plan, or if any signed file lacks the Developer ID team, hardened runtime
+or timestamp.
+
+`notarize-mac-app.mjs` submits a temporary ZIP with a `notarytool` keychain
+profile (`DOTLINK_SIGNING_KEYCHAIN` is passed as its keychain), waits for the
+result, prints Apple's log on rejection, staples the ticket and requires
+Gatekeeper to report `Notarized Developer ID`. Signing certificates and Apple
+credentials stay on the maintainer's Mac. They are never committed or placed in
+GitHub Actions.
+
+Sparkle 2.10.1 accepts the move from an ad-hoc release to a Developer ID release
+because the archive carries a valid EdDSA signature and the new app's code
+signature is valid. macOS treats the first Developer ID build as a new identity:
+Accessibility access and items saved with the legacy keychain API need one
+re-authorization after that update.
+
 ### Validation builds and conversation-state rollback
 
 Before running a validation relay against an existing installation, stop its owned services and make an owner-only local backup of the installed app plus `.runtime/bridge-state.json` and its `.runtime/bridge-state.json.photos` directory. Use the configured installation directory (normally `~/Library/Application Support/Dot Link`), not an unrelated checkout. Verify the backup against the originals before starting the test. These files contain private conversations and may contain credentials; never upload them or include them in a build.
@@ -193,7 +232,7 @@ remain separate stages. The maintainer presses the Even review-submission button
 The maintainer needs authenticated `gh`, write access to this repository, and the existing Ed25519 signing key at `.runtime/update-signing/ed25519.key` with mode 600. This key is never included in a build, commit, or workflow. Contributors can build and test without the release key; only the maintainer signs official updates.
 
 1. Complete the [required documentation check](#required-documentation-check-for-every-change-and-distribution), then update `CFBundleShortVersionString` and increase `CFBundleVersion` in `native/DotLinkSetup/Info.plist`.
-2. Run tests, the native driver test, and the Mac build above. Inspect the app and changes. Push the matching source to `main`.
+2. Run tests, the native driver test, and the Mac build above with [Developer ID signing and notarization](#developer-id-signing-and-notarization). Inspect the app and changes. Push the matching source to `main`.
 3. Write release notes to a local text file and run:
 
 ```sh
@@ -203,7 +242,7 @@ node scripts/release-mac-update.mjs '.runtime/mac-app/Dot Link.app' /path/to/rel
 4. Commit the generated `updates/mac/appcast.xml` on a release branch, open a pull request, and complete the required CI/review checks before merging it. Do not bypass main branch protection. Merging the signed feed enables client discovery of the release.
 5. Fetch the public feed and ZIP without authentication, verify signatures, and check the update in the app. A failed network request must never be reported as “up to date.”
 
-The release helper packages the app, verifies its signature, signs the ZIP, uploads a release, and signs the feed. The release points to the current public `main` commit. Do not publish mismatched source and binaries. Keep release signing local; do not put personal credentials into GitHub Actions to make installation work.
+The release helper refuses an app that is not Developer ID signed for the configured team, stapled and accepted by Gatekeeper as notarized. It then packages the app, signs the ZIP, uploads a release, and signs the feed. The release points to the current public `main` commit. Do not publish mismatched source and binaries. Keep release signing local; do not put personal credentials into GitHub Actions to make installation work.
 
 ## Even companion
 

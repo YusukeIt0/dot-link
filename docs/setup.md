@@ -12,7 +12,7 @@ For the recommended one-command install, use the [quickstart](https://github.com
 
 Download `Dot-Link-…-arm64.zip` from the [latest Mac release](https://github.com/YusukeIt0/dot-link/releases/latest), unzip it, and move **Dot Link.app** to `~/Applications`. Create that folder if needed. Choose the app ZIP, not GitHub's source-code archives. Open the app and continue at [Prepare this Mac](https://github.com/YusukeIt0/dot-link#1-install-on-your-mac).
 
-The installer checks the release checksum, app signature consistency and bundle identity. These checks do not provide Apple notarization. You can [inspect the installer](https://github.com/YusukeIt0/dot-link/blob/main/install.sh).
+The installer checks the release checksum, app signature and bundle identity. Releases are signed with a Developer ID and notarized by Apple. You can [inspect the installer](https://github.com/YusukeIt0/dot-link/blob/main/install.sh).
 
 From Mac 0.4.37, opening Dot Link elsewhere restores a missing app in `~/Applications`
 and opens the installed copy before connecting. If an equal or newer verified copy
@@ -24,7 +24,7 @@ opens the intended folder.
 
 ### First launch
 
-Dot Link is not Apple-notarized. If macOS says it cannot verify the developer and you trust the download, dismiss the warning, then open **System Settings → Privacy & Security → Open Anyway**. Authenticate in the Mac dialog and choose **Open**. A warning that the app is damaged or will harm your computer is different; see [Apple's guidance](https://support.apple.com/en-us/102445).
+Dot Link is notarized by Apple. When you open a downloaded copy for the first time, macOS asks you to confirm opening an app from the internet; choose **Open**. A warning that the app is damaged or will harm your computer means the copy should not be trusted; see [Apple's guidance](https://support.apple.com/en-us/102445).
 
 This guide uses English labels. See [application language](#application-language)
 to change the language in either app.
@@ -191,7 +191,7 @@ When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your
 | Mac connection error | The paired address responded, but the connection could not be completed. Check Dot Link on the Mac. |
 | Mac unreachable | Check Tailscale on the phone and that the Mac is awake, connected to Tailscale and running Dot Link. The app cannot distinguish a missing phone VPN from an unreachable Mac. It reconnects automatically; keep the existing pairing. |
 | Even cannot pair | Keep the Mac awake, resume Dot Link, and connect Mac and iPhone to the same Tailscale network. Generate a fresh code and paste it in full within two minutes. |
-| Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. |
+| Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. This is needed once when updating from a release before Developer ID signing; later updates keep access. |
 | Speech service rejects a recording | Check the selected service, key, account access and billing; for Microsoft also check the endpoint. Saving a key alone does not verify it. |
 | Mac 0.3.0 or 0.3.1 waits for Even to close before Dot was ever connected | Quit Dot Link and replace only the app in `~/Applications` with the latest ZIP. Keep Application Support data; do not uninstall. |
 

@@ -3,6 +3,7 @@ import { resolve, join, dirname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { assertBetaBuild, assertReleaseBuild, sourceIdentity } from './lib/even-build.mjs';
 import { assertProductionHistoryAsset } from './lib/production-history.mjs';
+import { codesignSteps, developerIDProblems, developerTeam, findMachO, forbiddenEntitlements, signedExecutables, signingMode } from './lib/mac-signing.mjs';
 const root=resolve('.'), output=resolve(process.argv[2] ?? '.runtime/mac-app/Dot Link.app'), contents=join(output,'Contents'), payload=join(contents,'Resources/payload');
 if (!output.startsWith(join(root,'.runtime')+'/') || !output.endsWith('/Dot Link.app')) throw new Error('Build output must be a Dot Link.app below .runtime');
 const build=JSON.parse(await readFile(join(root,'dist/build-info.txt'),'utf8')), source=sourceIdentity();
@@ -78,7 +79,23 @@ for(const [key,type,value] of [
 await cp('assets/brand/orbit/DotLink.icns',join(contents,'Resources/DotLink.icns'));
 await mkdir('.runtime/swift-module-cache',{recursive:true});
 run('/usr/bin/xcrun',['swiftc','-O','-module-cache-path',resolve('.runtime/swift-module-cache'),'-target',`arm64-apple-macos${minimumOS}`,'-framework','AppKit','-framework','ApplicationServices','-framework','UserNotifications','-F',sdk,'-framework','Sparkle','-Xlinker','-rpath','-Xlinker','@executable_path/../Frameworks','native/DotLinkSetup/Localization.swift','native/DotLinkSetup/STTProvider.swift','native/DotLinkSetup/STTSettings.swift','native/DotLinkSetup/HealthcareSettings.swift','native/DotLinkSetup/STTCredentials.swift','native/DotLinkSetup/HistoryArchiveKey.swift','native/DotLinkSetup/UpdateProgressWindow.swift','native/DotLinkSetup/AppUpdater.swift','native/NotificationMenu/DotStatus.swift','native/NotificationMenu/NotificationProbeResult.swift','native/DotLinkSetup/NotificationReader.swift','native/DotLinkSetup/NotificationForwarder.swift','native/DotLinkSetup/NotificationStructureProbe.swift','native/DotLinkSetup/NotificationController.swift','native/DotLinkSetup/SetupFailure.swift','native/DotLinkSetup/WindowLayout.swift','native/DotLinkSetup/main.swift','-o',join(contents,'MacOS/DotLink')]);
-for(const name of ['node','tunnel-client','whisper-cli'])run('/usr/bin/codesign',['--force','--sign','-',join(payload,'.runtime/bin',name)]);
-run('/usr/bin/codesign',['--force','--sign','-','--identifier','app.tripsurf.dotlink.mac',output]);
+const signing=signingMode(process.env);
+if(signing.mode==='developer-id'){
+ // Notarization requires every Mach-O file to carry this signature.
+ const unexpected=(await findMachO(output)).filter(path=>!signedExecutables().includes(path));
+ if(unexpected.length)throw new Error('Unsigned executable files in the bundle: '+unexpected.join(', '));
+}
+for(const args of codesignSteps(output,signing,resolve('native/DotLinkSetup/node-runtime.entitlements')))run('/usr/bin/codesign',args);
 run('/usr/bin/codesign',['--verify','--deep','--strict',output]);
-console.log(JSON.stringify({app:output,architecture:'arm64',runtimePackages:copied.size,scope:'Local test build; not notarized or publicly distributed'}));
+if(signing.mode==='developer-id'){
+ const team=developerTeam(update);
+ for(const path of signedExecutables()){
+  const display=spawnSync('/usr/bin/codesign',['-dvv',join(output,path)],{encoding:'utf8'});
+  const problems=display.status===0?developerIDProblems(display.stderr,team):['unreadable signature'];
+  const entitlements=spawnSync('/usr/bin/codesign',['-d','--entitlements','-','--xml',join(output,path)],{encoding:'utf8'}).stdout;
+  problems.push(...forbiddenEntitlements(entitlements).map(key=>'carries '+key));
+  if(problems.length)throw new Error(`${path}: ${problems.join('; ')}`);
+ }
+}
+const scope=signing.mode==='developer-id'?'Developer ID signed; notarize with scripts/notarize-mac-app.mjs before distribution':'Local test build; not notarized or publicly distributed';
+console.log(JSON.stringify({app:output,architecture:'arm64',runtimePackages:copied.size,signing:signing.mode,scope}));
