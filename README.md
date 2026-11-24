@@ -9,14 +9,6 @@
   <a href="docs/setup.md">User guide</a>
 </p>
 
-<p>
-  <sub><strong>2026-09-29</strong> · <a href="https://learn.chatgpt.com/docs/whats-new/devday-2026">ChatGPT dots officially announced</a></sub><br>
-  <sub><strong>2026-10-09</strong> · <a href="https://github.com/YusukeIt0/dot-link/commit/493b753c948c4a6ed09993bd6ed89eff8345ac35">Dot Link first published on GitHub</a></sub><br>
-  <sub><strong>2026-10-10</strong> · <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Dot Link launched on Even Hub</a></sub><br>
-  <sub><strong>2026-10-25</strong> · <a href="https://www.producthunt.com/products/dot-link">Dot Link launched on Product Hunt</a></sub>
-  <br><sub><strong>2026-10-28</strong> · <a href="https://www.facebook.com/ninjaaitools/posts/3288243901376851/">Featured by Ninja AI Tools in “12 Crazy AI Tools You Never Heard Of”</a></sub>
-</p>
-
 <p align="center">
   <a href="https://yusukeit0.github.io/dot-link/#film">
     <img src="assets/film/dot-link-introduction.jpg" alt="Watch the Dot Link introduction film" width="720">
@@ -24,6 +16,14 @@
   <br><a href="https://yusukeit0.github.io/dot-link/#film"><strong>Watch the film · 1 minute</strong></a>
   <br><sub>AI-generated illustrative scenes with simulator displays. Timing condensed.</sub>
 </p>
+
+## Milestones
+
+- **2026-09-29** · [ChatGPT dots officially announced](https://learn.chatgpt.com/docs/whats-new/devday-2026)
+- **2026-10-09** · [Dot Link first published on GitHub](https://github.com/YusukeIt0/dot-link/commit/493b753c948c4a6ed09993bd6ed89eff8345ac35)
+- **2026-10-10** · [Dot Link launched on Even Hub](https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink)
+- **2026-10-25** · [Dot Link launched on Product Hunt](https://www.producthunt.com/products/dot-link)
+- **2026-10-28** · [Featured by Ninja AI Tools in “12 Crazy AI Tools You Never Heard Of”](https://www.facebook.com/ninjaaitools/posts/3288243901376851/)
 
 ## What changes with Dot Link?
 
