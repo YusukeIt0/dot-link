@@ -1,18 +1,15 @@
-<p align="center">
-  <img src="assets/brand/orbit/mac-1024.png" alt="Dot Link" width="96" height="96">
-</p>
+# <img src="assets/brand/orbit/mac-1024.png" alt="" width="40" align="top"> Dot Link
 
-<h1 align="center">Dot Link</h1>
-<p align="center"><strong>Your Dot, aware of the world around you.</strong></p>
-<p align="center">Dot is smart, but it doesn't automatically know where you are or what's around you. Dot Link connects your existing ChatGPT Dot to Even G2, letting it understand more about your surroundings using the context you choose to share: your location, walking routes, terrain, recent places, and weather. Dot can reach out through your glasses when something matters, or stay quiet when it doesn't.</p>
-<p align="center">
+<p><strong>Your Dot, aware of the world around you.</strong></p>
+<p>Dot is smart, but it doesn't automatically know where you are or what's around you. Dot Link connects your existing ChatGPT Dot to Even G2, letting it understand more about your surroundings using the context you choose to share: your location, walking routes, terrain, recent places, and weather. Dot can reach out through your glasses when something matters, or stay quiet when it doesn't.</p>
+<p>
   <a href="https://yusukeit0.github.io/dot-link/">Website</a> ·
   <a href="#quickstart">Quickstart</a> ·
   <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Even Hub</a> ·
   <a href="docs/setup.md">User guide</a>
 </p>
 
-<p align="center">
+<p>
   <sub><strong>2026-09-29</strong> · <a href="https://learn.chatgpt.com/docs/whats-new/devday-2026">ChatGPT dots officially announced</a></sub><br>
   <sub><strong>2026-10-09</strong> · <a href="https://github.com/YusukeIt0/dot-link/commit/493b753c948c4a6ed09993bd6ed89eff8345ac35">Dot Link first published on GitHub</a></sub><br>
   <sub><strong>2026-10-10</strong> · <a href="https://hub.evenrealities.com/landing?package_id=app.tripsurf.dotlink">Dot Link launched on Even Hub</a></sub><br>
