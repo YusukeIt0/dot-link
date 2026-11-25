@@ -3,9 +3,11 @@ import {
   TextContainerUpgrade, waitForEvenAppBridge,
 } from '@evenrealities/even_hub_sdk';
 import { hostMotion, limits, numericAxis, poses, summarize } from './measurement.js';
+import { bearingCandidates } from './navigation/bearing.js';
 
 const $ = id => document.getElementById(id);
 const requestedLanguage = new URLSearchParams(window.location?.search).get('lang');
+const navComparison = (new URLSearchParams(window.location?.search).get('mode') ?? import.meta.env?.VITE_PROBE_MODE) === 'navigation';
 const japanese = (requestedLanguage ?? import.meta.env?.VITE_PROBE_LANGUAGE ?? navigator.language).toLowerCase().startsWith('ja');
 const say = (english, ja) => japanese ? ja : english;
 const poseText = index => poses[index][japanese ? 2 : 1];
@@ -22,6 +24,13 @@ if (japanese) {
   $('export-label').textContent = '測定記録（画面を閉じる前にコピーできます）';
   $('select').textContent = '測定記録を選択';
   $('status').textContent = 'G2に接続しています…';
+}
+if (navComparison) {
+  document.title = $('title').textContent = say('G2 active navigation check · Beta', 'G2ナビと文字表示の確認 · Beta');
+  $('instructions').textContent = say('Start with an active trip. Leave the phone still, notice which screen is on the glasses, and press Start. Sampling stops after ten seconds.',
+    'ナビ案内を開始した状態で使います。スマホを置き、眼鏡に地図と文字のどちらが見えているか覚えておいてください。「測定を始める」を押すと10秒で終了します。');
+  $('privacy').textContent = say('Only motion evidence is recorded on this page.', '測定値はこの画面だけに残ります。向きを合わせる操作は要りません。');
+  $('language').hidden = true;
 }
 const page = { containerID: 1, containerName: 'probe' };
 let bridge;
@@ -42,6 +51,8 @@ let imuStart;
 let startPending = false;
 let imuOff;
 let finishPromise;
+let imuEnabled = null;
+let endedMs = 0;
 const expectedInterval = ImuReportPace.P200;
 
 function show(text) {
@@ -81,10 +92,11 @@ function receive(event) {
   if ([OsEventTypeList.SYSTEM_EXIT_EVENT, OsEventTypeList.ABNORMAL_EXIT_EVENT,
     OsEventTypeList.FOREGROUND_EXIT_EVENT].includes(type)) { void finish('host exited'); return; }
   const extra = hostMotion(event.jsonData);
+  if (navComparison) Object.assign(extra, bearingCandidates(event.jsonData));
   const hasExtra = Object.keys(extra).length > 0;
   if (sys?.imuData || type === OsEventTypeList.IMU_DATA_REPORT || hasExtra) {
     const imu = sys?.imuData ?? {};
-    rows.push({ tMs: Math.round(performance.now() - startedAt), pose: poses[position][0],
+    rows.push({ tMs: Math.round(performance.now() - startedAt), pose: navComparison ? 'navigation' : poses[position][0],
       phase, x: numericAxis(imu.x), y: numericAxis(imu.y), z: numericAxis(imu.z),
       ...(hasExtra ? { hostMotion: extra } : {}) });
     if (rows.length >= limits.samples) void finish('sample limit');
@@ -95,6 +107,17 @@ function receive(event) {
 }
 
 function renderResults(reason) {
+  if (navComparison) {
+    const completeXYZ = rows.filter(row => [row.x, row.y, row.z].every(Number.isFinite)).length;
+    const namedMotion = rows.filter(row => row.hostMotion).map(({tMs, hostMotion}) => ({tMs, fields: hostMotion}));
+    $('export').hidden = false;
+    $('data').value = JSON.stringify({ mode: 'active navigation comparison', sdk: '0.0.16', model,
+      startupAcknowledged: true, imuStartAcknowledged: imuEnabled, imuOffAcknowledged: imuOff ?? null,
+      elapsedMs: endedMs, stopReason: reason, reports: rows.length, completeXYZ,
+      namedMotionReports: namedMotion.length, values: namedMotion.slice(0, 120) });
+    return say(`Finished. Complete XYZ reports: ${completeXYZ}. Other named motion reports: ${namedMotion.length}.`,
+      `終了しました。3軸の測定値は${completeXYZ}件、その他の向きのデータは${namedMotion.length}件です。下の測定記録をコピーしてください。`);
+  }
   const summary = summarize(rows);
   $('summary').textContent = summary.map(({pose, complete, received, means}) =>
     `${pose}  ${complete}/${received} XYZ  ${means.x ?? '?'}  ${means.y ?? '?'}  ${means.z ?? '?'}   |v| ${means.magnitude ?? '?'}`).join('\n');
@@ -116,6 +139,7 @@ async function disableImu(reason) {
 function finish(reason) {
   if (!active) return finishPromise;
   active = false;
+  endedMs = Math.round(performance.now() - startedAt);
   clearTimeout(clock);
   clearTimeout(timeout);
   unsubscribeEvents?.();
@@ -143,7 +167,7 @@ async function start() {
   active = true;
   phase = 'starting';
   startedAt = performance.now();
-  timeout = setTimeout(() => { void finish('time limit'); }, limits.sessionMs);
+  timeout = setTimeout(() => { void finish('time limit'); }, navComparison ? 20000 : limits.sessionMs);
   unsubscribeEvents = bridge.onEvenHubEvent(receive);
   unsubscribeDevice = bridge.onDeviceStatusChanged(status => {
     if (glassesId && status.sn && status.sn !== glassesId) return;
@@ -155,8 +179,16 @@ async function start() {
     imuStart = bridge.imuControl(true, expectedInterval);
     const enabled = await imuStart;
     startPending = false;
+    imuEnabled = enabled === true;
     if (!active) return;
     if (enabled !== true) { await finish('IMU start rejected'); return; }
+    if (navComparison) {
+      clearTimeout(timeout);
+      phase = 'observing';
+      show(say('Observing for ten seconds.', '10秒間、測定しています。'));
+      timeout = setTimeout(() => { void finish('navigation comparison finished'); }, 10000);
+      return;
+    }
     $('mark').hidden = false;
     nextPose();
   } catch { startPending = false; await finish('IMU start failed'); }
@@ -185,7 +217,8 @@ async function initialize() {
     const result = await bridge.createStartUpPageContainer(new CreateStartUpPageContainer({
       containerTotalNum: 1, textObject: [new TextContainerProperty({ ...page,
         xPosition: 8, yPosition: 48, width: 560, height: 152, isEventCapture: 1,
-        content: say('G2 motion probe · Beta\nStart the measurement on the phone.', 'G2の向きの測定 · Beta\nスマホで「測定を始める」を押してください。') })],
+        content: navComparison ? say('G2 navigation check\nStart on the phone.', 'G2ナビと文字表示の確認\nスマホで「測定を始める」を押してください。')
+          : say('G2 motion probe · Beta\nStart the measurement on the phone.', 'G2の向きの測定 · Beta\nスマホで「測定を始める」を押してください。') })],
     }));
     if (result !== 0) throw new Error();
     $('start').disabled = false;

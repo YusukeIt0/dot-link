@@ -7,7 +7,7 @@ import { limits, poses } from './measurement.js';
 const sdk = import.meta.resolve('@evenrealities/even_hub_sdk');
 
 // Use the real SDK parser and page models with a local synthetic host and clock.
-async function fixture(t, startResult = true, language = 'en') {
+async function fixture(t, startResult = true, language = 'en', mode = '') {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, {});
@@ -27,7 +27,7 @@ async function fixture(t, startResult = true, language = 'en') {
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   t.mock.method(performance, 'now', () => Date.now());
   const saved = new Map();
-  const win = { location: { search: '?lang=' + language }, addEventListener() {} };
+  const win = { location: { search: '?' + new URLSearchParams({lang: language, mode}) }, addEventListener() {} };
   for (const [key, value] of Object.entries({ document: doc, window: win, probeTestBridge: bridge })) {
     saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { value, configurable: true });
@@ -92,6 +92,33 @@ test('a rejected IMU request remains an empty, inconclusive run', async t => {
   assert.equal(f.result().stopReason, 'IMU start rejected');
   assert.deepEqual(f.result().summary, []);
   assert.equal(f.result().rows.length, 0);
+});
+
+test('a normal HUD can run a ten-second active comparison without any pose marks', async t => {
+  const f = await fixture(t, true, 'ja', 'navigation');
+  assert.match(f.element('title').textContent, /ナビと文字表示/);
+  f.sample({ x: 0, y: 0, z: 1, compassInfoMsg: { degrees: 0 }, secret: 'discard-me' });
+  f.sample({ x: 0, y: 1, z: 0, route: { heading: 123 } });
+  t.mock.timers.tick(10000);
+  await f.flush();
+  const r = f.result();
+  assert.equal(r.mode, 'active navigation comparison');
+  assert.equal(r.elapsedMs, 10000);
+  assert.equal(r.completeXYZ, 2);
+  assert.equal(r.namedMotionReports, 1);
+  assert.deepEqual(r.values, [{tMs: 0, fields: {'imudata.compassinfomsg.degrees': 0}}]);
+  assert.deepEqual([r.startupAcknowledged, r.imuStartAcknowledged, r.imuOffAcknowledged], [true, true, true]);
+  assert.deepEqual(f.calls, ['page', [true, 200], [false, 200]]);
+  assert.doesNotMatch(JSON.stringify(r), /route|discard-me|fixture-only/);
+});
+
+test('an active comparison records a rejected IMU start separately from a silent stream', async t => {
+  const f = await fixture(t, false, 'ja', 'navigation');
+  const r = f.result();
+  assert.equal(r.imuStartAcknowledged, false);
+  assert.equal(r.stopReason, 'IMU start rejected');
+  assert.equal(r.completeXYZ, 0);
+  assert.equal(r.imuOffAcknowledged, true);
 });
 
 test('both rotations, tilt and roll stay distinct, zero survives, and extra private fields are dropped', async t => {
