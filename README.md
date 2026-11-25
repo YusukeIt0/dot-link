@@ -99,9 +99,13 @@ With Mac 0.5.0 and an Even companion that includes **Sharing settings → Histor
 ## Requirements
 
 - **Apple Silicon Mac**, macOS 13.5 or later, kept awake and online during use.
-- **Even G2 and an iPhone** with the Even Realities app. Android is not supported.
+- **[Even G2](https://www.evenrealities.com/smart-glasses) and an iPhone** with the Even Realities app. Android is not supported.
 - **ChatGPT with [Dot](https://help.openai.com/en/articles/20001530-getting-started-with-your-dot)**, with access to an [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) and custom MCP connections. Installing Dot Link does not grant this account access.
 - **Tailscale** on both Mac and iPhone, signed in to the same account.
+
+Optional:
+
+- **[Polar](https://www.polar.com/en) device** synced with Polar Flow, for [health context](docs/setup.md#polar-health-context). Tested with [Polar Loop](https://www.polar.com/en/loop).
 
 ## Quickstart
 
