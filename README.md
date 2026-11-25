@@ -39,6 +39,7 @@
 | **Recent places** | Conversation and memory | Recorded locations and nearby places |
 | **Weather** | Forecast on request | Location-linked forecasts and optional nearby rain estimates |
 | **Health** | What you share | Polar data for context-aware suggestions |
+| **Historical context** | Conversation and memory | Past real-world context informs present decisions |
 | **Proactive help** | Conversation and connected context | Real-world context too |
 
 </div>
