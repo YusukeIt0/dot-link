@@ -12,7 +12,7 @@ For the recommended one-command install, use the [quickstart](https://github.com
 
 Download `Dot-Link-…-arm64.zip` from the [latest Mac release](https://github.com/YusukeIt0/dot-link/releases/latest), unzip it, and move **Dot Link.app** to `~/Applications`. Create that folder if needed. Choose the app ZIP, not GitHub's source-code archives. Open the app and continue at [Prepare this Mac](https://github.com/YusukeIt0/dot-link#1-install-on-your-mac).
 
-The installer checks the release checksum, app signature and bundle identity. From Mac 0.5.4, releases are also signed with a Developer ID and notarized by Apple. You can [inspect the installer](https://github.com/YusukeIt0/dot-link/blob/main/install.sh).
+The installer checks the release checksum, app signature and bundle identity, and that the app is signed by this project's developer (Team ID `27K9A27SGR`). From Mac 0.5.4, releases are signed with a Developer ID and notarized by Apple. You can [inspect the installer](https://github.com/YusukeIt0/dot-link/blob/main/install.sh).
 
 From Mac 0.4.37, opening Dot Link elsewhere restores a missing app in `~/Applications`
 and opens the installed copy before connecting. If an equal or newer verified copy
