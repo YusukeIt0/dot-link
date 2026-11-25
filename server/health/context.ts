@@ -78,7 +78,7 @@ export class HealthContext {
   private ready:Promise<void>;private closed=false;private healthy=true;private fault='';private busy=false;
   private abort?:AbortController;private oauth?:{state:string;client:PolarConnection;expires:number;generation:number;server:Server;timer:ReturnType<typeof setTimeout>};
   private timer:ReturnType<typeof setInterval>;private nextPoll=0;private syncAt?:string;private profileRefreshAt?:string;
-  private reads=new Map<string,{generation:number;revision:string;expires:number;evidenceExpiry:number;phoneTimeAllowed?:()=>boolean;archiveLease?:PolarArchiveLease}>();
+  private reads=new Map<string,{generation:number;revision:string;expires:number;evidenceExpiry:number;phoneTimeAllowed?:PhoneTimeRead['allowed'];archiveLease?:PolarArchiveLease}>();
   private historyPages=new Map<string,{query:PolarHistoryQuery;offset:number;readId:string;expires:number;phase:'legacy'|'archive';archiveCursor?:string}>();
   private decisions=new Map<string,{signature:string;result:unknown}>();
   private responseTail:Promise<unknown>=Promise.resolve();private subscriptionTail:Promise<unknown>=Promise.resolve();
@@ -270,8 +270,8 @@ export class HealthContext {
       interpretation_guidance:healthInterpretationGuidance,
       activity_guidance:contextActivityGuidance,response_tool:'respond_to_health',attribution:healthAttributionGuidance};
   }
-  private registerRead(evidenceExpiry:number, phoneTime?:PhoneTimeRead, archiveLease?:PolarArchiveLease) {
-    const now=this.now(), expires=Math.min(now+5*60_000,evidenceExpiry,this.state.connection?.expiresAt??Infinity,phoneTime?.expiresAt??Infinity);
+  private registerRead(evidenceExpiry:number, phoneTime?:PhoneTimeRead, archiveLease?:PolarArchiveLease, deliveryDeadline=Infinity) {
+    const now=this.now(), expires=Math.min(now+5*60_000,evidenceExpiry,deliveryDeadline,this.state.connection?.expiresAt??Infinity,phoneTime?.expiresAt??Infinity);
     const read_id=randomUUID();
     this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,evidenceExpiry,phoneTimeAllowed:phoneTime?.allowed,archiveLease});
     while (this.reads.size>40) {const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
@@ -296,6 +296,7 @@ export class HealthContext {
     const legacy=selectPolarHistory(this.state.observations,query,page?.phase==='archive'?0:offset);
     const units=legacy.units;
     let entries=legacy.entries, earliestExpiry=legacy.earliestExpiry;
+    let deliveryDeadline=page?.expires??Infinity;
     let coverage:Record<string,unknown>=legacy.coverage;
     let continuation:{phase:'legacy'|'archive';offset:number;archiveCursor?:string}|undefined;
     let partial=false;
@@ -324,7 +325,8 @@ export class HealthContext {
                 return {...e,retention:{period:r.period,first_received_at:new Date(r.firstReceivedMs).toISOString(),
                   expires_at:new Date(r.expiresAtMs).toISOString()}};
               });
-              earliestExpiry=Math.min(earliestExpiry,projected.earliestExpiry,batch.validUntilMs);
+              earliestExpiry=Math.min(earliestExpiry,projected.earliestExpiry);
+              deliveryDeadline=Math.min(deliveryDeadline,batch.validUntilMs);
               if(projected.nextOffset!==null){continuation={phase:'archive',offset:projected.nextOffset,archiveCursor:cursor};break;}
               continuation=batch.nextCursor?{phase:'archive',offset:0,archiveCursor:batch.nextCursor}:undefined;
               if(entries.length||!batch.nextCursor)break;
@@ -360,7 +362,7 @@ export class HealthContext {
       attribution:healthAttributionGuidance};
     // UUIDs, the expiry instant and the existing response-tool envelope occupy < 512 bytes.
     if (Buffer.byteLength(JSON.stringify(payload))>48*1024-512) throw new ToolRejection('history_page_too_large','Narrow the Polar field selection for this page.');
-    const receipt=this.registerRead(Math.min(earliestExpiry,page?.expires??Infinity),phoneTime,lease);
+    const receipt=this.registerRead(earliestExpiry,phoneTime,lease,deliveryDeadline);
     this.responseGuard(receipt.read_id)();
     const next_cursor=continuation?randomUUID():null;
     if (next_cursor && continuation) {
@@ -377,7 +379,7 @@ export class HealthContext {
       if(!this.usable()||!read||read.generation!==this.generation||read.evidenceExpiry<=this.now())throw rejected();
       if(purpose==='deliver' && (read.revision!==this.revision || read.expires<=this.now()))throw rejected();
       if(read.archiveLease){const current=this.archiveLease();if(current?.epoch!==read.archiveLease.epoch||current.period!==read.archiveLease.period)throw rejected();}
-      if(read.phoneTimeAllowed&&!read.phoneTimeAllowed())throw new ToolRejection('history_access_changed','The phone-clock evidence is no longer authorized. Re-read health context and reconsider the response.');
+      if(read.phoneTimeAllowed&&!read.phoneTimeAllowed(purpose))throw new ToolRejection('history_access_changed','The phone-clock evidence is no longer authorized. Re-read health context and reconsider the response.');
       return true;
     };
   }

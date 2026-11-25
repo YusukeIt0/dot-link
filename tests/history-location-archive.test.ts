@@ -9,6 +9,9 @@ import { ArchiveAuthority } from '../server/history/archive-authority.ts';
 import { readFactorHistory } from '../server/history/factor-tool.ts';
 import { historyExpiry } from '../server/history/retention.ts';
 import { LocationHistoryStore } from '../server/history/store.ts';
+import { Bridge } from '../server/bridge.ts';
+import { rpc } from '../server/http.ts';
+import { WebhookSender } from '../server/webhook.ts';
 import type { GeographicEvidence } from '../server/geography/types.ts';
 
 const owner = 'a'.repeat(64);
@@ -75,12 +78,48 @@ test('seven-day users keep their grant and data without provisioning, enabling t
   assert.ok(!JSON.stringify([first,second]).includes('"latitude"'));
   assert.equal(second.next_cursor,null);
   assert.equal(f.history.responseGuard(first.response_context.arguments.history_context_ids![0])(),true);
+  const protectedRecall = f.history.recallGuard(first.response_context.arguments.history_context_ids![0]);
+  const legacyRecall = f.history.recallGuard(second.response_context!.arguments.history_context_ids![0]);
+  f.at(start + 7 * day + 1000);
+  assert.equal(protectedRecall(), true);
+  assert.equal(legacyRecall(), false);
   await f.restart();
   assert.equal(f.keys,1);
   f.at(start+8*day); assert.equal(f.history.status(owner).historyCount,0);
   assert.deepEqual(f.page(start,start+4000).entries.map(x=>'measured_at' in x ? x.measured_at : undefined),[iso(start+3000)]);
   assert.equal(f.upload(start+1000),false);
   assert.deepEqual(f.page(start,start+4000).entries.map(x=>'measured_at' in x ? x.measured_at : undefined),[iso(start+3000)]);
+});
+
+for (const action of ['disable', 'delete'] as const) test(`protected location history keeps a sent suggestion visible past the read deadline until ${action}`, async t => {
+  const f = fixture(t);
+  f.legacyControl('enable');
+  await f.archive();
+  f.at(start + 1000);
+  assert.ok(f.upload());
+  f.at(start + 2000);
+  const sender = new WebhookSender(async (_url, body) => ({status: 200, body: JSON.stringify({challenge: JSON.parse(body).challenge})}));
+  const bridge = new Bridge(join(f.legacy, 'test-bridge.json'), sender, ['callback.example.test'], undefined, {now: () => f.now});
+  t.after(() => bridge.close());
+  await bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'},
+    delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
+  const call = (name: string, args: unknown = {}) => rpc(bridge, {jsonrpc: '2.0', id: 1, method: 'tools/call', params: {name, arguments: args}},
+    undefined, undefined, f.history) as Promise<any>;
+  const read = await call('get_factor_history', {start_at: iso(start), end_at: iso(f.now), fields: {location: ['motion']}});
+  const page = read.result.structuredContent.sources.location;
+  assert.equal(page.entries.length, 1);
+  const {arguments: refs, expires_no_later_than} = page.response_context;
+  const suggestion = {activity_id: 'afternoon-walk', disposition: 'announce', text: 'The riverside path is open.', ...refs};
+  assert.equal((await call('respond_to_context', suggestion)).result.structuredContent.stored_for_g2, true);
+  f.at(Date.parse(expires_no_later_than) + 1);
+  assert.equal((await call('respond_to_context', {...suggestion, activity_id: 'later-walk'})).error.data.reason, 'history_access_changed');
+  const recent = async () => (await call('get_recent_announcements')).result.structuredContent.messages.map((row: {text: string}) => row.text);
+  assert.deepEqual(await recent(), [suggestion.text]);
+  if (action === 'delete') await f.change({action: 'delete', source: 'location'});
+  else await f.archive(false);
+  assert.deepEqual(await recent(), []);
+  await f.archive();
+  assert.deepEqual(await recent(), []);
 });
 
 test('immutable fix, deadline and geography persist through later periods, expiry, and first late uploads', async t => {

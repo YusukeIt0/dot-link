@@ -77,6 +77,21 @@ async function fixture(t: TestContext, conversationTtlMs?: number) {
   };
 }
 
+test('recent health suggestions keep their phone-clock evidence after a read expires until place sharing stops', async t => {
+  const f = await fixture(t);
+  const {result} = await f.call('get_health_context', {categories: ['heart_rate']});
+  const clock = result.structuredContent.phone_time_evidence;
+  assert.equal(clock.status, 'available');
+  const suggestion = {activity_id: 'afternoon-check', ...result.structuredContent.response_context.arguments,
+    disposition: 'announce', text: 'Would you like a break?'};
+  assert.equal((await f.call('respond_to_context', suggestion)).result.structuredContent.stored_for_g2, true);
+  f.advance(6 * 60_000);
+  const recent = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages.map((row: {text: string}) => row.text);
+  assert.deepEqual(await recent(), [suggestion.text]);
+  f.historyControl('disable');
+  assert.deepEqual(await recent(), []);
+});
+
 test('real RPC composes health, place history, location, weather and mobility into one linked commit and retry', async t => {
   const f = await fixture(t);
   const weather = (await f.call('get_weather_context', {mode: 'current'})).result.structuredContent;

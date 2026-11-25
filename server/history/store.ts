@@ -287,9 +287,11 @@ export class LocationHistoryStore {
       const epoch = this.epoch;
       const now = this.now();
       if (earliestExpiry !== undefined && earliestExpiry <= now) return {evidence:{status:'unavailable'}};
-      const expires = Math.min(now + 5 * 60_000, earliestExpiry ?? Infinity);
-      return {evidence, expiresAt: expires, allowed: () => {
-        try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() >= now && this.now() < expires && (!extra || extra()); }
+      const evidenceExpiry = earliestExpiry ?? Infinity;
+      const expires = Math.min(now + 5 * 60_000, evidenceExpiry);
+      return {evidence, expiresAt: expires, allowed: (purpose = 'deliver') => {
+        const deadline = purpose === 'recall' ? evidenceExpiry : expires;
+        try { this.maintain(); return this.authorized() && this.consent.owner === owner && this.epoch === epoch && this.now() >= now && this.now() < deadline && (!extra || extra()); }
         catch { this.fail(); return false; }
       }};
     } catch { this.fail(); return {evidence:{status:'unavailable'}}; }
@@ -309,7 +311,7 @@ export class LocationHistoryStore {
       const active = this.archive.active(owner);
       if (active) {
         const page = this.archive.read(input, owner, active, this.consent.capacityOmitted);
-        return {...page.result, ...this.receipt(page.expires, page.guard)};
+        return {...page.result, ...this.receipt(page.expires, page.evidenceExpiry, page.grantAllowed)};
       }
     } catch (error) {
       if (error instanceof ToolRejection || 'cursor' in input) throw error;
@@ -318,7 +320,7 @@ export class LocationHistoryStore {
     }
     return this.readHistory(input, true);
   }
-  private receipt(expires: number, guard?: () => boolean, evidenceExpiry = expires) {
+  private receipt(expires: number, evidenceExpiry: number, guard?: () => boolean) {
     const id = randomUUID(); this.reads.set(id, {epoch:this.epoch, expires, evidenceExpiry, guard});
     while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
     return {history_context_id:id, response_context:{tool:'respond_to_context', arguments:{history_context_ids:[id]}, expires_no_later_than:new Date(expires).toISOString()}};
@@ -332,7 +334,7 @@ export class LocationHistoryStore {
     const now = this.now();
     if (expiresAt <= now) throw failure();
     const expires = Math.min(now + 5 * 60_000, expiresAt);
-    return {...result, ...this.receipt(expires, undefined, expiresAt)};
+    return {...result, ...this.receipt(expires, expiresAt)};
   }
   recallGuard(contextId: string) {
     const record = this.reads.get(contextId);
