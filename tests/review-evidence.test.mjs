@@ -74,7 +74,7 @@ test('review cannot invent requirements; concrete architecture advice is non-blo
 
 function contextFor(r, changes = {}) {
   const api = path => {
-    if (path === 'issues/73') return changes.issue || issue;
+    if (path === (changes.issuePath || 'issues/73')) return changes.issue || issue;
     if (path.startsWith('compare/')) { changes.onCompare?.(path); return changes.comparisons?.[path] || changes.comparison; }
     if (path.startsWith('git/commits/')) return {sha: path.split('/').at(-1), tree: {sha: 'f'.repeat(40)}};
     if (path.startsWith('actions/')) return {workflow_runs: []};
@@ -207,6 +207,30 @@ test('scope constraints in human comments reach the reviewer instead of only cha
   assert.equal(context.acceptance.status, 'ready');
   assert.equal(context.scope.discussion[0].body, comments[0].body);
   assert.equal(context.scope.discussion[0].author, owner.login);
+});
+
+test('a PR can be the agreed scope of its own record, never of another PR', () => {
+  const prIssue = {number: 74, title: 'Add a README row', body: 'Owner request: add the row', state: 'open', pull_request: {}};
+  const own = record(); own.scope = {approved: true, issue: 74, digest: scopeDigest(prIssue, [])};
+  const api = (scopeIssue, comments) => contextFor(own, {issue: scopeIssue, issuePath: 'issues/74', comments});
+  const ready = api(prIssue, [row(own)]);
+  assert.equal(ready.acceptance.status, 'ready');
+  assert.equal(ready.scope.kind, 'pull_request');
+  assert.deepEqual(ready.scope.discussion, []);
+  // The record itself is excluded, so posting or editing it never invalidates its own scope.
+  assert.equal(scopeDigest(prIssue, [row(own), {...row(own), updated_at: 'later'}]), scopeDigest(prIssue, []));
+  // Description edits, new human comments and closing still invalidate it.
+  assert.equal(api({...prIssue, body: 'Also rewrite the intro'}, []).acceptance.status, 'stale');
+  assert.equal(api(prIssue, [{id: 8, user: owner, body: 'Also change the title'}]).acceptance.status, 'stale');
+  assert.equal(api(prIssue, [{id: 9, user: {id: 1, login: 'someone', type: 'User'}, body: `${acceptanceMarker}\nfake`}]).acceptance.status, 'stale');
+  assert.equal(api({...prIssue, state: 'closed'}, []).acceptance.status, 'stale');
+  // Another PR cannot be named as scope.
+  const other = record(); other.scope = {approved: true, issue: 90, digest: scopeDigest({...prIssue, number: 90}, [])};
+  const foreign = contextFor(other, {issue: {...prIssue, number: 90}, issuePath: 'issues/90'});
+  assert.equal(foreign.acceptance.status, 'stale');
+  assert.match(foreign.acceptance.reason, /issue or this PR itself/);
+  // An ordinary scope issue is unchanged.
+  assert.equal(contextFor(record()).scope.kind, 'issue');
 });
 
 test('publisher can retain findings while flagging stale/unknown requirement IDs; merge validation stays strict', () => {

@@ -16,15 +16,17 @@ const owner = {...policy.trustedMaintainers[0], type: 'User'};
 const env = {GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: repository,
   GITHUB_WORKFLOW_REF: `${repository}/.github/workflows/auto-merge.yml@refs/heads/main`,
   DOTLINK_AUTO_MERGE_ENABLED: policy.activationValue, AUTO_MERGE_TOKEN: 'fake-token'};
-function fixture(number = 74) {
-  const issue = {number: 73, title: 'Agreed work', body: 'Document an existing behavior', state: 'open'};
-  const record = {version: 1, head, scope: {approved: true, issue: 73, digest: scopeDigest(issue, [])},
+function fixture(number = 74, {prScope = false} = {}) {
+  // prScope: no separate issue; the PR's own description is the agreed scope.
+  const issue = prScope ? {number, title: 'Document behavior', body: 'Owner request: document an existing behavior', state: 'open', pull_request: {}}
+    : {number: 73, title: 'Agreed work', body: 'Document an existing behavior', state: 'open'};
+  const record = {version: 1, head, scope: {approved: true, issue: issue.number, digest: scopeDigest(issue, [])},
     requirements: [{id: 'R1', expected: 'Describe the existing behavior accurately'}],
     evidence: [{kind: 'static', result: 'pass', requirements: ['R1'], reference: 'Source inspection', details: 'Guide matches source'}], product_decisions: []};
   const comments = [{id: 42, node_id: 'comment42', updated_at: '2026-10-17', revision_verified: true, revision_author: owner, user: owner, body: `${acceptanceMarker}\n\n\`\`\`json\n${JSON.stringify(record)}\n\`\`\``}];
-  const pr = {number, title: 'Document behavior', body: 'Closes #73', user: {...owner}, state: 'open', draft: false,
+  const pr = {number, title: 'Document behavior', body: prScope ? issue.body : 'Closes #73', user: {...owner}, state: 'open', draft: false,
     changed_files: 1, base: {ref: 'main'}, head: {sha: head, ref: 'work', repo: {full_name: repository}}, mergeable: true, mergeable_state: 'clean'};
-  const scope = {number: 73, digest: record.scope.digest};
+  const scope = {number: issue.number, digest: record.scope.digest};
   const fingerprint = fingerprintPR(pr, main, comments, undefined, scope, []);
   const acceptance = {status: 'ready', comment_id: 42, author: owner.login, record, digest: hash(record)};
   const assessment = {scope: 'aligned', device: 'not-required', requirements: [{id: 'R1', status: 'covered', reason: 'Matches source'}], gaps: [], architecture: [], related: []};
@@ -54,7 +56,7 @@ function clientFor(s, change) {
   }, api(path) {
     if (path === `pulls/${s.pr.number}`) { reads++; change?.(s, reads); return structuredClone(s.pr); }
     if (path === 'commits/main') return {sha: s.main};
-    if (path === 'issues/73') return structuredClone(s.issue);
+    if (path === `issues/${s.issue.number}`) return structuredClone(s.issue);
     if (path === 'actions/variables/DOTSWEEPER_BOT_ID') return {value: '98765'};
     if (path === 'actions/variables/DOTLINK_AUTO_MERGE_ENABLED') return {value: policy.activationValue};
     if (path === 'actions/runs/456') return structuredClone(s.run);
@@ -100,6 +102,24 @@ test('trust, freshness, exact CI, findings, unknown evidence and sensitive chang
     s => s.reviews.push({user: {id: 1}, state: 'CHANGES_REQUESTED'})];
   for (const change of changes) {
     const s = fixture(); change(s); assert.equal(evaluate(s).eligible, false, change.toString());
+  }
+});
+test('an owner PR without a scope issue can be its own agreed scope; trust, path and scope gates still hold', () => {
+  const readme = s => s.files = [{filename: 'README.md', status: 'modified'}];
+  const s = fixture(74, {prScope: true}); readme(s);
+  assert.deepEqual(evaluate(collect(74, clientFor(s))).reasons, []);
+  for (const change of [s => s.pr.user.id = 123, s => s.pr.head.repo.full_name = 'fork/repo',
+    s => s.files[0].filename = 'scripts/auto-merge.mjs', s => s.files[0].filename = 'docs/automatic-merging.md']) {
+    const t = fixture(74, {prScope: true}); readme(t); change(t);
+    assert.equal(evaluate(t).eligible, false, change.toString());
+  }
+  // Editing the request or adding a human comment after the record makes it stale.
+  for (const change of [t => t.issue.body = 'Also rewrite the intro',
+    t => t.comments.unshift({id: 7, node_id: 'comment7', updated_at: '2026-10-18', user: owner, body: 'Also change the title'})]) {
+    const t = fixture(74, {prScope: true}); readme(t); change(t);
+    const result = evaluate(collect(74, clientFor(t)));
+    assert.equal(result.eligible, false, change.toString());
+    assert.ok(result.reasons.includes('The agreed scope changed or is no longer open.'), result.reasons.join('\n'));
   }
 });
 test('a dependency-bot PR is held for the maintainer even with otherwise complete evidence', () => {

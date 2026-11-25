@@ -75,9 +75,15 @@ export function authenticateComments(rows, readNode, botId, additionalRelevant =
   });
 }
 
+// A PR can be the agreed scope of its own acceptance record when no separate
+// issue exists. The record lives in that PR's discussion, so trusted acceptance
+// comments are never part of a scope; every other human comment still is.
+const scopeDiscussion = comments => comments.filter(row => row.user?.type !== 'Bot' &&
+  !(row.body?.startsWith(acceptanceMarker) && trustedUser(row.user)));
+
 export function scopeDigest(issue, comments) {
   return hash({number: issue.number, title: issue.title, body: issue.body, state: issue.state,
-    discussion: comments.filter(row => row.user?.type !== 'Bot').map(row => ({
+    discussion: scopeDiscussion(comments).map(row => ({
       id: row.id, author: row.user?.login, body: row.body, updated_at: row.updated_at,
     }))});
 }
@@ -181,11 +187,15 @@ export function gatherContext(snapshot, api, paginate) {
     const issue = api(`issues/${record.scope.issue}`);
     const comments = paginate(`issues/${record.scope.issue}/comments?per_page=100`);
     const digest = scopeDigest(issue, comments);
-    if (issue.pull_request || issue.state !== 'open' || digest !== record.scope.digest) {
-      context.acceptance = {...context.acceptance, status: 'stale', reason: 'The agreed scope issue changed or is no longer open.'};
+    // Another PR is never a scope; only the reviewed PR may stand in for an issue.
+    const ownPR = record.scope.issue === snapshot.pr.number && issue.number === snapshot.pr.number;
+    if (issue.pull_request && !ownPR) {
+      context.acceptance = {...context.acceptance, status: 'stale', reason: 'The agreed scope must be an issue or this PR itself.'};
+    } else if (issue.state !== 'open' || digest !== record.scope.digest) {
+      context.acceptance = {...context.acceptance, status: 'stale', reason: 'The agreed scope changed or is no longer open.'};
     }
-    context.scope = {number: issue.number, title: issue.title, body: issue.body, digest,
-      discussion: comments.filter(x => x.user?.type !== 'Bot').map(x => ({id: x.id,
+    context.scope = {kind: issue.pull_request ? 'pull_request' : 'issue', number: issue.number, title: issue.title, body: issue.body, digest,
+      discussion: scopeDiscussion(comments).map(x => ({id: x.id,
         author: x.user?.login, body: x.body, updated_at: x.updated_at}))};
     // Reuse only an ancestor's observations with unchanged runtime. Do not ask
     // testers to repeat a device session merely for docs/tests/version metadata.
