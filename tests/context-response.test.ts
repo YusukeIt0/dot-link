@@ -19,7 +19,7 @@ import {ContextResponder} from '../server/context-response.ts';
 
 const owner = 'a'.repeat(64), NOW = Date.parse('2026-11-14T12:00:00Z');
 const settle = () => new Promise<void>(resolve => setImmediate(resolve));
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, conversationTtlMs?: number) {
   const dir = mkdtempSync(join(tmpdir(), 'combined-context-'));
   let now = NOW, authorized = true, block: Promise<void> | undefined, unblock = () => {}, sequence = 0;
   const sender = new WebhookSender(async (_url, raw) => {
@@ -27,10 +27,10 @@ async function fixture(t: TestContext) {
     if (p.type === 'verification') return {status: 200, body: JSON.stringify({challenge: p.challenge})};
     await block; return {status: 202, body: '{}'};
   });
-  const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test']);
+  const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test'], undefined, {now: () => now});
   const acquisition = new MobilityAcquisition(() => ({walking: {plan: async () => {throw Error('not requested');}},
     terrain: {clear() {}, elevations: async points => points.map(() => 12), profile: async () => {throw Error('not requested');}}}), () => now);
-  const location = new LocationContext(join(dir, 'location.json'), sender, [], bridge.sendMessage.bind(bridge), () => now,
+  const location = new LocationContext(join(dir, 'location.json'), sender, ['callback.example.test'], bridge.sendMessage.bind(bridge), () => now,
     () => authorized, undefined, () => acquisition);
   const history = new LocationHistoryStore(join(dir, 'history'), {now: () => now, ownerAuthorized: () => authorized,
     ownerRevoked: () => !authorized, announce: bridge.sendMessage.bind(bridge)});
@@ -60,7 +60,7 @@ async function fixture(t: TestContext) {
   history.ingest({latitude: 10, longitude: 20, accuracy: 5, measured_at: new Date(now).toISOString()}, sharing,
     {protocol: 1, epoch: history.status(owner).historyEpoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}, owner);
   weatherControl(true);
-  await bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'},
+  await bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, ttlMs: conversationTtlMs,
     delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   const question = randomUUID(); await bridge.submit({id: question, text: 'Public fixture question'});
   t.after(() => {unblock(); health.close(); weather.close(); location.close(); history.close(); bridge.close(); rmSync(dir, {recursive: true, force: true});});
@@ -240,6 +240,47 @@ test('recall of a location with attached weather follows its original weather gr
   f.weatherControl(false);
   f.weatherControl(true);
   assert.deepEqual(await recent(), []);
+});
+
+test('a verified location subscription covers a conversation gap without exposing its text to a replacement', async t => {
+  const f = await fixture(t, 500);
+  const args = {session_id:'personal-g2'};
+  const url = 'https://callback.example.test/events', other = 'https://callback.example.test/replacement';
+  const delivery = (url: string) => ({mode:'webhook', url, secret:'whsec_' + randomBytes(32).toString('base64')});
+  await f.location.subscribe({name:'location.updated', arguments:args, delivery:delivery(url)});
+  const location = async () => (await f.call('get_location_context', {})).result.structuredContent;
+  const conversation = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages.map((row: {text: string}) => row.text);
+  const history = (await f.call('get_location_history', {})).result.structuredContent.response_context.arguments;
+  await f.call('respond_to_context', {...(await location()).response_context.arguments, ...history, activity_id:'first',
+    disposition:'announce', text:'An earlier print market.'});
+  f.advance(501);
+  assert.deepEqual(await conversation(), []);
+  assert.deepEqual((await location()).recent_announcements, ['An earlier print market.']);
+  f.update(11);
+  await f.call('respond_to_location', {...(await location()).response_context.arguments, disposition:'announce', text:'The bridge opened.'});
+  assert.deepEqual((await location()).recent_announcements, ['An earlier print market.', 'The bridge opened.']);
+  f.historyControl('delete');
+  assert.deepEqual((await location()).recent_announcements, ['The bridge opened.']);
+  await f.bridge.subscribe({name:'utterance.created', arguments:args, delivery:delivery(url)});
+  assert.deepEqual((await location()).recent_announcements, ['The bridge opened.']);
+  await f.bridge.unsubscribe({name:'utterance.created', arguments:args, delivery:{mode:'webhook',url}});
+  await f.bridge.subscribe({name:'utterance.created', arguments:args, delivery:delivery(other)});
+  assert.deepEqual(await conversation(), []);
+  assert.deepEqual((await location()).recent_announcements, []);
+  await f.location.unsubscribe({name:'location.updated', arguments:args, delivery:{mode:'webhook',url}});
+  await f.location.subscribe({name:'location.updated', arguments:args, delivery:delivery(other)});
+  assert.deepEqual((await location()).recent_announcements, []);
+  assert.equal(f.bridge.outboundHistory().length, 2);
+});
+
+test('a verified renewal at the same callback restores still-visible conversation messages after expiry', async t => {
+  const f = await fixture(t, 500);
+  await f.call('send_message_to_g2', {message_id:randomUUID(), text:'Keep the earlier announcement.'});
+  f.advance(501);
+  assert.deepEqual(f.bridge.recentAnnouncements().messages, []);
+  await f.bridge.subscribe({name:'utterance.created', arguments:{session_id:'personal-g2'},
+    delivery:{mode:'webhook', url:'https://callback.example.test/events', secret:'whsec_' + randomBytes(32).toString('base64')}});
+  assert.deepEqual(f.bridge.recentAnnouncements().messages.map(message => message.text), ['Keep the earlier announcement.']);
 });
 
 test('unused unavailable sources do not block a health-only proactive suggestion, but attached clock history does', async t => {

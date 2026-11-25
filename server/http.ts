@@ -51,7 +51,7 @@ export const decisionFactorReaders = [
   registerDecisionFactor(healthTool, ({health}) => health && (args => health.read(args))),
   registerDecisionFactor(weatherContextTool, ({weather}) => weather && (args => weather.read(args))),
   registerDecisionFactor(locationContextTool, ({locations, bridge}) => locations && (args =>
-    locations.read(args, () => bridge.recentAnnouncements().messages.map(message => message.text)))),
+    locations.read(args, () => bridge.recentAnnouncements({}, true).messages.map(message => message.text)))),
   registerDecisionFactor(mobilityContextTool, ({locations}) => locations && (args => locations.readMobility(args))),
   registerDecisionFactor(locationHistoryTool, ({history}) => history && (args => history.read(args))),
   registerDecisionFactor(factorHistoryTool, ({history, health, archives}) => {

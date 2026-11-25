@@ -140,7 +140,10 @@ they do not infer provenance by inspecting generated prose.
 During a verified conversation subscription, Dot can check up to five recent
 unprompted messages and their storage times, including when location is off.
 The relay uses references to newly stored outbound messages and rechecks their
-source access. A new subscription or relay restart starts with an empty view.
+source access. A verified renewal at the same callback can resume after a lease
+lapse. A different conversation callback or relay restart starts with an empty
+conversation view. During a conversation gap, an active location subscriber
+can still read its own earlier location-informed announcements through the location tool.
 Saved conversations from before the update are never imported into this view.
 This adds no separate message archive, collection, permission or display receipt.
 

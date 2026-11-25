@@ -47,6 +47,10 @@ const leaseEvent = z.object({
 const LEASE_HISTORY_LIMIT = 16;
 const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), leaseHistory: z.array(leaseEvent).max(LEASE_HISTORY_LIMIT).optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(OUTBOUND_LIMIT).default([]) });
 type State = z.infer<typeof stateSchema>;
+export type LocationDelivery = {
+  sharing_id: string; expires_at: string;
+  verifiedLocationAudience?: (conversationUrl?: string) => boolean;
+};
 type Subscription = z.infer<typeof subscriptionSchema>;
 
 export const eventDefinition = {
@@ -98,9 +102,10 @@ export class Bridge {
   private now: () => number;
   private photoRetention: { maxBytes: number; maxAgeMs: number };
   private operation: Promise<unknown> = Promise.resolve();
-  // Only newly committed outbound IDs in this verified conversation are eligible.
-  // Never reconstruct the view from disk: older entries have no recipient or source scope.
-  private recent: {record: WeakRef<State['outbound'][number]>; visible?: () => boolean}[] = [];
+  // Older disk entries have no recipient or source scope. Index only new commits in memory.
+  private conversationGeneration = 0;
+  private recent: {record: WeakRef<State['outbound'][number]>; conversation?: number;
+    locationAudience?: LocationDelivery['verifiedLocationAudience']; visible?: () => boolean}[] = [];
   private readonly subscribing = new Set<Promise<unknown>>();
   // Subscriptions verifying or waiting to commit. Removing a callback cancels only
   // pending subscriptions of that same callback URL, never unrelated ones.
@@ -260,22 +265,25 @@ export class Bridge {
       ...(m.location_sharing_id ? {location_sharing_id: m.location_sharing_id, location_expires_at: m.location_expires_at} : {}),
     }));
   }
-  recentAnnouncements(raw: unknown = {}) {
+  recentAnnouncements(raw: unknown = {}, forLocation = false) {
     if (!z.object({}).strict().safeParse(raw).success) throw new ReadResponseError();
     const messages: {text: string; created_at: string}[] = [];
-    if (this.closed || !this.active()) return {messages};
+    if (this.closed) return {messages};
+    const conversation = this.active();
     for (const entry of this.recent) {
       const record = entry.record.deref();
       if (!record || !this.state.outbound.includes(record)) continue;
       try {
+        const sameConversation = conversation && entry.conversation === this.conversationGeneration;
+        if (!sameConversation && !(forLocation && entry.locationAudience?.(conversation?.url))) continue;
         if (!entry.visible || entry.visible()) messages.push({text: record.text, created_at: record.createdAt});
       } catch { /* An unavailable or revoked source cannot be quoted again. */ }
     }
     return {messages};
   }
   hasStoredMessage(id: string) { return this.state.outbound.some(message => message.message_id === id); }
-  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: {sharing_id: string; expires_at: string}, visible = stillAllowed) {
-    const conversation = this.recent;
+  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: LocationDelivery, visible = stillAllowed) {
+    const conversation = this.active() ? this.conversationGeneration : undefined;
     return this.serial(async () => {
       if (stillAllowed && !stillAllowed()) throw new Error('Message context is no longer valid');
       const parsed = outboundInput.safeParse(input);
@@ -299,8 +307,10 @@ export class Bridge {
         const record = { ...p, createdAt: at, ...(initialReply ? {initial_reply: true} : {}), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) };
         const outbound = [...this.state.outbound, record].slice(-OUTBOUND_LIMIT);
         this.save({ ...this.state, messages, outbound });
-        if (!p.utterance_id && this.active() && conversation === this.recent) {
-          this.recent.push({record: new WeakRef(record), visible});
+        const forConversation = conversation !== undefined && conversation === this.conversationGeneration && !!this.active();
+        if (!p.utterance_id && (forConversation || location?.verifiedLocationAudience)) {
+          this.recent.push({record: new WeakRef(record), conversation: forConversation ? conversation : undefined,
+            locationAudience: location?.verifiedLocationAudience, visible});
           if (this.recent.length > 5) this.recent.shift();
         }
         if (initialReply) this.latency.mark(p.utterance_id!, 'reply_stored');
@@ -349,7 +359,7 @@ export class Bridge {
         if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
         const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
         this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
-        if (!current) this.recent = [];
+        if (kind === 'created') this.conversationGeneration++;
         return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
       });
     } finally { this.pendingChecks.delete(check); }

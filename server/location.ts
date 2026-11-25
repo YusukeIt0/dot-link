@@ -11,6 +11,7 @@ import { ToolRejection } from './tool-response.ts';
 import { MobilityAcquisition, mobilityArguments } from './mobility/context.ts';
 import { captureEnvironment, mobilityArchiveRecords, type CaptureEnvironment } from './history/environment-fields.ts';
 import { BridgeResponseError } from './bridge-response-error.ts';
+import type { LocationDelivery } from './bridge.ts';
 import type { GeographyLoader, GeographyState, GeographyUpdate } from './geography/loader.ts';
 import type { GeographicEvidence } from './geography/types.ts';
 import { weatherQueryPoint, type WeatherEvidence } from './weather/types.ts';
@@ -89,6 +90,7 @@ export class LocationContext {
   private subscriptions: Promise<unknown> = Promise.resolve();
   private generation = 0;
   private recallGeneration = 0;
+  private subscriberGeneration = 0;
   private contextSequence=0;
   private readonly geography?:GeographyLoader;
   private geographyActive=false;
@@ -107,11 +109,11 @@ export class LocationContext {
   private path: string;
   private sender: WebhookSender;
   private hosts: string[];
-  private announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}, visible?: () => boolean) => Promise<unknown>;
+  private announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: LocationDelivery, visible?: () => boolean) => Promise<unknown>;
   private now: () => number;
   private ownerAuthorized: (owner: string) => boolean;
   constructor(path: string, sender: WebhookSender, hosts: string[],
-    announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: {sharing_id: string; expires_at: string}, visible?: () => boolean) => Promise<unknown>, now = Date.now,
+    announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: LocationDelivery, visible?: () => boolean) => Promise<unknown>, now = Date.now,
     ownerAuthorized: (owner: string) => boolean = () => true,
     geographyFactory?: (output:(update:GeographyUpdate)=>void)=>GeographyLoader,
     mobilityFactory?:()=>MobilityAcquisition,
@@ -291,10 +293,21 @@ export class LocationContext {
     this.requireResponseContext(read, generation);
     const guard = () => { this.requireResponseContext(read, generation); return true; };
     const decisionId = responseId(contextId, utteranceId);
-    return {guard, recallAllowed: this.recallGuard(read), owner:this.owner!, decisionId, previous: this.outcomes.get(decisionId), location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
+    return {guard, recallAllowed: this.recallGuard(read), owner:this.owner!, decisionId, previous: this.outcomes.get(decisionId), location: this.delivery(read),
       complete: (id: string, decision: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string}, result: unknown) => {
         this.recordResponse(id, read, generation, decision, result);
       }};
+  }
+  private delivery(read: FixRecord): LocationDelivery {
+    const scope: LocationDelivery = {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()};
+    if (this.active()) {
+      const generation = this.subscriberGeneration;
+      scope.verifiedLocationAudience = conversationUrl => {
+        const subscriber = this.active();
+        return !!subscriber && generation === this.subscriberGeneration && (!conversationUrl || conversationUrl === subscriber.url);
+      };
+    }
+    return scope;
   }
   private recallGuard(read: FixRecord) {
     const owner = this.owner!, grant = this.recallGeneration, weatherAllowed = read.weatherRecallAllowed;
@@ -351,7 +364,7 @@ export class LocationContext {
       if (p.disposition === 'announce') {
         try {
           result = await this.announce({ message_id: id, text: p.text!, ...(p.utterance_id ? {utterance_id:p.utterance_id} : {}) }, stillAllowed,
-            {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()}, this.recallGuard(read));
+            this.delivery(read), this.recallGuard(read));
         } catch (error) {
           if (error instanceof BridgeResponseError && error.reason === 'utterance_unknown') throw new LocationResponseError('utterance_unknown');
           if (error instanceof BridgeResponseError && error.reason === 'message_id_conflict') throw new LocationResponseError('conflicting_decision');
@@ -419,7 +432,11 @@ export class LocationContext {
       const id = 'sub_' + createHash('sha256').update(JSON.stringify([SESSION, EVENT, p.delivery.url])).digest('hex').slice(0, 32);
       if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
       const sub = { id, url: p.delivery.url, secret: p.delivery.secret, expiresAt: this.now() + (p.ttlMs ?? 3_600_000) };
-      await this.sender.verify(sub); this.save({ ...this.disk, subscription: sub, activationStoppedFor: undefined });this.syncGeography(true); this.maybeEvent(); this.changes.emit();
+      await this.sender.verify(sub);
+      const changed = this.disk.subscription?.id !== id;
+      this.save({ ...this.disk, subscription: sub, activationStoppedFor: undefined });
+      if (changed) this.subscriberGeneration++;
+      this.syncGeography(true); this.maybeEvent(); this.changes.emit();
       return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false };
     });
     this.subscriptions = run.catch(() => {}); return run;
@@ -428,7 +445,7 @@ export class LocationContext {
     const run = this.subscriptions.then(() => {
       const p = subscriptionArguments(z.object({ name: z.literal(EVENT), arguments: eventArgs, delivery: delivery.omit({ secret: true }) }), raw);
       if (this.disk.subscription?.url === p.delivery.url) { this.save({ ...this.disk, subscription: undefined,
-        activationStoppedFor: this.sharingId ?? this.disk.activationStoppedFor });this.syncGeography(); this.pending = undefined; if (this.retry) clearTimeout(this.retry); this.changes.emit(); }
+        activationStoppedFor: this.sharingId ?? this.disk.activationStoppedFor });this.subscriberGeneration++;this.syncGeography(); this.pending = undefined; if (this.retry) clearTimeout(this.retry); this.changes.emit(); }
       return {};
     });
     this.subscriptions = run.catch(() => {}); return run;

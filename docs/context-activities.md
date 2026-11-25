@@ -101,8 +101,11 @@ queue also recognizes retries of its latest 1,000 stored message IDs after resta
 times from the current verified conversation subscription. It works without a phone
 fix. The location read also returns their texts in `recent_announcements`.
 Linked replies stay with their question. The view starts empty after a relay restart
-or a new subscription and omits messages whose source access can no longer be
-verified. Storage time does not indicate when someone saw or read a message.
+or a different conversation subscription and omits messages whose source access
+can no longer be verified. Renewing the same callback after its lease lapses
+restores the view. During a conversation gap, the location tool can also show
+messages already sent within its own still-verified location subscription.
+Storage time does not indicate when someone saw or read a message.
 A location-informed message can still be recalled after the phone fix or lease
 expires. Explicitly stopping location sharing or revoking its owner hides the
 message, including after sharing is enabled again.
