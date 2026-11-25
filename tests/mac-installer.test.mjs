@@ -13,7 +13,7 @@ const url = 'https://github.com/YusukeIt0/dot-link/releases/download/mac-v9.8.7-
 const release = () => ({draft:false, prerelease:false, tag_name:'mac-v9.8.7-999', body:null, assets:[
   {name:'unrelated.txt',label:null}, {name:'Dot-Link-9.8.7-999-arm64.zip', browser_download_url:url, digest:`sha256:${hash}`},
 ]});
-function run(metadata, {existing=false, badSignature=false, language='en-US', bundleId='app.tripsurf.dotlink.mac', os='13.5', minimumOS='13.5'}={}) {
+function run(metadata, {existing=false, badSignature=false, team='27K9A27SGR', language='en-US', bundleId='app.tripsurf.dotlink.mac', os='13.5', minimumOS='13.5'}={}) {
   const root = mkdtempSync(join(tmpdir(), 'dot-link-installer-test-'));
   try {
     const bin=join(root,'bin'), destination=join(root,'Applications','Dot Link.app');
@@ -27,7 +27,8 @@ function run(metadata, {existing=false, badSignature=false, language='en-US', bu
     mock('curl',`printf '%s\\n' "$*" >> '${root}/requests'\nwhile [ "$1" != --output ]; do shift; done\ncase "$2" in release.json) cp '${root}/release.json' "$2" ;; Dot-Link.zip) cp '${root}/archive' "$2" ;; *) exit 9 ;; esac`);
     mock('ditto',`mkdir -p 'unpacked/Dot Link.app/Contents'
 cp '${root}/Info.plist' 'unpacked/Dot Link.app/Contents/Info.plist'`);
-    mock('codesign',badSignature?'exit 1':'exit 0');
+    // `codesign -dvv` prints signer details to stderr; `--verify` only sets the exit status.
+    mock('codesign',badSignature?'exit 1':`case "$1" in -dvv) printf 'Identifier=app.tripsurf.dotlink.mac\\n${team?`TeamIdentifier=${team}`:'Signature=adhoc'}\\n' >&2 ;; esac\nexit 0`);
     mock('open',`printf '%s' "$1" > '${root}/opened'`);
     if(existing) mkdirSync(destination,{recursive:true});
     const script=join(root,'install.sh');
@@ -55,7 +56,7 @@ test('installer stops before installation for unsafe or unavailable release data
   {const m=release();m.assets[1].digest=null;cases.push(m);}
   {const m=release();m.assets[1].browser_download_url='https://example.com/app.zip';cases.push(m);}
   for(const m of cases) {const r=run(m);assert.notEqual(r.status,0);assert.equal(r.installed,false);assert.equal(r.opened,false);}
-  for(const opts of [{badSignature:true},{bundleId:'com.example.other'}]) {const r=run(release(),opts);assert.notEqual(r.status,0);assert.equal(r.installed,false);assert.equal(r.opened,false);}
+  for(const opts of [{badSignature:true},{bundleId:'com.example.other'},{team:'ABCDE12345'},{team:''},{team:'27K9A27SGR0'}]) {const r=run(release(),opts);assert.notEqual(r.status,0);assert.equal(r.installed,false);assert.equal(r.opened,false);}
 });
 test('existing app is preserved without downloading', {skip:process.platform!=='darwin'},()=>{
   const r=run(release(),{existing:true});assert.notEqual(r.status,0);assert.equal(r.requests,'');assert.ok(r.installed);assert.equal(r.opened,false);

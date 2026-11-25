@@ -20,6 +20,7 @@ dotlink_install() (
       ja:checksum) echo '配布ファイルのSHA-256を確認できませんでした。' ;;
       ja:download) echo '%s をダウンロードしています…' ;;
       ja:identity) echo '配布ファイル内のアプリがDot Linkではありません。' ;;
+      ja:signer) echo '配布ファイル内のアプリが、Dot Linkの開発者の署名ではありません。' ;;
       ja:race) echo '導入先にアプリが作成されたため停止しました。既存アプリは置き換えていません。' ;;
       ja:installed) echo '%s を導入しました。Dot Linkを開きます…' ;;
       *:platform) echo 'An Apple Silicon Mac is required.' ;;
@@ -32,6 +33,7 @@ dotlink_install() (
       *:checksum) echo 'The release SHA-256 checksum is missing or invalid.' ;;
       *:download) echo 'Downloading %s…' ;;
       *:identity) echo 'The downloaded app is not identified as Dot Link.' ;;
+      *:signer) echo "The downloaded app is not signed by Dot Link's developer." ;;
       *:race) echo 'Destination appeared during installation; no app was replaced.' ;;
       *:installed) echo 'Installed %s. Opening Dot Link…' ;;
     esac
@@ -97,6 +99,10 @@ dotlink_install() (
   printf '%s  %s\n' "$dotlink_hash" Dot-Link.zip | shasum -a 256 -c -
   ditto -x -k Dot-Link.zip unpacked
   codesign --verify --deep --strict 'unpacked/Dot Link.app'
+  # Releases from 0.5.4 on carry this project's Developer ID. A valid signature
+  # from anyone else, or an ad-hoc one, must not be installed.
+  dotlink_signature="$(codesign -dvv 'unpacked/Dot Link.app' 2>&1)" || fail signer
+  printf '%s\n' "$dotlink_signature" | grep -qx 'TeamIdentifier=27K9A27SGR' || fail signer
   dotlink_bundle_id="$(plutil -extract CFBundleIdentifier raw -expect string -o - 'unpacked/Dot Link.app/Contents/Info.plist')"
   [ "$dotlink_bundle_id" = app.tripsurf.dotlink.mac ] || fail identity
   # Read the signed app's requirement, including future releases. Never install
