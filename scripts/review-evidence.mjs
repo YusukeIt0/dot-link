@@ -7,6 +7,9 @@ import {readFileSync} from 'node:fs';
 
 export const policy = JSON.parse(readFileSync(new URL('../config/development-policy.json', import.meta.url), 'utf8'));
 export const acceptanceMarker = '<!-- dot-link-acceptance:v1 -->';
+// Defined here (not in the Grok modules, which import this one) to avoid an import cycle.
+export const adjudicationMarker = '<!-- dot-link-grok-adjudication:v1 -->';
+export const reviewCommands = ['/dotlink review', '/dotlink review2nd'];
 export const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 // Preserve the receipt serialization across intake and both merge-gate callers.
 export function reviewInput(issue, pr, main, comments, base, scope, feedback) {
@@ -76,10 +79,12 @@ export function authenticateComments(rows, readNode, botId, additionalRelevant =
 }
 
 // A PR can be the agreed scope of its own acceptance record when no separate
-// issue exists. The record lives in that PR's discussion, so trusted acceptance
-// comments are never part of a scope; every other human comment still is.
-const scopeDiscussion = comments => comments.filter(row => row.user?.type !== 'Bot' &&
-  !(row.body?.startsWith(acceptanceMarker) && trustedUser(row.user)));
+// issue exists. Its discussion also holds trusted process comments (the record,
+// review commands, Grok adjudications), which are never part of a scope; every
+// other human comment, including untrusted lookalikes, still is.
+const processComment = row => trustedUser(row.user) && (row.body?.startsWith(acceptanceMarker) ||
+  row.body?.startsWith(adjudicationMarker) || reviewCommands.includes(row.body));
+const scopeDiscussion = comments => comments.filter(row => row.user?.type !== 'Bot' && !processComment(row));
 
 export function scopeDigest(issue, comments) {
   return hash({number: issue.number, title: issue.title, body: issue.body, state: issue.state,

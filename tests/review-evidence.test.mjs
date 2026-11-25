@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {acceptanceMarker, policy, hash, scopeDigest, acceptanceFromComments, validateAcceptance,
+import {acceptanceMarker, adjudicationMarker, policy, hash, scopeDigest, acceptanceFromComments, validateAcceptance,
   validateAssessment, acceptanceBlockers, gatherContext, relatedCandidates, packageVersionBetween, trustedUser, dependencyBot, authenticateComments} from '../scripts/review-evidence.mjs';
 
 const head = 'b'.repeat(40), before = 'a'.repeat(40);
@@ -219,6 +219,13 @@ test('a PR can be the agreed scope of its own record, never of another PR', () =
   assert.deepEqual(ready.scope.discussion, []);
   // The record itself is excluded, so posting or editing it never invalidates its own scope.
   assert.equal(scopeDigest(prIssue, [row(own), {...row(own), updated_at: 'later'}]), scopeDigest(prIssue, []));
+  // Trusted review commands and Grok adjudications are process, not scope; untrusted lookalikes still count.
+  const process = ['/dotlink review', '/dotlink review2nd', `${adjudicationMarker}\n{}`].map((body, id) => ({id, user: owner, body}));
+  assert.equal(scopeDigest(prIssue, process), scopeDigest(prIssue, []));
+  assert.equal(api(prIssue, process).acceptance.status, 'ready');
+  const stranger = {id: 1, login: 'someone', type: 'User'};
+  assert.notEqual(scopeDigest(prIssue, [{id: 3, user: stranger, body: '/dotlink review'}]), scopeDigest(prIssue, []));
+  assert.notEqual(scopeDigest(prIssue, [{id: 4, user: owner, body: '/dotlink review please also fix X'}]), scopeDigest(prIssue, []));
   // Description edits, new human comments and closing still invalidate it.
   assert.equal(api({...prIssue, body: 'Also rewrite the intro'}, []).acceptance.status, 'stale');
   assert.equal(api(prIssue, [{id: 8, user: owner, body: 'Also change the title'}]).acceptance.status, 'stale');

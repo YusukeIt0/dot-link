@@ -40,7 +40,9 @@ The agreed scope is normally an open issue. When a small owner-requested change
 has no separate issue, such as a README wording change, omit the issue number:
 the PR itself becomes the scope. Record the owner's request in the PR
 description first. The scope then covers the PR's title, description and human
-discussion, excluding trusted acceptance records. A record cannot name any other
+discussion, excluding trusted process comments (acceptance records, exact
+`/dotlink review` or `/dotlink review2nd` commands and Grok adjudications).
+A record cannot name any other
 PR as its scope. Only the author and path gates decide whether a PR can merge
 automatically; a PR scope does not make external or protected-path PRs eligible.
 
