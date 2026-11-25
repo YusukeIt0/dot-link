@@ -551,7 +551,17 @@ test('using the strict and forecast-only mappings for one specified weather read
     {reason:'context_decision_conflict'});
   const metOnly = await f.weather.read({...specified, nearby_precipitation:false});
   assert.equal(metOnly.forecast_only_response_context, undefined);
+  const withRain = f.weather.responseContext(r.weather_read_id).recallAllowed;
+  const onlyForecast = f.weather.responseContext(r.forecast_only_response_context.arguments.weather_read_ids[0]).recallAllowed;
+  const explicitMet = f.weather.responseContext(metOnly.weather_read_id).recallAllowed;
+  assert.equal(withRain(), true);
   f.consent();
+  assert.equal(withRain(), false);
+  assert.equal(onlyForecast(), true);
+  assert.equal(explicitMet(), true);
   assert.throws(() => f.weather.responseContext(r.weather_read_id).guard());
   assert.equal(f.weather.responseContext(r.forecast_only_response_context.arguments.weather_read_ids[0]).guard(), true);
+  f.consent(false);
+  assert.equal(onlyForecast(), false);
+  assert.equal(explicitMet(), false);
 });
