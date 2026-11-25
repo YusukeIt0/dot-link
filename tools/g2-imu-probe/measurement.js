@@ -1,12 +1,17 @@
-// Poses refer to the glasses. Keep the phone still throughout.
+// Relative to the initial level direction. Geographic north is optional.
 export const poses = [
-  ['N1', 'Face north, level'], ['E1', 'Face east, level'],
-  ['S1', 'Face south, level'], ['W1', 'Face west, level'],
-  ['N2', 'Face north again, level'], ['W2', 'Face west, level'],
-  ['S2', 'Face south, level'], ['E2', 'Face east, level'],
-  ['N3', 'Return to north, level'], ['pitch', 'Face north, look up about 25°'],
-  ['roll', 'Face north, tilt right ear down about 25°'],
-  ['N4', 'Return to north, level'],
+  ['F1', 'Look straight ahead', '最初の正面を向く'],
+  ['R1', 'Turn right a quarter turn', '右に90度回る'],
+  ['B1', 'Turn right again to face the back', 'もう一度右に90度。後ろを向く'],
+  ['L1', 'Turn right another quarter turn', 'また右に90度回る'],
+  ['F2', 'Turn right to face the start', '右に90度。最初の正面に戻る'],
+  ['L2', 'Turn left a quarter turn', '今度は左に90度回る'],
+  ['B2', 'Turn left again to face the back', 'もう一度左に90度。後ろを向く'],
+  ['R2', 'Turn left another quarter turn', 'また左に90度回る'],
+  ['F3', 'Turn left to face the start', '左に90度。最初の正面に戻る'],
+  ['pitch', 'Face forward and look slightly up', '正面のまま、少し上を向く'],
+  ['roll', 'Face level, then tilt your right ear toward your shoulder', '正面に戻し、右耳を右肩に少し近づける'],
+  ['F4', 'Return to level facing the start', '顔を水平にして、最初の正面を向く'],
 ];
 
 export const limits = { sessionMs: 240000, settleMs: 900, holdMs: 2200, samples: 3000 };

@@ -7,7 +7,7 @@ import { limits, poses } from './measurement.js';
 const sdk = import.meta.resolve('@evenrealities/even_hub_sdk');
 
 // Use the real SDK parser and page models with a local synthetic host and clock.
-async function fixture(t, startResult = true) {
+async function fixture(t, startResult = true, language = 'en') {
   const elements = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, {});
@@ -23,11 +23,12 @@ async function fixture(t, startResult = true) {
     onEvenHubEvent(callback) { handlers.event = callback; return () => { delete handlers.event; }; },
     onDeviceStatusChanged(callback) { handlers.status = callback; return () => { delete handlers.status; }; },
   };
-  const doc = { getElementById: element, addEventListener(name, cb) { handlers[name] = cb; } };
+  const doc = { documentElement: {}, getElementById: element, addEventListener(name, cb) { handlers[name] = cb; } };
   t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 0 });
   t.mock.method(performance, 'now', () => Date.now());
   const saved = new Map();
-  for (const [key, value] of Object.entries({ document: doc, window: { addEventListener() {} }, probeTestBridge: bridge })) {
+  const win = { location: { search: '?lang=' + language }, addEventListener() {} };
+  for (const [key, value] of Object.entries({ document: doc, window: win, probeTestBridge: bridge })) {
     saved.set(key, Object.getOwnPropertyDescriptor(globalThis, key));
     Object.defineProperty(globalThis, key, { value, configurable: true });
   }
@@ -57,6 +58,21 @@ async function fixture(t, startResult = true) {
   }
   return { element, handlers, doc, calls, sample, flush, result: () => JSON.parse(element('data').value) };
 }
+
+test('Japanese prompts permit a full unreferenced rotation without knowing north', async t => {
+  const f = await fixture(t, true, 'ja');
+  assert.equal(f.doc.documentElement.lang, 'ja');
+  assert.match(f.element('status').textContent, /正面/);
+  assert.match(f.element('start').textContent, /測定を始める/);
+  f.element('mark').onclick();
+  t.mock.timers.tick(limits.settleMs);
+  t.mock.timers.tick(limits.holdMs);
+  assert.match(f.element('status').textContent, /右に90度/);
+  f.element('stop').onclick();
+  await f.flush();
+  assert.equal(f.result().marks[0].pose, 'F1');
+  assert.match(f.result().reference, /unknown/);
+});
 
 test('a late start is turned off after the operator has already stopped', async t => {
   const pending = Promise.withResolvers();
