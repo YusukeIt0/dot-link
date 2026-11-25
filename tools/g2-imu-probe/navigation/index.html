@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>G2 navigation check · Beta</title>
+  <style>
+    :root { color-scheme: light dark; color: #191b1c; background: white; }
+    @media (prefers-color-scheme: dark) { :root { color: #f4f4f4; background: #17191b; } }
+    body { font: 1rem/1.5 system-ui, sans-serif; padding: 1rem; margin: auto; max-width: 36rem; }
+    h1 { font-size: 1.5rem; } button, textarea { font: inherit; }
+    button { padding: .6rem; margin: .2rem; } textarea { width: 100%; }
+  </style>
+</head>
+<body>
+  <h1 data-ja="G2ナビの方位確認 · Beta">G2 navigation check · Beta</h1>
+  <p data-ja="眼鏡に純正ナビの地図が見えたら観測を始めてください。スマホを置いたまま、顔をゆっくり左右に一度ずつ向けます。終わったら、眼鏡の地図がどうなったか、下のボタンで教えてください。北を知る必要はありません。">Start while the stock navigation map is visible on the glasses. Keep the phone still and turn your head slowly left and right once. Then report whether the map stayed visible. Any starting direction is fine.</p>
+  <p data-ja="60秒で終了します。現在地・目的地・音声は読みません。結果はこの画面だけに表示します。">Stops after 60 seconds. Location, destination and audio are not read. Results stay on this page.</p>
+  <p id="status" role="status" data-ja="G2の接続を確認中…">Checking the G2 connection…</p>
+  <button id="start" data-ja="地図が見えるので観測する" disabled>Map visible · start</button>
+  <button id="gone" data-ja="地図が消えた">The map disappeared</button>
+  <button id="finish" data-ja="地図がずっと見えていた" hidden>The map stayed visible</button>
+  <textarea id="result" aria-label="Result" rows="6" readonly hidden></textarea>
+  <script type="module" src="./listen.js"></script>
+</body>
+</html>

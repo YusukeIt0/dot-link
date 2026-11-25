@@ -34,3 +34,18 @@ Use `?lang=ja` or `?lang=en` for an explicit language. For a hosted session with
 Compare repeat holds and both turn directions with the forward-facing tilt/roll controls. Roughly constant level vectors near unit magnitude across different headings, alongside a clear response to tilt, support gravity-dominated acceleration. A change only during a turn could indicate motion or turn rate. Neither observation establishes an absolute bearing. A numeric field name also does not establish its physical source.
 
 If there is a candidate bearing, compare its stable value against *every* independently marked direction using circular error and report repeatability, angular spread, update age and gaps. Repeat after a restart starting on another known heading, and rotate the phone with the glasses fixed as a separate control before treating it as glasses-referenced. Only compare map bearings in a known common north reference. Keep all hardware and freshness claims tied to the versions and conditions measured.
+
+## Check what reaches Even Hub during native navigation
+
+The separate phone-only preview in `navigation/` checks a narrower question. A G2 can supply magnetic heading to another host during native navigation. It is unknown whether the stock Even app forwards a named angle to a developer preview while the glasses still show the native map.
+
+```sh
+node --test tools/g2-imu-probe/*.test.mjs
+VITE_PROBE_LANGUAGE=ja node_modules/.bin/vite build tools/g2-imu-probe/navigation --base ./ --outDir "$PWD/.runtime/g2-navigation-preview"
+```
+
+Serve only this second build as described above. Use the stock Even app with a route chosen by the wearer, from a safe place to stand still. If opening Developer Hub requires ending the route, record that outcome and stop there. If the preview opens, check the glasses. Report a disappeared map immediately or start the observation with the map still visible. Leave the phone still, turn the head slowly left and right once, then report whether the map stayed visible. No knowledge of north is required.
+
+The preview reads the G2 connection state and subscribes to SDK events for up to 60 seconds. It issues no display, IMU or navigation commands. Only event counts, relative receipt times, lifecycle flags and a limited set of explicitly named numeric angle candidates can appear in the local result. Copy the result before leaving. If the page closes first, record the observed screen transition. A timeout without an operator report leaves map visibility unknown.
+
+Zero matching events describe this particular WebView session and filter. They cannot establish whether another host receives compass data. A candidate must still track head turns with the phone fixed, agree with an independent reference, stay fresh and coexist with the actual Dot Link display and voice path. Working only during a native trip would leave ordinary use outside navigation unresolved.
