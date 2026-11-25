@@ -45,7 +45,9 @@ It checks:
   permissions, minimum OS or mixed runtime changes retain the physical gate.
   This exception does not waive CI, independent acceptance review, protected-path
   approval, or release/distribution authorization.
-- An independently assessed current acceptance record. Non-blocking architecture
+- An independently assessed current acceptance record. Its agreed scope is an
+  open issue, or the PR itself when no separate issue exists
+  ([development assurance](development-assurance.md)). Non-blocking architecture
   advice is not a defect and does not veto merging by itself.
 
 The coordinator reads everything again immediately before an exact-head squash

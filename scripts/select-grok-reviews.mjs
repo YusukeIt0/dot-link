@@ -3,7 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {appendFileSync} from 'node:fs';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {trustedUser, authenticateComments, commentRevisionQuery} from './review-evidence.mjs';
+import {trustedUser, authenticateComments, commentRevisionQuery, reviewCommands} from './review-evidence.mjs';
 import {automaticSelection, selected, grok, closingIssues, closingIssuesQuery} from './grok-review.mjs';
 import {notifyGrokReview} from './notify-grok-review.mjs';
 const repository = 'YusukeIt0/dot-link';
@@ -36,7 +36,7 @@ export async function selectPR(number, client, apply = false, notify = notifyGro
   await notifyAfterLabel(number, client, notify);
   return {number, action: 'labeled'};
 }
-export const selectionCommand = '/dotlink review2nd';
+export const selectionCommand = reviewCommands[1];
 export function authorizedCommand(row, readNode) {
   if (!trustedUser(row?.user) || row.body?.trim() !== selectionCommand) return false;
   const [verified] = authenticateComments([row], readNode, undefined, () => true);

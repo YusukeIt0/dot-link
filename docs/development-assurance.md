@@ -33,8 +33,18 @@ behavior separately. A static model cannot claim it ran tests or observed a devi
 For the automatic-merge path, the agent can draft a structured record:
 
 ```sh
-node scripts/prepare-acceptance.mjs <PR-number> <agreed-scope-issue> > /tmp/acceptance.md
+node scripts/prepare-acceptance.mjs <PR-number> [agreed-scope-issue] > /tmp/acceptance.md
 ```
+
+The agreed scope is normally an open issue. When a small owner-requested change
+has no separate issue, such as a README wording change, omit the issue number:
+the PR itself becomes the scope. Record the owner's request in the PR
+description first. The scope then covers the PR's title, description and human
+discussion, excluding trusted process comments (acceptance records, exact
+`/dotlink review` or `/dotlink review2nd` commands and Grok adjudications).
+A record cannot name any other
+PR as its scope. Only the author and path gates decide whether a PR can merge
+automatically; a PR scope does not make external or protected-path PRs eligible.
 
 This reads GitHub and writes only stdout. It never posts or approves anything.
 Fill the requirements and actual evidence, mark scope approved only when the
@@ -132,7 +142,8 @@ not itself require another model review. Optional improvements remain advice.
 Do not replace valid static/runtime evidence with another test form solely for
 uniformity, or add completion conditions after the agreed outcome is established.
 
-Any human scope-issue edit/comment changes the scope digest; any PR description,
+Any human scope-issue edit/comment changes the scope digest. When the PR is its
+own scope, a description edit or human PR comment does the same. Any PR description,
 human discussion, formal review or inline feedback change invalidates the review
 receipt. Update the record and re-review after a substantive change. The latest
 trusted record wins, including a malformed or stale one: an older passing record
