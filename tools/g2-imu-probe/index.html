@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>G2 motion probe · Beta</title>
+  <style>
+    body { font: 1rem/1.45 system-ui, sans-serif; max-width: 36rem; margin: auto; padding: 1rem; }
+    h1 { font-size: 1.5rem; } button, textarea { font: inherit; }
+    button { margin: .25rem .25rem .25rem 0; padding: .55rem .8rem; }
+    textarea { box-sizing: border-box; width: 100%; }
+    pre { white-space: pre-wrap; } [hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <h1>G2 motion probe · Beta</h1>
+  <p>Mark magnetic north, east, south and west with an independent compass. Set the phone down and keep it still. Follow the poses on the glasses. Tap once when aligned, then hold until the next instruction.</p>
+  <p>Samples stay on this page until you copy them or close it. The session stops after four minutes.</p>
+  <p id="status" role="status">Opening the Even Hub bridge…</p>
+  <button id="start" disabled>Start measurement</button>
+  <button id="mark" hidden>Aligned · record pose</button>
+  <button id="stop" hidden>Stop measurement</button>
+  <pre id="summary"></pre>
+  <section id="export" hidden>
+    <label for="data">Session JSON · select and copy before closing</label>
+    <textarea id="data" readonly rows="6" spellcheck="false"></textarea>
+    <button id="select">Select session JSON</button>
+  </section>
+  <script type="module" src="./probe.js"></script>
+</body>
+</html>
