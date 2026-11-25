@@ -62,7 +62,7 @@ Choose what to share in the iPhone companion's **Sharing settings**. These featu
 - **Terrain:** understand elevation and slopes, including hills along a route.
 - **Recent places:** let Dot refer to recorded movement and places. The default history period is seven days.
 - **Weather:** get forecasts for temperature, humidity and precipitation at your shared location or a place you ask about. With Mac 0.5.0 and Even 0.4.1, turning on **Weather context** also shares nearby satellite rain estimates. If you already share forecasts only, you can include nearby rain when the companion asks or later in **Sharing settings → Weather context**.
-- **Health:** let Dot use shared [Polar](https://www.polar.com/en) sleep, activity, heart rate, and recovery data to make more context-aware suggestions. Connect Polar in the Mac app's **Healthcare settings**, then turn on **Health context** in your Even companion.
+- **Health:** let Dot use shared Polar sleep, activity, heart rate, and recovery data to make more context-aware suggestions. Connect Polar in the Mac app's **Healthcare settings**, then turn on **Health context** in your Even companion.
 
 See [location and history setup](docs/setup.md#location-sharing), [weather setup](docs/setup.md#optional-weather-context), and [Polar health setup](docs/setup.md#polar-health-context) for sharing controls and compatible versions.
 
@@ -102,6 +102,10 @@ With Mac 0.5.0 and an Even companion that includes **Sharing settings → Histor
 - **[Even G2](https://www.evenrealities.com/smart-glasses) and an iPhone** with the Even Realities app. Android is not supported.
 - **ChatGPT with [Dot](https://help.openai.com/en/articles/20001530-getting-started-with-your-dot)**, with access to an [OpenAI Secure MCP Tunnel](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) and custom MCP connections. Installing Dot Link does not grant this account access.
 - **Tailscale** on both Mac and iPhone, signed in to the same account.
+
+Optional:
+
+- **[Polar](https://www.polar.com/en) device** synced with Polar Flow, for [health context](docs/setup.md#polar-health-context). Tested with [Polar Loop](https://www.polar.com/en/loop).
 
 ## Quickstart
 
