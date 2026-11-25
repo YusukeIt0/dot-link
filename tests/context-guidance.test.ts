@@ -162,5 +162,5 @@ test('shared activity guidance ties selective history to its existing guarded re
   assert.match(conversationGuidance.response, /even indirectly/);
   assert.match(conversationGuidance.response, /get_recent_announcements/);
   assert.match(conversationGuidance.response, /stopped or deleted/);
-  assert.match(conversationGuidance.response, /activity_id/);
+  assert.match(conversationGuidance.response, /Only respond_to_context accepts activity_id/);
 });
