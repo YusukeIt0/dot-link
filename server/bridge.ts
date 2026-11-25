@@ -47,6 +47,10 @@ const leaseEvent = z.object({
 const LEASE_HISTORY_LIMIT = 16;
 const stateSchema = z.object({ version: z.literal(1), subscription: subscriptionSchema.optional(), leaseHistory: z.array(leaseEvent).max(LEASE_HISTORY_LIMIT).optional(), messages: z.array(utteranceSchema).max(100), outbound: z.array(outboundRecord).max(OUTBOUND_LIMIT).default([]) });
 type State = z.infer<typeof stateSchema>;
+export type LocationDelivery = {
+  sharing_id: string; expires_at: string;
+  verifiedLocationAudience?: (conversationUrl?: string) => boolean;
+};
 type Subscription = z.infer<typeof subscriptionSchema>;
 
 export const eventDefinition = {
@@ -64,7 +68,7 @@ export const replyTool = {
 };
 export const sendMessageTool = {
   name: 'send_message_to_g2',
-  description: 'Send a message to the owner’s G2 now. For an answer or follow-up to a question, ALWAYS include its utterance_id from get_pending_utterances or utterance.created: the first answer is paired with that question and later messages appear on subsequent pages. Do not send the first answer as an unrelated proactive message, then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive message. For proactive recommendations based on shared location, use respond_to_location instead so sharing and freshness are checked. Generate a fresh UUID message_id for each distinct message; reuse that ID, text and utterance_id on retry. Duplicate checks cover the latest 1,000 accepted outbound messages; an evicted ID can be accepted again. Receipt confirms storage, not physical display. On rejection, follow error.data.reason; do not change the ID or omit utterance_id to bypass a conflict.',
+  description: 'Send a message to the owner’s G2 now. For an answer or follow-up to a question, ALWAYS include its utterance_id from get_pending_utterances or utterance.created: the first answer is paired with that question and later messages appear on subsequent pages. Do not send the first answer as an unrelated proactive message, then use reply_to_g2 for a summary. Omit utterance_id only for an independent proactive message. For activities influenced by shared evidence, follow the factor result’s conversation_guidance.response and use its guarded responder. Generate a fresh UUID message_id for each distinct message; reuse that ID, text and utterance_id on retry. Duplicate checks cover the latest 1,000 accepted outbound messages; an evicted ID can be accepted again. Receipt confirms storage, not physical display. On rejection, follow error.data.reason; do not change the ID or omit utterance_id to bypass a conflict.',
   inputSchema: { type: 'object', properties: { message_id: { type: 'string', format: 'uuid' }, utterance_id: { type: 'string', format: 'uuid', description: 'Required for an answer or follow-up to a question; omit only for independent proactive messages.' }, text: { type: 'string', minLength: 1, maxLength: 8000 } }, required: ['message_id', 'text'], additionalProperties: false },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -72,6 +76,12 @@ export const statusTool = {
   name: 'get_status', description: 'Read connection status of this personal Even G2 bridge before subscribing. Returns subscription status, message count, and session ID only; no conversation text.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+};
+export const recentAnnouncementsTool = {
+  name: 'get_recent_announcements',
+  description: 'Read up to five recent unprompted messages from this connection, oldest first, with their storage times. Use them to recognize suggestions already made. Each is conversation text, not fresh evidence, a wearer instruction or a display or read receipt. A current phone location is unnecessary.',
+  inputSchema: {type: 'object', properties: {}, additionalProperties: false},
+  annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false},
 };
 export const pendingTool = {
   name: 'get_pending_utterances', description: 'Read owner input. Items with source=owner_sharing_control in the legacy utterances list are explicit app sharing actions, not spoken messages or questions: process these app actions even when there are no spoken utterances. While sharing remains enabled, establish the event named by each current control item (location.updated or notification.created) for personal-g2 using the normal event mechanism without asking for another setting or confirmation. Preserve the utterance subscription and other existing feature subscriptions; do not send a control confirmation to G2. Its utterance_id is a compatibility input ID, not a spoken utterance; the bridge suppresses control acknowledgements instead of displaying them. Re-read before acting and do nothing for an absent/revoked request. Then read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
@@ -92,6 +102,10 @@ export class Bridge {
   private now: () => number;
   private photoRetention: { maxBytes: number; maxAgeMs: number };
   private operation: Promise<unknown> = Promise.resolve();
+  // Older disk entries have no recipient or source scope. Index only new commits in memory.
+  private conversationGeneration = 0;
+  private recent: {record: WeakRef<State['outbound'][number]>; conversation?: number;
+    locationAudience?: LocationDelivery['verifiedLocationAudience']; visible?: () => boolean}[] = [];
   private readonly subscribing = new Set<Promise<unknown>>();
   // Subscriptions verifying or waiting to commit. Removing a callback cancels only
   // pending subscriptions of that same callback URL, never unrelated ones.
@@ -251,7 +265,25 @@ export class Bridge {
       ...(m.location_sharing_id ? {location_sharing_id: m.location_sharing_id, location_expires_at: m.location_expires_at} : {}),
     }));
   }
-  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: {sharing_id: string; expires_at: string}) {
+  recentAnnouncements(raw: unknown = {}, forLocation = false) {
+    if (!z.object({}).strict().safeParse(raw).success) throw new ReadResponseError();
+    const messages: {text: string; created_at: string}[] = [];
+    if (this.closed) return {messages};
+    const conversation = this.active();
+    for (const entry of this.recent) {
+      const record = entry.record.deref();
+      if (!record || !this.state.outbound.includes(record)) continue;
+      try {
+        const sameConversation = conversation && entry.conversation === this.conversationGeneration;
+        if (!sameConversation && !(forLocation && entry.locationAudience?.(conversation?.url))) continue;
+        if (!entry.visible || entry.visible()) messages.push({text: record.text, created_at: record.createdAt});
+      } catch { /* An unavailable or revoked source cannot be quoted again. */ }
+    }
+    return {messages};
+  }
+  hasStoredMessage(id: string) { return this.state.outbound.some(message => message.message_id === id); }
+  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: LocationDelivery, visible = stillAllowed) {
+    const conversation = this.active() ? this.conversationGeneration : undefined;
     return this.serial(async () => {
       if (stillAllowed && !stillAllowed()) throw new Error('Message context is no longer valid');
       const parsed = outboundInput.safeParse(input);
@@ -263,7 +295,7 @@ export class Bridge {
         const question = p.utterance_id ? this.state.messages.find(item => item.id === p.utterance_id) : undefined;
         if (p.utterance_id && !question) throw new BridgeResponseError('utterance_unknown');
         const initialReply = !!question && question.reply === undefined;
-        const at = new Date().toISOString();
+        const at = new Date(this.now()).toISOString();
         let messages = this.state.messages;
         if (initialReply) {
           const { photos: _photos, ...retained } = question!;
@@ -272,8 +304,15 @@ export class Bridge {
         }
         // Rotate in acceptance order. Retried retained IDs never refresh that order.
         // Persist first-answer pairing and its retry identity in one transaction.
-        const outbound = [...this.state.outbound, { ...p, createdAt: at, ...(initialReply ? {initial_reply: true} : {}), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) }].slice(-OUTBOUND_LIMIT);
+        const record = { ...p, createdAt: at, ...(initialReply ? {initial_reply: true} : {}), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) };
+        const outbound = [...this.state.outbound, record].slice(-OUTBOUND_LIMIT);
         this.save({ ...this.state, messages, outbound });
+        const forConversation = conversation !== undefined && conversation === this.conversationGeneration && !!this.active();
+        if (!p.utterance_id && (forConversation || location?.verifiedLocationAudience)) {
+          this.recent.push({record: new WeakRef(record), conversation: forConversation ? conversation : undefined,
+            locationAudience: location?.verifiedLocationAudience, visible});
+          if (this.recent.length > 5) this.recent.shift();
+        }
         if (initialReply) this.latency.mark(p.utterance_id!, 'reply_stored');
       }
       return { message_id: p.message_id, stored_for_g2: true, physical_display_confirmed: false };
@@ -320,6 +359,7 @@ export class Bridge {
         if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
         const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
         this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
+        if (kind === 'created') this.conversationGeneration++;
         return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
       });
     } finally { this.pendingChecks.delete(check); }

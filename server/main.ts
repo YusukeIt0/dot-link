@@ -76,7 +76,7 @@ try {
   });
 } catch { console.error('Location history unavailable; ordinary conversation remains available'); }
 const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts,
-  (input, guard, context) => bridge.sendMessage(input, guard, context), Date.now,
+  bridge.sendMessage.bind(bridge), Date.now,
   owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
   output=>new LocalGeography(resolve('.runtime/geography'),output),()=>new MobilityAcquisition(), {
     attachGeography: (fix, evidence, owner) => history?.attachGeography(fix, evidence, owner),
@@ -97,7 +97,7 @@ const health = new HealthContext(resolve('.runtime/health/state.enc'), {
   key: healthKeychain(appExecutable),
   ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
   ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
-  announce: (input,guard) => bridge.sendMessage(input,guard), sender: new WebhookSender(safePost(hosts)),hosts,
+  announce: bridge.sendMessage.bind(bridge), sender: new WebhookSender(safePost(hosts)),hosts,
 });
 const activation: SharingActivation[] = [];
 try {activation.push(new SharingActivation(health.activationStore,bridge,health,Date.now,'health'));}

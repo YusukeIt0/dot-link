@@ -111,9 +111,17 @@ test('paired weather grants preserve MET and admit only authorized NOAA summarie
   assert.ok(JSON.stringify(later.entries).includes('"temperature_c":25'));
   assert.equal(calls, readsBeforeHistory);
   const receipt = later.response_context.arguments.archive_read_ids;
+  const activity = {activity_id: 'afternoon/forecast-update', disposition: 'announce', text: 'A lighter layer should do for the afternoon.'};
+  const sent = await tool('respond_to_context', {...activity, archive_read_ids: receipt});
+  assert.equal(sent.stored_for_g2, true);
+  assert.deepEqual(await tool('respond_to_context', {...activity, archive_read_ids: receipt}), sent);
+  const reread = (await tool('get_factor_history', query)).sources.weather.response_context.arguments;
+  assert.notDeepEqual(reread.archive_read_ids, receipt);
+  assert.equal((await tool('respond_to_context', {...activity, ...reread})).data.reason, 'context_decision_conflict');
+  assert.equal(bridge.outboundHistory().length, 1);
   assert.equal((await change({action: 'delete', source: 'weather'})).status, 200);
   assert.equal((await tool('get_factor_history', query)).sources.weather.status, 'unavailable');
-  assert.ok((await tool('respond_to_context', {disposition: 'silent', archive_read_ids: receipt})).data?.reason);
+  assert.equal((await tool('respond_to_context', {...activity, archive_read_ids: receipt})).data.reason, 'archive_context_unknown');
   await live();
   assert.equal(calls, readsBeforeHistory + 1);
   assert.deepEqual([rainReads, rainRefreshes], [0, 0]);

@@ -6,7 +6,7 @@ import { createServer, type IncomingMessage } from 'node:http';
 import { timingSafeEqual, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
-import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, sendMessageTool } from './bridge.ts';
+import { Bridge, eventDefinition, replyTool, statusTool, pendingTool, recentAnnouncementsTool, sendMessageTool } from './bridge.ts';
 import { NotificationInbox, notificationEvent, pendingNotificationsTool, announceNotificationTool, notificationDispositionTool } from './notifications.ts';
 import { LocationContext, locationEvent, locationContextTool, locationResponseTool } from './location.ts';
 import { mobilityContextTool } from './mobility/context.ts';
@@ -32,6 +32,7 @@ const rpcSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string(),
 const contextResponders = new WeakMap<Bridge, ContextResponder>();
 
 interface FactorSources {
+  bridge: Bridge;
   health?: HealthContext;
   weather?: WeatherContext;
   locations?: LocationContext;
@@ -49,7 +50,8 @@ export function registerDecisionFactor<T extends DecisionFactorTool>(tool: T, bi
 export const decisionFactorReaders = [
   registerDecisionFactor(healthTool, ({health}) => health && (args => health.read(args))),
   registerDecisionFactor(weatherContextTool, ({weather}) => weather && (args => weather.read(args))),
-  registerDecisionFactor(locationContextTool, ({locations}) => locations && (args => locations.read(args))),
+  registerDecisionFactor(locationContextTool, ({locations, bridge}) => locations && (args =>
+    locations.read(args, () => bridge.recentAnnouncements({}, true).messages.map(message => message.text)))),
   registerDecisionFactor(mobilityContextTool, ({locations}) => locations && (args => locations.readMobility(args))),
   registerDecisionFactor(locationHistoryTool, ({history}) => history && (args => history.read(args))),
   registerDecisionFactor(factorHistoryTool, ({history, health, archives}) => {
@@ -62,7 +64,8 @@ export const decisionFactorReaders = [
 ] as const satisfies readonly FactorRegistration[];
 
 export async function rpc(bridge: Bridge, raw: unknown, notifications?: NotificationInbox, locations?: LocationContext, history?: HistoryReader, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext, archives?: EnvironmentHistory): Promise<unknown> {
-  const sources = {health, weather, locations, history, archives};
+  const sources = {bridge, health, weather, locations, history, archives};
+  const hasContext = !!(locations || health || history?.responseGuard || weather || archives);
   // Control and conversation tools retain their own response and error formats.
   const controls = [
     {tool: statusTool, available: true}, {tool: pendingTool, available: true},
@@ -73,7 +76,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
     {tool: locationResponseTool, available: !!locations},
     {tool: historyResponseTool, available: !!history?.respond},
     {tool: healthResponseTool, available: !!health},
-    {tool: contextResponseTool, available: !!(locations || health || history?.responseGuard || weather || archives)},
+    {tool: contextResponseTool, available: hasContext}, {tool: recentAnnouncementsTool, available: hasContext},
   ];
   const activations = activation ? (Array.isArray(activation) ? activation : [activation]) : [];
   const acknowledge = (name: 'reply_to_g2' | 'send_message_to_g2', args: unknown) => {
@@ -145,11 +148,15 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
               return { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
             }
             case 'get_pending_notifications': return notifications!.pending(args);
+            case 'get_recent_announcements': return bridge.recentAnnouncements(args);
             case 'respond_to_history': return history!.respond!(args);
             case 'respond_to_health': return health!.respond(args);
             case 'respond_to_context': {
               let responder = contextResponders.get(bridge);
-              if (!responder) { responder = new ContextResponder(bridge.sendMessage.bind(bridge)); contextResponders.set(bridge, responder); }
+              if (!responder) {
+                responder = new ContextResponder(bridge.sendMessage.bind(bridge), id => bridge.hasStoredMessage(id));
+                contextResponders.set(bridge, responder);
+              }
               return responder.respond(args, {locations, health, history, weather, archives});
             }
             case 'send_message_to_g2': return acknowledge(name, args) ?? bridge.sendMessage(args);

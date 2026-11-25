@@ -89,7 +89,12 @@ test('first authorized late observations keep their assigned period; preceding s
   assert.ok(f.receivedDates.length); f.clock(false);
   assert.throws(f.h.responseGuard(joined.read_id!),/phone-clock/);
   assert.equal(f.h.responseGuard(long.read_id!)(),true);
+  const recall = f.h.responseGuard(long.read_id!, 'recall');
+  f.advance(6 * 60_000);
+  assert.throws(f.h.responseGuard(long.read_id!));
+  assert.equal(recall(), true);
   await f.change({action:'set',enabled:false});
+  assert.throws(recall);
   assert.throws(f.h.responseGuard(long.read_id!));
   assert.equal(f.read().entries.length,0);
   assert.equal(f.h.status(owner).healthEnabled,true);

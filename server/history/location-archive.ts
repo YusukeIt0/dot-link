@@ -173,6 +173,7 @@ export class LocationArchive {
     }
     const entries: Selected[] = [];
     const clocks: ObservationClock[] = [];
+    let evidenceExpiry = Infinity;
     let pressure = false, unsupported = 0;
     const fallback = this.db.prepare('SELECT 1 FROM observations WHERE id=? AND archive_generation IS NOT ?');
     for (let scan=0; !state.protectedDone && scan < 3; scan++) {
@@ -187,7 +188,7 @@ export class LocationArchive {
         if (!item) { unsupported++; continue; }
         clocks.push({measured_at:item.fix.measured_at, recording_epoch:item.epoch});
         entries.push(selectedLocationFields(item.fix, state.fields, () => mapLocationEvidence(item.geography)));
-        state.expires = Math.min(state.expires, record.expiresAtMs);
+        evidenceExpiry = Math.min(evidenceExpiry, record.expiresAtMs);
       }
       state.protectedCursor = raw.nextCursor ?? undefined;
       state.protectedDone = !raw.nextCursor;
@@ -207,12 +208,13 @@ export class LocationArchive {
         clocks.push({measured_at:fix.measured_at, recording_epoch});
         entries.push(selectedLocationFields(fix, state.fields, () =>
           mapLocationEvidence(row.geography ? JSON.parse(String(row.geography)) as GeographicEvidence : undefined)));
-        state.expires = Math.min(state.expires, Number(row.expires_at));
+        evidenceExpiry = Math.min(evidenceExpiry, Number(row.expires_at));
         state.after = {measured:Number(row.measured), id:String(row.id)};
       }
     }
-    const guard = () => this.now() >= state.issued && this.now() < state.expires && this.allows(active);
-    if (!guard()) throw changed();
+    state.expires = Math.min(state.expires, evidenceExpiry);
+    const grantAllowed = () => this.now() >= state.issued && this.allows(active);
+    if (this.now() >= state.expires || !grantAllowed()) throw changed();
     let next: string | null = null;
     if (more) {
       next = randomUUID();
@@ -233,7 +235,7 @@ export class LocationArchive {
         archive_write_error_this_grant_since_restart:this.writeFault === active.lease.stamp,
         order:'protected_window_then_remaining_recent_observations', interpretation:'Each entry is one retained phone observation. Gaps do not establish inactivity.'},
       entries, next_cursor:next};
-    return {result, guard, expires:state.expires};
+    return {result, grantAllowed, expires:state.expires, evidenceExpiry};
   }
 
   clear() { this.pages.clear(); this.geography.clear(); }

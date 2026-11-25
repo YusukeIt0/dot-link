@@ -89,10 +89,12 @@ test('MCP discovery, selected historical fields, exclusive end, independent page
   assert.equal(next.sources.location.next_cursor, null);
   const refs = {...page.sources.location.response_context.arguments, ...page.sources.polar.response_context.arguments};
   const refused = await f.call('respond_to_context', {...refs, disposition: 'announce', text: 'Example'});
-  assert.equal(refused.error.data.reason, 'history_question_required');
-  assert.equal((await f.call('respond_to_context', {...refs, disposition: 'silent'})).result.structuredContent.stored_for_g2, false);
+  assert.equal(refused.error.data.reason, 'activity_id_required');
+  const suggestion = {...refs, activity_id: 'lunchtime/2026-11-14T12:00Z', disposition: 'announce', text: 'There is a quiet path by the river.'};
+  assert.equal((await f.call('respond_to_context', suggestion)).result.structuredContent.stored_for_g2, true);
+  assert.deepEqual(await f.call('respond_to_context', suggestion), await f.call('respond_to_context', suggestion));
   f.control('delete');
-  assert.ok((await f.call('respond_to_context', {...refs, disposition: 'silent'})).error);
+  assert.equal((await f.call('respond_to_context', suggestion)).error.data.reason, 'history_access_changed');
   const partial = (await f.call('get_factor_history', {...window, fields: selection})).result.structuredContent.sources;
   assert.equal(partial.location.status, 'unavailable');
   assert.equal(partial.polar.entries[0].fields.steps, 321);

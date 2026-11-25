@@ -19,7 +19,7 @@ import {ContextResponder} from '../server/context-response.ts';
 
 const owner = 'a'.repeat(64), NOW = Date.parse('2026-11-14T12:00:00Z');
 const settle = () => new Promise<void>(resolve => setImmediate(resolve));
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, conversationTtlMs?: number) {
   const dir = mkdtempSync(join(tmpdir(), 'combined-context-'));
   let now = NOW, authorized = true, block: Promise<void> | undefined, unblock = () => {}, sequence = 0;
   const sender = new WebhookSender(async (_url, raw) => {
@@ -27,10 +27,10 @@ async function fixture(t: TestContext) {
     if (p.type === 'verification') return {status: 200, body: JSON.stringify({challenge: p.challenge})};
     await block; return {status: 202, body: '{}'};
   });
-  const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test']);
+  const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test'], undefined, {now: () => now});
   const acquisition = new MobilityAcquisition(() => ({walking: {plan: async () => {throw Error('not requested');}},
     terrain: {clear() {}, elevations: async points => points.map(() => 12), profile: async () => {throw Error('not requested');}}}), () => now);
-  const location = new LocationContext(join(dir, 'location.json'), sender, [], bridge.sendMessage.bind(bridge), () => now,
+  const location = new LocationContext(join(dir, 'location.json'), sender, ['callback.example.test'], bridge.sendMessage.bind(bridge), () => now,
     () => authorized, undefined, () => acquisition);
   const history = new LocationHistoryStore(join(dir, 'history'), {now: () => now, ownerAuthorized: () => authorized,
     ownerRevoked: () => !authorized, announce: bridge.sendMessage.bind(bridge)});
@@ -60,7 +60,7 @@ async function fixture(t: TestContext) {
   history.ingest({latitude: 10, longitude: 20, accuracy: 5, measured_at: new Date(now).toISOString()}, sharing,
     {protocol: 1, epoch: history.status(owner).historyEpoch, timezone: 'Etc/UTC', utc_offset_minutes: 0}, owner);
   weatherControl(true);
-  await bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'},
+  await bridge.subscribe({name: 'utterance.created', arguments: {session_id: 'personal-g2'}, ttlMs: conversationTtlMs,
     delivery: {mode: 'webhook', url: 'https://callback.example.test/events', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   const question = randomUUID(); await bridge.submit({id: question, text: 'Public fixture question'});
   t.after(() => {unblock(); health.close(); weather.close(); location.close(); history.close(); bridge.close(); rmSync(dir, {recursive: true, force: true});});
@@ -73,8 +73,24 @@ async function fixture(t: TestContext) {
     advance(ms: number) {now += ms;}, revoke() {authorized = false;},
     async holdBridge() {block = new Promise<void>(resolve => {unblock = resolve;}); const pending = bridge.submit({id: randomUUID(), text: 'Queue barrier'}); await settle(); return {pending, release() {unblock(); block = undefined;}};},
     restartLocation() {stop(); sharing = randomUUID(); start(); update();},
+    renewLocationSession() {sharing = randomUUID(); start();},
   };
 }
+
+test('recent health suggestions keep their phone-clock evidence after a read expires until place sharing stops', async t => {
+  const f = await fixture(t);
+  const {result} = await f.call('get_health_context', {categories: ['heart_rate']});
+  const clock = result.structuredContent.phone_time_evidence;
+  assert.equal(clock.status, 'available');
+  const suggestion = {activity_id: 'afternoon-check', ...result.structuredContent.response_context.arguments,
+    disposition: 'announce', text: 'Would you like a break?'};
+  assert.equal((await f.call('respond_to_context', suggestion)).result.structuredContent.stored_for_g2, true);
+  f.advance(6 * 60_000);
+  const recent = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages.map((row: {text: string}) => row.text);
+  assert.deepEqual(await recent(), [suggestion.text]);
+  f.historyControl('disable');
+  assert.deepEqual(await recent(), []);
+});
 
 test('real RPC composes health, place history, location, weather and mobility into one linked commit and retry', async t => {
   const f = await fixture(t);
@@ -111,16 +127,175 @@ for (const [kind, change, expected] of [
   assert.equal(f.bridge.outboundHistory().length, 0);
 });
 
-test('silence writes nothing, does not consume a question, and does not authorize proactive history', async t => {
+test('silence writes nothing and reserves a location activity while leaving a question independent', async t => {
   const f = await fixture(t), refs = f.receipts();
   const before = f.bridge.history();
   const silent = await f.call('respond_to_context', {...refs, disposition: 'silent'});
   assert.equal(silent.result.structuredContent.stored_for_g2, false); assert.deepEqual(f.bridge.history(), before);
   const proactive = await f.call('respond_to_context', {...refs, disposition: 'announce', text: 'Past places'});
-  assert.equal(proactive.error.data.reason, 'history_question_required');
+  assert.equal(proactive.error.data.reason, 'context_decision_conflict');
   const answer = await f.call('respond_to_context', {...refs, health_read_ids: [(f.health.read({categories: ['sleep']}) as any).read_id], disposition: 'announce', utterance_id: f.question, text: 'An answer'});
   assert.equal(answer.result.structuredContent.stored_for_g2, true);
   assert.equal((await f.call('respond_to_context', {...refs, disposition: 'silent', utterance_id: f.question})).error.data.reason, 'invalid_arguments');
+});
+
+for (const withLocation of [false, true]) {
+  test(`one occurrence stores one history-informed message across MCP retries and rereads, location=${withLocation}`, async t => {
+    const f = await fixture(t);
+    if (!withLocation) f.stop();
+    const call = async (name: string, args: unknown = {}) => (await f.call(name, args)).result.structuredContent;
+    const read = async () => (await call('get_location_history')).response_context.arguments;
+    const position = withLocation ? (await call('get_location_context')).response_context.arguments : {};
+    const first = {activity_id: 'walk/2026-11-14T12:00Z', ...position, ...await read(), disposition: 'announce', text: 'The book fair is open this afternoon.'};
+    const fresh = {...first, ...await read()};
+    assert.notDeepEqual(fresh.history_context_ids, first.history_context_ids);
+    const sent = await f.call('respond_to_context', first);
+    assert.equal(sent.result.structuredContent.stored_for_g2, true);
+    assert.equal(sent.result.structuredContent.physical_display_confirmed, false);
+    const [retry, reread] = await Promise.all([f.call('respond_to_context', first), f.call('respond_to_context', fresh)]);
+    assert.deepEqual(retry, sent);
+    assert.equal(reread.error.data.reason, 'context_decision_conflict');
+    assert.equal((await f.call('respond_to_context', {...fresh, text: 'Try the book fair today.'})).error.data.reason, 'context_decision_conflict');
+    assert.equal(f.bridge.outboundHistory().length, 1);
+    const recent = await call('get_recent_announcements');
+    assert.deepEqual(recent.messages, [{text: first.text, created_at: f.bridge.outboundHistory()[0].createdAt}]);
+    assert.deepEqual((await call('get_location_context')).recent_announcements, [first.text]);
+  });
+}
+
+test('independent home activities can stay quiet, send a first suggestion, then send only a change', async t => {
+  const f = await fixture(t);
+  f.stop();
+  const read = async () => (await f.call('get_location_history', {})).result.structuredContent.response_context.arguments;
+  const decide = async (activity_id: string, text?: string) => f.call('respond_to_context', {
+    ...await read(), activity_id, disposition: text ? 'announce' : 'silent', ...(text ? {text} : {}),
+  });
+  assert.equal((await decide('rain')).result.structuredContent.stored_for_g2, false);
+  assert.equal((await decide('rain', 'A conflicting decision')).error.data.reason, 'context_decision_conflict');
+  assert.equal((await decide('clear', 'It is a good time for the canal loop.')).result.structuredContent.stored_for_g2, true);
+  assert.equal((await decide('unchanged')).result.structuredContent.stored_for_g2, false);
+  assert.equal((await decide('earlier-rain', 'For that walk, leave before three.')).result.structuredContent.stored_for_g2, true);
+  assert.deepEqual(f.bridge.outboundHistory().map(m => m.reply), ['It is a good time for the canal loop.', 'For that walk, leave before three.']);
+});
+
+for (const action of ['disable', 'delete']) {
+  test(`history ${action} fences queued and repeated announcements, recent text and new reads`, async t => {
+    const f = await fixture(t);
+    f.stop();
+    const {response_context} = (await f.call('get_location_history', {})).result.structuredContent;
+    const decision = {...response_context.arguments, activity_id: 'occasion-one', disposition: 'announce', text: 'The small market opens soon.'};
+    assert.equal((await f.call('respond_to_context', decision)).result.structuredContent.stored_for_g2, true);
+    const hold = await f.holdBridge();
+    const queued = f.call('respond_to_context', {...decision, activity_id: 'occasion-two', text: 'Queued second opportunity.'});
+    await settle();
+    f.historyControl(action);
+    hold.release();
+    await hold.pending;
+    assert.equal((await queued).error.data.reason, 'history_access_changed');
+    assert.equal((await f.call('respond_to_context', decision)).error.data.reason, 'history_access_changed');
+    assert.equal((await f.call('get_location_history', {})).result.structuredContent.status, 'unavailable');
+    assert.deepEqual((await f.call('get_recent_announcements', {})).result.structuredContent.messages, []);
+    f.historyControl('enable');
+    assert.deepEqual((await f.call('get_location_context', {})).result.structuredContent.recent_announcements, []);
+    assert.deepEqual(f.bridge.outboundHistory().map(m => m.reply), [decision.text]);
+  });
+}
+
+test('recent messages cross response routes, exclude linked replies and reset for a newly verified conversation', async t => {
+  const f = await fixture(t);
+  const {context_id} = f.receipts();
+  const read = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages;
+  await f.call('respond_to_location', {context_id, disposition: 'announce', text: 'The arcade is open.'});
+  f.update(11);
+  assert.deepEqual((await f.call('get_location_context', {})).result.structuredContent.recent_announcements, ['The arcade is open.']);
+  for (let index = 1; index <= 5; index++) await f.call('send_message_to_g2', {message_id: randomUUID(), text: 'Suggestion ' + index});
+  await f.call('send_message_to_g2', {message_id: randomUUID(), utterance_id: f.question, text: 'A private answer.'});
+  await f.call('send_message_to_g2', {message_id: randomUUID(), utterance_id: f.question, text: 'A follow-up.'});
+  assert.deepEqual((await read()).map((m: {text: string}) => m.text), Array.from({length: 5}, (_, index) => 'Suggestion ' + (index + 1)));
+  const subscription = {name: 'utterance.created', arguments: {session_id: 'personal-g2'}};
+  await f.bridge.unsubscribe({...subscription, delivery: {mode: 'webhook', url: 'https://callback.example.test/events'}});
+  assert.deepEqual(await read(), []);
+  await f.bridge.subscribe({...subscription, delivery: {mode: 'webhook', url: 'https://callback.example.test/other', secret: 'whsec_' + randomBytes(32).toString('base64')}});
+  assert.deepEqual(await read(), []);
+  assert.ok(f.bridge.outboundHistory().some(message => message.reply === 'Suggestion 1'));
+});
+
+for (const combined of [false, true]) {
+  test(`a stale fix cannot deliver again, but its sent text is visible until consent changes, combined=${combined}`, async t => {
+    const f = await fixture(t);
+    const read = async (name: string, args = {}) => (await f.call(name, args)).result.structuredContent;
+    const current = (await read('get_location_context')).response_context.arguments;
+    const evidence = combined ? (await read('get_location_history')).response_context.arguments : {};
+    const decision = {...current, ...evidence, disposition: 'announce', text: 'The print studio is open.'};
+    const respond = combined ? 'respond_to_context' : 'respond_to_location';
+    assert.equal((await read(respond, decision)).stored_for_g2, true);
+    f.advance(91_000);
+    assert.equal((await read('get_location_context')).context, null);
+    assert.deepEqual((await read('get_location_context')).recent_announcements, [decision.text]);
+    assert.equal((await read('get_recent_announcements')).messages[0].text, decision.text);
+    const staleAnswer = await f.call(respond, {...decision, utterance_id: f.question, text: 'A new answer using the old fix.'});
+    assert.ok(staleAnswer.error);
+    assert.equal(f.bridge.history().find(item => item.id === f.question)?.reply, undefined);
+    assert.equal(f.bridge.outboundHistory().length, 1);
+    f.renewLocationSession();
+    assert.equal((await read('get_recent_announcements')).messages[0].text, decision.text);
+    f.restartLocation();
+    assert.deepEqual((await read('get_recent_announcements')).messages, []);
+  });
+}
+
+test('recall of a location with attached weather follows its original weather grant', async t => {
+  const f = await fixture(t);
+  const weather = (await f.call('get_weather_context', {mode: 'current'})).result.structuredContent;
+  const text = 'The rain is expected to ease.';
+  await f.call('respond_to_location', {context_id: weather.context_id, disposition: 'announce', text});
+  const recent = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages;
+  f.advance(91_000);
+  assert.equal((await recent())[0].text, text);
+  f.weatherControl(false);
+  f.weatherControl(true);
+  assert.deepEqual(await recent(), []);
+});
+
+test('a verified location subscription covers a conversation gap without exposing its text to a replacement', async t => {
+  const f = await fixture(t, 500);
+  const args = {session_id:'personal-g2'};
+  const url = 'https://callback.example.test/events', other = 'https://callback.example.test/replacement';
+  const delivery = (url: string) => ({mode:'webhook', url, secret:'whsec_' + randomBytes(32).toString('base64')});
+  await f.location.subscribe({name:'location.updated', arguments:args, delivery:delivery(url)});
+  const location = async () => (await f.call('get_location_context', {})).result.structuredContent;
+  const conversation = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages.map((row: {text: string}) => row.text);
+  const history = (await f.call('get_location_history', {})).result.structuredContent.response_context.arguments;
+  await f.call('respond_to_context', {...(await location()).response_context.arguments, ...history, activity_id:'first',
+    disposition:'announce', text:'An earlier print market.'});
+  f.advance(501);
+  assert.deepEqual(await conversation(), []);
+  assert.deepEqual((await location()).recent_announcements, ['An earlier print market.']);
+  f.update(11);
+  await f.call('respond_to_location', {...(await location()).response_context.arguments, disposition:'announce', text:'The bridge opened.'});
+  assert.deepEqual((await location()).recent_announcements, ['An earlier print market.', 'The bridge opened.']);
+  f.historyControl('delete');
+  assert.deepEqual((await location()).recent_announcements, ['The bridge opened.']);
+  await f.bridge.subscribe({name:'utterance.created', arguments:args, delivery:delivery(url)});
+  assert.deepEqual((await location()).recent_announcements, ['The bridge opened.']);
+  await f.bridge.unsubscribe({name:'utterance.created', arguments:args, delivery:{mode:'webhook',url}});
+  await f.bridge.subscribe({name:'utterance.created', arguments:args, delivery:delivery(other)});
+  assert.deepEqual(await conversation(), []);
+  assert.deepEqual((await location()).recent_announcements, []);
+  await f.location.unsubscribe({name:'location.updated', arguments:args, delivery:{mode:'webhook',url}});
+  await f.location.subscribe({name:'location.updated', arguments:args, delivery:delivery(other)});
+  assert.deepEqual((await location()).recent_announcements, []);
+  assert.equal(f.bridge.outboundHistory().length, 2);
+});
+
+test('a verified renewal at the same callback restores still-visible conversation messages after expiry', async t => {
+  const f = await fixture(t, 500);
+  await f.call('send_message_to_g2', {message_id:randomUUID(), text:'Keep the earlier announcement.'});
+  f.advance(501);
+  assert.deepEqual(f.bridge.recentAnnouncements().messages, []);
+  await f.bridge.subscribe({name:'utterance.created', arguments:{session_id:'personal-g2'},
+    delivery:{mode:'webhook', url:'https://callback.example.test/events', secret:'whsec_' + randomBytes(32).toString('base64')}});
+  assert.deepEqual(f.bridge.recentAnnouncements().messages.map(message => message.text), ['Keep the earlier announcement.']);
 });
 
 test('unused unavailable sources do not block a health-only proactive suggestion, but attached clock history does', async t => {
@@ -255,7 +430,7 @@ test('combined decisions reserve every used health read, not just the first', as
   assert.equal(f.bridge.outboundHistory().length, 0);
 });
 
-test('archived weather and route receipts allow silence and one existing question without a live location receipt', async t => {
+test('archived weather and route receipts support an activity or a question without current location', async t => {
   const f = await fixture(t);
   const responder = new ContextResponder(f.bridge.sendMessage.bind(f.bridge));
   const a = randomUUID(), b = randomUUID(), unknown = randomUUID();
@@ -265,12 +440,15 @@ test('archived weather and route receipts allow silence and one existing questio
   await assert.rejects(responder.respond({archive_read_ids:[unknown], disposition:'silent'}, sources), {reason: 'archive_context_unknown'});
   const silent = await responder.respond({archive_read_ids:[a,b], disposition:'silent'}, sources);
   assert.deepEqual(silent, {disposition:'silent', stored_for_g2:false});
-  await assert.rejects(responder.respond({archive_read_ids:[a], disposition:'announce', text:'Unsolicited'}, sources), {reason: 'history_question_required'});
+  await assert.rejects(responder.respond({archive_read_ids:[a], disposition:'announce', text:'Unsolicited'}, sources), {reason: 'activity_id_required'});
   const reply = {archive_read_ids:[a,b], disposition:'announce', text:'This was the earlier forecast.', utterance_id:f.question};
   const sent = await responder.respond(reply, sources);
   assert.deepEqual(await responder.respond({...reply, archive_read_ids:[b,a]}, sources), sent);
   assert.equal(f.bridge.history().find(q => q.id === f.question)?.reply, reply.text);
   assert.equal(f.bridge.outboundHistory().length, 0);
+  const walk = {activity_id:'afternoon-walk/2026-11-14T12:00Z', archive_read_ids:[a,b], disposition:'announce', text:'There is time for the riverside loop.'};
+  assert.deepEqual(await responder.respond(walk, sources), await responder.respond(walk, sources));
+  assert.equal(f.bridge.outboundHistory().length, 1);
 });
 
 test('existing receipt sets retain their persisted v1 retry identity when archive receipts are added to the protocol', async () => {

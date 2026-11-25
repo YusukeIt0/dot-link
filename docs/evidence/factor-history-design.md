@@ -2,6 +2,10 @@
 
 # Decision-factor history
 
+The question-linked response boundary below describes the original design.
+Current activity routing and receipt requirements are documented in
+[Context in autonomous activities](../context-activities.md).
+
 Design proposal for [#375](https://github.com/YusukeIt0/dot-link/issues/375), based on [main at f01d086](https://github.com/YusukeIt0/dot-link/tree/f01d0867a2965053da63793e502c246ce9c9cd4e). Dot Link can preserve the evidence that an enabled source already returns. Dot chooses which evidence to read, compare and discuss. A historical read operates entirely on locally retained evidence and makes zero provider requests. Versions, grades, gaps and forecast revisions remain visible so a later answer can describe what was actually known.
 
 ## Enrollment and personal control
