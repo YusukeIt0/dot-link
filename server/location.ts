@@ -31,7 +31,7 @@ const fixSchema = z.object({
 }).strict();
 type Subscription = z.infer<typeof subscriptionSchema>;
 type GeographicContext={status:GeographyState}&Partial<GeographicEvidence>;
-interface FixRecord { id: string; contextSequence:number; fix: LocationFix; receivedAt: number; geography?:GeographicContext; geographyRevision?:string; weather?:WeatherEvidence; weatherRevision?:string; weatherEpoch?:string; }
+interface FixRecord { id: string; contextSequence:number; fix: LocationFix; receivedAt: number; geography?:GeographicContext; geographyRevision?:string; weather?:WeatherEvidence; weatherRevision?:string; weatherEpoch?:string; weatherRecallAllowed?: () => boolean; }
 interface Pending { id: string; contextSequence:number; anchor: LocationFix; createdAt: number; status: 'sending' | 'accepted' | 'failed'; attempts: number; geographyRevision?:string; weatherRevision?:string; }
 
 /** Stable retry identity shared by the outcome store and outbound bridge. */
@@ -88,6 +88,7 @@ export class LocationContext {
   private announceTail: Promise<unknown> = Promise.resolve();
   private subscriptions: Promise<unknown> = Promise.resolve();
   private generation = 0;
+  private recallGeneration = 0;
   private contextSequence=0;
   private readonly geography?:GeographyLoader;
   private geographyActive=false;
@@ -166,7 +167,8 @@ export class LocationContext {
     if(this.sharingId===p.sharing_id&&this.owner===owner&&this.mobilityAllowed!==p.mobility_enabled)throw new Error('Consent change requires a new sharing session');
     if (this.sharingId !== p.sharing_id || this.owner !== owner) {
       if (this.sharingId && !this.disk.revoked.includes(this.sharingId)) { this.disk.revoked.push(this.sharingId); this.disk.revoked = this.disk.revoked.slice(-100); this.save(); }
-      this.clear(); this.sharingId = p.sharing_id; this.owner = owner;
+      const sameGrant = this.owner === owner && this.mobilityAllowed === p.mobility_enabled;
+      this.clear(sameGrant); this.sharingId = p.sharing_id; this.owner = owner;
     }
     this.mobilityAllowed=p.mobility_enabled;
     this.leaseUntil = this.now() + LOCATION_LEASE_MS; this.syncGeography(true);this.changes.emit();
@@ -186,7 +188,8 @@ export class LocationContext {
     this.sequence = p.sequence; this.leaseUntil = this.now() + LOCATION_LEASE_MS;
     if (p.fix && (!this.latest || Date.parse(p.fix.measured_at) >= Date.parse(this.latest.fix.measured_at))) {
       const sameCell = this.latest && JSON.stringify(weatherQueryPoint(this.latest.fix)) === JSON.stringify(weatherQueryPoint(p.fix));
-      const previousWeather = sameCell ? {weather:this.latest!.weather,weatherRevision:this.latest!.weatherRevision,weatherEpoch:this.latest!.weatherEpoch} : {};
+      const previousWeather = sameCell ? {weather:this.latest!.weather,weatherRevision:this.latest!.weatherRevision,
+        weatherEpoch:this.latest!.weatherEpoch,weatherRecallAllowed:this.latest!.weatherRecallAllowed} : {};
       if (!sameCell) this.weatherDirty = undefined;
       this.latest = { id: randomUUID(), contextSequence:++this.contextSequence, fix: p.fix, receivedAt: this.now(), ...previousWeather }; this.received++;
     }
@@ -219,7 +222,7 @@ export class LocationContext {
     return {fix: {...record.fix}, contextId: record.id, guard,
       validUntil: Math.min(this.leaseUntil, Date.parse(record.fix.measured_at) + LOCATION_FRESH_MS, subscribed ? this.active()!.expiresAt : Infinity)};
   }
-  attachWeather(fix: LocationFix, evidence: WeatherEvidence, epoch: string) {
+  attachWeather(fix: LocationFix, evidence: WeatherEvidence, epoch: string, recallAllowed: () => boolean) {
     if (!this.usable() || !this.latest || JSON.stringify(weatherQueryPoint(fix)) !== JSON.stringify(weatherQueryPoint(this.latest.fix))) return;
     // Retrieval/check timestamps alone must not cause another decision or event.
     const signature = createHash('sha256').update(JSON.stringify([evidence.query_point, evidence.status,
@@ -227,13 +230,13 @@ export class LocationContext {
     if (this.latest.weatherRevision === signature && this.weatherEpoch === epoch) return;
     this.weatherEpoch = epoch;
     this.latest = {...this.latest, id: randomUUID(), contextSequence: ++this.contextSequence,
-      weather: evidence, weatherRevision: signature, weatherEpoch: epoch};
+      weather: evidence, weatherRevision: signature, weatherEpoch: epoch, weatherRecallAllowed: recallAllowed};
     this.weatherDirty = signature; this.maybeEvent(); this.changes.emit();
   }
   clearWeather() {
     this.weatherDirty = undefined; this.weatherEpoch = undefined;
     if (!this.latest?.weather) return;
-    const {weather: _weather, weatherRevision: _revision, weatherEpoch: _epoch, ...record} = this.latest;
+    const {weather: _weather, weatherRevision: _revision, weatherEpoch: _epoch, weatherRecallAllowed: _recall, ...record} = this.latest;
     this.latest = {...record, id: randomUUID(), contextSequence: ++this.contextSequence};
     this.scheduleContextEvent(); this.changes.emit();
   }
@@ -288,14 +291,16 @@ export class LocationContext {
     this.requireResponseContext(read, generation);
     const guard = () => { this.requireResponseContext(read, generation); return true; };
     const decisionId = responseId(contextId, utteranceId);
-    return {guard, recallAllowed: this.recallGuard(read, generation), owner:this.owner!, decisionId, previous: this.outcomes.get(decisionId), location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
+    return {guard, recallAllowed: this.recallGuard(read), owner:this.owner!, decisionId, previous: this.outcomes.get(decisionId), location: {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()},
       complete: (id: string, decision: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string}, result: unknown) => {
         this.recordResponse(id, read, generation, decision, result);
       }};
   }
-  private recallGuard(read: FixRecord, generation: number) {
-    const weatherEpoch = read.weatherEpoch;
-    return () => !this.closed && this.usable() && generation === this.generation && weatherEpoch === this.weatherEpoch;
+  private recallGuard(read: FixRecord) {
+    const owner = this.owner!, grant = this.recallGeneration, weatherAllowed = read.weatherRecallAllowed;
+    // A missed fix expires permission to send against it. It does not withdraw a message already sent.
+    return () => !this.closed && this.owner === owner && this.ownerAuthorized(owner) &&
+      this.recallGeneration === grant && (!weatherAllowed || weatherAllowed());
   }
   private recordResponse(id: string, read: FixRecord, generation: number,
     p: {disposition: 'silent' | 'announce'; text?: string; utterance_id?: string; receiptKey?: string}, result: unknown) {
@@ -346,7 +351,7 @@ export class LocationContext {
       if (p.disposition === 'announce') {
         try {
           result = await this.announce({ message_id: id, text: p.text!, ...(p.utterance_id ? {utterance_id:p.utterance_id} : {}) }, stillAllowed,
-            {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()}, this.recallGuard(read, generation));
+            {sharing_id: this.sharingId!, expires_at: new Date(Date.parse(read.fix.measured_at) + LOCATION_FRESH_MS).toISOString()}, this.recallGuard(read));
         } catch (error) {
           if (error instanceof BridgeResponseError && error.reason === 'utterance_unknown') throw new LocationResponseError('utterance_unknown');
           if (error instanceof BridgeResponseError && error.reason === 'message_id_conflict') throw new LocationResponseError('conflicting_decision');
@@ -365,7 +370,8 @@ export class LocationContext {
     if (read.weather && read.weatherEpoch !== this.weatherEpoch) throw new LocationResponseError('context_unknown');
     if (distanceMeters(read.fix, this.latest.fix) > 100) throw new LocationResponseError('moved_too_far');
   }
-  private clear() {
+  private clear(preserveRecall = false) {
+    if (!preserveRecall) this.recallGeneration++;
     this.mobility?.clear();this.mobilityAllowed=false;this.weatherDirty=undefined;this.weatherEpoch=undefined;
     this.stopGeography();this.generation++; this.sharingId = undefined; this.owner = undefined; this.leaseUntil = 0; this.sequence = -1;
     this.latest = undefined; this.reads.clear(); this.mobilityReads.clear(); this.outcomes.clear(); this.pending = undefined; this.lastAnchor = undefined; this.lastEventAt = -Infinity;

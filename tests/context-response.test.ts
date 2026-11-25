@@ -73,6 +73,7 @@ async function fixture(t: TestContext) {
     advance(ms: number) {now += ms;}, revoke() {authorized = false;},
     async holdBridge() {block = new Promise<void>(resolve => {unblock = resolve;}); const pending = bridge.submit({id: randomUUID(), text: 'Queue barrier'}); await settle(); return {pending, release() {unblock(); block = undefined;}};},
     restartLocation() {stop(); sharing = randomUUID(); start(); update();},
+    renewLocationSession() {sharing = randomUUID(); start();},
   };
 }
 
@@ -202,6 +203,43 @@ test('recent messages cross response routes, exclude linked replies and reset fo
   await f.bridge.subscribe({...subscription, delivery: {mode: 'webhook', url: 'https://callback.example.test/other', secret: 'whsec_' + randomBytes(32).toString('base64')}});
   assert.deepEqual(await read(), []);
   assert.ok(f.bridge.outboundHistory().some(message => message.reply === 'Suggestion 1'));
+});
+
+for (const combined of [false, true]) {
+  test(`a stale fix cannot deliver again, but its sent text is visible until consent changes, combined=${combined}`, async t => {
+    const f = await fixture(t);
+    const read = async (name: string, args = {}) => (await f.call(name, args)).result.structuredContent;
+    const current = (await read('get_location_context')).response_context.arguments;
+    const evidence = combined ? (await read('get_location_history')).response_context.arguments : {};
+    const decision = {...current, ...evidence, disposition: 'announce', text: 'The print studio is open.'};
+    const respond = combined ? 'respond_to_context' : 'respond_to_location';
+    assert.equal((await read(respond, decision)).stored_for_g2, true);
+    f.advance(91_000);
+    assert.equal((await read('get_location_context')).context, null);
+    assert.deepEqual((await read('get_location_context')).recent_announcements, [decision.text]);
+    assert.equal((await read('get_recent_announcements')).messages[0].text, decision.text);
+    const staleAnswer = await f.call(respond, {...decision, utterance_id: f.question, text: 'A new answer using the old fix.'});
+    assert.ok(staleAnswer.error);
+    assert.equal(f.bridge.history().find(item => item.id === f.question)?.reply, undefined);
+    assert.equal(f.bridge.outboundHistory().length, 1);
+    f.renewLocationSession();
+    assert.equal((await read('get_recent_announcements')).messages[0].text, decision.text);
+    f.restartLocation();
+    assert.deepEqual((await read('get_recent_announcements')).messages, []);
+  });
+}
+
+test('recall of a location with attached weather follows its original weather grant', async t => {
+  const f = await fixture(t);
+  const weather = (await f.call('get_weather_context', {mode: 'current'})).result.structuredContent;
+  const text = 'The rain is expected to ease.';
+  await f.call('respond_to_location', {context_id: weather.context_id, disposition: 'announce', text});
+  const recent = async () => (await f.call('get_recent_announcements', {})).result.structuredContent.messages;
+  f.advance(91_000);
+  assert.equal((await recent())[0].text, text);
+  f.weatherControl(false);
+  f.weatherControl(true);
+  assert.deepEqual(await recent(), []);
 });
 
 test('unused unavailable sources do not block a health-only proactive suggestion, but attached clock history does', async t => {
