@@ -14,7 +14,7 @@ import type {WeatherContext} from '../server/weather/context.ts';
 const names = decisionFactorReaders.map(reader => reader.tool.name);
 const nonFactors = ['get_status', 'get_pending_utterances', 'reply_to_g2', 'send_message_to_g2',
   'get_pending_notifications', 'announce_notification_to_g2', 'set_notification_disposition',
-  'respond_to_location', 'respond_to_history', 'respond_to_health', 'respond_to_context'];
+  'respond_to_location', 'respond_to_history', 'respond_to_health', 'respond_to_context', 'get_recent_announcements'];
 const interval = {start_at: '2020-01-01T10:00:00Z', end_at: '2020-01-01T11:00:00Z'};
 const query = {...interval, known_at: interval.start_at, fields: {polar: ['steps'], weather: ['temperature']}, limit: 3};
 
@@ -158,5 +158,9 @@ test('shared activity guidance ties selective history to its existing guarded re
   assert.match(selectiveHistory, /field/);
   assert.match(selectiveHistory, /window|period/);
   assert.match(conversationGuidance.response, /archive_read_ids/);
-  assert.match(conversationGuidance.response, /existing question/);
+  assert.equal(conversationGuidance.version, 5);
+  assert.match(conversationGuidance.response, /even indirectly/);
+  assert.match(conversationGuidance.response, /get_recent_announcements/);
+  assert.match(conversationGuidance.response, /stopped or deleted/);
+  assert.match(conversationGuidance.response, /activity_id/);
 });

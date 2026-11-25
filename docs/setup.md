@@ -131,9 +131,9 @@ Mac 0.4.30 and Even 0.3.53), open **Sharing settings** and turn it on separately
 from **Share my location**. This lets Dot
 refer to up to seven days of recorded places and movement. Collection needs both
 options; old companions keep ordinary location sharing and do not upload history.
-Refresh your existing ChatGPT connection's tools to add `get_location_history`
-and `respond_to_history`, then continue your normal conversation. You do not need
-a separate Dot or a new event subscription for historical questions.
+Refresh your existing ChatGPT connection's tools after updating the Mac relay.
+Dot can use shared history to answer a question or suggest something during an
+existing activity. You can ask Dot for fewer suggestions in conversation.
 
 Turning current-location sharing off leaves existing history readable. Turn
 **Remember recent places** off to stop collection and historical access, or choose

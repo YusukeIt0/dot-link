@@ -80,10 +80,34 @@ collection or AI reasoning engine is introduced.
 
 `silent` writes no message and omits text/question ID. It can acknowledge an
 independent location activity without consuming a question answer. A user's
-question should still receive an answer from available evidence. G2 announcements
-using recent places, saved forecasts or walking plans require an existing question; combined replies
-do not enable proactive historical claims. Individual-source response tools remain
-compatible. Conversation preferences and already-available AI memory need no new
+question should still receive an answer from available evidence. Dot can use permitted
+recent places, saved forecasts or walking plans to make a suggestion at home or on
+the move. For example, a clear spell that fits the duration of a saved walk can
+make it worth mentioning. A bounded history read can help choose a nearby place
+without establishing a first visit. Dot includes the receipts that influenced
+the choice even if its message only mentions the opportunity. Precise historical
+times and addresses belong in a requested answer.
+
+Pass the same `activity_id` on each decision for one event or autonomous occurrence.
+Use the event's `update_id`, the host run ID, or the activity name and its scheduled
+UTC time. An unscheduled activity without a host ID can choose one at the start.
+Keep it through rereads and retries. An unprompted historical announcement needs
+this ID when it has no current location. Existing location-only clients can still
+use the location decision ID. A later occurrence can produce a different decision.
+The relay remembers up to 1,000 combined decisions in memory. The normal outbound
+queue also recognizes retries of its latest 1,000 stored message IDs after restart.
+
+`get_recent_announcements` returns up to five unprompted message texts and storage
+times from the current verified conversation subscription. It works without a phone
+fix. The location read also returns their texts in `recent_announcements`.
+Linked replies stay with their question. The view starts empty after a relay restart
+or a new subscription and omits messages whose source access can no longer be
+verified. Storage time does not indicate when someone saw or read a message.
+Dot uses this view to avoid repeating a suggestion and to mention only a change
+that matters. The person can ask for fewer suggestions in conversation.
+
+The dedicated `respond_to_history` tool answers a specific question.
+Conversation preferences and already-available AI memory need no new
 Dot Link receipt. Notifications retain their separate disposition/announcement
 contract and are not receipts for this operation.
 
@@ -204,8 +228,8 @@ Version 1 returns a separate page for each requested source. To continue one
 selection, send only its `source` and its `next_cursor` as `cursor`.
 For a combined G2 answer, supply the contributing sources' response references
 to `respond_to_context`. The Mac rechecks their authorization and expiry.
-An answer based on recent-place, forecast or route history requires the existing G2 question and its
-`utterance_id`. A history read neither acquires new source data nor sends a
+Attach the original `utterance_id` when answering a G2 question, and the activity
+occurrence when making an independent suggestion. A history read neither acquires new source data nor sends a
 message. The contract can be exercised with synthetic records through MCP.
 For connected-Dot acceptance, compare the requested periods and fields in the
 synthetic server's trace with the answer in the conversation. Include a follow-up
@@ -301,8 +325,8 @@ period. Missing historical evidence or samples remain unknown; explain or clarif
 only when that changes the answer. Do not require additional sharing to fill gaps.
 Combined health response receipts recheck history access, deletion and expiry before
 delivery. A new read after history stops can still support a health-only response.
-This clock projection does not authorize historical place claims or change the
-existing question-linked history response requirement.
+The phone-clock projection supplies timing evidence. Use a separate authorized
+place-history read when the historical location itself matters.
 
 The encrypted v1 scalar-value shape remains compatible with earlier builds.
 Existing records without full-response summaries are labeled `legacy_stored_samples`;

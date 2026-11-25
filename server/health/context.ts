@@ -58,7 +58,7 @@ export interface HealthOptions {
   phoneTime?:(dates:string[],owner:string)=>PhoneTimeRead;
   key:(operation:'read'|'create'|'delete'|'authorize')=>Promise<Buffer|undefined>;
   ownerAuthorized:(owner:string)=>boolean; ownerRevoked:(owner:string)=>boolean;
-  announce:(input:{message_id:string;text:string;utterance_id?:string},guard:()=>boolean)=>Promise<unknown>;
+  announce:(input:{message_id:string;text:string;utterance_id?:string},guard:()=>boolean, location?: undefined, visible?:()=>boolean)=>Promise<unknown>;
   sender:WebhookSender;hosts:string[];api?:PolarAPI;now?:()=>number;
 }
 export class HealthContext {
@@ -78,7 +78,7 @@ export class HealthContext {
   private ready:Promise<void>;private closed=false;private healthy=true;private fault='';private busy=false;
   private abort?:AbortController;private oauth?:{state:string;client:PolarConnection;expires:number;generation:number;server:Server;timer:ReturnType<typeof setTimeout>};
   private timer:ReturnType<typeof setInterval>;private nextPoll=0;private syncAt?:string;private profileRefreshAt?:string;
-  private reads=new Map<string,{generation:number;revision:string;expires:number;phoneTimeAllowed?:()=>boolean;archiveLease?:PolarArchiveLease}>();
+  private reads=new Map<string,{generation:number;revision:string;expires:number;evidenceExpiry:number;phoneTimeAllowed?:()=>boolean;archiveLease?:PolarArchiveLease}>();
   private historyPages=new Map<string,{query:PolarHistoryQuery;offset:number;readId:string;expires:number;phase:'legacy'|'archive';archiveCursor?:string}>();
   private decisions=new Map<string,{signature:string;result:unknown}>();
   private responseTail:Promise<unknown>=Promise.resolve();private subscriptionTail:Promise<unknown>=Promise.resolve();
@@ -273,7 +273,7 @@ export class HealthContext {
   private registerRead(evidenceExpiry:number, phoneTime?:PhoneTimeRead, archiveLease?:PolarArchiveLease) {
     const now=this.now(), expires=Math.min(now+5*60_000,evidenceExpiry,this.state.connection?.expiresAt??Infinity,phoneTime?.expiresAt??Infinity);
     const read_id=randomUUID();
-    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,phoneTimeAllowed:phoneTime?.allowed,archiveLease});
+    this.reads.set(read_id,{generation:this.generation,revision:this.revision,expires,evidenceExpiry,phoneTimeAllowed:phoneTime?.allowed,archiveLease});
     while (this.reads.size>40) {const oldest=this.reads.keys().next().value!;this.reads.delete(oldest);this.decisions.delete(oldest);}
     return {read_id,response_context:{tool:'respond_to_context',arguments:{health_read_ids:[read_id]},expires_no_later_than:new Date(expires).toISOString()}};
   }
@@ -370,11 +370,12 @@ export class HealthContext {
     return {...payload,next_cursor,...receipt};
   }
   /** Reused by the combined response; no send or new collection occurs here. */
-  responseGuard(readId:string) {
+  responseGuard(readId:string, purpose: 'deliver' | 'recall' = 'deliver') {
     const read=this.reads.get(readId);
     return ()=>{
       this.maintain();
-      if(!this.usable()||!read||read.generation!==this.generation||read.revision!==this.revision||read.expires<=this.now())throw rejected();
+      if(!this.usable()||!read||read.generation!==this.generation||read.evidenceExpiry<=this.now())throw rejected();
+      if(purpose==='deliver' && (read.revision!==this.revision || read.expires<=this.now()))throw rejected();
       if(read.archiveLease){const current=this.archiveLease();if(current?.epoch!==read.archiveLease.epoch||current.period!==read.archiveLease.period)throw rejected();}
       if(read.phoneTimeAllowed&&!read.phoneTimeAllowed())throw new ToolRejection('history_access_changed','The phone-clock evidence is no longer authorized. Re-read health context and reconsider the response.');
       return true;
@@ -389,7 +390,7 @@ export class HealthContext {
     if(read&&read.expires>this.now()&&read.generation===this.generation&&read.revision===this.revision)this.decisions.set(readId,{signature,result});
   }
   responseContext(readId:string) {
-    return {guard:this.responseGuard(readId),previous:this.decisions.get(readId),
+    return {guard:this.responseGuard(readId),recallAllowed:this.responseGuard(readId,'recall'),previous:this.decisions.get(readId),
       complete:(signature:string,result:unknown)=>{this.rememberDecision(readId,signature,result);}};
   }
   respond(raw:unknown) {
@@ -405,7 +406,7 @@ export class HealthContext {
     if(!p.text)throw rejected();
     const id=createHash('sha256').update(`${p.read_id}:${p.utterance_id??'proactive'}`).digest('hex');
     const message_id=`${id.slice(0,8)}-${id.slice(8,12)}-4${id.slice(13,16)}-8${id.slice(17,20)}-${id.slice(20,32)}`;
-    const result=await this.options.announce({message_id,text:p.text,...(p.utterance_id?{utterance_id:p.utterance_id}:{})},allowed);
+    const result=await this.options.announce({message_id,text:p.text,...(p.utterance_id?{utterance_id:p.utterance_id}:{})},allowed,undefined,this.responseGuard(p.read_id,'recall'));
     this.rememberDecision(p.read_id,signature,result);return result;
   }
   sharingIntent() {

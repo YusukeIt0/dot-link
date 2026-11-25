@@ -51,7 +51,7 @@ export class EnvironmentHistory {
   private readonly authority: ArchiveAuthority;
   private readonly now: () => number;
   private readonly cursors = new Map<string, Cursor>();
-  private readonly receipts = new Map<string, Reference>();
+  private readonly receipts = new Map<string, Reference & {evidenceExpiry: number}>();
   private readonly captureFault = new Map<Source, string>();
 
   constructor(authority: ArchiveAuthority, now: () => number = Date.now) {
@@ -91,7 +91,8 @@ export class EnvironmentHistory {
       this.receipts.delete(id);
       return false;
     };
-    if (guard()) return {owner: receipt.lease.owner, guard};
+    if (guard()) return {owner: receipt.lease.owner, guard, recallAllowed: () =>
+      this.now() >= receipt.issuedAt && this.now() < receipt.evidenceExpiry && this.authority.allows(receipt.lease)};
   }
 
   private allowed(ref: Reference) {
@@ -127,6 +128,7 @@ export class EnvironmentHistory {
     if (!selection) return unavailable();
     const {lease, fields, window, query} = selection;
     let expires = selection.expires;
+    let evidenceExpiry = Infinity;
     let bytesLeft = pageBytes - 1536;
     let unsupported = 0, reduced = 0, unreadable = 0, capacityOmitted = false;
     const entries: object[] = [];
@@ -143,6 +145,7 @@ export class EnvironmentHistory {
       capacityOmitted ||= batch.capacityOmitted;
       for (const [index, row] of batch.records.entries()) {
         expires = Math.min(expires, row.expiresAtMs);
+        evidenceExpiry = Math.min(evidenceExpiry, row.expiresAtMs);
         if (row.version !== 1) { unsupported++; continue; }
         try {
           const budget = bytesLeft - 512 * (batch.records.length - index - 1);
@@ -156,7 +159,7 @@ export class EnvironmentHistory {
       position = batch.nextCursor ?? undefined;
       if (entries.length || !position) break;
     }
-    const ref = {lease, issuedAt: selection.issuedAt, expires};
+    const ref = {lease, issuedAt: selection.issuedAt, expires, evidenceExpiry};
     if (!this.allowed(ref)) throw changed();
     const now = this.now();
     const id = remember(this.receipts, ref, now, 96);

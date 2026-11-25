@@ -175,7 +175,9 @@ export class WeatherContext {
     const read = this.reads.get(readId) ?? [...this.reads.values()].find(entry => entry.forecastOnly?.id === readId);
     if (!read) throw new ToolRejection('weather_context_unknown', 'Weather evidence is unavailable. Re-read useful context and reconsider.');
     const receipt = read.forecastOnly?.id === readId ? read.forecastOnly : read;
-    return {contextId: read.contextId, decisionId: read.id, owner: this.consent.owner, expires: receipt.expires, guard: () => {
+    const consent = this.controlEpoch;
+    return {contextId: read.contextId, decisionId: read.id, owner: this.consent.owner, expires: receipt.expires,
+      recallAllowed: () => this.allowed() && this.controlEpoch === consent, guard: () => {
       receipt.guard();
       if (this.now() >= receipt.expires) throw new ToolRejection('weather_context_expired', 'Weather evidence expired. Re-read useful context and reconsider.');
       return true;

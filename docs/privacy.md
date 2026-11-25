@@ -127,15 +127,22 @@ pending verification. See the [Polar API agreement](https://www.polar.com/en/leg
 ## Responses using several context sources
 
 The connected AI can select relevant permitted location, weather, walking/terrain,
-recent-place and health evidence for one answer. The Mac rechecks every submitted
+recent-place and health evidence for a reply or an unprompted suggestion. The Mac rechecks every submitted
 source receipt before saving that message, including sharing stops, deletion,
-revocation and expiry. Recent-place announcements still require an existing
-question. Silent decisions save no conversation message. Receipts and their bounded
+revocation and expiry. This includes history that influenced a suggestion even
+when the text mentions only the present. Silent decisions save no conversation message. Receipts and their bounded
 retry decisions stay in memory and do not create a combined sensor history or new
 data collection. Accepted answers use the ordinary conversation storage described
 above; stopping a source does not erase previously shared conversations. These
 checks depend on the AI submitting every source used in its reasoning or text;
 they do not infer provenance by inspecting generated prose.
+
+During a verified conversation subscription, Dot can check up to five recent
+unprompted messages and their storage times, including when location is off.
+The relay uses references to newly stored outbound messages and rechecks their
+source access. A new subscription or relay restart starts with an empty view.
+Saved conversations from before the update are never imported into this view.
+This adds no separate message archive, collection, permission or display receipt.
 
 On Mac 0.5.0, the history tool lets the connected AI request selected fields
 from the same paired owner's recent-place, Polar, weather and walking/terrain
@@ -298,8 +305,8 @@ immediately and removes this history during the next maintenance/access pass
 after confirmed revocation, pairing removal or expiry. A temporary authorization
 lookup failure blocks access without deleting retained history.
 
-History-based G2 replies use a short-lived history context and recheck access,
-deletion and expiry before being saved as ordinary question-linked replies.
+Both unprompted suggestions and question-linked G2 replies that use this history
+recheck short-lived access receipts, deletion and expiry before storage.
 Deleting local history cannot retract information or conversations already sent
 to Dot/OpenAI. Those services' retention and memory controls remain separate.
 Uninstalling moves the runtime, including this database, to Trash.

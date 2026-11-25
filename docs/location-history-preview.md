@@ -3,7 +3,9 @@
 The application provides opt-in recent-place history through the normal relay.
 See [setup](setup.md#remember-recent-places) and [data handling](privacy.md#recent-places).
 `get_location_history` reads evidence; `respond_to_history` returns a question-linked
-G2 answer after rechecking access. No proactive history event is introduced.
+G2 answer after rechecking access. In the installed relay, an existing activity
+can also use permitted history and its receipts with `respond_to_context` for an
+unprompted suggestion. The isolated preview below exposes only the read.
 
 Fictional movement controls and fixtures are excluded from the installed application.
 The accepted Beta session is recorded in [PR #268](https://github.com/YusukeIt0/dot-link/pull/268).

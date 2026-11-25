@@ -54,7 +54,7 @@ export class LocationHistoryStore {
   private consent: Consent;
   private epoch = randomUUID();
   private index: LocationHistoryIndex;
-  private reads = new Map<string, {epoch: string; expires: number; guard?: () => boolean}>();
+  private reads = new Map<string, {epoch: string; expires: number; evidenceExpiry: number; guard?: () => boolean}>();
   private readonly archive?: LocationArchive;
   private timer?: ReturnType<typeof setInterval>;
   private closed = false;
@@ -318,8 +318,8 @@ export class LocationHistoryStore {
     }
     return this.readHistory(input, true);
   }
-  private receipt(expires: number, guard?: () => boolean) {
-    const id = randomUUID(); this.reads.set(id, {epoch:this.epoch, expires, guard});
+  private receipt(expires: number, guard?: () => boolean, evidenceExpiry = expires) {
+    const id = randomUUID(); this.reads.set(id, {epoch:this.epoch, expires, evidenceExpiry, guard});
     while (this.reads.size > 50) this.reads.delete(this.reads.keys().next().value!);
     return {history_context_id:id, response_context:{tool:'respond_to_context', arguments:{history_context_ids:[id]}, expires_no_later_than:new Date(expires).toISOString()}};
   }
@@ -332,7 +332,11 @@ export class LocationHistoryStore {
     const now = this.now();
     if (expiresAt <= now) throw failure();
     const expires = Math.min(now + 5 * 60_000, expiresAt);
-    return {...result, ...this.receipt(expires)};
+    return {...result, ...this.receipt(expires, undefined, expiresAt)};
+  }
+  recallGuard(contextId: string) {
+    const record = this.reads.get(contextId);
+    return () => !!record && this.authorized() && this.epoch === record.epoch && this.now() < record.evidenceExpiry && (!record.guard || record.guard());
   }
   responseGuard(contextId: string) {
     const record = this.reads.get(contextId);
