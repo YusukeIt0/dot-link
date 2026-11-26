@@ -4,6 +4,13 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 Even Hub accepts at most 500 characters of change notes, including the review note.
 
+## 0.4.4
+
+- Ask on G2 and Dot can answer in your usual Dot chat if you put the glasses away. Dot can also choose where to tell you about a Mac notification you already share.
+- On glasses that report only case position, Dot can use G2 after you take it out of the case, even on a desk.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.3
 
 - With the updated Mac app, Dot can answer on G2 or in your existing Dot chat. A reply follows the question if you put the glasses in their case. On glasses that report only case status, a pair on your desk can still receive a message.
