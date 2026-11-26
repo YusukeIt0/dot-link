@@ -67,8 +67,8 @@ async function fixture(t: TestContext, allowedOwner = owner) {
   }
   const delivery = (name: string) => ({mode: 'webhook', url: 'https://callback.example.test/' + name,
     secret: 'whsec_' + randomBytes(32).toString('base64')});
-  const subscribe = async (name: string) => {
-    const response = await rpc('events/subscribe', {name, arguments: scope, delivery: delivery(name)});
+  const subscribe = async (name: string, callback = name) => {
+    const response = await rpc('events/subscribe', {name, arguments: scope, delivery: delivery(callback)});
     assert.ok(response.result, JSON.stringify(response.error));
   };
   await subscribe('utterance.created');
@@ -252,6 +252,38 @@ test('a signed notification selects one recipient, respects silence/defer and re
   assert.equal((await status(delayed)).status, 'chat_handoff');
   assert.equal((await status(delayed)).client_response_at, undefined);
   assert.equal((await f.history()).length, 1);
+});
+
+test('a verified callback can resume its unanswered question and deferred notification after its leases lapse', async t => {
+  const f = await fixture(t);
+  const question = await f.question(), notification = await f.notification();
+  const deferred = {...notification, include_deferred: true};
+  await f.result('set_notification_disposition', {...notification, disposition: 'later'});
+  f.advance(24 * 60 * 60 * 1000 + 1);
+  assert.deepEqual((await f.result('get_pending_utterances')).utterances, []);
+  assert.deepEqual((await f.result('get_pending_notifications', deferred)).notifications, []);
+
+  await f.subscribe('utterance.created');
+  await f.subscribe('notification.created');
+  assert.deepEqual((await f.result('get_pending_utterances')).utterances.map((item: any) => item.utterance_id), [question.id]);
+  assert.equal((await f.result('get_pending_notifications', deferred)).notifications[0].notification_id, notification.notification_id);
+  const reply = await f.result('reply_to_g2', {utterance_id: question.id, text: 'The south entrance.'});
+  assert.equal((await f.result('claim_owner_chat_delivery', {receipt: reply.receipt})).utterance_id, question.id);
+  const announcement = await f.result('announce_notification_to_g2', {...notification, text: 'The fictional service is ready.'});
+  assert.equal((await f.result('claim_owner_chat_delivery', {receipt: announcement.receipt})).text, 'The fictional service is ready.');
+});
+
+test('a different verified callback cannot resume a lapsed recipient, even if the former callback later returns', async t => {
+  const f = await fixture(t);
+  const question = await f.question(), notification = await f.notification();
+  for (const suffix of ['/replacement', '']) {
+    f.advance(24 * 60 * 60 * 1000 + 1);
+    await f.subscribe('utterance.created', 'utterance.created' + suffix);
+    await f.subscribe('notification.created', 'notification.created' + suffix);
+    assert.deepEqual((await f.result('get_pending_utterances')).utterances, []);
+    assert.deepEqual((await f.result('get_pending_notifications', notification)).notifications, []);
+    assert.equal((await f.tool('reply_to_g2', {utterance_id: question.id, text: 'The south entrance.'})).error.data.reason, 'delivery_access_changed');
+  }
 });
 
 test('lease replacement and stopped sharing invalidate unclaimed grants without writing to either G2 history', async t => {
