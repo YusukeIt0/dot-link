@@ -4,6 +4,7 @@ import { connectionFailure, connectionFailureCaption, connectionFailureHint } fr
 import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
 import { RuntimeNative } from './runtime-native.ts';
+import { GlassesAvailability, type AvailabilityChallenge } from './g2-availability.ts';
 import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
 import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from './speech-status.ts';
@@ -149,6 +150,9 @@ let pendingDelivery = new PendingUtterance(() => localStorage, session.credentia
 let exited = false;
 let relayRestored = !session.credentials?.resumeToken;
 let glassesReady = false;
+const glassesAvailability = new GlassesAvailability();
+let availabilityMenuOpen = false;
+let stopAvailabilityEvents: (() => void) | undefined;
 let startupStage: 'bridge' | 'page' | 'ready' = 'bridge';
 let startupResult: number | undefined;
 let offeredInvite: PairingInvite | undefined;
@@ -500,9 +504,18 @@ function showMessage(): void {
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
-interface Snapshot { revision: string; status: { subscribed: boolean; photoAttachments?: number; factorHistoryProtocol?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
+interface Snapshot { revision: string; availabilityChallenge?: AvailabilityChallenge; status: { subscribed: boolean; photoAttachments?: number; factorHistoryProtocol?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false, resumed = false): void {
   if (exited) return;
+  if (snapshot.availabilityChallenge) {
+    const version = session.version, native = bridge;
+    const usable = () => native && glassesReady && pageActive && !availabilityMenuOpen && navigator.onLine !== false;
+    void glassesAvailability.answer(snapshot.availabilityChallenge,
+      () => native && usable() ? glassesAvailability.read(native) : Promise.resolve('unknown'),
+      () => !exited && session.isCurrent(version),
+      (id, state) => session.request('/api/g2-availability', 'POST', JSON.stringify({id, state: usable() ? state : 'unknown'}))
+    ).catch(() => { /* The Mac expires unanswered checks. Ordinary updates continue. */ });
+  }
   historySharing.receive(snapshot.status); weatherSharing.receive(snapshot.status); healthSharing.receive(snapshot.status);
   const supportedHistory = snapshot.status.factorHistoryProtocol === 1;
   const target = session.token ? session.version + ':' + (session.credentials?.origin ?? location.origin) : undefined;
@@ -1100,10 +1113,11 @@ discardButton.onclick = () => {
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
-window.addEventListener('pagehide', () => { exitDiagnostics.record('pagehide'); pageActive = false; updateRuntime(false); });
+window.addEventListener('pagehide', () => { exitDiagnostics.record('pagehide'); pageActive = false; glassesAvailability.cancelReading(); updateRuntime(false); });
 function stopSession(): void {
   if (exited) return;
   exitDiagnostics.record('stop-session');
+  stopAvailabilityEvents?.(); glassesAvailability.invalidate();
   void locationSharing.stop();
   exited = true; pageActive = false; session.stop(); clearPhotos(); pendingText = undefined;
   disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
@@ -1114,6 +1128,7 @@ function stopSession(): void {
 
 function retireSupersededRuntime(): void {
   if (exited) return;
+  stopAvailabilityEvents?.(); glassesAvailability.invalidate();
   runtimeNative.retire();
   disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
   exited = true; pageActive = false; clearPhotos(); pendingText = undefined;
@@ -1170,6 +1185,10 @@ async function connect(): Promise<void> {
   startupResult = result;
   if (result !== 0) throw new Error('Glasses page initialization failed');
   startupStage = 'ready'; glassesReady = true; syncRuntimeEffects();
+  try {
+    stopAvailabilityEvents = appBridge.onDeviceStatusChanged(status => glassesAvailability.statusChanged(appBridge, status));
+    void glassesAvailability.read(appBridge);
+  } catch { /* Older Even hosts can still use ordinary conversation. */ }
   void readAloudPreferences.attach(nativeStorage).then(() => {
     if (exited) return;
     const wasEnabled = tts;
@@ -1231,7 +1250,11 @@ async function connect(): Promise<void> {
       return;
     }
     // Foreground events describe the system menu overlay, not screen power.
-    if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT || eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) return;
+    if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT || eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
+      availabilityMenuOpen = eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT;
+      glassesAvailability.cancelReading();
+      return;
+    }
     const hasInput = !!(event.sysEvent || event.textEvent || event.listEvent);
     const isSingle = hasInput && (eventType === OsEventTypeList.CLICK_EVENT || eventType === undefined);
     const isGesture = isSingle || [OsEventTypeList.DOUBLE_CLICK_EVENT, OsEventTypeList.SCROLL_TOP_EVENT,
@@ -1356,6 +1379,7 @@ window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreR
 } });
 window.addEventListener('offline', () => {
   if (exited || !session.token) return;
+  glassesAvailability.cancelReading();
   progress.connectionFailure = 'phone'; progress.connection = 'offline'; updateRuntime();
 });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });

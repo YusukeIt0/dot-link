@@ -17,6 +17,10 @@ The entry point coordinates the existing user experience. A module boundary shou
 
 ## Interaction and lifecycle
 
+The companion can answer a short-lived delivery check on the paired Mac's update connection. Even documents that an active iOS plugin keeps running when the phone is locked or another app is open. Dot Link uses that lifecycle with its existing network permission. The Mac requests a fresh observation for each delivery decision, including after a host restart or a new pairing session. The glasses system menu, phone page unload and device disconnection invalidate pending evidence. An unanswered check yields unknown availability. [Even Hub background lifecycle](https://hub.evenrealities.com/docs/build/background-lifecycle) · [Even Hub plugin permissions](https://hub.evenrealities.com/docs/ship/packaging#permissions-format)
+
+The companion reads explicit case and wear fields from the public `getGlassesInfo` response. Some G2 hosts report wear as false even when the wearer can read the display. Until the current connection demonstrates positive wear, a connected G2 explicitly outside its case is available, including on a desk. Once positive wear is observed the companion can distinguish removal. An in-case G2 is unavailable. Missing case data, invalid responses, an unknown host, an ambiguous paired recipient and an unanswered request produce unknown availability.
+
 1. Input capture produces a clip; the application starts recognition and decides whether to send immediately or allow review.
 2. Relay requests carry the active session credentials. A connection transition cancels ordinary requests and advances the session generation; callers also guard their UI updates with that generation.
 3. Incoming snapshots are reconciled with history. `ConversationState` returns announcement and display decisions; the application executes speech, progress, rendering and standby effects.
