@@ -29,6 +29,31 @@ test('a settled closed case cannot assert availability; positive wear distinguis
   assert.equal(await sample({isInCase: false}), 'unknown');
 });
 
+test('a delivery-time getter can confirm an overlapping removal event without borrowing an old case reading', async () => {
+  const availability = new GlassesAvailability();
+  const sample = (inside: boolean) => ({model: 'g2', sn: 'fixture', status: {connectType: 'connected', isInCase: inside, isCharging: inside, isWearing: false}});
+  const read = (inside: boolean) => availability.read({callEvenApp: async () => sample(inside)});
+  const event = {...sample(false).status, sn: 'fixture'};
+  assert.equal(await read(true), 'unavailable');
+  let finish!: (value: unknown) => void;
+  const native = new Promise(resolve => {finish = resolve;});
+  availability.statusChanged({callEvenApp: () => native}, event);
+  assert.equal(await read(false), 'available');
+  finish(sample(true));
+  await native;
+  assert.equal(await read(false), 'available');
+
+  assert.equal(await read(true), 'unavailable');
+  let finishAgain!: (value: unknown) => void;
+  const second = new Promise(resolve => {finishAgain = resolve;});
+  availability.statusChanged({callEvenApp: () => second}, event);
+  assert.equal(await read(true), 'unavailable');
+  assert.equal(await read(false), 'unknown');
+  finishAgain(sample(false));
+  await second;
+  assert.equal(await read(false), 'unknown');
+});
+
 test('late native reads and abandoned companion requests cannot revive an old state', async () => {
   const device = new GlassesAvailability();
   let finish!: (value: unknown) => void;
@@ -46,6 +71,33 @@ test('late native reads and abandoned companion requests cannot revive an old st
   for (let i = 0; i < 2; i++)
     await device.answer({id:'fresh'}, async () => 'unknown', () => true, async () => {posts++;});
   assert.equal(posts, 1);
+});
+
+test('only the current G2 contributes in-flight events, independent of accessory arrival order', async () => {
+  const outside = {connectType:'connected', isInCase:false, isCharging:false, isWearing:false};
+  const removed = {...outside, sn:'glasses'};
+  const closing = {...removed, isInCase:true, isCharging:true};
+  const ring = {...outside, sn:'ring'};
+  const chargingRing = {...ring, isCharging:true};
+  for (const [events, expected] of [
+    [[removed,ring], 'available'], [[ring,removed], 'available'],
+    [[removed,chargingRing], 'available'], [[chargingRing,removed], 'available'],
+    [[removed,{...ring,connectType:'disconnected'}], 'available'],
+    [[removed,chargingRing,closing], 'unavailable'], [[closing,ring,removed], 'available'],
+    [[removed,{...closing,sn:''}], 'unavailable'],
+    [[removed,...Array.from({length:8}, (_, i) => ({...ring,sn:'accessory-'+i}))], 'unknown'],
+  ] as const) {
+    const device = new GlassesAvailability();
+    const inside = {model:'g2', sn:'glasses', status:closing};
+    const onDesk = {model:'g2', sn:'glasses', status:outside};
+    assert.equal(await device.read({callEvenApp:async () => inside}), 'unavailable');
+    let finish!: (value: unknown) => void;
+    const pending = new Promise(resolve => {finish = resolve;});
+    for (const event of events) device.statusChanged({callEvenApp:() => pending}, event);
+    assert.equal(await device.read({callEvenApp:async () => onDesk}), expected, JSON.stringify(events));
+    finish(onDesk);
+    await pending;
+  }
 });
 
 test('routing observes only an unexpired challenge of one current owner and runtime', async () => {
