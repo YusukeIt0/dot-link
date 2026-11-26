@@ -70,7 +70,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
   const hasContext = !!(locations || health || history?.responseGuard || weather || archives);
   // Control and conversation tools retain their own response and error formats.
   const controls = [
-    {tool:chatDeliveryTool, available:!!bridge.routing},
+    {tool: chatDeliveryTool, available: !!bridge?.routing},
     {tool: statusTool, available: true}, {tool: pendingTool, available: true},
     {tool: replyTool, available: true}, {tool: sendMessageTool, available: true},
     {tool: pendingNotificationsTool, available: !!notifications},
@@ -112,7 +112,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
       case 'tools/list':
         result = {tools: [
           ...decisionFactorReaders.filter(factor => factor.bind(sources)).map(factor => factor.tool),
-          ...controls.filter(control => control.available).map(({tool}) => bridge.routing &&
+          ...controls.filter(control => control.available).map(({tool}) => bridge?.routing &&
             ['send_message_to_g2','reply_to_g2','announce_notification_to_g2','respond_to_context','respond_to_location','respond_to_health','respond_to_history'].includes(tool.name)
             ? {...tool,description:tool.description + ' ' + routingGuidance} : tool),
         ]};
