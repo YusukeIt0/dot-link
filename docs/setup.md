@@ -72,7 +72,7 @@ With Mac 0.5.5 and Even 0.4.3, Dot checks the G2 when an answer or suggestion is
 
 If your Mac updates first and you still have Even 0.4.2, you can keep asking questions from G2. Open your usual Dot chat for the answer. The glasses show a short cue in the question's history and finish waiting. Updating the companion enables G2 delivery when the glasses are available.
 
-Keep Dot Link running in Even Hub to let it answer the Mac while you use another app. Even Hub handles background operation automatically. If your existing Dot cannot use the new chat handoff after the Mac update, use **Update tools** for the existing ChatGPT connection and restart that Dot. Your existing pairing and sharing choices carry over.
+Keep Dot Link running in Even Hub to let it answer the Mac while you use another app. Even Hub handles background operation automatically. If answers stop reaching Dot chat or announcements about shared Mac notifications stop after the Mac update, choose **Update tools** for your existing Dot Link connection in ChatGPT. Finish any active work and restart that same Dot. The updated tools let Dot confirm which notification was shared with it and claim a reply for your chat. Your existing pairing and sharing choices carry over.
 
 Hold to record on G2 and release to stop, or tap the microphone in the Even companion. Tap the same button again to stop and transcribe; the adjacent trash button discards recording or transcription without sending. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to edit the text before sending with the up arrow. Use the left/right arrows to browse conversation history and the speaker button to turn read aloud on or off. **Display settings** controls idle timeout, wake gestures and head-raise behavior.
 
@@ -201,7 +201,7 @@ When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your
 | Mac connection error | The paired address responded, but the connection could not be completed. Check Dot Link on the Mac. |
 | Mac unreachable | Check Tailscale on the phone and that the Mac is awake, connected to Tailscale and running Dot Link. The app cannot distinguish a missing phone VPN from an unreachable Mac. It reconnects automatically; keep the existing pairing. |
 | Even cannot pair | Keep the Mac awake, resume Dot Link, and connect Mac and iPhone to the same Tailscale network. Generate a fresh code and paste it in full within two minutes. |
-| Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. This is needed once when updating from a release before 0.5.4; later updates keep access. |
+| Notifications stop after an update | If the Mac already has Accessibility access and notification sharing is on, choose **Update tools** for the existing ChatGPT connection and restart the same Dot. For the first update from a release before 0.5.4, remove Dot Link from macOS Accessibility, add the installed app again, and enable access. Later updates keep that access. |
 | Speech service rejects a recording | Check the selected service, key, account access and billing; for Microsoft also check the endpoint. Saving a key alone does not verify it. |
 | Mac 0.3.0 or 0.3.1 waits for Even to close before Dot was ever connected | Quit Dot Link and replace only the app in `~/Applications` with the latest ZIP. Keep Application Support data; do not uninstall. |
 
