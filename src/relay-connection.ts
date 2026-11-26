@@ -1,4 +1,5 @@
 import { appOrigin, relayOrigin } from './relay-origin.ts';
+export const CHAT_HANDOFF_MEDIA_TYPE = 'application/vnd.dotlink.chat-handoff+json';
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 export interface RelayCredentials { origin: string; token: string; expiresAt: number; resumeToken?: string; appOrigin?: string; }
 const KEY = 'dot-relay-v1';

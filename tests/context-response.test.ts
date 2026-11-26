@@ -15,11 +15,13 @@ import {weatherSource, type WeatherEvidence} from '../server/weather/types.ts';
 import {MobilityAcquisition} from '../server/mobility/context.ts';
 import {WebhookSender} from '../server/webhook.ts';
 import {rpc} from '../server/http.ts';
+import {DeliveryRouting} from '../server/delivery-routing.ts';
+import {G2DeliveryAvailability} from '../server/g2-availability.ts';
 import {ContextResponder} from '../server/context-response.ts';
 
 const owner = 'a'.repeat(64), NOW = Date.parse('2026-11-14T12:00:00Z');
 const settle = () => new Promise<void>(resolve => setImmediate(resolve));
-async function fixture(t: TestContext, conversationTtlMs?: number) {
+async function fixture(t: TestContext, conversationTtlMs?: number, route = false) {
   const dir = mkdtempSync(join(tmpdir(), 'combined-context-'));
   let now = NOW, authorized = true, block: Promise<void> | undefined, unblock = () => {}, sequence = 0;
   const sender = new WebhookSender(async (_url, raw) => {
@@ -27,7 +29,9 @@ async function fixture(t: TestContext, conversationTtlMs?: number) {
     if (p.type === 'verification') return {status: 200, body: JSON.stringify({challenge: p.challenge})};
     await block; return {status: 202, body: '{}'};
   });
-  const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test'], undefined, {now: () => now});
+  const routing = route ? new DeliveryRouting(join(dir, 'handoffs.json'), new G2DeliveryAvailability(() => false),
+    subject => authorized && subject === owner) : undefined;
+  const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test'], undefined, {now: () => now, routing});
   const acquisition = new MobilityAcquisition(() => ({walking: {plan: async () => {throw Error('not requested');}},
     terrain: {clear() {}, elevations: async points => points.map(() => 12), profile: async () => {throw Error('not requested');}}}), () => now);
   const location = new LocationContext(join(dir, 'location.json'), sender, ['callback.example.test'], bridge.sendMessage.bind(bridge), () => now,
@@ -492,4 +496,26 @@ test('archive responses enforce the same owner with other archive, history, Pola
   hold.release(); await hold.pending;
   await assert.rejects(pending, {reason: 'context_access_changed'});
   assert.equal(f.bridge.history().find(q => q.id === f.question)?.reply, undefined);
+});
+
+test('combined context keeps silence, rechecks every source at native handoff and reports no G2 storage', async t => {
+  const f = await fixture(t, undefined, true);
+  const evidence = f.receipts();
+  const quiet = await f.call('respond_to_context', {...evidence, activity_id: 'silent-fixture', disposition: 'silent'});
+  assert.deepEqual(quiet.result.structuredContent, {disposition: 'silent', stored_for_g2: false});
+  const p = {...f.receipts(), disposition: 'announce', utterance_id: f.question, text: 'Use the fictional station entrance.'};
+  const reply = (await f.call('respond_to_context', p)).result.structuredContent;
+  assert.equal(reply.destination, 'owner_chat');
+  assert.equal((await f.call('respond_to_context', p)).result.structuredContent.receipt, reply.receipt);
+  assert.equal(f.location.status().locationAnnouncementCount, 0);
+  assert.deepEqual(f.location.read().recent_announcements, []);
+  f.historyControl('delete');
+  const directRetry = await f.call('reply_to_g2', {utterance_id: f.question, text: p.text});
+  assert.equal(directRetry.error.data.reason, 'delivery_access_changed');
+  const followupAlias = await f.call('send_message_to_g2', {utterance_id: f.question, message_id: randomUUID(), text: p.text});
+  assert.equal(followupAlias.error.data.reason, 'delivery_access_changed');
+  const revoked = await f.call('claim_owner_chat_delivery', {receipt: reply.receipt});
+  assert.equal(revoked.error.data.reason, 'history_access_changed');
+  assert.equal(f.bridge.history(owner)[0].reply, undefined);
+  assert.deepEqual(f.bridge.outboundHistory(owner), []);
 });

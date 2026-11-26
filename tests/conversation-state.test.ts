@@ -91,3 +91,11 @@ test('announcement deduplication remains separate from unread eligibility after 
   assert.equal(state.receive([a], false, () => true).announcements.length, 0);
   assert.equal(state.unreadCount, 1);
 });
+
+test('a question continued in official chat restores with no pending reply, speech or new-reply alert', () => {
+  const state = new ConversationState();
+  const moved = {...message('fixture', 1000), status: 'chat_handoff'};
+  assert.deepEqual(state.receive([moved], true, () => true), {announcements: [], waiting: undefined});
+  assert.equal(state.flush(allowed).wake, false);
+  assert.equal(state.unreadCount, 0);
+});

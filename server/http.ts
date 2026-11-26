@@ -25,6 +25,7 @@ import type { LocationHistoryStore } from './history/store.ts';
 import { historyUploadSchema } from './history/store.ts';
 import type { SharingActivation } from './sharing-activation.ts';
 import type { G2DeliveryAvailability } from './g2-availability.ts';
+import { chatDeliveryTool, routingGuidance } from './delivery-routing.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -69,6 +70,7 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
   const hasContext = !!(locations || health || history?.responseGuard || weather || archives);
   // Control and conversation tools retain their own response and error formats.
   const controls = [
+    {tool: chatDeliveryTool, available: !!bridge?.routing},
     {tool: statusTool, available: true}, {tool: pendingTool, available: true},
     {tool: replyTool, available: true}, {tool: sendMessageTool, available: true},
     {tool: pendingNotificationsTool, available: !!notifications},
@@ -110,7 +112,9 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
       case 'tools/list':
         result = {tools: [
           ...decisionFactorReaders.filter(factor => factor.bind(sources)).map(factor => factor.tool),
-          ...controls.filter(control => control.available).map(control => control.tool),
+          ...controls.filter(control => control.available).map(({tool}) => bridge?.routing &&
+            ['send_message_to_g2','reply_to_g2','announce_notification_to_g2','respond_to_context','respond_to_location','respond_to_health','respond_to_history'].includes(tool.name)
+            ? {...tool,description:tool.description + ' ' + routingGuidance} : tool),
         ]};
         break;
       case 'tools/call': {
@@ -144,6 +148,11 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         }
         return { jsonrpc: '2.0', id, ...await toolResponse(() => {
           switch (name) {
+            case 'claim_owner_chat_delivery': {
+              const grant = bridge.routing!.take(args);
+              if ('utterance_id' in grant) bridge.changes.emit();
+              return grant;
+            }
             case 'get_status': {
               if (!z.object({}).strict().safeParse(args === undefined ? {} : args).success) throw new ReadResponseError();
               return { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
@@ -216,10 +225,10 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
   const unsubscribeHistory = histories?.changes.subscribe(changed);
   const unsubscribeAvailability = availability?.changes.subscribe(changed);
   const cursor = () => `${instance}:${revision}`;
-  const history = () => [...bridge.history(), ...bridge.outboundHistory(), ...(notifications?.history() ?? [])]
+  const history = (owner?: string) => [...bridge.history(owner), ...bridge.outboundHistory(owner), ...(notifications?.history(owner) ?? [])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-100);
   const deviceStatus = (owner?: string) => ({ ...bridge.status(), previouslySubscribed: bridge.hasPreviousSubscription(), photoAttachments: 1, ...(archives && owner ? {factorHistoryProtocol: 1} : {}), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}), ...(histories?.status(owner) ?? {}), ...(weather?.status(owner) ?? {}), ...(health?.status(owner) ?? {}) });
-  const snapshot = (owner?: string) => ({ revision: cursor(), status: deviceStatus(owner), messages: history() });
+  const snapshot = (owner?: string) => ({ revision: cursor(), status: deviceStatus(owner), messages: history(owner) });
   const server = createServer(async (request, response) => {
     response.setHeader('Content-Type', 'application/json; charset=utf-8');
     response.setHeader('Cache-Control', 'no-store');
@@ -286,7 +295,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
         send(200, {...result, ...(histories?.status(owner) ?? {})}); return;
       }
       if (request.url === '/api/messages' && request.method === 'GET') {
-        const messages = history();
+        const messages = history(historyOwner);
         response.once('finish', () => notifications?.markClientResponse(messages.map(n => n.id)));
         send(200, messages); return;
       }
@@ -296,7 +305,11 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       if (request.url === '/api/updates' && request.method === 'GET') {
         const after = request.headers['x-g2-revision'];
         if (after !== undefined && (typeof after !== 'string' || !/^[0-9a-f-]{36}:\d{1,12}$/.test(after))) { send(400, { error: 'Invalid revision' }); return; }
+        const authorizedRuntime = historyOwner && runtime && availability?.currentRuntime(historyOwner, runtime);
         if (historyOwner && runtime) availability?.observe(historyOwner, runtime);
+        const received = request.headers['x-g2-notification-receipt'];
+        if (typeof received === 'string' && historyOwner && runtime && availability?.currentRuntime(historyOwner,runtime))
+          notifications?.acknowledgeDeviceReceipt(received,historyOwner,runtime);
         if (after === cursor()) {
           if (waiting.size >= 8) { send(503, { error: 'Too many waiting clients' }); return; }
           await new Promise<void>(resolve => {
@@ -307,15 +320,21 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
           });
         }
         if (!response.destroyed) {
+          // A newer companion can claim the pairing during the long poll.
+          if (authorizedRuntime && !availability!.currentRuntime(historyOwner!, runtime!)) {
+            send(401, {error: 'Current pairing required'}); return;
+          }
           const value = snapshot(historyOwner);
           response.once('finish', () => notifications?.markClientResponse(value.messages.map(n => n.id)));
           const challenge = historyOwner && runtime ? availability?.challenge(historyOwner, runtime) : undefined;
-          send(200, challenge ? {...value, availabilityChallenge: challenge} : value);
+          const receipt = historyOwner && runtime && availability?.currentRuntime(historyOwner,runtime)
+            ? notifications?.offerDeviceReceipt(value.messages.map(m=>m.id),historyOwner,runtime) : undefined;
+          send(200,{...value,...(challenge ? {availabilityChallenge:challenge} : {}),...(receipt ? {notificationReceipt:receipt} : {})});
         }
         return;
       }
       if (request.url === '/api/timings' && request.method === 'POST') { bridge.latency.client(await body(request)); send(204); return; }
-      if (request.url === '/api/utterances' && request.method === 'POST') { send(200, await bridge.submit(await body(request, PHOTO_REQUEST_BYTES))); return; }
+      if (request.url === '/api/utterances' && request.method === 'POST') { send(200, await bridge.submit(await body(request, PHOTO_REQUEST_BYTES),historyOwner)); return; }
       if (notifications && request.url === '/api/notifications' && request.method === 'POST') { send(200, await notifications.submit(await body(request))); return; }
       if (request.url === '/mcp' && request.method === 'POST') {
         const result = await rpc(bridge, await body(request), notifications, locations, histories, weather, activation, health, archives?.environment); send(result === undefined ? 202 : 200, result); return;

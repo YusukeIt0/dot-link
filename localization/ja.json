@@ -64,6 +64,7 @@
   "even.you": "あなた",
   "even.could_not_confirm_delivery": "配送を確認できませんでした",
   "even.waiting_for_a_reply": "返信を待っています…",
+  "even.continue_in_dot_chat": "続きはDotのチャットで。",
   "even.read_aloud_failed_please_read_the_reply_on_screen": "読み上げできませんでした。画面の返信をご確認ください。",
   "even.dot_connected": "Dot接続済み",
   "even.dot_disconnected": "Dot未接続",

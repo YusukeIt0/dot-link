@@ -1,3 +1,4 @@
+import { pendingChatHandoff } from '../delivery-routing.ts';
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import { z } from 'zod';
@@ -58,7 +59,7 @@ export interface HealthOptions {
   phoneTime?:(dates:string[],owner:string)=>PhoneTimeRead;
   key:(operation:'read'|'create'|'delete'|'authorize')=>Promise<Buffer|undefined>;
   ownerAuthorized:(owner:string)=>boolean; ownerRevoked:(owner:string)=>boolean;
-  announce:(input:{message_id:string;text:string;utterance_id?:string},guard:()=>boolean, location?: undefined, visible?:()=>boolean)=>Promise<unknown>;
+  announce:(input:{message_id:string;text:string;utterance_id?:string},guard:()=>boolean, location?: undefined, visible?:()=>boolean, owner?:string)=>Promise<unknown>;
   sender:WebhookSender;hosts:string[];api?:PolarAPI;now?:()=>number;
 }
 export class HealthContext {
@@ -403,12 +404,12 @@ export class HealthContext {
     const allowed=this.responseGuard(p.read_id);
     if(!allowed())throw rejected();
     const signature=JSON.stringify([p.disposition,p.utterance_id,p.text]);
-    const prior=this.decisions.get(p.read_id);if(prior){if(prior.signature!==signature)throw rejected();return prior.result;}
+    const prior=this.decisions.get(p.read_id);if(prior){if(prior.signature!==signature)throw rejected();if (!pendingChatHandoff(prior.result)) return prior.result;}
     if(p.disposition==='silent'){if(p.text||p.utterance_id)throw rejected();const result={disposition:'silent'};this.rememberDecision(p.read_id,signature,result);return result;}
     if(!p.text)throw rejected();
     const id=createHash('sha256').update(`${p.read_id}:${p.utterance_id??'proactive'}`).digest('hex');
     const message_id=`${id.slice(0,8)}-${id.slice(8,12)}-4${id.slice(13,16)}-8${id.slice(17,20)}-${id.slice(20,32)}`;
-    const result=await this.options.announce({message_id,text:p.text,...(p.utterance_id?{utterance_id:p.utterance_id}:{})},allowed,undefined,this.responseGuard(p.read_id,'recall'));
+    const result=await this.options.announce({message_id,text:p.text,...(p.utterance_id?{utterance_id:p.utterance_id}:{})},allowed,undefined,this.responseGuard(p.read_id,'recall'),this.historyOwner());
     this.rememberDecision(p.read_id,signature,result);return result;
   }
   sharingIntent() {

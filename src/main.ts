@@ -496,7 +496,7 @@ function showMessage(): void {
   const current = () => conversation.find(message.id) ?? message;
   display(() => {
     const item = current();
-    return item.reply || item.photosExpired ? `${conversation.position(item.id)}/${conversation.count}` :
+    return item.reply || item.photosExpired || item.status === 'chat_handoff' ? `${conversation.position(item.id)}/${conversation.count}` :
       item.status === 'failed' ? t('even.delivery_unconfirmed') : t('even.waiting_for_name', { name: wakeNamePreferences.assistantName });
   }, () => conversationText(current(), Date.now(), wakeNamePreferences.assistantName), message.id,
     () => conversationHudText(current(), Date.now(), wakeNamePreferences.assistantName));
@@ -536,7 +536,7 @@ function receiveUpdate(snapshot: Snapshot, initial = false, resumed = false): vo
     // A stored answer completes the request even when consent/freshness blocks
     // its announcement. Completion must not wake the display or start speech.
     if (message.reply) progress.complete(message.id);
-    else if (message.photosExpired) progress.stopWaiting(message.id);
+    else if (message.photosExpired || message.status === 'chat_handoff') progress.stopWaiting(message.id);
   }
   for (const message of update.announcements) {
     timing.mark(message.id, 'reply_received');
@@ -692,7 +692,7 @@ sendButton.onclick = async () => {
     const message = await api<Message>('/api/utterances', 'POST', JSON.stringify({id:pendingId,text, ...(attachments.length ? {photos: attachments} : {})}));
     timing.mark(pendingId!, 'utterance_accepted');
     reportTiming(pendingId!);
-    if (message.photosExpired && !message.reply) {
+    if (message.photosExpired && !message.reply && message.status !== 'chat_handoff') {
       // The old delivery can no longer expose its images. A later explicit Send gets a new ID.
       pendingDelivery.clear(); pendingId = undefined; pendingText = undefined;
       throw new Error(t('even.photos_expired_resend'));
@@ -701,7 +701,9 @@ sendButton.onclick = async () => {
     progress.waiting(message.id, message.createdAt, Date.now());
     pendingDelivery.clear();
     transcript.value = ''; resizeTranscript(); pendingId = undefined; pendingText = undefined; clearPhotos();
-    if (conversation.acceptSent(message).reply) progress.complete(message.id);
+    const accepted = conversation.acceptSent(message);
+    if (accepted.reply) progress.complete(message.id);
+    else if (accepted.status === 'chat_handoff') progress.stopWaiting(message.id);
     showMessage();
     notice.textContent = '';
   } catch (error) {

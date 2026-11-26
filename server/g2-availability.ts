@@ -39,6 +39,7 @@ export class G2DeliveryAvailability {
       this.peers.delete(owner);
     }
   }
+  currentRuntime(owner: string, runtime: string) { return this.authorized(owner, runtime); }
   observe(owner: string, runtime: string): void {
     const old = this.peers.get(owner);
     if (old?.runtime === runtime) { old.lastUpdate = this.now(); return; }

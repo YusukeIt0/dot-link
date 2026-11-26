@@ -64,6 +64,7 @@
   "even.you": "나",
   "even.could_not_confirm_delivery": "전달 여부를 확인하지 못했습니다",
   "even.waiting_for_a_reply": "답변을 기다리고 있습니다…",
+  "even.continue_in_dot_chat": "Dot 채팅에서 대화를 이어가세요.",
   "even.read_aloud_failed_please_read_the_reply_on_screen": "읽어주기에 실패했습니다. 화면에서 답변을 확인하세요.",
   "even.dot_connected": "Dot 연결됨",
   "even.dot_disconnected": "Dot 연결 안 됨",

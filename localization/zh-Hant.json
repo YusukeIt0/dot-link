@@ -64,6 +64,7 @@
   "even.you": "我",
   "even.could_not_confirm_delivery": "無法確認是否送達",
   "even.waiting_for_a_reply": "等待回覆…",
+  "even.continue_in_dot_chat": "請在 Dot 聊天中繼續。",
   "even.read_aloud_failed_please_read_the_reply_on_screen": "朗讀失敗。請在螢幕上閱讀回覆。",
   "even.dot_connected": "Dot 已連線",
   "even.dot_disconnected": "Dot 已中斷連線",
