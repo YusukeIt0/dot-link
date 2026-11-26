@@ -249,9 +249,11 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (result.ok && ['/api/updates', '/api/messages', '/api/utterances'].includes(path) &&
               !request.headers.accept?.split(',').some(value => value.trim() === CHAT_HANDOFF_MEDIA_TYPE)) {
             const locale = chooseLanguage(request.headers['accept-language']?.split(',')[0].split(';')[0].trim() ?? 'en');
-            if (path === '/api/updates') data.messages = data.messages.map((entry: unknown) => earlierCompanionMessage(entry, locale));
-            else if (path === '/api/messages') data = data.map((entry: unknown) => earlierCompanionMessage(entry, locale));
-            else data = earlierCompanionMessage(data, locale);
+            if (path === '/api/updates' && Array.isArray(data?.messages))
+              data.messages = data.messages.map((entry: unknown) => earlierCompanionMessage(entry, locale));
+            else if (path === '/api/messages' && Array.isArray(data))
+              data = data.map((entry: unknown) => earlierCompanionMessage(entry, locale));
+            else if (path === '/api/utterances') data = earlierCompanionMessage(data, locale);
           }
           if (result.ok && options.deviceName) {
             if (path === '/api/status') data.deviceName = options.deviceName;
