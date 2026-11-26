@@ -68,7 +68,7 @@ test('paired companion answers the Mac long-poll challenge, with fresh hardware,
   const challenge = poll.value.availabilityChallenge;
   assert.deepEqual(Object.keys(challenge), ['id']);
   await phone.answer(challenge, () => phone.read({callEvenApp: async () => ({model:'g2',
-    status:{connectType:'connected', isWearing:false, isInCase:false}})}), () => true, async (id, state) => {
+    status:{connectType:'connected', isWearing:true, isInCase:false}})}), () => true, async (id, state) => {
     const response = await call('/api/g2-availability', headers, {id, state});
     assert.deepEqual(response, {status:200, value:{accepted:true}});
   });
@@ -82,5 +82,16 @@ test('paired companion answers the Mac long-poll challenge, with fresh hardware,
   const nextHeaders = {Authorization: `Bearer ${next.value.token}`};
   await call('/api/updates', nextHeaders);
   assert.equal((await call('/api/g2-availability', nextHeaders, {...challenge, state:'available'})).status, 409);
+  const reopened = new GlassesAvailability();
+  for (const [inCase, expected] of [[true, 'unavailable'], [false, 'unknown']] as const) {
+    const pending = mac.check();
+    const offered = (await call('/api/updates', nextHeaders)).value.availabilityChallenge;
+    await reopened.answer(offered, () => reopened.read({callEvenApp: async () => ({
+      model: 'g2', status: {connectType: 'connected', isWearing: false, isInCase: inCase, isCharging: false},
+    })}), () => true, async (id, state) => {
+      assert.equal((await call('/api/g2-availability', nextHeaders, {id, state})).status, 200);
+    });
+    assert.equal((await pending).state(), expected);
+  }
   const stored = await call('/api/messages', nextHeaders); assert.deepEqual(stored.value, []);
 });

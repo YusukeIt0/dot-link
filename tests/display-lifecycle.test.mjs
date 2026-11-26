@@ -21,7 +21,7 @@ const script = stripTypeScriptTypes(source
 const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
 
 async function launch(options = {}) {
-  let now = 0, timerId = 0, receiver;
+  let now = 0, timerId = 0, receiver, statusReceiver;
   const epoch = Date.now();
   const timers = new Map(); const elements = new Map(); const listeners = new Map();
   const calls = []; const networkCalls = []; const requests = []; const physical = new Map();
@@ -55,7 +55,7 @@ async function launch(options = {}) {
   const bridge = {
     ...(options.glassesInfo && {
       callEvenApp: async method => { assert.equal(method, sdk.EvenAppMethod.GetGlassesInfo); return options.glassesInfo(); },
-      onDeviceStatusChanged: () => () => {},
+      onDeviceStatusChanged: callback => { statusReceiver = callback; return () => { statusReceiver = undefined; }; },
     }),
     async createStartUpPageContainer(page) { calls.push(['create']); for (const c of page.textObject) physical.set(c.containerID, c.content); return 0; },
     async textContainerUpgrade(update) {
@@ -146,6 +146,7 @@ async function launch(options = {}) {
     browserEvent: async name => {listeners.get(name)?.({persisted: false}); await flush();},
     failUpdate: async () => {assert.ok(requests.length); requests.shift().reject(new Error('Network unavailable')); await flush();},
     emit: async event => {receiver(event); await flush();},
+    deviceStatus: async status => { statusReceiver?.(status); await flush(); },
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
     close: async () => {vm.runInContext('stopSession()', context); await flush();},
@@ -160,9 +161,10 @@ const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status
 
 test('a running Even WebView answers while the phone is hidden and invalidates readings on unload', async t => {
   const responses = [];
-  let inCase = false;
+  let inCase = true;
+  const status = () => ({sn:'fixture-g2', connectType:'connected', isInCase:inCase, isCharging:inCase, isWearing:false});
   const app = await launch({
-    glassesInfo: () => ({model: 'g2', status: {connectType: 'connected', isInCase: inCase, isWearing: false}}),
+    glassesInfo: () => ({model:'g2', sn:'fixture-g2', status:status()}),
     request: (url, init) => {
       if (!url.endsWith('/api/g2-availability')) return;
       responses.push(JSON.parse(init.body)); return Promise.resolve({ok: true, status: 200});
@@ -171,15 +173,36 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   t.after(app.close);
   const deliver = id => app.deliver({...app.snapshot(), availabilityChallenge: {id}});
   app.context.document.hidden = true; await app.browserEvent('visibilitychange');
-  await deliver('hidden-fresh');
-  assert.deepEqual(responses, [{id: 'hidden-fresh', state: 'available'}]);
-  inCase = true;
   await deliver('hidden-in-case');
   assert.deepEqual(responses.at(-1), {id: 'hidden-in-case', state: 'unavailable'});
+  inCase = false;
+  await deliver('unconfirmed-open');
+  assert.deepEqual(responses.at(-1), {id:'unconfirmed-open', state:'unknown'});
+  await app.deviceStatus({...status(), sn:'fixture-ring'});
+  await deliver('unrelated-event');
+  assert.deepEqual(responses.at(-1), {id:'unrelated-event', state:'unknown'});
+  await app.deviceStatus(status());
+  await deliver('removed-on-desk');
+  assert.deepEqual(responses.at(-1), {id:'removed-on-desk', state:'available'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.FOREGROUND_ENTER_EVENT}});
+  await deliver('menu-open');
+  assert.deepEqual(responses.at(-1), {id:'menu-open', state:'unknown'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.FOREGROUND_EXIT_EVENT}});
+  await deliver('menu-closed');
+  assert.deepEqual(responses.at(-1), {id:'menu-closed', state:'available'});
   await app.browserEvent('pagehide'); await deliver('unloaded');
   assert.deepEqual(responses.at(-1), {id:'unloaded', state:'unknown'});
   await app.browserEvent('pageshow'); await deliver('fresh-after-return');
-  assert.deepEqual(responses.at(-1), {id:'fresh-after-return', state:'unavailable'});
+  assert.deepEqual(responses.at(-1), {id:'fresh-after-return', state:'unknown'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_RING}});
+  await deliver('ring-input');
+  assert.deepEqual(responses.at(-1), {id:'ring-input', state:'unknown'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_GLASSES_L}});
+  await deliver('temple-input');
+  assert.deepEqual(responses.at(-1), {id:'temple-input', state:'available'});
+  inCase = true;
+  await deliver('back-in-case');
+  assert.deepEqual(responses.at(-1), {id:'back-in-case', state:'unavailable'});
   assert.equal(app.networkCalls.some(url => url.includes('/api/utterances')), false);
 });
 
