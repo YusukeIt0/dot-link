@@ -251,8 +251,9 @@ export class NotificationInbox {
       return await this.serial(async () => {
         if (this.active() && this.active()!.id !== id) throw new SubscriptionResponseError('subscription_conflict');
         if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
-        const current = this.active();
-        this.save(true, { ...this.state, subscription: {...sub,...(this.routing ? {receipt:current?.id === sub.id && current.receipt ? current.receipt : randomUUID()} : {})}, activationStoppedFor: undefined });
+        const previous = this.state.subscription;
+        const receipt = previous?.id === id ? previous.receipt : undefined;
+        this.save(true, { ...this.state, subscription: {...sub, ...(this.routing ? {receipt: receipt ?? randomUUID()} : {})}, activationStoppedFor: undefined });
         return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
       });
     } finally { this.pendingChecks.delete(check); }

@@ -434,8 +434,12 @@ export class Bridge {
         const current = this.active();
         if (current && current.id !== id) throw new SubscriptionResponseError('subscription_conflict');
         if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
-        const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
-        const recipient = this.routing ? this.deliveryRecipient() ?? randomUUID() : undefined;
+        // Expiry pauses access. A verified renewal of the saved callback restores
+        // its audience, including the subscription ID used by older Mac versions.
+        const previous = this.state.subscription;
+        const renewed = previous?.id === id;
+        const kind = renewed ? 'renewed' : 'created';
+        const recipient = this.routing ? (renewed ? previous.recipient ?? previous.id : randomUUID()) : undefined;
         this.save({ ...this.state, subscription: {...sub, recipient}, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
         if (kind === 'created') this.conversationGeneration++;
         return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
