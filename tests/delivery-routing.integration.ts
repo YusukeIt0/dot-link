@@ -1,6 +1,7 @@
 import test, {type TestContext} from 'node:test';
 import assert from 'node:assert/strict';
-import {randomBytes, randomUUID} from 'node:crypto';
+import {createHash, randomBytes, randomUUID} from 'node:crypto';
+import {request} from 'node:http';
 import {once} from 'node:events';
 import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
@@ -9,15 +10,18 @@ import {Bridge} from '../server/bridge.ts';
 import {DeliveryRouting} from '../server/delivery-routing.ts';
 import {G2DeliveryAvailability} from '../server/g2-availability.ts';
 import {bridgeServer} from '../server/http.ts';
+import {deviceServer} from '../server/device.ts';
 import {NotificationInbox} from '../server/notifications.ts';
 import {WebhookSender} from '../server/webhook.ts';
 import type {DeliveryAvailability} from '../src/g2-availability.ts';
+import {CHAT_HANDOFF_MEDIA_TYPE} from '../src/relay-connection.ts';
+import {message} from '../src/i18n.ts';
 
 const owner = 'a'.repeat(64), otherOwner = 'b'.repeat(64), runtime = 'c'.repeat(64);
 const deviceHeaders = {'X-G2-Location-Owner': owner, 'X-G2-Paired-Runtime': runtime};
 const scope = {session_id: 'personal-g2'};
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, allowedOwner = owner) {
   const directory = mkdtempSync(join(tmpdir(), 'dot-delivery-'));
   const path = join(directory, 'chat-handoffs.json');
   let now = Date.now(), currentRuntime = runtime;
@@ -30,8 +34,8 @@ async function fixture(t: TestContext) {
     events.push(event);
     return {status: 202, body: '{}'};
   });
-  const mac = new G2DeliveryAvailability((subject, id) => subject === owner && id === currentRuntime, () => now, 1200);
-  const routing = new DeliveryRouting(path, mac, subject => subject === owner);
+  const mac = new G2DeliveryAvailability((subject, id) => subject === allowedOwner && id === currentRuntime, () => now, 1200);
+  const routing = new DeliveryRouting(path, mac, subject => subject === allowedOwner);
   const bridge = new Bridge(join(directory, 'bridge.json'), sender, hosts, undefined, {now: () => now, routing});
   const notifications = new NotificationInbox(join(directory, 'notifications.json'), sender, hosts, () => now, routing);
   const server = bridgeServer(bridge, tokens, notifications, undefined, undefined, undefined, undefined, undefined, undefined, mac);
@@ -100,9 +104,54 @@ async function fixture(t: TestContext) {
     assert.ok(signedEvent?.data.recipient_receipt);
     return {notification_id: id, recipient_receipt: signedEvent.data.recipient_receipt};
   }
-  return {path, directory, mac, routing, bridge, events, http, rpc, tool, result, subscribe, fetchUpdates,
+  return {path, directory, base, deviceToken:tokens.device, mac, routing, bridge, events, http, rpc, tool, result, subscribe, fetchUpdates,
     history, decide, question, notification, advance(ms: number) {now += ms;}, replaceRuntime() {currentRuntime = 'e'.repeat(64);}};
 }
+
+test('the published Even companion finishes a handed-off question without announcing the answer on G2', async t => {
+  const oldOwner = createHash('sha256').update('d'.repeat(43)).digest('hex');
+  const f = await fixture(t, oldOwner);
+  const host = 'mac.example.test', origin = 'https://' + host;
+  const gateway = deviceServer({token:f.deviceToken, origin, directory:f.directory, bridgeURL:f.base, transcribe:async () => ''});
+  gateway.listen(0, '127.0.0.1'); await once(gateway, 'listening');
+  const address = gateway.address(); assert(address && typeof address === 'object');
+  const port = address.port;
+  t.after(() => {gateway.closeAllConnections(); gateway.close();});
+  function device(path: string, body?: unknown, accept = '*/*') {
+    return new Promise<any>((resolve, reject) => {
+      const req = request({host:'127.0.0.1', port, path, method: body ? 'POST' : 'GET',
+        headers:{Host:host, Origin:origin, Authorization:'Bearer ' + f.deviceToken, 'Content-Type':'application/json',
+          Accept:accept, 'Accept-Language':'ja-JP, en;q=0.8'}}, res => {
+        const chunks: Buffer[] = [];
+        res.on('data', chunk => chunks.push(chunk));
+        res.on('end', () => res.statusCode === 200 ? resolve(JSON.parse(Buffer.concat(chunks).toString())) : reject(Error(String(res.statusCode))));
+      });
+      req.on('error', reject); req.end(body ? JSON.stringify(body) : undefined);
+    });
+  }
+  const question = {id:randomUUID(), text:'Where is the fictional sculpture?'};
+  assert.equal((await device('/api/utterances', question)).reply, undefined);
+  const answer = 'Beside the north entrance.';
+  const handoff = await f.result('reply_to_g2', {utterance_id:question.id, text:answer});
+  assert.equal(handoff.destination, 'owner_chat');
+  const hint = message('even.continue_in_dot_chat', 'ja');
+  const [oldRow] = await device('/api/messages');
+  assert.equal(oldRow.id, question.id); assert.equal(oldRow.text, question.text);
+  assert.equal(oldRow.reply, hint); assert.equal(oldRow.location_sharing_id, 'dotlink:owner-chat');
+  assert.equal(oldRow.location_expires_at, undefined); assert.equal(oldRow.photosExpired, undefined);
+  assert.deepEqual((await device('/api/updates')).messages, [oldRow]);
+  assert.deepEqual(await device('/api/utterances', question), oldRow);
+  const canonical = (await f.history(oldOwner))[0];
+  assert.equal(canonical.status, 'chat_handoff'); assert.equal(canonical.reply, undefined);
+  assert.equal(canonical.location_sharing_id, undefined);
+  const accept = 'application/json, ' + CHAT_HANDOFF_MEDIA_TYPE;
+  assert.deepEqual(await device('/api/messages', undefined, accept), [canonical]);
+  assert.deepEqual((await device('/api/updates', undefined, accept)).messages, [canonical]);
+  assert.deepEqual(await device('/api/utterances', question, accept), canonical);
+  assert.deepEqual(await f.history(otherOwner), []);
+  assert.equal((await f.result('claim_owner_chat_delivery', {receipt:handoff.receipt})).text, answer);
+  assert.equal((await f.result('claim_owner_chat_delivery', {receipt:handoff.receipt})).action, 'do_not_resend');
+});
 
 test('one independent Dot decision uses G2 when available and the existing owner chat otherwise', async t => {
   const f = await fixture(t);

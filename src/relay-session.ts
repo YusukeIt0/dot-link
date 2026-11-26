@@ -1,8 +1,9 @@
-import { apiAddress, type RelayCredentials, type RelaySettings } from './relay-connection.ts';
+import { apiAddress, CHAT_HANDOFF_MEDIA_TYPE, type RelayCredentials, type RelaySettings } from './relay-connection.ts';
 import type { PairingInvite } from './relay-origin.ts';
 import { RelayResponseError } from './connection-failure.ts';
 import { RUNTIME_RECOVERY_PROTOCOL, RUNTIME_SUPERSEDED, runtimeGeneration, type RuntimeRecoveryRequest } from './runtime-recovery.ts';
 type Ownership = { stage: 'unknown' | 'legacy' } | { stage: 'claim'; expectedGeneration: number } | { stage: 'owned'; generation: number };
+const acceptMessages = `application/json, ${CHAT_HANDOFF_MEDIA_TYPE}`;
 interface Options {
   settings: RelaySettings;
   legacyToken: string;
@@ -114,6 +115,7 @@ export class RelaySession {
     await this.ensureOrigin(); this.check(version);
     const response = await this.options.fetch(apiAddress(path, this.saved?.origin), {
       method, credentials: 'omit', redirect: 'error', headers: {Authorization: `Bearer ${this.token}`,
+        ...(['/api/messages', '/api/utterances'].includes(path) ? {Accept: acceptMessages} : {}),
         ...(trace ? {'X-G2-Trace-ID': trace} : {}),
         ...(body ? {'Content-Type': typeof body === 'string' ? 'application/json' : 'audio/wav'} : {})},
       body: body instanceof Uint8Array ? new Blob([new Uint8Array(body).buffer], {type: 'audio/wav'}) : body,
@@ -134,7 +136,7 @@ export class RelaySession {
     if (signal.aborted) throw new Error('Connection changed');
     const receipt = this.notificationReceipt;
     const response = await this.options.fetch(apiAddress('/api/updates', this.saved?.origin), {
-      credentials: 'omit', redirect: 'error', headers: {Authorization: `Bearer ${this.token}`, ...(revision ? {'X-G2-Revision': revision} : {}),
+      credentials: 'omit', redirect: 'error', headers: {Authorization: `Bearer ${this.token}`, Accept: acceptMessages, ...(revision ? {'X-G2-Revision': revision} : {}),
         ...(receipt && receipt.version === version && receipt.revision === revision ? {'X-G2-Notification-Receipt':receipt.id} : {})},
       signal: AbortSignal.any([signal, this.controller.signal, AbortSignal.timeout(25000)]),
     });

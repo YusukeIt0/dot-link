@@ -10,6 +10,8 @@ import { LatencyLog, traceId } from './latency.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 import type { UpdateActivity } from './update-activity.ts';
 import { appOrigin } from '../src/relay-origin.ts';
+import { CHAT_HANDOFF_MEDIA_TYPE } from '../src/relay-connection.ts';
+import { chooseLanguage, message, type Language } from '../src/i18n.ts';
 import { RUNTIME_RECOVERY_PROTOCOL, RUNTIME_SUPERSEDED, runtimeRecoveryRequest } from '../src/runtime-recovery.ts';
 
 async function boundedBody(request: IncomingMessage, maximum: number): Promise<Buffer> {
@@ -20,6 +22,15 @@ async function boundedBody(request: IncomingMessage, maximum: number): Promise<B
     chunks.push(chunk);
   }
   return Buffer.concat(chunks);
+}
+
+function earlierCompanionMessage(entry: unknown, locale: Language): unknown {
+  if (!entry || typeof entry !== 'object' || !('status' in entry) || entry.status !== 'chat_handoff' ||
+      'kind' in entry || 'reply' in entry || !('text' in entry) || typeof entry.text !== 'string') return entry;
+  // Even 0.4.2 ends its wait only for a reply or expired photos. Its sole
+  // per-row mute checks for an active location session. A non-UUID can never
+  // match one. This view of the question is never stored or sent to Dot.
+  return {...entry, reply: message('even.continue_in_dot_chat', locale), location_sharing_id: 'dotlink:owner-chat'};
 }
 
 export function deviceServer(options: { token: string; origin: string; directory: string;
@@ -234,7 +245,14 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (response.destroyed) return;
           if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
           if (result.status === 204) { response.writeHead(204); response.end(); return; }
-          const data = await result.json();
+          let data = await result.json();
+          if (result.ok && ['/api/updates', '/api/messages', '/api/utterances'].includes(path) &&
+              !request.headers.accept?.split(',').some(value => value.trim() === CHAT_HANDOFF_MEDIA_TYPE)) {
+            const locale = chooseLanguage(request.headers['accept-language']?.split(',')[0].split(';')[0].trim() ?? 'en');
+            if (path === '/api/updates') data.messages = data.messages.map((entry: unknown) => earlierCompanionMessage(entry, locale));
+            else if (path === '/api/messages') data = data.map((entry: unknown) => earlierCompanionMessage(entry, locale));
+            else data = earlierCompanionMessage(data, locale);
+          }
           if (result.ok && options.deviceName) {
             if (path === '/api/status') data.deviceName = options.deviceName;
             if (path === '/api/updates') data.status.deviceName = options.deviceName;
