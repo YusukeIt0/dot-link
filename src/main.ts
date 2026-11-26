@@ -5,7 +5,7 @@ import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
 import { RuntimeNative } from './runtime-native.ts';
 import { GlassesAvailability, type AvailabilityChallenge } from './g2-availability.ts';
-import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
+import { AudioInputSource, CreateStartUpPageContainer, EventSourceType, ImuReportPace, OsEventTypeList, TextContainerProperty,
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
 import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from './speech-status.ts';
 import { sttErrorMessage } from './stt-errors.ts';
@@ -1113,7 +1113,7 @@ discardButton.onclick = () => {
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
-window.addEventListener('pagehide', () => { exitDiagnostics.record('pagehide'); pageActive = false; glassesAvailability.cancelReading(); updateRuntime(false); });
+window.addEventListener('pagehide', () => { exitDiagnostics.record('pagehide'); pageActive = false; glassesAvailability.invalidate(); updateRuntime(false); });
 function stopSession(): void {
   if (exited) return;
   exitDiagnostics.record('stop-session');
@@ -1251,7 +1251,7 @@ async function connect(): Promise<void> {
     }
     // Foreground events describe the system menu overlay, not screen power.
     if (eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT || eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT) {
-      availabilityMenuOpen = eventType === OsEventTypeList.FOREGROUND_EXIT_EVENT;
+      availabilityMenuOpen = eventType === OsEventTypeList.FOREGROUND_ENTER_EVENT;
       glassesAvailability.cancelReading();
       return;
     }
@@ -1260,6 +1260,9 @@ async function connect(): Promise<void> {
     const isGesture = isSingle || [OsEventTypeList.DOUBLE_CLICK_EVENT, OsEventTypeList.SCROLL_TOP_EVENT,
       OsEventTypeList.SCROLL_BOTTOM_EVENT, OsEventTypeList.LONG_PRESS_EVENT, OsEventTypeList.LONG_PRESS_RELEASE_EVENT].includes(eventType!);
     if (!isGesture) return;
+    const source = event.sysEvent?.eventSource;
+    if (source === EventSourceType.TOUCH_EVENT_FROM_GLASSES_L || source === EventSourceType.TOUCH_EVENT_FROM_GLASSES_R)
+      glassesAvailability.templeInput(appBridge);
     // Ignore both edges before waking the display or touching any recording.
     if ((eventType === OsEventTypeList.LONG_PRESS_EVENT || eventType === OsEventTypeList.LONG_PRESS_RELEASE_EVENT)
       && (!operationPreferencesReady || operationPreferences.disableHoldRecording)) return;
@@ -1379,7 +1382,7 @@ window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreR
 } });
 window.addEventListener('offline', () => {
   if (exited || !session.token) return;
-  glassesAvailability.cancelReading();
+  glassesAvailability.invalidate();
   progress.connectionFailure = 'phone'; progress.connection = 'offline'; updateRuntime();
 });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });
