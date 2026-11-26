@@ -20,13 +20,19 @@ export class GlassesAvailability {
   private casePosition: 'unknown' | 'inside' | 'outside' = 'unknown';
   private revision = 0;
   private eventState?: string;
-  private pendingEvidence?: StatusEvent | 'temple';
+  private readonly pendingEvents = new Map<string, StatusEvent>();
+  private pendingTemple = false;
   private lastChallenge?: AvailabilityChallenge;
+
+  private clearInputs(): void {
+    this.pendingEvents.clear();
+    this.pendingTemple = false;
+  }
 
   cancelReading(): void {
     this.revision++;
     this.eventState = undefined;
-    this.pendingEvidence = undefined;
+    this.clearInputs();
     this.lastChallenge = undefined;
   }
 
@@ -38,10 +44,10 @@ export class GlassesAvailability {
   private forgetDevice(): void {
     this.observedWear = false;
     this.casePosition = 'unknown';
-    this.pendingEvidence = undefined;
+    this.clearInputs();
   }
 
-  private interpret(device: unknown, evidence?: StatusEvent | 'temple'): DeliveryAvailability {
+  private interpret(device: unknown): DeliveryAvailability {
     if (!object(device) || device.model !== 'g2' || !object(device.status)) {
       this.forgetDevice();
       return 'unknown';
@@ -52,22 +58,21 @@ export class GlassesAvailability {
       return 'unknown';
     }
     const serial = device.sn || device.status.sn;
-    const event = typeof evidence === 'object' ? evidence : undefined;
-    // The callback also reports accessories. Compare locally, including when
-    // a delivery-time getter supersedes the event's original getter.
-    const fromOtherDevice = event?.sn && typeof serial === 'string' && serial.length > 0 && event.sn !== serial;
-    if (event && !fromOtherDevice) {
-      this.eventState = eventKey(event);
-      if (event.connectType !== 'connected') {
-        this.forgetDevice();
-        return 'unknown';
-      }
+    // Accessory events can arrive before the native getter finishes. Use the
+    // latest event for each source. An unidentified negative event is a veto.
+    const events = [...this.pendingEvents.values()].filter(status =>
+      typeof serial !== 'string' || !serial || !status.sn || status.sn === serial);
+    const lastEvent = events.at(-1);
+    if (lastEvent) this.eventState = eventKey(lastEvent);
+    if (events.some(status => status.connectType !== 'connected')) {
+      this.forgetDevice();
+      return 'unknown';
     }
     if (isInCase === true || isCharging === true) {
       this.casePosition = isInCase === true ? 'inside' : 'unknown';
       return 'unavailable';
     }
-    if (!fromOtherDevice && (event?.isInCase === true || event?.isCharging === true)) {
+    if (events.some(status => status.isInCase === true || status.isCharging === true)) {
       this.casePosition = 'unknown';
       return 'unavailable';
     }
@@ -85,26 +90,36 @@ export class GlassesAvailability {
     // A getter alone has reported out-of-case with the lid closed. Confirm a
     // removal event against the G2 that produced this read, or a temple input.
     // The identifier is used only during this local observation.
-    if (evidence === 'temple') this.casePosition = 'outside';
-    else if (this.casePosition === 'inside' && evidence?.isInCase === false && evidence.isCharging === false &&
-        evidence.sn && evidence.sn === serial) this.casePosition = 'outside';
+    const removal = typeof serial === 'string' && serial ? this.pendingEvents.get(serial) : undefined;
+    if (this.pendingTemple || (this.casePosition === 'inside' && removal?.isInCase === false && removal.isCharging === false))
+      this.casePosition = 'outside';
     return this.casePosition === 'outside' ? 'available' : 'unknown';
   }
 
   async read(bridge: NativeBridge, evidence?: StatusEvent | 'temple'): Promise<DeliveryAvailability> {
     const revision = ++this.revision;
-    if (evidence) this.pendingEvidence = evidence;
+    if (evidence === 'temple') this.pendingTemple = true;
+    else if (evidence) {
+      const key = evidence.sn || '';
+      // Bound transient data even if the host leaves a native call pending.
+      if (!this.pendingEvents.has(key) && this.pendingEvents.size >= 8) {
+        this.invalidate();
+        return 'unknown';
+      }
+      this.pendingEvents.delete(key);
+      this.pendingEvents.set(key, evidence);
+    }
     try {
       const device: unknown = await bridge.callEvenApp(EvenAppMethod.GetGlassesInfo);
       if (this.revision !== revision) return 'unknown';
       // A send may start its own fresh getter before the event's getter
       // returns. Only the newest reading may consume the outstanding input.
-      const input = this.pendingEvidence;
-      this.pendingEvidence = undefined;
-      return this.interpret(device, input);
+      return this.interpret(device);
     } catch {
       if (this.revision === revision) this.forgetDevice();
       return 'unknown';
+    } finally {
+      if (this.revision === revision) this.clearInputs();
     }
   }
 
@@ -116,12 +131,12 @@ export class GlassesAvailability {
     if (status.connectType !== 'connected' && !status.sn) { this.invalidate(); return; }
     const key = eventKey(status);
     const removal = this.casePosition === 'inside' && status.isInCase === false && status.isCharging === false;
-    if (key === this.eventState && !removal && !this.pendingEvidence) return;
+    const pending = this.pendingEvents.size > 0 || this.pendingTemple;
+    if (key === this.eventState && !removal && !pending) return;
     this.eventState = undefined;
-    this.pendingEvidence = undefined;
     this.revision++;
     if (status.connectType !== 'connected' || status.isInCase === true || status.isCharging === true ||
-        removal || (status.isWearing === true && !this.observedWear)) {
+        pending || removal || (status.isWearing === true && !this.observedWear)) {
       void this.read(bridge, status);
     } else this.eventState = key;
   }

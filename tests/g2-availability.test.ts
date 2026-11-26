@@ -73,6 +73,33 @@ test('late native reads and abandoned companion requests cannot revive an old st
   assert.equal(posts, 1);
 });
 
+test('only the current G2 contributes in-flight events, independent of accessory arrival order', async () => {
+  const outside = {connectType:'connected', isInCase:false, isCharging:false, isWearing:false};
+  const removed = {...outside, sn:'glasses'};
+  const closing = {...removed, isInCase:true, isCharging:true};
+  const ring = {...outside, sn:'ring'};
+  const chargingRing = {...ring, isCharging:true};
+  for (const [events, expected] of [
+    [[removed,ring], 'available'], [[ring,removed], 'available'],
+    [[removed,chargingRing], 'available'], [[chargingRing,removed], 'available'],
+    [[removed,{...ring,connectType:'disconnected'}], 'available'],
+    [[removed,chargingRing,closing], 'unavailable'], [[closing,ring,removed], 'available'],
+    [[removed,{...closing,sn:''}], 'unavailable'],
+    [[removed,...Array.from({length:8}, (_, i) => ({...ring,sn:'accessory-'+i}))], 'unknown'],
+  ] as const) {
+    const device = new GlassesAvailability();
+    const inside = {model:'g2', sn:'glasses', status:closing};
+    const onDesk = {model:'g2', sn:'glasses', status:outside};
+    assert.equal(await device.read({callEvenApp:async () => inside}), 'unavailable');
+    let finish!: (value: unknown) => void;
+    const pending = new Promise(resolve => {finish = resolve;});
+    for (const event of events) device.statusChanged({callEvenApp:() => pending}, event);
+    assert.equal(await device.read({callEvenApp:async () => onDesk}), expected, JSON.stringify(events));
+    finish(onDesk);
+    await pending;
+  }
+});
+
 test('routing observes only an unexpired challenge of one current owner and runtime', async () => {
   const permitted = new Map([['first','session-a'], ['second','session-b']]);
   let now = 100;
