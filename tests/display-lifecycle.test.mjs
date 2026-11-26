@@ -184,6 +184,12 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   await app.deviceStatus(status());
   await deliver('removed-on-desk');
   assert.deepEqual(responses.at(-1), {id:'removed-on-desk', state:'available'});
+  await app.deviceStatus({...status(), sn:'fixture-ring', isCharging:true});
+  await deliver('ring-charging');
+  assert.deepEqual(responses.at(-1), {id:'ring-charging', state:'available'});
+  await app.deviceStatus({...status(), sn:'fixture-ring', connectType:'disconnected'});
+  await deliver('ring-disconnected');
+  assert.deepEqual(responses.at(-1), {id:'ring-disconnected', state:'available'});
   await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.FOREGROUND_ENTER_EVENT}});
   await deliver('menu-open');
   assert.deepEqual(responses.at(-1), {id:'menu-open', state:'unknown'});
@@ -212,6 +218,10 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   await app.deviceStatus(status());
   await deliver('removed-after-network-return');
   assert.deepEqual(responses.at(-1), {id:'removed-after-network-return', state:'available'});
+  await app.deviceStatus({...status(), sn:'fixture-ring', isCharging:true});
+  await app.deviceStatus({...status(), isCharging:true});
+  await deliver('g2-charge-event-precedes-getter');
+  assert.deepEqual(responses.at(-1), {id:'g2-charge-event-precedes-getter', state:'unknown'});
   assert.equal(app.networkCalls.some(url => url.includes('/api/utterances')), false);
 });
 

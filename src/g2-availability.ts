@@ -5,6 +5,10 @@ export interface AvailabilityChallenge { id: string }
 type NativeBridge = Pick<EvenAppBridge, 'callEvenApp'>;
 interface StatusEvent { connectType: string; isWearing?: boolean; isInCase?: boolean; isCharging?: boolean; sn?: string }
 
+function eventKey(status: StatusEvent): string {
+  return JSON.stringify([status.connectType, status.isWearing, status.isInCase, status.isCharging]);
+}
+
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -47,8 +51,24 @@ export class GlassesAvailability {
       this.forgetDevice();
       return 'unknown';
     }
+    const serial = device.sn || device.status.sn;
+    const event = typeof evidence === 'object' ? evidence : undefined;
+    // The callback also reports accessories. Compare locally, including when
+    // a delivery-time getter supersedes the event's original getter.
+    const fromOtherDevice = event?.sn && typeof serial === 'string' && serial.length > 0 && event.sn !== serial;
+    if (event && !fromOtherDevice) {
+      this.eventState = eventKey(event);
+      if (event.connectType !== 'connected') {
+        this.forgetDevice();
+        return 'unknown';
+      }
+    }
     if (isInCase === true || isCharging === true) {
       this.casePosition = isInCase === true ? 'inside' : 'unknown';
+      return 'unavailable';
+    }
+    if (!fromOtherDevice && (event?.isInCase === true || event?.isCharging === true)) {
+      this.casePosition = 'unknown';
       return 'unavailable';
     }
     if (isInCase !== false || (isCharging !== undefined && typeof isCharging !== 'boolean') ||
@@ -67,7 +87,7 @@ export class GlassesAvailability {
     // The identifier is used only during this local observation.
     if (evidence === 'temple') this.casePosition = 'outside';
     else if (this.casePosition === 'inside' && evidence?.isInCase === false && evidence.isCharging === false &&
-        evidence.sn && evidence.sn === (device.sn || device.status.sn)) this.casePosition = 'outside';
+        evidence.sn && evidence.sn === serial) this.casePosition = 'outside';
     return this.casePosition === 'outside' ? 'available' : 'unknown';
   }
 
@@ -93,19 +113,17 @@ export class GlassesAvailability {
   }
 
   statusChanged(bridge: NativeBridge, status: StatusEvent): void {
-    if (status.connectType !== 'connected') { this.invalidate(); return; }
-    const key = JSON.stringify([status.connectType, status.isWearing, status.isInCase, status.isCharging]);
+    if (status.connectType !== 'connected' && !status.sn) { this.invalidate(); return; }
+    const key = eventKey(status);
     const removal = this.casePosition === 'inside' && status.isInCase === false && status.isCharging === false;
-    if (key === this.eventState && !removal) return;
-    this.eventState = key;
+    if (key === this.eventState && !removal && !this.pendingEvidence) return;
+    this.eventState = undefined;
     this.pendingEvidence = undefined;
     this.revision++;
-    if (status.isInCase === true || status.isCharging === true) {
-      this.casePosition = 'unknown';
-      void this.read(bridge);
-    } else if (removal || (status.isWearing === true && !this.observedWear)) {
+    if (status.connectType !== 'connected' || status.isInCase === true || status.isCharging === true ||
+        removal || (status.isWearing === true && !this.observedWear)) {
       void this.read(bridge, status);
-    }
+    } else this.eventState = key;
   }
 
   async answer(challenge: AvailabilityChallenge, read: () => Promise<DeliveryAvailability>,
