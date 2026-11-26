@@ -4,7 +4,7 @@ import { DeviceInfo, EvenAppMethod } from '@evenrealities/even_hub_sdk';
 import { GlassesAvailability } from '../src/g2-availability.ts';
 import { G2DeliveryAvailability } from '../server/g2-availability.ts';
 
-test('raw G2 case values survive missing-field normalization; demonstrated wear distinguishes a desk', async () => {
+test('a settled closed case cannot assert availability; positive wear distinguishes a desk', async () => {
   const device = new GlassesAvailability();
   const sample = (flags: Record<string, unknown>, model = 'g2', connectType = 'connected') =>
     device.read({callEvenApp: async method => {
@@ -15,14 +15,18 @@ test('raw G2 case values survive missing-field normalization; demonstrated wear 
   assert.equal(await sample({isInCase: 'false'}), 'unknown');
   assert.equal(await sample({isInCase: false, isWearing: 'true'}), 'unknown');
   assert.equal(await sample({isInCase: false, isWearing: true}, 'ring1'), 'unknown');
-  assert.equal(await sample({isInCase: false, isWearing: false}), 'available');
+  assert.equal(await sample({isInCase: false, isWearing: false}), 'unknown');
+  assert.equal(await sample({isInCase: true, isWearing: false, isCharging: false}), 'unavailable');
+  assert.equal(await sample({isInCase: false, isWearing: false, isCharging: false}), 'unknown');
+  assert.equal(await sample({isInCase: false, isWearing: true, isCharging: true}), 'unavailable');
+  assert.equal(await sample({isInCase: false, isWearing: true, isCharging: 'false'}), 'unknown');
   assert.equal(await sample({isInCase: true, isWearing: true}), 'unavailable');
   assert.equal(await sample({isInCase: false, isWearing: true}), 'available');
   device.cancelReading(); // A system menu leaves the same G2 connected.
   assert.equal(await sample({isInCase: false, isWearing: false}), 'unavailable');
   assert.equal(await sample({isInCase: false}), 'unknown');
   assert.equal(await sample({isInCase: false, isWearing: true}, 'g2', 'disconnected'), 'unknown');
-  assert.equal(await sample({isInCase: false}), 'available');
+  assert.equal(await sample({isInCase: false}), 'unknown');
 });
 
 test('late native reads and abandoned companion requests cannot revive an old state', async () => {

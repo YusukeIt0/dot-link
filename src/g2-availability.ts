@@ -28,16 +28,20 @@ export class GlassesAvailability {
 
   private interpret(device: unknown): DeliveryAvailability {
     if (!object(device) || device.model !== 'g2' || !object(device.status)) return 'unknown';
-    const { connectType, isInCase, isWearing } = device.status;
+    const { connectType, isInCase, isWearing, isCharging } = device.status;
     if (connectType !== 'connected') {
       this.observedWear = false;
       return 'unknown';
     }
-    if (isInCase === true) return 'unavailable';
-    if (isInCase !== false || (isWearing !== undefined && typeof isWearing !== 'boolean')) return 'unknown';
-    if (isWearing === true) this.observedWear = true;
-    if (this.observedWear && isWearing !== true) return isWearing === false ? 'unavailable' : 'unknown';
-    return 'available';
+    if (isInCase === true || isCharging === true) return 'unavailable';
+    if (isInCase !== false || (isCharging !== undefined && typeof isCharging !== 'boolean')) return 'unknown';
+    if (isWearing === true) {
+      this.observedWear = true;
+      return 'available';
+    }
+    // On Even iOS 2.4.1 a fresh lookup selected G2 while the case stayed
+    // closed. An explicit false case field alone cannot establish removal.
+    return isWearing === false && this.observedWear ? 'unavailable' : 'unknown';
   }
 
   async read(bridge: Pick<EvenAppBridge, 'callEvenApp'>): Promise<DeliveryAvailability> {
@@ -48,9 +52,9 @@ export class GlassesAvailability {
     } catch { return 'unknown'; }
   }
 
-  statusChanged(bridge: Pick<EvenAppBridge, 'callEvenApp'>, status: { connectType: string; isWearing?: boolean; isInCase?: boolean }): void {
+  statusChanged(bridge: Pick<EvenAppBridge, 'callEvenApp'>, status: { connectType: string; isWearing?: boolean; isInCase?: boolean; isCharging?: boolean }): void {
     // An event may describe a ring. Only the model-specific lookup can establish wear.
-    const key = JSON.stringify([status.connectType, status.isWearing, status.isInCase]);
+    const key = JSON.stringify([status.connectType, status.isWearing, status.isInCase, status.isCharging]);
     if (key === this.eventState) return;
     this.eventState = key;
     this.revision++;
