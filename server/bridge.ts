@@ -20,7 +20,7 @@ const OUTBOUND_LIMIT = 1000;
 const MAX_CONVERSATION_LEASE_MS = 24 * 60 * 60 * 1000;
 interface OwnerInput {
   utterance_id: string; text: string; created_at: string;
-  source?: 'owner_sharing_control'; photo_count?: number; photos_expired?: boolean;
+  source?: 'owner_sharing_control'; photo_count?: number; photos_expired?: boolean; chat_handoff_pending?: boolean;
 }
 const argsSchema = z.object({ session_id: z.literal(SESSION) }).strict();
 const deliverySchema = z.object({ mode: z.literal('webhook'), url: z.string().max(2048), secret: z.string().max(100) }).strict();
@@ -87,7 +87,7 @@ export const recentAnnouncementsTool = {
   annotations: {readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false},
 };
 export const pendingTool = {
-  name: 'get_pending_utterances', description: 'Read owner input. Items with source=owner_sharing_control in the legacy utterances list are explicit app sharing actions, not spoken messages or questions: process these app actions even when there are no spoken utterances. While sharing remains enabled, establish the event named by each current control item (location.updated or notification.created) for personal-g2 using the normal event mechanism without asking for another setting or confirmation. Preserve the utterance subscription and other existing feature subscriptions; do not send a control confirmation to G2. Its utterance_id is a compatibility input ID, not a spoken utterance; the bridge suppresses control acknowledgements instead of displaying them. Re-read before acting and do nothing for an absent/revoked request. Then read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. Already answered utterances are excluded.',
+  name: 'get_pending_utterances', description: 'Read owner input. Items with source=owner_sharing_control in the legacy utterances list are explicit app sharing actions, not spoken messages or questions: process these app actions even when there are no spoken utterances. While sharing remains enabled, establish the event named by each current control item (location.updated or notification.created) for personal-g2 using the normal event mechanism without asking for another setting or confirmation. Preserve the utterance subscription and other existing feature subscriptions; do not send a control confirmation to G2. Its utterance_id is a compatibility input ID, not a spoken utterance; the bridge suppresses control acknowledgements instead of displaying them. Re-read before acting and do nothing for an absent/revoked request. Then read unanswered utterances from the owner, oldest first (up to 10 messages and 4 photos per call). Use after an utterance.created notification even when the notification body is unavailable. Photos appear as image content, preceded by their utterance_id and photo number; use the actual images, not guesses from the text. Reply using each returned utterance_id, then read again for more pending messages. Expired photos are marked photos_expired and are unavailable; ask the owner to resend them rather than guessing their content. For chat_handoff_pending, use the receipt from your original answer, or repeat that same guarded response and ID to renew it. If the claim tool is missing, update the existing Dot Link tools and restart this Dot. Only an authorized claim completes the question on G2. Already answered utterances are excluded.',
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
 };
@@ -218,14 +218,16 @@ export class Bridge {
   private publicMessage(item: State['messages'][number]) {
     const { photos: _photos, photoDigests, recipient: _recipient, device_owner: _owner, ...message } = item;
     const chat = this.routing?.find('question',item.id);
-    return { ...message, ...(chat ? {status:'chat_handoff' as const} : {}), ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
+    return { ...message, ...(chat?.claimed ? {status:'chat_handoff' as const} : {}), ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
   }
   history(owner?: string) { this.expirePhotos(); return this.state.messages.filter(m => !m.device_owner || m.device_owner === owner).map(item => this.publicMessage(item)); }
   private pendingMessages(limit = 10) {
     let count = 0;
     const messages: State['messages'] = [];
     for (const item of this.state.messages) {
-      if (item.status === 'replied' || this.routing?.find('question',item.id) || item.recipient && item.recipient !== this.deliveryRecipient()) continue;
+      if (item.status === 'replied' || this.routing?.find('question',item.id)?.claimed ||
+          (item.recipient && item.recipient !== this.deliveryRecipient()) ||
+          (item.device_owner && this.routing && !this.routing.ownerAuthorized(item.device_owner))) continue;
       const photos = item.photos?.length ?? 0;
       if (messages.length === limit || count + photos > MAX_PHOTOS) break;
       messages.push(item); count += photos;
@@ -246,6 +248,7 @@ export class Bridge {
     if (changed) this.save();
     return { session_id: SESSION, utterances: messages
       .map(item => ({ utterance_id: item.id, text: item.text, created_at: item.createdAt,
+        ...(this.routing?.find('question', item.id) ? {chat_handoff_pending: true} : {}),
         ...(item.photoDigests?.length ? { photo_count: item.photoDigests.length } : {}),
         ...(item.photosExpired ? { photos_expired: true } : {}) })) };
   }

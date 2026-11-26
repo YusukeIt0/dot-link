@@ -161,7 +161,9 @@ export class NotificationInbox {
       n.status !== 'announced' && n.disposition !== 'silent' && (include_deferred || n.disposition !== 'later')).slice(0, 10);
     const unread = notifications.filter(n => !n.dot_read_at);
     if (unread.length) { const at = new Date(this.now()).toISOString(); for (const n of unread) n.dot_read_at = at; try { this.save(false); } catch { /* Optional receipt metadata must not block the Dot read. */ } }
-    return { session_id: session, notifications: notifications.map(n => ({ notification_id: n.id, source_app: n.source_app, title: n.title, body: n.body, observed_at: n.observed_at, source_verification: n.source_verification, disposition: n.disposition, ...(n.audience ? {recipient_receipt:n.audience} : {}) })) };
+    return { session_id: session,
+      ...(this.routing && !recipient_receipt ? {connection_guidance: 'Use the recipient_receipt from the triggering notification.created event. If the connection tools lack that input, update the existing Dot Link plugin tools and restart this Dot.'} : {}),
+      notifications: notifications.map(n => ({ notification_id: n.id, source_app: n.source_app, title: n.title, body: n.body, observed_at: n.observed_at, source_verification: n.source_verification, disposition: n.disposition, ...(n.audience ? {recipient_receipt:n.audience} : {}) })) };
   }
   decide(input: unknown) {
     return this.serial(async () => {

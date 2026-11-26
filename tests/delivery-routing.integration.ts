@@ -134,6 +134,16 @@ test('the published Even companion finishes a handed-off question without announ
   const answer = 'Beside the north entrance.';
   const handoff = await f.result('reply_to_g2', {utterance_id:question.id, text:answer});
   assert.equal(handoff.destination, 'owner_chat');
+  const beforeClaim = (await device('/api/updates')).messages[0];
+  assert.notEqual(beforeClaim.status, 'chat_handoff');
+  assert.equal(beforeClaim.reply, undefined);
+  const [pending] = (await f.result('get_pending_utterances')).utterances;
+  assert.equal(pending.utterance_id, question.id); assert.equal(pending.chat_handoff_pending, true);
+  assert.equal(pending.receipt, undefined);
+  const renewed = await f.result('reply_to_g2', {utterance_id:question.id, text:answer});
+  assert.equal(renewed.receipt, handoff.receipt);
+  assert.equal((await f.result('claim_owner_chat_delivery', {receipt:renewed.receipt})).text, answer);
+  assert.deepEqual((await f.result('get_pending_utterances')).utterances, []);
   const hint = message('even.continue_in_dot_chat', 'ja');
   const [oldRow] = await device('/api/messages');
   assert.equal(oldRow.id, question.id); assert.equal(oldRow.text, question.text);
@@ -149,7 +159,6 @@ test('the published Even companion finishes a handed-off question without announ
   assert.deepEqual((await device('/api/updates', undefined, accept)).messages, [canonical]);
   assert.deepEqual(await device('/api/utterances', question, accept), canonical);
   assert.deepEqual(await f.history(otherOwner), []);
-  assert.equal((await f.result('claim_owner_chat_delivery', {receipt:handoff.receipt})).text, answer);
   assert.equal((await f.result('claim_owner_chat_delivery', {receipt:handoff.receipt})).action, 'do_not_resend');
 });
 
@@ -213,7 +222,9 @@ test('a signed notification selects one recipient, respects silence/defer and re
   const source = await f.notification(), quiet = await f.notification(), delayed = await f.notification();
   const read = (params: object) => f.result('get_pending_notifications', params);
   const decide = (input: object, disposition: string) => f.result('set_notification_disposition', {...input, disposition});
-  assert.deepEqual((await read({})).notifications, []);
+  const noReceipt = await read({});
+  assert.deepEqual(noReceipt.notifications, []);
+  assert.match(noReceipt.connection_guidance, /update the existing Dot Link plugin tools/);
   assert.deepEqual((await read({...source, recipient_receipt: randomUUID()})).notifications, []);
   const status = async (n: typeof source) => (await f.http('/api/notifications/status', 'notification', {ids: [n.notification_id]})).data.notifications[0];
   assert.equal((await status(source)).dot_read_at, undefined);

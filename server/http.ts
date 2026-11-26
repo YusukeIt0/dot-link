@@ -148,7 +148,11 @@ export async function rpc(bridge: Bridge, raw: unknown, notifications?: Notifica
         }
         return { jsonrpc: '2.0', id, ...await toolResponse(() => {
           switch (name) {
-            case 'claim_owner_chat_delivery': return bridge.routing!.take(args);
+            case 'claim_owner_chat_delivery': {
+              const grant = bridge.routing!.take(args);
+              if ('utterance_id' in grant) bridge.changes.emit();
+              return grant;
+            }
             case 'get_status': {
               if (!z.object({}).strict().safeParse(args === undefined ? {} : args).success) throw new ReadResponseError();
               return { ...bridge.status(), ...(notifications?.status() ?? {}), ...(locations?.status() ?? {}) };
