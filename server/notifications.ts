@@ -170,11 +170,14 @@ export class NotificationInbox {
       const p = parsed.data;
       const n = this.state.notifications.find(n => n.id === p.notification_id);
       if (!n || !this.permitted(n,p.recipient_receipt,p.notification_id)) throw new NotificationResponseError('notification_unknown');
-      if (n.status === 'announced' || this.routing?.find('notification',n.id)) throw new NotificationResponseError('notification_already_announced');
+      if (n.status === 'announced' || this.routing?.find('notification', n.id)?.claimed) throw new NotificationResponseError('notification_already_announced');
       if (n.disposition !== p.disposition) {
         const decided = { ...n, disposition: p.disposition, decided_at: new Date(this.now()).toISOString() };
         this.save(false, { ...this.state, notifications: this.state.notifications.map(item => item === n ? decided : item) });
       }
+      // An unclaimed handoff has not authorized a native send. The new
+      // disposition invalidates its grant before a retry can release any text.
+      this.routing?.cancelPendingNotification(n.id);
       return { notification_id: n.id, disposition: p.disposition, stored_for_g2: false, wakeup_scheduled: false };
     });
   }

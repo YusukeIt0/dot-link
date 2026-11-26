@@ -10,6 +10,8 @@ const recordSchema = z.object({
   id: z.string().uuid(),
   messageId: z.string().uuid().optional(),
   digest: z.string().regex(/^[a-f0-9]{64}$/),
+  audience: z.string().regex(/^[a-f0-9]{64}$/),
+  source: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   receipt: z.string().uuid(),
   claimed: z.boolean(),
 });
@@ -24,6 +26,7 @@ interface Delivery {
   question?: string;
   questionId?: string;
   messageId?: string;
+  source?: string;
 }
 interface Grant {
   delivery: Delivery;
@@ -76,11 +79,23 @@ export class DeliveryRouting {
   outbound(id: string) {
     return this.records.find(record => record.messageId === id);
   }
-  private digest(input: Delivery) {
-    return createHash('sha256').update(JSON.stringify([input.audience, input.questionId ?? null, input.question ?? null, input.text])).digest('hex');
+  private contentDigest(input: Delivery) {
+    return createHash('sha256').update(JSON.stringify([input.questionId ?? null, input.question ?? null, input.text])).digest('hex');
   }
-  matches(entry: Reservation, input: Delivery) {
-    return entry.digest === this.digest(input);
+  sameContent(entry: Reservation, input: Delivery) {
+    return entry.digest === this.contentDigest(input);
+  }
+  sameSource(entry: Reservation, source?: string) {
+    return entry.source === this.sourceDigest(source);
+  }
+  private sourceDigest(source?: string) {
+    return source === undefined ? undefined : createHash('sha256').update(source).digest('hex');
+  }
+  cancelPendingNotification(id: string) {
+    const entry = this.find('notification', id);
+    if (!entry || entry.claimed) return;
+    this.write(this.records.filter(record => record !== entry));
+    this.forget(entry.receipt);
   }
   private write(records: Reservation[]) {
     const temporary = this.path + '.tmp';
@@ -95,10 +110,12 @@ export class DeliveryRouting {
   reserve(kind: DeliveryKind, id: string, input: Delivery) {
     this.requireAvailable();
     if (!input.allowed()) throw new ToolRejection('delivery_access_changed', 'The original source or recipient changed. No new delivery is authorized.');
+    const audience = createHash('sha256').update(input.audience).digest('hex');
     let entry = this.find(kind, id);
-    if (entry && !this.matches(entry, input)) throw new ToolRejection('delivery_conflict', 'This delivery belongs to different content or a different recipient. Keep the original identity.');
+    if (entry && (entry.audience !== audience || !this.sameSource(entry, input.source))) throw new ToolRejection('delivery_access_changed', 'Only the original guarded response can authorize this handoff.');
+    if (entry && !this.sameContent(entry, input)) throw new ToolRejection('delivery_conflict', 'This delivery belongs to different content or a different recipient. Keep the original identity.');
     if (!entry) {
-      entry = {kind, id, digest: this.digest(input), receipt: randomUUID(), claimed: false, messageId: input.messageId};
+      entry = {kind, id, digest: this.contentDigest(input), audience, source: this.sourceDigest(input.source), receipt: randomUUID(), claimed: false, messageId: input.messageId};
       const sameKind = this.records.filter(record => record.kind === kind);
       const oldest = sameKind.length >= retentionPerKind ? sameKind[0] : undefined;
       this.write([...this.records.filter(record => record !== oldest), entry]);

@@ -160,7 +160,7 @@ export class ContextResponder {
       throw new ToolRejection('context_decision_conflict', 'An announcement was already stored for this occurrence.');
     const result = p.disposition === 'silent' ? {disposition: 'silent', stored_for_g2: false} :
       await this.send({message_id, text: p.text!, ...(p.utterance_id ? {utterance_id: p.utterance_id} : {})}, allowed, location?.location,
-        () => recallGuards.every(check => check()), owner);
+        () => recallGuards.every(check => check()), owner, 'context:' + receiptKey);
     this.decisions.set(decisionKey, {receiptKey, signature, result});
     while (this.decisions.size > 1000) this.decisions.delete(this.decisions.keys().next().value!);
     location?.complete(location.decisionId, {...p, receiptKey}, result);

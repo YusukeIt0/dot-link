@@ -292,12 +292,12 @@ export class Bridge {
     return {messages};
   }
   hasStoredMessage(id: string) { return this.state.outbound.some(message => message.message_id === id) || !!this.routing?.outbound(id); }
-  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: LocationDelivery, visible = stillAllowed, sourceOwner?: string) {
-    return this.deliverMessage(input, {stillAllowed, location, visible, sourceOwner});
+  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: LocationDelivery, visible = stillAllowed, sourceOwner?: string, sourceReceipt?: string) {
+    return this.deliverMessage(input, {stillAllowed, location, visible, sourceOwner, sourceReceipt});
   }
   private async deliverMessage(input: unknown, scope: {stillAllowed?: () => boolean; location?: LocationDelivery;
-    visible?: () => boolean; sourceOwner?: string; firstAnswer?: boolean}) {
-    const {stillAllowed, location, visible, sourceOwner, firstAnswer} = scope;
+    visible?: () => boolean; sourceOwner?: string; sourceReceipt?: string; firstAnswer?: boolean}) {
+    const {stillAllowed, location, visible, sourceOwner, sourceReceipt, firstAnswer} = scope;
     const parsed = outboundInput.safeParse(input);
     if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
     const p = parsed.data;
@@ -327,13 +327,16 @@ export class Bridge {
       if (!authorized()) throw new ToolRejection('delivery_access_changed', 'The original source or recipient changed.');
     };
     checkAccess();
-    const delivery = {audience, text: p.text, questionId: p.utterance_id, messageId: p.message_id,
+    // Replaying a guarded decision through an ordinary sender must never
+    // replace its health, location, history or other live access checks.
+    const source = stillAllowed ? sourceReceipt ?? p.message_id : undefined;
+    const delivery = {audience, source, text: p.text, questionId: p.utterance_id, messageId: p.message_id,
       question: original?.text, allowed: authorized};
     const repeatsInitialG2 = (question?: State['messages'][number]) => question && question.reply === p.text &&
       this.state.outbound.some(record => record.initial_reply && record.message_id === question.id && record.utterance_id === question.id);
     const firstChat = original && routing?.find('question', original.id);
     const storedAnswer = (firstAnswer && original && (original.reply !== undefined || firstChat)) || repeatsInitialG2(original) ||
-      (firstChat && firstChat.messageId === p.utterance_id && routing?.matches(firstChat, delivery));
+      (firstChat && routing?.sameContent(firstChat, delivery) && (firstChat.messageId === p.utterance_id || !routing.sameSource(firstChat, source)));
     const observation = routed && !this.hasStoredMessage(p.message_id) && !storedAnswer
       ? await routing.availability.check(owner) : undefined;
     return this.serial(async () => {
@@ -354,7 +357,7 @@ export class Bridge {
           return {message_id: p.message_id, stored_for_g2: true, physical_display_confirmed: false};
         }
         const repeatsChatAnswer = priorQuestion && (firstAnswer ||
-          (priorQuestion.messageId === question?.id && routing!.matches(priorQuestion, delivery)));
+          (routing!.sameContent(priorQuestion, delivery) && (priorQuestion.messageId === question?.id || !routing!.sameSource(priorQuestion, source))));
         const prior = routing?.outbound(p.message_id) ?? (repeatsChatAnswer ? priorQuestion : undefined);
         if (prior && !routed) throw new BridgeResponseError('message_id_conflict');
         const initialReply = !!question && question.reply === undefined && !priorQuestion;

@@ -510,6 +510,10 @@ test('combined context keeps silence, rechecks every source at native handoff an
   assert.equal(f.location.status().locationAnnouncementCount, 0);
   assert.deepEqual(f.location.read().recent_announcements, []);
   f.historyControl('delete');
+  const directRetry = await f.call('reply_to_g2', {utterance_id: f.question, text: p.text});
+  assert.equal(directRetry.error.data.reason, 'delivery_access_changed');
+  const followupAlias = await f.call('send_message_to_g2', {utterance_id: f.question, message_id: randomUUID(), text: p.text});
+  assert.equal(followupAlias.error.data.reason, 'delivery_access_changed');
   const revoked = await f.call('claim_owner_chat_delivery', {receipt: reply.receipt});
   assert.equal(revoked.error.data.reason, 'history_access_changed');
   assert.equal(f.bridge.history(owner)[0].reply, undefined);

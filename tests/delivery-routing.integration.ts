@@ -270,3 +270,18 @@ test('pre-update saved notification history stays intact and a new ticket cannot
   assert.equal(after.audience, undefined);
   assert.equal(after.client_response_at, undefined);
 });
+
+test('a new silent or deferred choice can withdraw a notification until its native send is claimed', async t => {
+  const f = await fixture(t);
+  const source = await f.notification();
+  const announce = (text: string) => f.result('announce_notification_to_g2', {...source, text});
+  const pending = await announce('Fictional reminder.');
+  await f.result('set_notification_disposition', {...source, disposition: 'later'});
+  assert.equal((await f.tool('claim_owner_chat_delivery', {receipt: pending.receipt})).error.data.reason, 'delivery_unknown');
+  assert.equal((await f.result('get_pending_notifications', {...source, include_deferred: true})).notifications.length, 1);
+  const again = await announce('Updated fictional reminder.');
+  await f.result('set_notification_disposition', {...source, disposition: 'silent'});
+  assert.equal((await f.tool('claim_owner_chat_delivery', {receipt: again.receipt})).error.data.reason, 'delivery_unknown');
+  assert.equal((await f.tool('announce_notification_to_g2', {...source, text: 'Fictional reminder.'})).error.data.reason, 'notification_silent');
+  assert.deepEqual(await f.history(), []);
+});
