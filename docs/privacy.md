@@ -22,6 +22,14 @@ On a verified conversation subscription or renewal, the relay grants up to 24 ho
 
 The local conversation relay retains its latest 16 subscription changes or failed renewals for restart diagnostics. Each entry contains the change type, time, granted expiry and, when supplied, requested lifetime. The entries omit callback addresses, signing secrets and conversation content.
 
+## Choosing where Dot replies
+
+When a message is ready, the Mac can ask the current paired companion whether G2 can receive it. The companion reads connection, wear and case status through the Even SDK. It sends only an availability result and the ID of the current request to the Mac. The reading expires within seconds. Dot Link keeps no history of wearing, removal or case changes. The companion uses its existing network permission.
+
+If the message belongs in the existing Dot chat, the Mac briefly holds its approved text and rechecks the source before authorizing a single native chat send. The Mac separately retains up to 1,000 routing records each for questions, independent or follow-up messages, and notification announcements. A record contains opaque IDs, a digest and whether the handoff was claimed. The chat-only answer does not enter the glasses history. OpenAI handles the resulting chat message. A claim does not confirm that a native message was sent, displayed or read.
+
+New shared Mac notifications include an opaque receipt for their verified Dot subscription. Stopping sharing or replacing the recipient prevents later access to those new notifications. A G2 notification receipt records that the same paired companion returned a token from the response containing that announcement. It does not record whether the wearer looked at it. Existing saved notification and conversation history retains its original records.
+
 ## Optional Polar health context
 
 Health sharing starts off. In **Healthcare settings** on the Mac, each user registers

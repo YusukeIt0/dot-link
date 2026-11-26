@@ -82,11 +82,11 @@ export function deviceServer(options: { token: string; origin: string; directory
           if (revokeBootstrap && (method !== 'POST' || headers.some(item => !['authorization', 'content-type'].includes(item)))) {
             json(403, { error: 'Revocation preflight rejected' }); return;
           }
-          if (!routes.includes(path) || !['GET', 'POST'].includes(String(method)) || headers.some(item => !['authorization', 'content-type', 'x-g2-trace-id', 'x-g2-revision'].includes(item))) {
+          if (!routes.includes(path) || !['GET', 'POST'].includes(String(method)) || headers.some(item => !['authorization', 'content-type', 'x-g2-trace-id', 'x-g2-revision','x-g2-notification-receipt'].includes(item))) {
             json(403, { error: 'Preflight rejected' }); return;
           }
           response.setHeader('Access-Control-Allow-Methods', 'GET, POST');
-          response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-G2-Trace-ID, X-G2-Revision');
+          response.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-G2-Trace-ID, X-G2-Revision, X-G2-Notification-Receipt');
           response.setHeader('Access-Control-Max-Age', '300');
           response.writeHead(204); response.end(); return;
         }
@@ -219,7 +219,7 @@ export function deviceServer(options: { token: string; origin: string; directory
         try {
           const ownerRequired = path.startsWith('/api/location/') || ['/api/weather', '/api/health', '/api/factor-history'].includes(path);
           const runtimeRoute = ['/api/updates', '/api/g2-availability'].includes(path);
-          const locationOwner = (ownerRequired || runtimeRoute || path === '/api/status') ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
+          const locationOwner = (ownerRequired || runtimeRoute || ['/api/status','/api/utterances','/api/messages'].includes(path)) ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
           const runtime = !legacy && runtimeRoute && locationOwner ? createHash('sha256').update(credential).digest('hex') : undefined;
           if (path === '/api/g2-availability' && !runtime) { json(403, {error: 'Current pairing required'}); return; }
           if (ownerRequired && !locationOwner) { json(401, {error: 'Pairing required'}); return; }
@@ -227,6 +227,8 @@ export function deviceServer(options: { token: string; origin: string; directory
             headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json',
               ...(locationOwner ? {'X-G2-Location-Owner': locationOwner} : {}),
               ...(runtime ? {'X-G2-Paired-Runtime': runtime} : {}),
+              ...(runtime && path === '/api/updates' && typeof request.headers['x-g2-notification-receipt'] === 'string'
+                ? {'X-G2-Notification-Receipt':request.headers['x-g2-notification-receipt']} : {}),
               ...(typeof request.headers['x-g2-revision'] === 'string' ? { 'X-G2-Revision': request.headers['x-g2-revision'] } : {}) },
             body: body?.toString('utf8'), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]), redirect: 'error' });
           if (response.destroyed) return;

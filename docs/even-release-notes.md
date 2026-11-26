@@ -4,6 +4,13 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 Even Hub accepts at most 500 characters of change notes, including the review note.
 
+## 0.4.3
+
+- With the updated Mac app, Dot can answer on G2 or in your existing Dot chat. A reply follows the question if you put the glasses in their case. On glasses that report only case status, a pair on your desk can still receive a message.
+- The same choice applies when Dot decides to tell you about a shared Mac notification.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.2
 
 - Weather can share forecasts and nearby satellite rain estimates with your Dot.

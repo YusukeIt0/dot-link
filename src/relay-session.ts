@@ -21,6 +21,7 @@ export class RelaySession {
   private credential: string;
   private controller = new AbortController();
   private epoch = 0;
+  private notificationReceipt?: {version:number; revision:string; id:string};
   private stopped = false;
   private ownership: Ownership = { stage: 'unknown' };
   private runtimeId: string;
@@ -131,8 +132,10 @@ export class RelaySession {
     const version = this.epoch;
     await this.ensureOrigin(); this.check(version);
     if (signal.aborted) throw new Error('Connection changed');
+    const receipt = this.notificationReceipt;
     const response = await this.options.fetch(apiAddress('/api/updates', this.saved?.origin), {
-      credentials: 'omit', redirect: 'error', headers: {Authorization: `Bearer ${this.token}`, ...(revision ? {'X-G2-Revision': revision} : {})},
+      credentials: 'omit', redirect: 'error', headers: {Authorization: `Bearer ${this.token}`, ...(revision ? {'X-G2-Revision': revision} : {}),
+        ...(receipt && receipt.version === version && receipt.revision === revision ? {'X-G2-Notification-Receipt':receipt.id} : {})},
       signal: AbortSignal.any([signal, this.controller.signal, AbortSignal.timeout(25000)]),
     });
     this.check(version);
@@ -143,7 +146,10 @@ export class RelaySession {
       } else this.options.rejected('invalid');
     }
     if (!response.ok) throw new RelayResponseError('Update connection failed');
-    const result = await response.json().catch(() => { throw new RelayResponseError('Invalid update response'); }); this.check(version); return result;
+    const result = await response.json().catch(() => { throw new RelayResponseError('Invalid update response'); }); this.check(version);
+    if (!signal.aborted) this.notificationReceipt = typeof result?.notificationReceipt === 'string' && typeof result.revision === 'string'
+      ? {version,revision:result.revision,id:result.notificationReceipt} : undefined;
+    return result;
   }
   async pair(invite: PairingInvite): Promise<RelayCredentials> {
     const version = this.epoch; this.check(version);

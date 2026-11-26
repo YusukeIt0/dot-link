@@ -68,6 +68,10 @@ Dot Link retains subscriptions across restarts. On builds that include the 24-ho
 
 The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.
 
+With Mac 0.5.5 and Even 0.4.3, Dot checks the G2 when an answer or suggestion is ready. If the glasses report that you are wearing them, the message goes to G2. If they are in the case, or the companion cannot confirm that G2 is available, Dot can continue in your existing ChatGPT Dot chat. A question asked there stays in that chat. On G2s that report only case status, a connected pair outside its case can receive a message while sitting on a desk. Opening or closing the case does not start a message.
+
+Keep Dot Link running in Even Hub to let it answer the Mac while you use another app. Even Hub handles background operation automatically. If your existing Dot cannot use the new chat handoff after the Mac update, use **Update tools** for the existing ChatGPT connection and restart that Dot. Your existing pairing and sharing choices carry over.
+
 Hold to record on G2 and release to stop, or tap the microphone in the Even companion. Tap the same button again to stop and transcribe; the adjacent trash button discards recording or transcription without sending. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to edit the text before sending with the up arrow. Use the left/right arrows to browse conversation history and the speaker button to turn read aloud on or off. **Display settings** controls idle timeout, wake gestures and head-raise behavior.
 
 In **Operation settings**, **Disable hold-to-record** blocks manual recording on both G2 and the phone and discards any manual recording in progress. It does not enable wake listening; use separately enabled Hey dot or text input.
@@ -95,6 +99,8 @@ Web addresses remain visible as plain text in the phone conversation and do not 
 For **read-aloud**, use the switch in the Even companion. It starts OFF on first use and remembers your ON/OFF choice when you reopen the app. Selecting a different interface language turns read-aloud OFF; turn it on again when you want to listen. Reopening does not replay earlier replies. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
 
 ## Mac notifications
+
+If Dot chooses to tell you about a shared notification, it uses the same G2 or Dot chat destination as a conversation message. A notification Dot marks silent stays silent. A deferred notification can be reconsidered later.
 
 In the Mac app, choose **Permissions**, add the installed Dot Link.app under macOS **Accessibility**, and enable access. Then turn on **Share all Mac notifications with Dot**. With Mac 0.4.35 or later, Dot Link asks your existing Dot to receive shared notifications automatically; no separate event setup is needed. You can tell your Dot which notifications you want to hear about.
 

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { z } from 'zod';
@@ -12,6 +12,8 @@ import { MAX_PHOTOS } from '../src/photo-attachments.ts';
 import { PhotoStore } from './photo-store.ts';
 import { BridgeResponseError } from './bridge-response-error.ts';
 import type { SharingActivation } from './sharing-activation.ts';
+import type { DeliveryRouting } from './delivery-routing.ts';
+import { ToolRejection } from './tool-response.ts';
 
 const SESSION = 'personal-g2';
 const OUTBOUND_LIMIT = 1000;
@@ -27,9 +29,10 @@ const subscribeSchema = z.object({
   cursor: z.null().optional(), ttlMs: z.number().int().positive().max(MAX_CONVERSATION_LEASE_MS).nullable().optional(),
 });
 const replySchema = z.object({ utterance_id: z.string().uuid(), text: z.string().trim().min(1).max(8000) }).strict();
-const subscriptionSchema = z.object({ id: z.string(), url: z.string(), secret: z.string(), expiresAt: z.number() });
+const subscriptionSchema = z.object({ id: z.string(), url: z.string(), secret: z.string(), expiresAt: z.number(), recipient: z.string().optional() });
 const utteranceSchema = z.object({
   id: z.string().uuid(), text: z.string(), createdAt: z.string(),
+  recipient: z.string().optional(), device_owner: z.string().optional(),
   status: z.enum(['pending', 'accepted', 'failed', 'replied']),
   reply: z.string().optional(), repliedAt: z.string().optional(), readAt: z.string().optional(),
   location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional(),
@@ -39,7 +42,7 @@ const outboundInput = z.object({
   message_id: z.string().uuid(), text: z.string().trim().min(1).max(8000),
   utterance_id: z.string().uuid().optional(),
 }).strict();
-const outboundRecord = outboundInput.extend({ createdAt: z.string(), initial_reply: z.boolean().optional(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
+const outboundRecord = outboundInput.extend({ createdAt: z.string(), initial_reply: z.boolean().optional(), audience: z.string().optional(), device_owner: z.string().optional(), location_sharing_id: z.string().uuid().optional(), location_expires_at: z.string().datetime().optional() });
 const leaseEvent = z.object({
   at: z.number(), kind: z.enum(['created', 'renewed', 'unsubscribed', 'callback_gone', 'renewal_failed']),
   expiresAt: z.number(), requestedTtlMs: z.number().nullable().optional(),
@@ -91,6 +94,7 @@ export const pendingTool = {
 
 export class Bridge {
   readonly changes = new ChangeSignal();
+  readonly routing?: DeliveryRouting;
   private state: State;
   private path: string;
   private photoStore: PhotoStore;
@@ -110,7 +114,8 @@ export class Bridge {
   // Subscriptions verifying or waiting to commit. Removing a callback cancels only
   // pending subscriptions of that same callback URL, never unrelated ones.
   private readonly pendingChecks = new Set<{ url: string; cancelled: boolean }>();
-  constructor(path: string, sender: WebhookSender, hosts: string[], latency = new LatencyLog(), options: { now?: () => number; photoRetention?: { maxBytes: number; maxAgeMs: number } } = {}) {
+  constructor(path: string, sender: WebhookSender, hosts: string[], latency = new LatencyLog(), options: { now?: () => number; photoRetention?: { maxBytes: number; maxAgeMs: number }; routing?: DeliveryRouting } = {}) {
+    this.routing = options.routing;
     this.now = options.now ?? Date.now; this.photoRetention = options.photoRetention ?? PHOTO_RETENTION;
     this.latency = latency;
     this.path = path; this.sender = sender; this.hosts = hosts;
@@ -184,6 +189,10 @@ export class Bridge {
     const sub = this.state.subscription;
     return sub && sub.expiresAt > this.now() ? sub : undefined;
   }
+  private deliveryRecipient() {
+    const sub = this.active();
+    return sub?.recipient ?? sub?.id;
+  }
   private leaseHistory(kind: z.infer<typeof leaseEvent>['kind'], sub: Subscription, requestedTtlMs?: number | null) {
     const event = { at: this.now(), kind, expiresAt: sub.expiresAt, requestedTtlMs };
     return [...(this.state.leaseHistory ?? []), event].slice(-LEASE_HISTORY_LIMIT);
@@ -207,15 +216,16 @@ export class Bridge {
     return response.status;
   }
   private publicMessage(item: State['messages'][number]) {
-    const { photos: _photos, photoDigests, ...message } = item;
-    return { ...message, ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
+    const { photos: _photos, photoDigests, recipient: _recipient, device_owner: _owner, ...message } = item;
+    const chat = this.routing?.find('question',item.id);
+    return { ...message, ...(chat ? {status:'chat_handoff' as const} : {}), ...(photoDigests?.length ? { photoCount: photoDigests.length } : {}) };
   }
-  history() { this.expirePhotos(); return this.state.messages.map(item => this.publicMessage(item)); }
+  history(owner?: string) { this.expirePhotos(); return this.state.messages.filter(m => !m.device_owner || m.device_owner === owner).map(item => this.publicMessage(item)); }
   private pendingMessages(limit = 10) {
     let count = 0;
     const messages: State['messages'] = [];
     for (const item of this.state.messages) {
-      if (item.status === 'replied') continue;
+      if (item.status === 'replied' || this.routing?.find('question',item.id) || item.recipient && item.recipient !== this.deliveryRecipient()) continue;
       const photos = item.photos?.length ?? 0;
       if (messages.length === limit || count + photos > MAX_PHOTOS) break;
       messages.push(item); count += photos;
@@ -257,8 +267,8 @@ export class Bridge {
     return { content, structuredContent: value };
   }
 
-  outboundHistory() {
-    return this.state.outbound.filter(m => !m.initial_reply).map(m => ({
+  outboundHistory(owner?: string) {
+    return this.state.outbound.filter(m => !m.initial_reply && (!m.device_owner || m.device_owner === owner)).map(m => ({
       id: `dot:${m.message_id}`, kind: 'proactive' as const, text: '', reply: m.text,
       status: 'replied', createdAt: m.createdAt,
       ...(m.utterance_id ? {utterance_id: m.utterance_id} : {}),
@@ -281,30 +291,91 @@ export class Bridge {
     }
     return {messages};
   }
-  hasStoredMessage(id: string) { return this.state.outbound.some(message => message.message_id === id); }
-  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: LocationDelivery, visible = stillAllowed) {
-    const conversation = this.active() ? this.conversationGeneration : undefined;
+  hasStoredMessage(id: string) { return this.state.outbound.some(message => message.message_id === id) || !!this.routing?.outbound(id); }
+  sendMessage(input: unknown, stillAllowed?: () => boolean, location?: LocationDelivery, visible = stillAllowed, sourceOwner?: string) {
+    return this.deliverMessage(input, {stillAllowed, location, visible, sourceOwner});
+  }
+  private async deliverMessage(input: unknown, scope: {stillAllowed?: () => boolean; location?: LocationDelivery;
+    visible?: () => boolean; sourceOwner?: string; firstAnswer?: boolean}) {
+    const {stillAllowed, location, visible, sourceOwner, firstAnswer} = scope;
+    const parsed = outboundInput.safeParse(input);
+    if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
+    const p = parsed.data;
+    const original = p.utterance_id ? this.state.messages.find(item => item.id === p.utterance_id) : undefined;
+    if (p.utterance_id && !original && !this.hasStoredMessage(p.message_id)) throw new BridgeResponseError('utterance_unknown');
+    const owner = original?.device_owner ?? sourceOwner;
+    const routing = this.routing;
+    const destination = this.deliveryRecipient();
+    const conversation = destination ? this.conversationGeneration : undefined;
+    // Pre-update questions have no established chat recipient. Keep their prior
+    // reply path without assigning saved questions to a later subscription.
+    const routed = routing && (!original || !!original.recipient);
+    const audience = JSON.stringify([destination ?? null, owner ?? null]);
+    const authorized = () => {
+      if (this.closed || (stillAllowed && !stillAllowed()) || (owner && !routing?.ownerAuthorized(owner))) return false;
+      if (!destination && !(stillAllowed && sourceOwner)) return false;
+      if (destination !== this.deliveryRecipient() || (destination && conversation !== this.conversationGeneration)) return false;
+      if (!original) return true;
+      const current = this.state.messages.find(item => item.id === original.id);
+      return !!current && current.createdAt === original.createdAt && current.text === original.text &&
+        current.recipient === destination && current.device_owner === original.device_owner &&
+        (!original.device_owner || !sourceOwner || original.device_owner === sourceOwner);
+    };
+    const checkAccess = () => {
+      if (!routed) return;
+      routing.requireAvailable();
+      if (!authorized()) throw new ToolRejection('delivery_access_changed', 'The original source or recipient changed.');
+    };
+    checkAccess();
+    const delivery = {audience, text: p.text, questionId: p.utterance_id, messageId: p.message_id,
+      question: original?.text, allowed: authorized};
+    const repeatsInitialG2 = (question?: State['messages'][number]) => question && question.reply === p.text &&
+      this.state.outbound.some(record => record.initial_reply && record.message_id === question.id && record.utterance_id === question.id);
+    const firstChat = original && routing?.find('question', original.id);
+    const storedAnswer = (firstAnswer && original && (original.reply !== undefined || firstChat)) || repeatsInitialG2(original) ||
+      (firstChat && firstChat.messageId === p.utterance_id && routing?.matches(firstChat, delivery));
+    const observation = routed && !this.hasStoredMessage(p.message_id) && !storedAnswer
+      ? await routing.availability.check(owner) : undefined;
     return this.serial(async () => {
       if (stillAllowed && !stillAllowed()) throw new Error('Message context is no longer valid');
-      const parsed = outboundInput.safeParse(input);
-      if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
-      const p = parsed.data;
+      checkAccess();
       const existing = this.state.outbound.find(m => m.message_id === p.message_id);
+      if (existing?.audience && existing.audience !== audience) throw new ToolRejection('delivery_access_changed', 'The original recipient changed.');
+      if (firstAnswer && existing?.initial_reply && existing.utterance_id === p.utterance_id && existing.text !== p.text) throw new BridgeResponseError('reply_conflict');
       if (existing && (existing.text !== p.text || existing.utterance_id !== p.utterance_id)) throw new BridgeResponseError('message_id_conflict');
       if (!existing) {
         const question = p.utterance_id ? this.state.messages.find(item => item.id === p.utterance_id) : undefined;
         if (p.utterance_id && !question) throw new BridgeResponseError('utterance_unknown');
-        const initialReply = !!question && question.reply === undefined;
+        const priorQuestion = question && routing?.find('question', question.id);
+        // Both public tools can supply the first answer. Its implicit identity
+        // is the question ID; a retry through the other tool cannot add a page.
+        if (question?.reply !== undefined && (firstAnswer || repeatsInitialG2(question))) {
+          if (question.reply !== p.text) throw new BridgeResponseError('reply_conflict');
+          return {message_id: p.message_id, stored_for_g2: true, physical_display_confirmed: false};
+        }
+        const repeatsChatAnswer = priorQuestion && (firstAnswer ||
+          (priorQuestion.messageId === question?.id && routing!.matches(priorQuestion, delivery)));
+        const prior = routing?.outbound(p.message_id) ?? (repeatsChatAnswer ? priorQuestion : undefined);
+        if (prior && !routed) throw new BridgeResponseError('message_id_conflict');
+        const initialReply = !!question && question.reply === undefined && !priorQuestion;
+        if (routed && (prior || observation?.state() !== 'available')) {
+          const kind = prior?.kind ?? (initialReply ? 'question' : 'message');
+          const id = prior?.id ?? (initialReply ? question!.id : p.message_id);
+          const result = routing.reserve(kind, id, delivery);
+          if (initialReply) this.changes.emit();
+          return {message_id: p.message_id, ...result};
+        }
         const at = new Date(this.now()).toISOString();
         let messages = this.state.messages;
         if (initialReply) {
           const { photos: _photos, ...retained } = question!;
           messages = messages.map(item => item === question ? { ...retained, reply: p.text, repliedAt: at, status: 'replied' as const,
+            ...(routed && observation?.owner ? {device_owner: observation.owner} : {}),
             ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) } : item);
         }
         // Rotate in acceptance order. Retried retained IDs never refresh that order.
         // Persist first-answer pairing and its retry identity in one transaction.
-        const record = { ...p, createdAt: at, ...(initialReply ? {initial_reply: true} : {}), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) };
+        const record = { ...p, createdAt: at, ...(routed && observation?.owner ? {device_owner: observation.owner, audience} : {}), ...(initialReply ? {initial_reply: true} : {}), ...(location ? {location_sharing_id: location.sharing_id, location_expires_at: location.expires_at} : {}) };
         const outbound = [...this.state.outbound, record].slice(-OUTBOUND_LIMIT);
         this.save({ ...this.state, messages, outbound });
         const forConversation = conversation !== undefined && conversation === this.conversationGeneration && !!this.active();
@@ -358,7 +429,8 @@ export class Bridge {
         if (current && current.id !== id) throw new SubscriptionResponseError('subscription_conflict');
         if (check.cancelled) throw new SubscriptionResponseError('subscription_changed');
         const kind = this.state.subscription?.id === id ? 'renewed' : 'created';
-        this.save({ ...this.state, subscription: sub, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
+        const recipient = this.routing ? this.deliveryRecipient() ?? randomUUID() : undefined;
+        this.save({ ...this.state, subscription: {...sub, recipient}, leaseHistory: this.leaseHistory(kind, sub, params.ttlMs) });
         if (kind === 'created') this.conversationGeneration++;
         return { id, refreshBefore: new Date(sub.expiresAt).toISOString(), cursor: null, truncated: false as const };
       });
@@ -378,7 +450,7 @@ export class Bridge {
       return {};
     });
   }
-  async submit(input: unknown) {
+  async submit(input: unknown, deviceOwner?: string) {
     // Previously an utterance queued behind an in-flight subscription. Keep that
     // outcome when nothing is subscribed yet; with an active subscription, never wait.
     if (!this.active() && this.subscribing.size) await Promise.allSettled([...this.subscribing]);
@@ -389,6 +461,8 @@ export class Bridge {
       const photoDigests = photos?.map(photoDigest) ?? [];
       const existing = this.state.messages.find(item => item.id === id);
       if (existing) {
+        if ((existing.device_owner && existing.device_owner !== deviceOwner) ||
+            (existing.recipient && existing.recipient !== this.deliveryRecipient())) throw new Error('Original utterance recipient unavailable');
         if (existing.text !== text || JSON.stringify(existing.photoDigests ?? []) !== JSON.stringify(photoDigests)) throw new Error('Utterance ID already used for different content');
         return this.publicMessage(existing);
       }
@@ -397,6 +471,7 @@ export class Bridge {
       const retained = this.state.messages.slice(-99);
       if (retained.reduce((n, item) => n + photoBytes(item.photos), 0) + photoBytes(photos) > this.photoRetention.maxBytes) throw new PhotoStorageFullError();
       const message: State['messages'][number] = { id, text, createdAt: new Date(this.now()).toISOString(), status: 'pending',
+        ...(this.routing ? {recipient: this.deliveryRecipient(), device_owner: deviceOwner} : {}),
         ...(photoDigests.length ? { photos, photoDigests } : {}) };
       this.latency.mark(id, 'utterance_created');
       this.save({ ...this.state, messages: [...retained, message] });
@@ -429,6 +504,10 @@ export class Bridge {
     if (!parsed.success) throw new BridgeResponseError('invalid_arguments');
     const { utterance_id, text } = parsed.data;
     this.latency.mark(utterance_id, 'dot_reply_received');
+    if (this.routing) {
+      const result = await this.deliverMessage({message_id: utterance_id, utterance_id, text}, {firstAnswer: true});
+      return result.stored_for_g2 ? {utterance_id,delivered_to_bridge:true} : {utterance_id,...result};
+    }
     return this.serial(async () => {
       const message = this.state.messages.find(item => item.id === utterance_id);
       if (!message) throw new BridgeResponseError('utterance_unknown');

@@ -25,6 +25,7 @@ import type { FactorArchives } from './history/archive-controls.ts';
 import { createHash } from 'node:crypto';
 import { SharingActivation } from './sharing-activation.ts';
 import { G2DeliveryAvailability } from './g2-availability.ts';
+import { DeliveryRouting } from './delivery-routing.ts';
 
 try {writeFileSync(resolve('.runtime/health-admin-key'),randomBytes(32).toString('base64url'),{flag:'wx',mode:0o600});} catch (error) {if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;}
 const tokens = {
@@ -37,11 +38,12 @@ const hosts = (process.env.DOT_CALLBACK_HOSTS ?? '').split(',').map(value => val
 // An empty allowlist permits discovery but rejects every callback subscription.
 const port = Number(process.env.DOT_BRIDGE_PORT ?? 3460);
 if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Invalid port');
-const bridge = new Bridge(resolve('.runtime/bridge-state.json'), new WebhookSender(safePost(hosts)), hosts, new LatencyLog(resolve('.runtime/latency-bridge.jsonl')));
-const notifications = tokens.notification ? new NotificationInbox(resolve('.runtime/notification-state.json'), new WebhookSender(safePost(hosts)), hosts) : undefined;
 const pairing = new PairingAuthority(resolve('.runtime/pairing'));
 const availability = new G2DeliveryAvailability((owner, runtime) => pairing.currentRuntime(owner, runtime));
 const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
+const routing = new DeliveryRouting(resolve('.runtime/chat-handoffs.json'),availability,owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner));
+const bridge = new Bridge(resolve('.runtime/bridge-state.json'), new WebhookSender(safePost(hosts)), hosts, new LatencyLog(resolve('.runtime/latency-bridge.jsonl')), {routing});
+const notifications = tokens.notification ? new NotificationInbox(resolve('.runtime/notification-state.json'), new WebhookSender(safePost(hosts)), hosts, Date.now, routing) : undefined;
 const appExecutable = process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../../../MacOS/DotLink', import.meta.url)) : undefined;
 const archiveDirectory = resolve('.runtime/factor-history');
 let history: LocationHistoryStore | undefined;
@@ -74,7 +76,7 @@ try {
     archive: () => archives?.authority,
     ownerAuthorized: owner => owner === legacyLocationOwner || pairing.authorizedSubject(owner),
     ownerRevoked: owner => owner !== legacyLocationOwner && pairing.subjectStatus(owner) === 'revoked',
-    announce: (input, guard) => bridge.sendMessage(input, guard),
+    announce: (input, guard) => bridge.sendMessage(input, guard, undefined, guard, history?.historyOwner()),
   });
 } catch { console.error('Location history unavailable; ordinary conversation remains available'); }
 const locations = new LocationContext(resolve('.runtime/location-subscription.json'), new WebhookSender(safePost(hosts)), hosts,

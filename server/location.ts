@@ -1,3 +1,4 @@
+import { ownerChatDelivery, pendingChatHandoff } from './delivery-routing.ts';
 import { contextActivityGuidance, decisionFactorTool } from './context-guidance.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
@@ -109,11 +110,11 @@ export class LocationContext {
   private path: string;
   private sender: WebhookSender;
   private hosts: string[];
-  private announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: LocationDelivery, visible?: () => boolean) => Promise<unknown>;
+  private announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: LocationDelivery, visible?: () => boolean, owner?: string) => Promise<unknown>;
   private now: () => number;
   private ownerAuthorized: (owner: string) => boolean;
   constructor(path: string, sender: WebhookSender, hosts: string[],
-    announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: LocationDelivery, visible?: () => boolean) => Promise<unknown>, now = Date.now,
+    announce: (input: { message_id: string; text: string; utterance_id?: string }, stillAllowed: () => boolean, location: LocationDelivery, visible?: () => boolean, owner?: string) => Promise<unknown>, now = Date.now,
     ownerAuthorized: (owner: string) => boolean = () => true,
     geographyFactory?: (output:(update:GeographyUpdate)=>void)=>GeographyLoader,
     mobilityFactory?:()=>MobilityAcquisition,
@@ -208,7 +209,7 @@ export class LocationContext {
     this.lastReadAt = new Date(this.now()).toISOString(); this.changes.emit();
     return { ...status, response_context: {tool: 'respond_to_context', arguments: {context_id: current.id}, expires_no_later_than: new Date(Math.min(this.leaseUntil, Date.parse(current.fix.measured_at) + LOCATION_FRESH_MS)).toISOString()}, activity_guidance: contextActivityGuidance, context: { context_id: current.id, ...current.fix, received_at: new Date(current.receivedAt).toISOString(),
       source: 'phone_location', update_id: this.pending?.id ?? null, ...(current.geography?{geography:current.geography}:{}), ...(current.weather?{weather:current.weather}:{}) },
-      recent_announcements: recentAnnouncements?.() ?? [...this.outcomes.values()].filter(o => o.disposition === 'announce').slice(-5).map(o => o.text) };
+      recent_announcements: recentAnnouncements?.() ?? [...this.outcomes.values()].filter(o => o.disposition === 'announce' && !ownerChatDelivery(o.result)).slice(-5).map(o => o.text) };
   }
   /** Snapshot authorization without depending on geography downloads or mutating a fix. */
   weatherAccess(owner: string, subscribed = false) {
@@ -321,7 +322,7 @@ export class LocationContext {
     this.outcomes.set(id, {...p, result});
     while (this.outcomes.size > 30) this.outcomes.delete(this.outcomes.keys().next().value!);
     this.lastDecisionAt = new Date(this.now()).toISOString();
-    if (p.disposition === 'announce') { this.lastAnnouncementAt = this.lastDecisionAt; this.sent++; }
+    if (p.disposition === 'announce' && !ownerChatDelivery(result)) { this.lastAnnouncementAt = this.lastDecisionAt; this.sent++; }
     // Question answers never acknowledge an independent proactive event.
     if (!p.utterance_id) {
       this.lastAnchor = read.fix;
@@ -352,7 +353,7 @@ export class LocationContext {
       const previous = this.outcomes.get(id);
       if (previous) {
         if (previous.receiptKey !== undefined || previous.disposition !== p.disposition || previous.text !== p.text || previous.utterance_id !== p.utterance_id) throw new LocationResponseError('conflicting_decision');
-        return previous.result;
+        if (!pendingChatHandoff(previous.result)) return previous.result;
       }
       const read = this.reads.get(p.context_id);
       this.requireResponseContext(read);
@@ -364,7 +365,7 @@ export class LocationContext {
       if (p.disposition === 'announce') {
         try {
           result = await this.announce({ message_id: id, text: p.text!, ...(p.utterance_id ? {utterance_id:p.utterance_id} : {}) }, stillAllowed,
-            this.delivery(read), this.recallGuard(read));
+            this.delivery(read), this.recallGuard(read), this.owner);
         } catch (error) {
           if (error instanceof BridgeResponseError && error.reason === 'utterance_unknown') throw new LocationResponseError('utterance_unknown');
           if (error instanceof BridgeResponseError && error.reason === 'message_id_conflict') throw new LocationResponseError('conflicting_decision');

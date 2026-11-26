@@ -4,6 +4,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 
 | Owner | Responsibility | Does not decide |
 | --- | --- | --- |
+| `src/g2-availability.ts` | One on-demand SDK reading for the current Mac challenge, including wear or case fallback | Whether Dot initiates a message or which conversation receives it |
 | `src/photo-attachments.ts` | SDK camera/library selection and bounded pixel re-encoding into one photo format | Draft UI, send policy or relay retention |
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
