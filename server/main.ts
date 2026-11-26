@@ -24,6 +24,7 @@ import { EnvironmentHistory } from './history/environment-history.ts';
 import type { FactorArchives } from './history/archive-controls.ts';
 import { createHash } from 'node:crypto';
 import { SharingActivation } from './sharing-activation.ts';
+import { G2DeliveryAvailability } from './g2-availability.ts';
 
 try {writeFileSync(resolve('.runtime/health-admin-key'),randomBytes(32).toString('base64url'),{flag:'wx',mode:0o600});} catch (error) {if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;}
 const tokens = {
@@ -39,6 +40,7 @@ if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error('Inv
 const bridge = new Bridge(resolve('.runtime/bridge-state.json'), new WebhookSender(safePost(hosts)), hosts, new LatencyLog(resolve('.runtime/latency-bridge.jsonl')));
 const notifications = tokens.notification ? new NotificationInbox(resolve('.runtime/notification-state.json'), new WebhookSender(safePost(hosts)), hosts) : undefined;
 const pairing = new PairingAuthority(resolve('.runtime/pairing'));
+const availability = new G2DeliveryAvailability((owner, runtime) => pairing.currentRuntime(owner, runtime));
 const legacyLocationOwner = createHash('sha256').update(tokens.device).digest('hex');
 const appExecutable = process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../../../MacOS/DotLink', import.meta.url)) : undefined;
 const archiveDirectory = resolve('.runtime/factor-history');
@@ -108,7 +110,7 @@ if (notifications) {
   try { activation.push(new SharingActivation(resolve('.runtime/notification-sharing-activation.json'), bridge, notifications, Date.now, 'notification')); }
   catch { console.error('Notification activation unavailable; ordinary conversation remains available'); }
 }
-const server = bridgeServer(bridge, tokens, notifications, locations, history, weather, activation, health, archives);
+const server = bridgeServer(bridge, tokens, notifications, locations, history, weather, activation, health, archives, availability);
 server.requestTimeout = 15_000;
 server.headersTimeout = 10_000;
 server.listen(port, '127.0.0.1', () => console.log(`Private Dot bridge listening on 127.0.0.1:${port}; Dot connection not verified`));

@@ -233,6 +233,16 @@ export class PairingAuthority {
    * Older sessions use their session hash; recovery-capable sessions keep their
    * owner through port rotation. Never expose either hash in a status response. */
   authorizedSubject(subject: string): boolean { return this.subjectStatus(subject) === 'authorized'; }
+  /** The gateway derives both identifiers from its authenticated session. An old
+   * WebView of the same pairing cannot speak for its replacement. */
+  currentRuntime(subject: string, sessionHash: string): boolean {
+    if (!fileName.test(`${sessionHash}.json`) || !this.authorizedSubject(subject)) return false;
+    try {
+      const record: RecoveryRecord = JSON.parse(readFileSync(join(this.directory, 'recoveries', `${subject}.json`), 'utf8'));
+      return record.currentSession === sessionHash && !!record.runtimeOwner &&
+        runtimeGeneration(record.runtimeOwner.generation) && record.runtimeOwner.generation > 0;
+    } catch { return false; }
+  }
   /** Distinguish confirmed removal/expiry from unreadable state for durable owners. */
   subjectStatus(subject: string): 'authorized' | 'revoked' | 'unavailable' {
     if (!fileName.test(`${subject}.json`)) return 'unavailable';

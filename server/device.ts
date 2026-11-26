@@ -72,7 +72,7 @@ export function deviceServer(options: { token: string; origin: string; directory
     }
     try {
       if (path.startsWith('/api/')) {
-        const routes = ['/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', '/api/transcribe', '/api/pair', '/api/pair/resume', '/api/pair/revoke', '/api/location/control', '/api/location/update', '/api/location/history', '/api/weather', '/api/health', '/api/factor-history'];
+        const routes = ['/api/status', '/api/messages', '/api/updates', '/api/g2-availability', '/api/utterances', '/api/timings', '/api/transcribe', '/api/pair', '/api/pair/resume', '/api/pair/revoke', '/api/location/control', '/api/location/update', '/api/location/history', '/api/weather', '/api/health', '/api/factor-history'];
         if (request.method === 'OPTIONS' && crossOrigin) {
           const method = request.headers['access-control-request-method'];
           const headers = String(request.headers['access-control-request-headers'] ?? '').toLowerCase().split(',').map(item => item.trim()).filter(Boolean);
@@ -208,7 +208,7 @@ export function deviceServer(options: { token: string; origin: string; directory
           } finally { response.removeListener('close', cancel); }
         }
         const allowed = (request.method === 'GET' && ['/api/status', '/api/messages', '/api/updates', '/api/factor-history'].includes(path)) ||
-          (request.method === 'POST' && ['/api/utterances', '/api/timings', '/api/location/control', '/api/location/update', '/api/location/history', '/api/weather', '/api/health', '/api/factor-history'].includes(path));
+          (request.method === 'POST' && ['/api/g2-availability', '/api/utterances', '/api/timings', '/api/location/control', '/api/location/update', '/api/location/history', '/api/weather', '/api/health', '/api/factor-history'].includes(path));
         if (!allowed) { json(404, { error: 'Not found' }); return; }
         if (request.method === 'POST' && request.headers['content-type'] !== 'application/json') { json(415, { error: 'JSON required' }); return; }
         const body = request.method === 'POST' ? await boundedBody(request, path === '/api/utterances' ? PHOTO_REQUEST_BYTES : 32768) : undefined;
@@ -218,11 +218,15 @@ export function deviceServer(options: { token: string; origin: string; directory
         response.once('close', disconnected);
         try {
           const ownerRequired = path.startsWith('/api/location/') || ['/api/weather', '/api/health', '/api/factor-history'].includes(path);
-          const locationOwner = (ownerRequired || ['/api/status', '/api/updates'].includes(path)) ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
+          const runtimeRoute = ['/api/updates', '/api/g2-availability'].includes(path);
+          const locationOwner = (ownerRequired || runtimeRoute || path === '/api/status') ? (legacy ? createHash('sha256').update(options.token).digest('hex') : options.pairing?.subject(credential, requestOrigin!)) : undefined;
+          const runtime = !legacy && runtimeRoute && locationOwner ? createHash('sha256').update(credential).digest('hex') : undefined;
+          if (path === '/api/g2-availability' && !runtime) { json(403, {error: 'Current pairing required'}); return; }
           if (ownerRequired && !locationOwner) { json(401, {error: 'Pairing required'}); return; }
           const result = await fetch(`${bridgeURL}${path}`, { method: request.method,
             headers: { Authorization: `Bearer ${options.token}`, 'Content-Type': 'application/json',
               ...(locationOwner ? {'X-G2-Location-Owner': locationOwner} : {}),
+              ...(runtime ? {'X-G2-Paired-Runtime': runtime} : {}),
               ...(typeof request.headers['x-g2-revision'] === 'string' ? { 'X-G2-Revision': request.headers['x-g2-revision'] } : {}) },
             body: body?.toString('utf8'), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20000)]), redirect: 'error' });
           if (response.destroyed) return;

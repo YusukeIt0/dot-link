@@ -24,6 +24,7 @@ import type { EnvironmentHistory } from './history/environment-history.ts';
 import type { LocationHistoryStore } from './history/store.ts';
 import { historyUploadSchema } from './history/store.ts';
 import type { SharingActivation } from './sharing-activation.ts';
+import type { G2DeliveryAvailability } from './g2-availability.ts';
 
 const { version: packageVersion } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -199,7 +200,7 @@ async function body(request: IncomingMessage, limit = 32768): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
-export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string; healthAdmin?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext, archives?: FactorArchives) {
+export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: string; notification?: string; healthAdmin?: string }, notifications?: NotificationInbox, locations?: LocationContext, histories?: LocationHistoryStore, weather?: WeatherContext, activation?: SharingActivation | SharingActivation[], health?: HealthContext, archives?: FactorArchives, availability?: G2DeliveryAvailability) {
   if (tokens.mcp.length < 32 || tokens.device.length < 32 || tokens.mcp === tokens.device) throw new Error('Use distinct bridge tokens of at least 32 characters');
   if (notifications && (!tokens.notification || tokens.notification.length < 32 || [tokens.mcp, tokens.device].includes(tokens.notification))) throw new Error('Use a distinct notification ingestion token');
   if (health && (!tokens.healthAdmin || tokens.healthAdmin.length < 32 || [tokens.mcp,tokens.device,tokens.notification].includes(tokens.healthAdmin))) throw new Error('Use a distinct health settings token');
@@ -213,6 +214,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
   const unsubscribeHealth = health?.changes.subscribe(changed);
   const unsubscribeWeather = weather?.changes.subscribe(changed);
   const unsubscribeHistory = histories?.changes.subscribe(changed);
+  const unsubscribeAvailability = availability?.changes.subscribe(changed);
   const cursor = () => `${instance}:${revision}`;
   const history = () => [...bridge.history(), ...bridge.outboundHistory(), ...(notifications?.history() ?? [])]
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(-100);
@@ -227,7 +229,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     if (request.headers.origin) { send(403, { error: 'Browser origin not enabled' }); return; }
     // This bridge uses static credentials, not OAuth. Missing metadata and
     // other unknown routes must be 404 rather than an authentication challenge.
-    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(notifications ? ['/api/notifications', '/api/notifications/status'] : []), ...(locations ? ['/api/location/control', '/api/location/update', '/api/location/revoke'] : []), ...(histories ? ['/api/location/history'] : []), ...(weather ? ['/api/weather'] : []), ...(health ? ['/api/health', '/api/health/setup'] : []), ...(archives ? ['/api/factor-history'] : [])].includes(request.url ?? '')) {
+    if (!['/mcp', '/api/status', '/api/messages', '/api/updates', '/api/utterances', '/api/timings', ...(availability ? ['/api/g2-availability'] : []), ...(notifications ? ['/api/notifications', '/api/notifications/status'] : []), ...(locations ? ['/api/location/control', '/api/location/update', '/api/location/revoke'] : []), ...(histories ? ['/api/location/history'] : []), ...(weather ? ['/api/weather'] : []), ...(health ? ['/api/health', '/api/health/setup'] : []), ...(archives ? ['/api/factor-history'] : [])].includes(request.url ?? '')) {
       send(404, { error: 'Not found' }); return;
     }
     const token = request.url === '/api/health/setup' ? (tokens.healthAdmin ?? '') : request.url === '/mcp' ? tokens.mcp : ['/api/notifications', '/api/notifications/status'].includes(request.url ?? '') ? tokens.notification! : tokens.device;
@@ -235,6 +237,13 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     try {
       const subject = request.headers['x-g2-location-owner'];
       const historyOwner = typeof subject === 'string' && /^[a-f0-9]{64}$/.test(subject) ? subject : undefined;
+      const pairedRuntime = request.headers['x-g2-paired-runtime'];
+      const runtime = typeof pairedRuntime === 'string' && /^[a-f0-9]{64}$/.test(pairedRuntime) ? pairedRuntime : undefined;
+      if (availability && request.url === '/api/g2-availability' && request.method === 'POST') {
+        if (!historyOwner || !runtime) { send(403, {error: 'Current pairing required'}); return; }
+        const accepted = availability.respond(historyOwner, runtime, await body(request, 1024));
+        send(accepted ? 200 : 409, {accepted}); return;
+      }
       if (archives && request.url === '/api/factor-history') {
         if (!historyOwner) { send(400, {error: 'Device subject required'}); return; }
         if (request.method === 'GET') { send(200, await archiveSettings(archives.authority, historyOwner, health, histories)); return; }
@@ -287,6 +296,7 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
       if (request.url === '/api/updates' && request.method === 'GET') {
         const after = request.headers['x-g2-revision'];
         if (after !== undefined && (typeof after !== 'string' || !/^[0-9a-f-]{36}:\d{1,12}$/.test(after))) { send(400, { error: 'Invalid revision' }); return; }
+        if (historyOwner && runtime) availability?.observe(historyOwner, runtime);
         if (after === cursor()) {
           if (waiting.size >= 8) { send(503, { error: 'Too many waiting clients' }); return; }
           await new Promise<void>(resolve => {
@@ -299,7 +309,8 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
         if (!response.destroyed) {
           const value = snapshot(historyOwner);
           response.once('finish', () => notifications?.markClientResponse(value.messages.map(n => n.id)));
-          send(200, value);
+          const challenge = historyOwner && runtime ? availability?.challenge(historyOwner, runtime) : undefined;
+          send(200, challenge ? {...value, availabilityChallenge: challenge} : value);
         }
         return;
       }
@@ -321,5 +332,6 @@ export function bridgeServer(bridge: Bridge, tokens: { mcp: string; device: stri
     }
   });
   server.once('close', () => { for (const item of activation ? (Array.isArray(activation) ? activation : [activation]) : []) item.close(); notifications?.close(); bridge.close(); unsubscribeBridge(); unsubscribeNotifications?.(); unsubscribeLocations?.(); unsubscribeHistory?.(); unsubscribeWeather?.(); unsubscribeHealth?.(); health?.close(); weather?.close(); locations?.close(); histories?.close(); for (const wake of [...waiting]) wake(); });
+  server.once('close', () => { unsubscribeAvailability?.(); availability?.close(); });
   return server;
 }
