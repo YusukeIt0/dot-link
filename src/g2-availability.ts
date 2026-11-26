@@ -16,11 +16,13 @@ export class GlassesAvailability {
   private casePosition: 'unknown' | 'inside' | 'outside' = 'unknown';
   private revision = 0;
   private eventState?: string;
+  private pendingEvidence?: StatusEvent | 'temple';
   private lastChallenge?: AvailabilityChallenge;
 
   cancelReading(): void {
     this.revision++;
     this.eventState = undefined;
+    this.pendingEvidence = undefined;
     this.lastChallenge = undefined;
   }
 
@@ -32,6 +34,7 @@ export class GlassesAvailability {
   private forgetDevice(): void {
     this.observedWear = false;
     this.casePosition = 'unknown';
+    this.pendingEvidence = undefined;
   }
 
   private interpret(device: unknown, evidence?: StatusEvent | 'temple'): DeliveryAvailability {
@@ -61,7 +64,7 @@ export class GlassesAvailability {
     if (isCharging !== false) return 'unknown';
     // A getter alone has reported out-of-case with the lid closed. Confirm a
     // removal event against the G2 that produced this read, or a temple input.
-    // Device identifiers are compared here only and never retained or sent.
+    // The identifier is used only during this local observation.
     if (evidence === 'temple') this.casePosition = 'outside';
     else if (this.casePosition === 'inside' && evidence?.isInCase === false && evidence.isCharging === false &&
         evidence.sn && evidence.sn === (device.sn || device.status.sn)) this.casePosition = 'outside';
@@ -70,9 +73,15 @@ export class GlassesAvailability {
 
   async read(bridge: NativeBridge, evidence?: StatusEvent | 'temple'): Promise<DeliveryAvailability> {
     const revision = ++this.revision;
+    if (evidence) this.pendingEvidence = evidence;
     try {
       const device: unknown = await bridge.callEvenApp(EvenAppMethod.GetGlassesInfo);
-      return this.revision === revision ? this.interpret(device, evidence) : 'unknown';
+      if (this.revision !== revision) return 'unknown';
+      // A send may start its own fresh getter before the event's getter
+      // returns. Only the newest reading may consume the outstanding input.
+      const input = this.pendingEvidence;
+      this.pendingEvidence = undefined;
+      return this.interpret(device, input);
     } catch {
       if (this.revision === revision) this.forgetDevice();
       return 'unknown';
@@ -89,6 +98,7 @@ export class GlassesAvailability {
     const removal = this.casePosition === 'inside' && status.isInCase === false && status.isCharging === false;
     if (key === this.eventState && !removal) return;
     this.eventState = key;
+    this.pendingEvidence = undefined;
     this.revision++;
     if (status.isInCase === true || status.isCharging === true) {
       this.casePosition = 'unknown';

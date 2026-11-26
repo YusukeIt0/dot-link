@@ -29,6 +29,31 @@ test('a settled closed case cannot assert availability; positive wear distinguis
   assert.equal(await sample({isInCase: false}), 'unknown');
 });
 
+test('a delivery-time getter can confirm an overlapping removal event without borrowing an old case reading', async () => {
+  const availability = new GlassesAvailability();
+  const sample = (inside: boolean) => ({model: 'g2', sn: 'fixture', status: {connectType: 'connected', isInCase: inside, isCharging: inside, isWearing: false}});
+  const read = (inside: boolean) => availability.read({callEvenApp: async () => sample(inside)});
+  const event = {...sample(false).status, sn: 'fixture'};
+  assert.equal(await read(true), 'unavailable');
+  let finish!: (value: unknown) => void;
+  const native = new Promise(resolve => {finish = resolve;});
+  availability.statusChanged({callEvenApp: () => native}, event);
+  assert.equal(await read(false), 'available');
+  finish(sample(true));
+  await native;
+  assert.equal(await read(false), 'available');
+
+  assert.equal(await read(true), 'unavailable');
+  let finishAgain!: (value: unknown) => void;
+  const second = new Promise(resolve => {finishAgain = resolve;});
+  availability.statusChanged({callEvenApp: () => second}, event);
+  assert.equal(await read(true), 'unavailable');
+  assert.equal(await read(false), 'unknown');
+  finishAgain(sample(false));
+  await second;
+  assert.equal(await read(false), 'unknown');
+});
+
 test('late native reads and abandoned companion requests cannot revive an old state', async () => {
   const device = new GlassesAvailability();
   let finish!: (value: unknown) => void;

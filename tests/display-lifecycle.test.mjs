@@ -200,9 +200,18 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_GLASSES_L}});
   await deliver('temple-input');
   assert.deepEqual(responses.at(-1), {id:'temple-input', state:'available'});
+  await app.browserEvent('offline');
+  await app.failUpdate();
+  await app.browserEvent('online');
+  await deliver('network-restored');
+  assert.deepEqual(responses.at(-1), {id:'network-restored', state:'unknown'});
   inCase = true;
   await deliver('back-in-case');
   assert.deepEqual(responses.at(-1), {id:'back-in-case', state:'unavailable'});
+  inCase = false;
+  await app.deviceStatus(status());
+  await deliver('removed-after-network-return');
+  assert.deepEqual(responses.at(-1), {id:'removed-after-network-return', state:'available'});
   assert.equal(app.networkCalls.some(url => url.includes('/api/utterances')), false);
 });
 
