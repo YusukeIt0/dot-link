@@ -79,7 +79,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var setupFailure = SetupFailurePresentation()
     private var startupReportText: String?
     private var supportCheckFailed = false
-    var startupReportPasteboard: () -> NSPasteboard = { .general }
+    var reportPasteboard: () -> NSPasteboard = { .general }
     var quitFailure: QuitFailurePresentation?
     var notificationSuspensionBeforeStop: Bool?
     var progressLabel: NSTextField?
@@ -296,7 +296,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         alert.addButton(withTitle: tr("mac.update_progress_close"))
         alert.addButton(withTitle: tr("mac.copy"))
         if alert.runModal() == .alertSecondButtonReturn {
-            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(report, forType: .string)
+            let pasteboard = reportPasteboard()
+            pasteboard.clearContents(); pasteboard.setString(report, forType: .string)
         }
     }
     static func isSystemSessionEnd(_ event: NSAppleEventDescriptor?) -> Bool {
@@ -788,7 +789,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     @objc private func copyStartupReport(_ sender: NSButton) {
         guard !busy, step == "startupCheck", let report = startupReportText else { return }
-        let pasteboard = startupReportPasteboard()
+        let pasteboard = reportPasteboard()
         pasteboard.clearContents()
         if pasteboard.setString(report, forType: .string) { sender.title = tr("mac.report_code_copied") }
     }

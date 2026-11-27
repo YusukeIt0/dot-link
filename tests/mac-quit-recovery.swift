@@ -51,6 +51,7 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
             "bridge": true, "device": true, "tunnel": true, "subscribed": true, "step": "pair"]
         #if !BASELINE
         checkReconnectMenu()
+        checkSetupSupportPanel()
         #endif
         sut.connectNotifications()
         sut.notifications?.healthTimer?.invalidate()
@@ -160,7 +161,7 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
         let originalLanguage = sut.language
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }
-        sut.startupReportPasteboard = { pasteboard }
+        sut.reportPasteboard = { pasteboard }
         for step in ["install", "pair", "networkConflict", "appLocation"] {
             sut.state = ["step": step]
             sut.render()
@@ -198,6 +199,50 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
         sut.language = originalLanguage
         sut.currentAction = ""
         sut.messageRecord = nil
+    }
+
+    func checkSetupSupportPanel() {
+        let saved = sut.state, language = sut.language, checked = sut.lastChecked
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer {
+            sut.state = saved; sut.busy = false; sut.lastChecked = checked; sut.language = language
+            sut.reportPasteboard = { .general }; pasteboard.releaseGlobally()
+        }
+        sut.language = "fr"
+        sut.receive(["kind":"result", "step":"pair", "installed":true, "evenPairingKnown":false, "evenPaired":false,
+                     "subscriptionCheck":"active", "lifecycleStopped":false, "privateField":"private fixture"])
+        sut.reportPasteboard = { pasteboard }
+        func reportText(_ view: NSView) -> NSTextView? {
+            if let text = view as? NSTextView { return text }
+            return view.subviews.lazy.compactMap(reportText).first
+        }
+        for busy in [false, true] {
+            sut.busy = busy
+            sut.updateMenu()
+            let menu = sut.statusItem.menu!
+            let item = menu.item(withTitle: sut.tr("mac.setup_support_status"))!
+            precondition(item.isEnabled && item.action == #selector(SetupApp.showSupportStatus))
+            pasteboard.clearContents(); pasteboard.setString("unchanged until Copy", forType:.string)
+            let before = pasteboard.changeCount
+            var displayed: String?
+            let timer = Timer(timeInterval:0.05, repeats:true) { [self] timer in
+                guard let view = NSApp.modalWindow?.contentView, let text = reportText(view) else { return }
+                timer.invalidate()
+                precondition(!text.isEditable && text.isSelectable && pasteboard.changeCount == before)
+                displayed = text.string
+                let json = try! JSONSerialization.jsonObject(with: Data(text.string.utf8)) as! [String:Any]
+                precondition(json["next"] as? String == (busy ? "wait-for-current-operation" : "recheck-saved-pairing"))
+                precondition(json["macControl"] as? String == (busy ? nil : sut.tr("mac.refresh_status")))
+                precondition((json["observedAt"] != nil) == !busy && !text.string.contains("private fixture"))
+                let choice = buttons(view).first { $0.title == sut.tr(busy ? "mac.update_progress_close" : "mac.copy") }!
+                choice.performClick(nil)
+            }
+            RunLoop.main.add(timer, forMode:.modalPanel)
+            menu.performActionForItem(at: menu.index(of:item))
+            precondition(displayed != nil)
+            precondition(pasteboard.string(forType:.string) == (busy ? "unchanged until Copy" : displayed))
+        }
+        print("PASS: native support menu, idle and busy panels, French control and exact Copy with private pasteboard")
     }
 
     func checkReconnectMenu() {
