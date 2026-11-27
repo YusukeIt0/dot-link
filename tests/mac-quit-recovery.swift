@@ -222,7 +222,7 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
             if let text = view as? NSTextView { return text }
             return view.subviews.lazy.compactMap(reportText).first
         }
-        for busy in [false, true] {
+        for (fromSettings, busy) in [(false, false), (true, false), (false, true)] {
             sut.busy = busy
             sut.updateMenu()
             let menu = sut.statusItem.menu!
@@ -244,11 +244,20 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
                 choice.performClick(nil)
             }
             RunLoop.main.add(timer, forMode:.modalPanel)
-            menu.performActionForItem(at: menu.index(of:item))
+            if fromSettings {
+                sut.showingDetails = true
+                sut.render()
+                let button = buttons(sut.stack).first { $0.title == sut.tr("mac.setup_support_status") }!
+                button.performClick(nil)
+                sut.showingDetails = false
+                sut.render()
+            } else {
+                menu.performActionForItem(at: menu.index(of:item))
+            }
             precondition(displayed != nil)
             precondition(pasteboard.string(forType:.string) == (busy ? "unchanged until Copy" : displayed))
         }
-        print("PASS: optional health error retained the verified setup report; idle/busy panels, French control and exact Copy verified")
+        print("PASS: setup window and menu open the same report; idle/busy, prior health error, French control and exact Copy verified")
     }
 
     func checkReconnectMenu() {

@@ -495,6 +495,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if showingDetails && !busy {
             add(tr("mac.advanced_settings"), size: 23, bold: true)
             button(tr("mac.back")) { [weak self] in self?.showHome() }
+            button(tr("mac.setup_support_status")) { [weak self] in self?.showSupportStatus() }
             if !message.isEmpty { add(message) }
             if let updater = appUpdater { let updates = updater.settingsView(); stack.addArrangedSubview(updates); updates.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true }
             space()

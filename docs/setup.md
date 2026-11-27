@@ -22,7 +22,7 @@ fi
 
 ### Read the result and continue
 
-On supported Mac builds, **Dot Link menu bar icon → Setup support status** displays a structured snapshot. **Copy** copies exactly the text shown. The menu works while an operation is in progress. Use the setup window for changes so its current operation and update controls can coordinate them. In a browser-only conversation, you can share this snapshot and perform the next indicated control yourself.
+In the Mac setup window, open **Advanced settings → Setup support status** to read the latest snapshot. The **Dot Link menu bar icon → Setup support status** also works during a setup operation. **Copy** copies exactly the text shown. Use the setup window for changes so its current operation and update controls can coordinate them. In a browser-only conversation, you can share this snapshot and perform the next indicated control yourself.
 
 | What the report can establish | How to continue |
 | --- | --- |
