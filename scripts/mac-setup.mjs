@@ -30,29 +30,47 @@ for await (const chunk of process.stdin) {
 let input = {};
 try { input = JSON.parse(inputText || '{}'); } catch { emit({ kind: 'error', code: 'INVALID_INPUT' }); process.exit(1); }
 
-async function inspect() {
-  const installation = await discoverInstallation();
+// Only discovery is read-only. An update journal may require real service or
+// file changes, so recovery itself must never race this deadline.
+async function discoverAtStartup() {
+  let timer;
+  try {
+    return await Promise.race([
+      discoverInstallation(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('STARTUP_DISCOVERY_TIMEOUT')), 60_000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function inspect(knownInstallation) {
+  const installation = knownInstallation ?? await discoverInstallation();
+  if (!installation.installed) {
+    // Prepare rediscovers the installation before it can write anything.
+    return { ...installation, evenPairingKnown: true, evenPaired: false, step: nextSetupStep(installation) };
+  }
   const directory = installation.directory;
-  process.chdir(installation.installed ? directory : payload);
+  process.chdir(directory);
   let network;
   try { network = await tailscale(); } catch {}
   const tsInstalled = !!await executable(['/Applications/Tailscale.app/Contents/MacOS/Tailscale', join(homedir(), 'Applications/Tailscale.app/Contents/MacOS/Tailscale'), '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale']);
   const model = join(directory, '.runtime/models/ggml-small.bin');
-  const dependencies = installation.installed && await exists(model) && !!await executable([join(directory, '.runtime/bin/whisper-cli'), '/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli']) && !!await executable([join(directory, '.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client']);
-  const tunnelConfigured = installation.installed && await exists(join(directory, '.runtime/tunnel.yaml'));
+  const dependencies = await exists(model) && !!await executable([join(directory, '.runtime/bin/whisper-cli'), '/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli']) && !!await executable([join(directory, '.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client']);
+  const tunnelConfigured = await exists(join(directory, '.runtime/tunnel.yaml'));
   let health = {};
-  if (installation.installed) {
-    try { health = JSON.parse(await run(process.execPath, [join(payload, 'scripts/setup-status.mjs'), directory], { timeout: 15000 })); } catch {}
-  }
-  const pairing = installation.installed ? await pairingStatus(directory) : { evenPairingKnown: true, evenPaired: false };
-  const lifecycle = installation.installed ? await lifecycleState(directory) : {};
-  const jobs = installation.installed ? await ownedJobs(directory, {app:join(homedir(), 'Applications/Dot Link.app')}) : [];
+  try { health = JSON.parse(await run(process.execPath, [join(payload, 'scripts/setup-status.mjs'), directory], { timeout: 15000 })); } catch {}
+  const pairing = await pairingStatus(directory);
+  const lifecycle = await lifecycleState(directory);
+  const jobs = await ownedJobs(directory, {app:join(homedir(), 'Applications/Dot Link.app')});
   const servicesConfigured = ['bridge','device','tunnel'].every(name => jobs.some(job => job.name === name));
   const state = { ...installation, ...pairing, ...lifecycle, servicesConfigured, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,
     networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured,
     tunnelCatalogFailed: health.tunnelCatalogFailed === true,
     bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, previouslySubscribed: health.previouslySubscribed === true, subscribed: health.subscribed === true };
-  state.legacyNotificationRegistered = installation.installed ? (await legacyNotificationState(directory)).registered : false;
+  state.legacyNotificationRegistered = (await legacyNotificationState(directory)).registered;
   try { state.sttProvider = await sttSelection(join(directory, '.runtime')); } catch { state.sttProvider = 'unknown'; }
   try { state.sttMicrosoftEndpoint = await sttMicrosoftEndpoint(join(directory, '.runtime')); } catch { state.sttMicrosoftEndpoint = ''; }
   state.step = nextSetupStep(state);
@@ -127,9 +145,11 @@ try {
   }
   else if (action === 'update-adopt') { const found = await discoverInstallation(); await prepareUpdate(found.directory, {bootstrap:true}); await finishUpdate(found.directory); result = await inspect(); }
   else if (action === 'update-recover') {
-    const found = await discoverInstallation();
+    const found = await discoverAtStartup();
     const updateRecovery = await finishUpdate(found.directory,{backgroundCleanup:true,restart:true});
-    result = await inspect();
+    // Always give existing recovery records their usual handling. Only reuse
+    // an empty discovery result when recovery didn't change the installation.
+    result = await inspect(found.installed || updateRecovery.recovered ? undefined : found);
     // A previous helper may have finished before its result reached the GUI.
     // Reuse the strict no-services/no-prior-runtime proof for initial setup;
     // missing service files alone must never qualify as successful recovery.
@@ -235,6 +255,12 @@ try {
     emit({ kind: 'error', code: failure.code, failure, diagnosticSaved }); process.exitCode = 1;
   } else {
     const safe = typeof error.message === 'string' && /^[A-Z_]{3,60}$/.test(error.message) ? error.message : 'SETUP_FAILED';
-    emit({ kind: 'error', code: safe }); process.exitCode = 1;
+    if (safe === 'STARTUP_DISCOVERY_TIMEOUT') {
+      // A filesystem read may still be pending. Flush the safe error and exit
+      // this helper before a retry. No recovery operation was started.
+      process.stdout.write(JSON.stringify({kind:'error', code:safe}) + '\n', () => process.exit(1));
+    } else {
+      emit({ kind: 'error', code: safe }); process.exitCode = 1;
+    }
   }
 }
