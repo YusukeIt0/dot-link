@@ -90,6 +90,7 @@ With Mac 0.5.0 and an Even companion that includes **Sharing settings → Histor
 - **Read or listen:** read replies on G2 or enable read-aloud through your iPhone.
 - **Speak, type or send photos:** transcribe speech with local Whisper or your own external speech-recognition service; type messages or attach photos from your iPhone camera or library. [Speech settings](docs/setup.md#speech) · [Photos](docs/setup.md#photos).
 - **Hear from Dot:** receive proactive messages without asking first. Dot decides what merits an interruption.
+- **Continue in chat:** with Mac 0.5.5 and Even 0.4.4, Dot checks your G2 when a reply is ready. If the glasses are in their case, it can continue in your existing Dot chat. [Delivery details](docs/setup.md#conversation-and-display).
 - **Share Mac notifications:** optionally let Dot use readable new notifications and decide what to announce. Sharing starts off. [Notification setup](docs/setup.md#mac-notifications).
 
 <a id="make-it-yours"></a>
