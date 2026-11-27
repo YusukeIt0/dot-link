@@ -78,6 +78,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var message: String { messageRecord.map { Localization.shared.text($0, language: language) } ?? "" }
     var setupFailure = SetupFailurePresentation()
     private var startupReportText: String?
+    private var supportCheckFailed = false
     var startupReportPasteboard: () -> NSPasteboard = { .general }
     var quitFailure: QuitFailurePresentation?
     var notificationSuspensionBeforeStop: Bool?
@@ -260,6 +261,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         func item(_ title: String, _ action: Selector, enabled: Bool = true) { let i = NSMenuItem(title: title, action: action, keyEquivalent: ""); i.target = self; i.isEnabled = enabled && !busy && appUpdater?.blocksActions != true; menu.addItem(i) }
         menu.autoenablesItems = false
         item(tr("mac.open_dot_link"), #selector(showHome))
+        let support = NSMenuItem(title: tr("mac.setup_support_status"), action: #selector(showSupportStatus), keyEquivalent: "")
+        support.target = self; menu.addItem(support)
         item(tr("mac.even_connection_settings"), #selector(menuPair), enabled: yes("installed"))
         item(tr("mac.speech_input_128"), #selector(menuSpeech), enabled: yes("installed"))
         item(tr("mac.speech_output_129"), #selector(menuSpeechOutput), enabled: yes("installed"))
@@ -276,6 +279,25 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         menu.addItem(.separator())
         let quit = NSMenuItem(title: tr("mac.quit_dot_link"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); menu.addItem(quit)
         statusItem.menu = menu
+    }
+    @objc func showSupportStatus() {
+        let needsFreshCheck = supportCheckFailed && !["startupCheck", "appLocation", "updateRecovery", "conflict"].contains(step)
+        let report = SupportStatus.report(state: needsFreshCheck ? ["step":"unknown"] : state, source: .window,
+            language: language, catalog: .shared, busy: busy || quitting || appUpdater?.blocksActions == true,
+            checked: lastChecked, failure: setupFailure.details, startupTimeout: startupReportText != nil)
+        let alert = NSAlert()
+        alert.messageText = tr("mac.setup_support_status")
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 440, height: 245))
+        scroll.hasVerticalScroller = true; scroll.borderType = .bezelBorder
+        let text = NSTextView(frame: scroll.contentView.bounds)
+        text.isEditable = false; text.isSelectable = true; text.font = .monospacedSystemFont(ofSize: 12, weight: .regular)
+        text.autoresizingMask = [.width]; text.string = report; text.setAccessibilityLabel(alert.messageText)
+        scroll.documentView = text; alert.accessoryView = scroll
+        alert.addButton(withTitle: tr("mac.update_progress_close"))
+        alert.addButton(withTitle: tr("mac.copy"))
+        if alert.runModal() == .alertSecondButtonReturn {
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(report, forType: .string)
+        }
     }
     static func isSystemSessionEnd(_ event: NSAppleEventDescriptor?) -> Bool {
         guard let event, event.eventClass == kCoreEventClass, event.eventID == kAEQuitApplication else { return false }
@@ -888,7 +910,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 alert.runModal(); allowTermination = true; NSApp.terminate(nil); return
             }
             if let plan = value["uninstallPlan"] as? [String: Any] { render(); confirmUninstall(plan); return }
-            state = value; lastChecked = Date()
+            state = value; lastChecked = Date(); supportCheckFailed = false
             if ["pause", "resume", "activate"].contains(currentAction) { quitFailure = nil }
             var showAfterUpdate = false
             if currentAction == "update-recover" {
@@ -929,6 +951,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 if yes("servicesConfigured") && yes("lifecycleStopped") && state["lifecycleReason"] as? String == "quit" { perform("resume") }
             }
         case "error":
+            supportCheckFailed = true
             // A failed setup action is not confirmed sharing; never imply an automatic retry.
             if currentAction == "health" { busy = false; helper = nil; healthState["status"] = value["code"] as? String ?? "unavailable"; healthState["sharing"] = false; healthPoll?.invalidate(); render(); return }
             busy = false; helper = nil; automaticResumePending = false
@@ -990,6 +1013,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 }
+if CommandLine.arguments.contains("--support-status") { SupportStatus.runSavedCommand() }
 if CommandLine.arguments.dropFirst().first == "--history-archive-key" { runHistoryArchiveKeyHelper() }
 if CommandLine.arguments.contains("--health-credential") { runHealthCredentialHelper() }
 if CommandLine.arguments.contains("--stt-credential") { runSTTCredentialHelper() }

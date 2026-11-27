@@ -110,6 +110,8 @@ Optional:
 
 ## Quickstart
 
+You can give your usual assistant this repository URL and ask “Set up Dot Link on my Mac” or “Help me fix my connection.” Start with [setup and recovery with your assistant](docs/setup.md#setup-and-recovery-with-your-assistant). It includes the official installer, a read-only check for an existing installation and a test using your own Dot and G2.
+
 ### 1. Install on your Mac
 
 ```sh

@@ -17,6 +17,7 @@ async function saveLifecycle(directory, state) {
 export async function lifecycleState(directory) {
   try {
     const s = JSON.parse(await readFile(lifecycleFile(directory), 'utf8'));
+    if (typeof s?.stopped !== 'boolean') throw new Error('LIFECYCLE_STATE_UNREADABLE');
     return { lifecycleStopped: s.stopped === true, lifecycleReason: ['pause','quit'].includes(s.reason) ? s.reason : '' };
   } catch (e) {
     if (e.code === 'ENOENT') return { lifecycleStopped: false, lifecycleReason: '' };

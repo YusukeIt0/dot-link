@@ -15,6 +15,7 @@ import { removeEvenPairings } from './lib/pairing-removal.mjs';
 import { legacyNotificationState, retireLegacyNotifications } from './lib/notification-migration.mjs';
 import { tailscale, run, executable, assertOwnedAgents } from './lib/setup.mjs';
 import { setupStage, setupFailure, runSetupInstall, activateRelay, saveSetupFailure, clearSetupFailure } from './lib/setup-failure.mjs';
+import { savedFile } from './support-status.mjs';
 
 const payload = fileURLToPath(new URL('..', import.meta.url));
 const action = process.argv[2] ?? 'inspect';
@@ -55,12 +56,13 @@ async function inspect(knownInstallation) {
   }
   const directory = installation.directory;
   process.chdir(directory);
-  let network;
-  try { network = await tailscale(); } catch {}
+  let network, networkReason;
+  try { network = await tailscale(); } catch (error) { networkReason = error.setupCode; }
   const tsInstalled = !!await executable(['/Applications/Tailscale.app/Contents/MacOS/Tailscale', join(homedir(), 'Applications/Tailscale.app/Contents/MacOS/Tailscale'), '/opt/homebrew/bin/tailscale', '/usr/local/bin/tailscale']);
   const model = join(directory, '.runtime/models/ggml-small.bin');
   const dependencies = await exists(model) && !!await executable([join(directory, '.runtime/bin/whisper-cli'), '/opt/homebrew/bin/whisper-cli', '/usr/local/bin/whisper-cli']) && !!await executable([join(directory, '.runtime/bin/tunnel-client'), '/opt/homebrew/bin/tunnel-client', '/usr/local/bin/tunnel-client']);
-  const tunnelConfigured = await exists(join(directory, '.runtime/tunnel.yaml'));
+  const tunnelPath = join(directory, '.runtime/tunnel.yaml');
+  const tunnelConfigured = await exists(tunnelPath);
   let health = {};
   try { health = JSON.parse(await run(process.execPath, [join(payload, 'scripts/setup-status.mjs'), directory], { timeout: 15000 })); } catch {}
   const pairing = await pairingStatus(directory);
@@ -68,7 +70,9 @@ async function inspect(knownInstallation) {
   const jobs = await ownedJobs(directory, {app:join(homedir(), 'Applications/Dot Link.app')});
   const servicesConfigured = ['bridge','device','tunnel'].every(name => jobs.some(job => job.name === name));
   const state = { ...installation, ...pairing, ...lifecycle, servicesConfigured, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,
-    networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured,
+    networkConflict: ['conflict', 'public'].includes(network?.state), tunnelConfigured, savedTunnel: await savedFile(tunnelPath),
+    networkCheck: network?.state ?? networkReason, bridgeCheck:health.bridgeCheck, deviceCheck:health.deviceCheck,
+    tunnelCheck:health.tunnelCheck, subscriptionCheck:health.subscriptionCheck,
     tunnelCatalogFailed: health.tunnelCatalogFailed === true,
     bridge: health.bridge === true, device: health.device === true, tunnel: health.tunnel === true, previouslySubscribed: health.previouslySubscribed === true, subscribed: health.subscribed === true };
   state.legacyNotificationRegistered = (await legacyNotificationState(directory)).registered;
