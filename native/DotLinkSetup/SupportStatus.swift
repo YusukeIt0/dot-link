@@ -28,7 +28,14 @@ enum SupportStatus {
             // The install record is written before the speech model download finishes.
             installation = flag("installed", "detected", "unprepared")
         }
-        let paused = flag("lifecycleStopped", "paused", "not-paused")
+        let stopped = facts["lifecycleStopped"] as? Bool
+        let relayIntent: String
+        switch (stopped, facts["lifecycleReason"] as? String) {
+        case (true, "pause"): relayIntent = "paused"
+        case (true, "quit"): relayIntent = "quit"
+        case (false, _): relayIntent = "not-paused"
+        default: relayIntent = "unknown"
+        }
         let pairing = installed == true && facts["evenPairingKnown"] as? Bool == true
             ? flag("evenPaired", "saved", "absent") : "unknown"
         let tunnel = flag("savedTunnel", "present", "absent")
@@ -44,7 +51,7 @@ enum SupportStatus {
             next = "review-update-in-app"; if live { control = "mac.retry_recovery" }
         } else if blocked {
             next = "review-in-app"; if live && step != "unknown" { control = "mac.check_again" }
-        } else if paused == "paused" {
+        } else if stopped == true && (relayIntent != "quit" || (live && step == "start")) {
             next = "confirm-before-resuming"; if live && step == "start" { control = "mac.resume" }
         } else if installed == false {
             next = "prepare-mac"; control = "mac.prepare_this_mac_172"
@@ -63,7 +70,7 @@ enum SupportStatus {
                 }
             case "networkConflict": next = "review-existing-network"; control = "mac.check_again"
             case "dot" where tunnel == "absent": next = "configure-tunnel-with-owner"; control = "mac.open_openai_connection_settings"
-            case "start" where paused == "not-paused": next = "review-start-relay"; control = "mac.start_relay"
+            case "start" where stopped == false: next = "review-start-relay"; control = "mac.start_relay"
             case "reconnecting": next = "recheck-existing-relay"; control = "mac.refresh_status"
             case "subscribe" where subscription == "inactive":
                 next = facts["previouslySubscribed"] as? Bool == true ? "reconnect-existing-dot" : "check-existing-dot-setup"
@@ -80,7 +87,7 @@ enum SupportStatus {
         var result: [String: Any] = [
             "schema": 1, "source": source.rawValue, "macLanguage": language, "next": next,
             "supportMenu": catalog.text("mac.setup_support_status", language: language),
-            "installation": installation, "relayIntent": paused, "savedTunnel": tunnel, "savedEvenPairing": pairing,
+            "installation": installation, "relayIntent": relayIntent, "savedTunnel": tunnel, "savedEvenPairing": pairing,
             "tailscale": network, "localRelay": observation("bridgeCheck", ["responded", "failed", "unreachable"]),
             "macToPrivateRoute": observation("deviceCheck", ["responded", "failed", "unreachable"]),
             "localTunnel": observation("tunnelCheck", ["responded", "failed", "unreachable"]),

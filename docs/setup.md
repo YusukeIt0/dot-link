@@ -26,7 +26,7 @@ On supported Mac builds, **Dot Link menu bar icon → Setup support status** dis
 
 | What the report can establish | How to continue |
 | --- | --- |
-| `source: saved-on-mac` reports the saved tunnel configuration, Even pairing and a deliberate pause. `installation: detected` means the Mac found an existing installation. | For a paused relay, confirm that you want to resume. Open the existing setup window to check preparation and the live connection. |
+| `source: saved-on-mac` reports the saved tunnel configuration and Even pairing. `installation: detected` means the Mac found an existing installation. `relayIntent` distinguishes **Pause** (`paused`) and **Quit** (`quit`). | Confirm before resuming a paused relay. After a normal quit, open the Mac window to see the current setup step. Reopening a configured Mac can resume its services. |
 | The Mac window reports `installation: incomplete` when required components are missing, including after an interrupted speech model download. It reports `prepared` once it finds the components. | Use the indicated preparation control and check the status again. Keep the existing settings and pairing. |
 | `source: mac-window` reports the last Mac check. `failed` records a response that failed the check. `unknown` means the app could not establish that fact. | Read `next` and the localized `macControl` when present. After a change, refresh the window and read a new snapshot. An update in progress or conflicting installations need attention in the Mac app first. |
 | The local relay or tunnel responds, or the Mac can reach its own private route. | Continue to the existing Dot in ChatGPT and choose **Check connection to Dot** on the Mac. Check the iPhone's connection separately. |

@@ -33,7 +33,7 @@ test('offline reads preserve an existing paused installation and reobserve pairi
   await writeFile(join(runtime,'tunnel.yaml'), 'private fixture configuration');
   await writeFile(join(runtime,'update-storage.lock'), '');
   const absent = await savedSupportFacts({home});
-  assert.deepEqual(absent, {installed:true, existing:true, lifecycleStopped:true, savedTunnel:true, evenPairingKnown:true, evenPaired:false});
+  assert.deepEqual(absent, {installed:true, existing:true, lifecycleStopped:true, lifecycleReason:'pause', savedTunnel:true, evenPairingKnown:true, evenPaired:false});
   const session = join(sessions, 'a'.repeat(64) + '.json');
   const saved = JSON.stringify({origin:'http://127.0.0.1:5555',expiresAt:Date.now()+600000});
   await writeFile(session, saved);
@@ -44,6 +44,8 @@ test('offline reads preserve an existing paused installation and reobserve pairi
   assert.equal((await savedSupportFacts({home})).evenPairingKnown, false);
   await writeFile(session, saved);
   assert.deepEqual(await savedSupportFacts({home}), snapshots[0]);
+  await writeFile(join(runtime, 'lifecycle.json'), '{"stopped":true,"reason":"quit"}');
+  assert.deepEqual(await savedSupportFacts({home}), {...snapshots[0], lifecycleReason:'quit'});
   await writeFile(join(runtime, 'lifecycle.json'), '{}');
   assert.equal((await savedSupportFacts({home})).lifecycleStopped, undefined);
   await writeFile(join(runtime, 'app-update.json'), 'private fixture journal');

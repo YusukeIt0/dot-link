@@ -27,8 +27,9 @@ export async function savedSupportFacts({home} = {}) {
   const recovery = await savedFile(journal);
   if (recovery !== false) return {...facts, step:recovery ? 'updateRecovery' : 'unknown'};
   try {
-    const {lifecycleStopped} = await lifecycleState(directory);
+    const {lifecycleStopped, lifecycleReason} = await lifecycleState(directory);
     facts.lifecycleStopped = lifecycleStopped;
+    facts.lifecycleReason = lifecycleReason;
   } catch { /* The saved intent could not be determined. */ }
   facts.savedTunnel = await savedFile(join(directory, '.runtime/tunnel.yaml'));
   const pairing = await pairingStatus(directory);
