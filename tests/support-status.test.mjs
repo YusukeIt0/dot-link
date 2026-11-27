@@ -3,6 +3,7 @@ import test from 'node:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { lifecycleState } from '../scripts/lib/app-lifecycle.mjs';
 import { savedSupportFacts } from '../scripts/support-status.mjs';
 import { checkSetupHealth } from '../scripts/setup-status.mjs';
 
@@ -47,6 +48,8 @@ test('offline reads preserve an existing paused installation and reobserve pairi
   await writeFile(join(runtime, 'lifecycle.json'), '{"stopped":true,"reason":"quit"}');
   assert.deepEqual(await savedSupportFacts({home}), {...snapshots[0], lifecycleReason:'quit'});
   await writeFile(join(runtime, 'lifecycle.json'), '{}');
+  assert.deepEqual(await lifecycleState(root), {lifecycleStopped:false, lifecycleReason:''});
+  assert.deepEqual(await lifecycleState(root, {reportUnknown:true}), {});
   assert.equal((await savedSupportFacts({home})).lifecycleStopped, undefined);
   await writeFile(join(runtime, 'app-update.json'), 'private fixture journal');
   assert.deepEqual(await savedSupportFacts({home}), {installed:true, existing:true, step:'updateRecovery'});

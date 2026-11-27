@@ -66,7 +66,7 @@ async function inspect(knownInstallation) {
   let health = {};
   try { health = JSON.parse(await run(process.execPath, [join(payload, 'scripts/setup-status.mjs'), directory], { timeout: 15000 })); } catch {}
   const pairing = await pairingStatus(directory);
-  const lifecycle = await lifecycleState(directory);
+  const lifecycle = await lifecycleState(directory, {reportUnknown:true});
   const jobs = await ownedJobs(directory, {app:join(homedir(), 'Applications/Dot Link.app')});
   const servicesConfigured = ['bridge','device','tunnel'].every(name => jobs.some(job => job.name === name));
   const state = { ...installation, ...pairing, ...lifecycle, servicesConfigured, dependencies, tailscaleInstalled: tsInstalled, tailscaleConnected: !!network,

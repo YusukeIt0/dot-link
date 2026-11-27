@@ -25,6 +25,8 @@ import Foundation
         precondition(pause["relayIntent"] as? String == "paused" && pause["next"] as? String == "confirm-before-resuming")
         let unknownStop = try report(["lifecycleStopped":true, "step":"network"])
         precondition(unknownStop["relayIntent"] as? String == "unknown" && unknownStop["next"] as? String == "confirm-before-resuming")
+        let unspecified = try report(["lifecycleStopped":NSNull(), "step":"start"])
+        precondition(unspecified["relayIntent"] as? String == "unknown" && unspecified["next"] as? String == "recheck-in-app")
         let quit: [String:Any] = ["lifecycleStopped":true, "lifecycleReason":"quit", "step":"dot", "savedTunnel":false]
         let savedQuit = try report(quit, source:.saved)
         precondition(savedQuit["relayIntent"] as? String == "quit" && savedQuit["next"] as? String == "check-in-mac-window")

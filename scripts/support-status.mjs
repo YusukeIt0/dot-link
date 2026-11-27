@@ -27,7 +27,7 @@ export async function savedSupportFacts({home} = {}) {
   const recovery = await savedFile(journal);
   if (recovery !== false) return {...facts, step:recovery ? 'updateRecovery' : 'unknown'};
   try {
-    const {lifecycleStopped, lifecycleReason} = await lifecycleState(directory);
+    const {lifecycleStopped, lifecycleReason} = await lifecycleState(directory, {reportUnknown:true});
     facts.lifecycleStopped = lifecycleStopped;
     facts.lifecycleReason = lifecycleReason;
   } catch { /* The saved intent could not be determined. */ }

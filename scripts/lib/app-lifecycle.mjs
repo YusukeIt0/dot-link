@@ -14,10 +14,12 @@ async function saveLifecycle(directory, state) {
     await rename(temporary,path);
   } catch(error) { await unlink(temporary).catch(()=>{});throw error; }
 }
-export async function lifecycleState(directory) {
+export async function lifecycleState(directory, {reportUnknown = false} = {}) {
   try {
     const s = JSON.parse(await readFile(lifecycleFile(directory), 'utf8'));
-    if (typeof s?.stopped !== 'boolean') throw new Error('LIFECYCLE_STATE_UNREADABLE');
+    // Observations leave a missing stop flag unknown. Service and update callers
+    // keep their existing interpretation of an unspecified flag.
+    if (reportUnknown && typeof s.stopped !== 'boolean') return {};
     return { lifecycleStopped: s.stopped === true, lifecycleReason: ['pause','quit'].includes(s.reason) ? s.reason : '' };
   } catch (e) {
     if (e.code === 'ENOENT') return { lifecycleStopped: false, lifecycleReason: '' };
