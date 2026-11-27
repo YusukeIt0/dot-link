@@ -20,9 +20,16 @@ enum SupportStatus {
             guard live, let value = facts[key] as? String, allowed.contains(value) else { return "unknown" }
             return value
         }
-        let installed = flag("installed", "prepared", "unprepared")
+        let installed = facts["installed"] as? Bool
+        let installation: String
+        if installed == true, live, let componentsReady = facts["dependencies"] as? Bool {
+            installation = componentsReady ? "prepared" : "incomplete"
+        } else {
+            // The install record is written before the speech model download finishes.
+            installation = flag("installed", "detected", "unprepared")
+        }
         let paused = flag("lifecycleStopped", "paused", "not-paused")
-        let pairing = installed == "prepared" && facts["evenPairingKnown"] as? Bool == true
+        let pairing = installed == true && facts["evenPairingKnown"] as? Bool == true
             ? flag("evenPaired", "saved", "absent") : "unknown"
         let tunnel = flag("savedTunnel", "present", "absent")
         let subscription = observation("subscriptionCheck", ["active", "inactive"])
@@ -39,9 +46,9 @@ enum SupportStatus {
             next = "review-in-app"; if live && step != "unknown" { control = "mac.check_again" }
         } else if paused == "paused" {
             next = "confirm-before-resuming"; if live && step == "start" { control = "mac.resume" }
-        } else if installed == "unprepared" {
+        } else if installed == false {
             next = "prepare-mac"; control = "mac.prepare_this_mac_172"
-        } else if !live || installed != "prepared" {
+        } else if !live || installed != true {
             next = "check-in-mac-window"
         } else {
             switch step {
@@ -73,7 +80,7 @@ enum SupportStatus {
         var result: [String: Any] = [
             "schema": 1, "source": source.rawValue, "macLanguage": language, "next": next,
             "supportMenu": catalog.text("mac.setup_support_status", language: language),
-            "installation": installed, "relayIntent": paused, "savedTunnel": tunnel, "savedEvenPairing": pairing,
+            "installation": installation, "relayIntent": paused, "savedTunnel": tunnel, "savedEvenPairing": pairing,
             "tailscale": network, "localRelay": observation("bridgeCheck", ["responded", "failed", "unreachable"]),
             "macToPrivateRoute": observation("deviceCheck", ["responded", "failed", "unreachable"]),
             "localTunnel": observation("tunnelCheck", ["responded", "failed", "unreachable"]),

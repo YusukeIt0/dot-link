@@ -3,7 +3,7 @@ import Foundation
 @main enum SupportStatusTests {
     static func main() throws {
         let catalog = Localization(directory: URL(fileURLWithPath: "localization"))
-        let ready: [String: Any] = ["installed":true, "lifecycleStopped":false, "step":"pair", "savedTunnel":true,
+        let ready: [String: Any] = ["installed":true, "dependencies":true, "lifecycleStopped":false, "step":"pair", "savedTunnel":true,
             "evenPairingKnown":true, "evenPaired":true, "bridgeCheck":"responded", "subscriptionCheck":"active",
             "directory":"private fixture", "pairingCode":"private fixture", "sttMicrosoftEndpoint":"private fixture"]
         func report(_ changes: [String: Any] = [:], language: String = "en", source: SupportStatus.Source = .window,
@@ -29,6 +29,16 @@ import Foundation
         try expect(["step":"dot", "savedTunnel":NSNull()], "recheck-in-app")
         let saved = try report(source:.saved)
         precondition(saved["dotSubscription"] as? String == "unknown" && saved["next"] as? String == "check-in-mac-window")
+        precondition(saved["installation"] as? String == "detected" && saved["savedEvenPairing"] as? String == "saved")
+        let partial = try report(["dependencies":false, "step":"install"])
+        precondition(partial["installation"] as? String == "incomplete" && partial["savedEvenPairing"] as? String == "saved")
+        precondition(partial["next"] as? String == "review-mac-preparation" && partial["macControl"] as? String == catalog.text("mac.prepare_this_mac_172", language:"en"))
+        let verified = try report()
+        precondition(verified["installation"] as? String == "prepared")
+        let unchecked = try report(["dependencies":NSNull()])
+        precondition(unchecked["installation"] as? String == "detected")
+        let fresh = try report(["installed":false], source:.saved)
+        precondition(fresh["installation"] as? String == "unprepared" && fresh["next"] as? String == "prepare-mac")
         let waiting = try report(busy:true)
         precondition(waiting["next"] as? String == "wait-for-current-operation" && waiting["macControl"] == nil)
         for language in catalog.languages {
