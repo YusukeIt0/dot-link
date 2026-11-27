@@ -22,7 +22,9 @@ fi
 
 ### Read the result and continue
 
-In the Mac setup window, open **Advanced settings → Setup support status** to read the latest snapshot. The **Dot Link menu bar icon → Setup support status** also works during a setup operation. **Copy** copies exactly the text shown. Use the setup window for changes so its current operation and update controls can coordinate them. In a browser-only conversation, you can share this snapshot and perform the next indicated control yourself.
+In the Mac setup window, choose the gear at the bottom (**Advanced settings**), then **Setup support status**. The **Dot Link menu bar icon → Setup support status** also works during a setup operation. **Copy** copies exactly the text shown. In a browser-only conversation, you choose whether to share this snapshot and use the indicated Mac control yourself. Make changes in the setup window so it can coordinate them with any operation or update in progress. If your installed version has no support status item, use its ordinary setup window and any error code it shows.
+
+For the exact button names, open the [English](../localization/en.json), [German](../localization/de.json), [French](../localization/fr.json), [Japanese](../localization/ja.json), [Korean](../localization/ko.json), [Simplified Chinese](../localization/zh-Hans.json) or [Traditional Chinese](../localization/zh-Hant.json) file that matches the Mac app's selected language. Use the values of `mac.advanced_settings` → `mac.setup_support_status` for the path above. On the startup timeout screen, use `mac.check_again` and `mac.copy_report_code`. The bundled guide links to the files shipped in that app.
 
 | What the report can establish | How to continue |
 | --- | --- |
