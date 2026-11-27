@@ -4,6 +4,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 
 | Owner | Responsibility | Does not decide |
 | --- | --- | --- |
+| `src/g2-availability.ts` | One on-demand SDK reading for the current Mac challenge, including wear or case fallback | Whether Dot initiates a message or which conversation receives it |
 | `src/photo-attachments.ts` | SDK camera/library selection and bounded pixel re-encoding into one photo format | Draft UI, send policy or relay retention |
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
@@ -16,6 +17,12 @@ The entry point coordinates the existing user experience. A module boundary shou
 | Existing `VoiceInput`, `DisplayStandby`, `LocationSharing`, `LiveUpdates`, and history modules | Their existing capture, standby, location, receive-loop, and reconciliation policies | Unrelated UI or transport state |
 
 ## Interaction and lifecycle
+
+The paired Mac requests a fresh observation when a message is ready. An active iOS plugin can answer while another app is open. The Even Hub privacy questionnaire records this use under **Run background services**. The package uses the existing network permission. An open glasses system menu, a page unload or a lost connection prevents an outstanding check from asserting availability. Even requires an installed beta build for its five-minute locked-phone check. [Background lifecycle](https://hub.evenrealities.com/docs/build/background-lifecycle) · [Manifest permissions](https://hub.evenrealities.com/docs/ship/packaging#permissions-format) · [Submission and QA](https://hub.evenrealities.com/docs/ship/app-submission)
+
+The companion reads the public `getGlassesInfo` response. A connected G2 reporting positive wear and an explicit out-of-case state can receive a message. Case or charging status takes priority. Once the device has demonstrated wear detection, a later negative wear reading directs the reply to chat. On a host that reports false even while worn, the companion can verify removal from a previously observed case when a status event from that G2 and a fresh reading both report outside and off charge. A touch reported by a glasses temple can also establish an outside state. Every send still requires a fresh connected, out-of-case reading. A cold start with only negative readings leaves availability unknown. An unchanged display write can succeed inside a closed case. [Closed-case observation](https://github.com/YusukeIt0/dot-link/issues/461#issuecomment-7201470887)
+
+A phone network disconnect or a WebView unload ends the observation. Events can be missed during the interruption. On a G2 with a case-only signal, the companion needs another confirmed removal or a glasses-temple input before it can answer that the glasses are available again. An overlapping send can corroborate a pending removal with its own fresh native reading.
 
 1. Input capture produces a clip; the application starts recognition and decides whether to send immediately or allow review.
 2. Relay requests carry the active session credentials. A connection transition cancels ordinary requests and advances the session generation; callers also guard their UI updates with that generation.

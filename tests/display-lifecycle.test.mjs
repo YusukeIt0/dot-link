@@ -21,7 +21,7 @@ const script = stripTypeScriptTypes(source
 const flush = async () => { for (let i = 0; i < 80; i++) await Promise.resolve(); };
 
 async function launch(options = {}) {
-  let now = 0, timerId = 0, receiver;
+  let now = 0, timerId = 0, receiver, statusReceiver;
   const epoch = Date.now();
   const timers = new Map(); const elements = new Map(); const listeners = new Map();
   const calls = []; const networkCalls = []; const requests = []; const physical = new Map();
@@ -53,6 +53,10 @@ async function launch(options = {}) {
   };
   const listen = (name, callback) => { listeners.set(name, callback); };
   const bridge = {
+    ...(options.glassesInfo && {
+      callEvenApp: async method => { assert.equal(method, sdk.EvenAppMethod.GetGlassesInfo); return options.glassesInfo(); },
+      onDeviceStatusChanged: callback => { statusReceiver = callback; return () => { statusReceiver = undefined; }; },
+    }),
     async createStartUpPageContainer(page) { calls.push(['create']); for (const c of page.textObject) physical.set(c.containerID, c.content); return 0; },
     async textContainerUpgrade(update) {
       calls.push(['text', update.containerID, update.content]);
@@ -142,6 +146,7 @@ async function launch(options = {}) {
     browserEvent: async name => {listeners.get(name)?.({persisted: false}); await flush();},
     failUpdate: async () => {assert.ok(requests.length); requests.shift().reject(new Error('Network unavailable')); await flush();},
     emit: async event => {receiver(event); await flush();},
+    deviceStatus: async status => { statusReceiver?.(status); await flush(); },
     evaluate: async code => {vm.runInContext(code, context); await flush();},
     gate: () => {let release; writeGate = new Promise(resolve => {release = resolve;}); return release;},
     close: async () => {vm.runInContext('stopSession()', context); await flush();},
@@ -153,6 +158,72 @@ async function launch(options = {}) {
 const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT}};
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
+
+test('a running Even WebView answers while the phone is hidden and invalidates readings on unload', async t => {
+  const responses = [];
+  let inCase = true;
+  const status = () => ({sn:'fixture-g2', connectType:'connected', isInCase:inCase, isCharging:inCase, isWearing:false});
+  const app = await launch({
+    glassesInfo: () => ({model:'g2', sn:'fixture-g2', status:status()}),
+    request: (url, init) => {
+      if (!url.endsWith('/api/g2-availability')) return;
+      responses.push(JSON.parse(init.body)); return Promise.resolve({ok: true, status: 200});
+    },
+  });
+  t.after(app.close);
+  const deliver = id => app.deliver({...app.snapshot(), availabilityChallenge: {id}});
+  app.context.document.hidden = true; await app.browserEvent('visibilitychange');
+  await deliver('hidden-in-case');
+  assert.deepEqual(responses.at(-1), {id: 'hidden-in-case', state: 'unavailable'});
+  inCase = false;
+  await deliver('unconfirmed-open');
+  assert.deepEqual(responses.at(-1), {id:'unconfirmed-open', state:'unknown'});
+  await app.deviceStatus({...status(), sn:'fixture-ring'});
+  await deliver('unrelated-event');
+  assert.deepEqual(responses.at(-1), {id:'unrelated-event', state:'unknown'});
+  await app.deviceStatus(status());
+  await deliver('removed-on-desk');
+  assert.deepEqual(responses.at(-1), {id:'removed-on-desk', state:'available'});
+  await app.deviceStatus({...status(), sn:'fixture-ring', isCharging:true});
+  await deliver('ring-charging');
+  assert.deepEqual(responses.at(-1), {id:'ring-charging', state:'available'});
+  await app.deviceStatus({...status(), sn:'fixture-ring', connectType:'disconnected'});
+  await deliver('ring-disconnected');
+  assert.deepEqual(responses.at(-1), {id:'ring-disconnected', state:'available'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.FOREGROUND_ENTER_EVENT}});
+  await deliver('menu-open');
+  assert.deepEqual(responses.at(-1), {id:'menu-open', state:'unknown'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.FOREGROUND_EXIT_EVENT}});
+  await deliver('menu-closed');
+  assert.deepEqual(responses.at(-1), {id:'menu-closed', state:'available'});
+  await app.browserEvent('pagehide'); await deliver('unloaded');
+  assert.deepEqual(responses.at(-1), {id:'unloaded', state:'unknown'});
+  await app.browserEvent('pageshow'); await deliver('fresh-after-return');
+  assert.deepEqual(responses.at(-1), {id:'fresh-after-return', state:'unknown'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_RING}});
+  await deliver('ring-input');
+  assert.deepEqual(responses.at(-1), {id:'ring-input', state:'unknown'});
+  await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_GLASSES_L}});
+  await deliver('temple-input');
+  assert.deepEqual(responses.at(-1), {id:'temple-input', state:'available'});
+  await app.browserEvent('offline');
+  await app.failUpdate();
+  await app.browserEvent('online');
+  await deliver('network-restored');
+  assert.deepEqual(responses.at(-1), {id:'network-restored', state:'unknown'});
+  inCase = true;
+  await deliver('back-in-case');
+  assert.deepEqual(responses.at(-1), {id:'back-in-case', state:'unavailable'});
+  inCase = false;
+  await app.deviceStatus(status());
+  await deliver('removed-after-network-return');
+  assert.deepEqual(responses.at(-1), {id:'removed-after-network-return', state:'available'});
+  await app.deviceStatus({...status(), sn:'fixture-ring', isCharging:true});
+  await app.deviceStatus({...status(), isCharging:true});
+  await deliver('g2-charge-event-precedes-getter');
+  assert.deepEqual(responses.at(-1), {id:'g2-charge-event-precedes-getter', state:'unknown'});
+  assert.equal(app.networkCalls.some(url => url.includes('/api/utterances')), false);
+});
 
 for (const language of ['en', 'ja']) {
  for (const autoSend of [false, true]) {

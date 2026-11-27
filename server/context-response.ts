@@ -1,3 +1,4 @@
+import { pendingChatHandoff } from './delivery-routing.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { healthCheckIn } from './health/guidance.ts';
@@ -148,18 +149,18 @@ export class ContextResponder {
       const previous = location.previous;
       if (previous.receiptKey !== receiptKey || previous.disposition !== p.disposition || previous.text !== p.text)
         throw new ToolRejection('context_decision_conflict', 'This location already has a different decision. Retry only the original receipts, question, disposition and text.');
-      return previous.result;
+      if (!pendingChatHandoff(previous.result)) return previous.result;
     }
     const prior = this.decisions.get(decisionKey);
     if (prior) {
       if (prior.receiptKey !== receiptKey || prior.signature !== signature) throw new ToolRejection('context_decision_conflict', 'This occurrence already has a decision. Retry only the original receipts, disposition and text.');
-      return prior.result;
+      if (!pendingChatHandoff(prior.result)) return prior.result;
     }
     if (activityKey && p.disposition === 'silent' && this.hasStoredMessage(message_id))
       throw new ToolRejection('context_decision_conflict', 'An announcement was already stored for this occurrence.');
     const result = p.disposition === 'silent' ? {disposition: 'silent', stored_for_g2: false} :
       await this.send({message_id, text: p.text!, ...(p.utterance_id ? {utterance_id: p.utterance_id} : {})}, allowed, location?.location,
-        () => recallGuards.every(check => check()));
+        () => recallGuards.every(check => check()), owner, 'context:' + receiptKey);
     this.decisions.set(decisionKey, {receiptKey, signature, result});
     while (this.decisions.size > 1000) this.decisions.delete(this.decisions.keys().next().value!);
     location?.complete(location.decisionId, {...p, receiptKey}, result);

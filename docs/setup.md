@@ -68,6 +68,14 @@ Dot Link retains subscriptions across restarts. On builds that include the 24-ho
 
 The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.
 
+With Mac 0.5.5 and Even 0.4.4, Dot checks the G2 when an answer or suggestion is ready. If the glasses report that you are wearing them, the message goes to G2. If they are in the case, or the companion cannot confirm that G2 is available, Dot can continue in your existing ChatGPT Dot chat. A question asked there stays in that chat. On G2s that report only case status, a connected pair outside its case can receive a message while sitting on a desk. Opening or closing the case does not start a message.
+
+If your G2 reports only case status and the phone loses its network connection or Dot Link reopens, Dot can continue in your usual chat. To receive messages on G2 again, take the glasses out of the case once more or touch a glasses temple.
+
+If your Mac updates first and you still have Even 0.4.2, you can keep asking questions from G2. Open your usual Dot chat for the answer. The glasses show a short cue in the question's history and finish waiting. Updating the companion enables G2 delivery when the glasses are available.
+
+Keep Dot Link running in Even Hub to let it answer the Mac while you use another iPhone app. In ChatGPT, open **Plugins → your existing Dot Link plugin → Settings → Update tools**. Return to the same Dot conversation. When any current work has finished, open the Dot's action menu at the top and select **Restart**. The updated tools let Dot read an individual shared Mac notification and continue a G2 reply in your chat. Your existing pairing and sharing choices carry over.
+
 Hold to record on G2 and release to stop, or tap the microphone in the Even companion. Tap the same button again to stop and transcribe; the adjacent trash button discards recording or transcription without sending. Recordings are limited to 30 seconds. **Send after transcription** is on by default; turn it off to edit the text before sending with the up arrow. Use the left/right arrows to browse conversation history and the speaker button to turn read aloud on or off. **Display settings** controls idle timeout, wake gestures and head-raise behavior.
 
 In **Operation settings**, **Disable hold-to-record** blocks manual recording on both G2 and the phone and discards any manual recording in progress. It does not enable wake listening; use separately enabled Hey dot or text input.
@@ -95,6 +103,8 @@ Web addresses remain visible as plain text in the phone conversation and do not 
 For **read-aloud**, use the switch in the Even companion. It starts OFF on first use and remembers your ON/OFF choice when you reopen the app. Selecting a different interface language turns read-aloud OFF; turn it on again when you want to listen. Reopening does not replay earlier replies. **Speech output** on the Mac identifies the current method as iPhone; external speech-output services are not yet available.
 
 ## Mac notifications
+
+If Dot chooses to tell you about a shared notification, it uses the same G2 or Dot chat destination as a conversation message. A notification Dot marks silent stays silent. A deferred notification can be reconsidered later.
 
 In the Mac app, choose **Permissions**, add the installed Dot Link.app under macOS **Accessibility**, and enable access. Then turn on **Share all Mac notifications with Dot**. With Mac 0.4.35 or later, Dot Link asks your existing Dot to receive shared notifications automatically; no separate event setup is needed. You can tell your Dot which notifications you want to hear about.
 
@@ -179,7 +189,9 @@ Use **Check for updates** in the Mac app. Automatic updates are currently paused
 
 Updates preserve connection settings, pairing and history. After recovery succeeds, obsolete app backups are automatically removed, keeping one verified rollback generation; older accumulated backups are also cleaned up. No manual storage cleanup or extra setting is required. You do not need to recreate your tunnel or pairing. Update the Even companion through Even Hub separately. The command-line installer stops if an app already exists in `~/Applications`; it is for installation, not replacement.
 
-When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your Dot Link connection → Update tools**. If your existing Dot still uses the previous tools, finish any active work and choose **Restart** from that Dot's action menu. In the conversation-ordering update, updating the registered tools alone did not refresh an already-running Dot; restarting it made the new question-reference inputs available. If the new tool is still unavailable after these steps, ask the same Dot to rediscover the tools on its Dot Link connection; this was also needed when adding walking and terrain information. Keep the existing Dot and connection. This step concerns tool-definition changes, not every app update.
+If you remove a pairing and create a new one, the Mac keeps the questions, replies and announcements addressed to the former pairing under its usual history limit. The new pairing can see its own messages and older history that predates pairing-specific delivery.
+
+When an update changes Dot's tools, open **Plugins** in ChatGPT, select the installed Dot Link plugin, then choose **Settings → Update tools**. Go back to your usual Dot conversation, finish any work in progress, and select **Restart** in its top action menu. If a new tool is still missing after the restart, ask that Dot to rediscover the tools on its existing Dot Link connection.
 
 ## Troubleshooting
 
@@ -193,7 +205,7 @@ When an update changes Dot's tools, open **ChatGPT Settings → Plugins → your
 | Mac connection error | The paired address responded, but the connection could not be completed. Check Dot Link on the Mac. |
 | Mac unreachable | Check Tailscale on the phone and that the Mac is awake, connected to Tailscale and running Dot Link. The app cannot distinguish a missing phone VPN from an unreachable Mac. It reconnects automatically; keep the existing pairing. |
 | Even cannot pair | Keep the Mac awake, resume Dot Link, and connect Mac and iPhone to the same Tailscale network. Generate a fresh code and paste it in full within two minutes. |
-| Notifications stop after an update | Remove Dot Link from macOS Accessibility, add the installed app again, and enable access. This is needed once when updating from a release before 0.5.4; later updates keep access. |
+| Notifications stop after an update | If the Mac already has Accessibility access and notification sharing is on, choose **Update tools** for the existing ChatGPT connection and restart the same Dot. For the first update from a release before 0.5.4, remove Dot Link from macOS Accessibility, add the installed app again, and enable access. Later updates keep that access. |
 | Speech service rejects a recording | Check the selected service, key, account access and billing; for Microsoft also check the endpoint. Saving a key alone does not verify it. |
 | Mac 0.3.0 or 0.3.1 waits for Even to close before Dot was ever connected | Quit Dot Link and replace only the app in `~/Applications` with the latest ZIP. Keep Application Support data; do not uninstall. |
 

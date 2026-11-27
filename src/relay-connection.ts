@@ -1,4 +1,5 @@
 import { appOrigin, relayOrigin } from './relay-origin.ts';
+export const CHAT_HANDOFF_MEDIA_TYPE = 'application/vnd.dotlink.chat-handoff+json';
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 export interface RelayCredentials { origin: string; token: string; expiresAt: number; resumeToken?: string; appOrigin?: string; }
 const KEY = 'dot-relay-v1';
@@ -72,7 +73,7 @@ export class RelaySettings {
 }
 
 export function apiAddress(path: string, origin?: string): string {
-  if (!['/api/status', '/api/messages', '/api/updates', '/api/transcribe', '/api/utterances', '/api/timings', '/api/location/control', '/api/location/update', '/api/location/history', '/api/factor-history', '/api/weather', '/api/health', '/api/pair', '/api/pair/resume', '/api/pair/revoke'].includes(path)) throw new Error('Unknown API route');
+  if (!['/api/status', '/api/messages', '/api/updates', '/api/g2-availability', '/api/transcribe', '/api/utterances', '/api/timings', '/api/location/control', '/api/location/update', '/api/location/history', '/api/factor-history', '/api/weather', '/api/health', '/api/pair', '/api/pair/resume', '/api/pair/revoke'].includes(path)) throw new Error('Unknown API route');
   return origin ? `${relayOrigin(origin)}${path}` : path;
 }
 

@@ -64,6 +64,7 @@
   "even.you": "Moi",
   "even.could_not_confirm_delivery": "Impossible de confirmer la réception",
   "even.waiting_for_a_reply": "En attente d’une réponse…",
+  "even.continue_in_dot_chat": "Poursuivez dans votre conversation avec Dot.",
   "even.read_aloud_failed_please_read_the_reply_on_screen": "La lecture à voix haute a échoué. Lisez la réponse à l’écran.",
   "even.dot_connected": "Dot connecté",
   "even.dot_disconnected": "Dot déconnecté",
