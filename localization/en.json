@@ -367,6 +367,8 @@
   "mac.open_tailscale_dns_settings": "Open Tailscale DNS settings",
   "mac.diagnostics_copied": "Diagnostics copied",
   "mac.copy_diagnostics": "Copy diagnostics",
+  "mac.copy_report_code": "Copy report code",
+  "mac.report_code_copied": "Report code copied",
   "mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation": "Only the failed step, error codes and app version. No keys or conversations.",
   "mac.removing_even_connections": "Removing Even connections…",
   "mac.stopping_dot_link": "Stopping Dot Link…",

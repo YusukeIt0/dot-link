@@ -33,7 +33,7 @@ try {
   await symlink(process.execPath, join(payload, '.runtime/bin/node'));
   await writeFile(join(root, 'mode'), 'stop');
   for (const [file, value] of Object.entries(saved)) await writeFile(join(directory, '.runtime', file), value);
-  await writeFile(join(contents, 'Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${namespace}</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleExecutable</key><string>Test</string><key>CFBundleVersion</key><string>1</string></dict></plist>`);
+  await writeFile(join(contents, 'Info.plist'), `<?xml version="1.0"?><plist version="1.0"><dict><key>CFBundleIdentifier</key><string>${namespace}</string><key>CFBundlePackageType</key><string>APPL</string><key>CFBundleExecutable</key><string>Test</string><key>CFBundleShortVersionString</key><string>1.2.3</string><key>CFBundleVersion</key><string>1</string></dict></plist>`);
   const pids = {};
   for (const name of names) {
     const plist = {Label: `local.even-g2-dot.${name}`, WorkingDirectory: name === 'setup-ui' ? join(home, 'Applications/Dot Link.app/Contents') : directory,
