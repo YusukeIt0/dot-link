@@ -203,14 +203,20 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
 
     func checkSetupSupportPanel() {
         let saved = sut.state, language = sut.language, checked = sut.lastChecked
+        let action = sut.currentAction, health = sut.healthState
         let pasteboard = NSPasteboard.withUniqueName()
         defer {
             sut.state = saved; sut.busy = false; sut.lastChecked = checked; sut.language = language
+            sut.currentAction = action; sut.healthState = health
             sut.reportPasteboard = { .general }; pasteboard.releaseGlobally()
         }
         sut.language = "fr"
         sut.receive(["kind":"result", "step":"pair", "installed":true, "evenPairingKnown":false, "evenPaired":false,
                      "subscriptionCheck":"active", "lifecycleStopped":false, "privateField":"private fixture"])
+        let setupCheckedAt = sut.lastChecked
+        sut.currentAction = "health"
+        sut.receive(["kind":"error", "code":"HEALTH_NETWORK_UNAVAILABLE"])
+        precondition(sut.healthState["status"] as? String == "HEALTH_NETWORK_UNAVAILABLE" && sut.lastChecked == setupCheckedAt)
         sut.reportPasteboard = { pasteboard }
         func reportText(_ view: NSView) -> NSTextView? {
             if let text = view as? NSTextView { return text }
@@ -242,7 +248,7 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
             precondition(displayed != nil)
             precondition(pasteboard.string(forType:.string) == (busy ? "unchanged until Copy" : displayed))
         }
-        print("PASS: native support menu, idle and busy panels, French control and exact Copy with private pasteboard")
+        print("PASS: optional health error retained the verified setup report; idle/busy panels, French control and exact Copy verified")
     }
 
     func checkReconnectMenu() {
