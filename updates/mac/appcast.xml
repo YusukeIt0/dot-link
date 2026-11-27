@@ -5,7 +5,9 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
 If you use Even companion 0.4.2, you can keep asking questions on G2. Open your usual Dot chat to read the answer. With companion 0.4.4, Dot can send replies and announcements about Mac notifications you already share to your glasses. On a G2 that reports case position reliably, taking it out of the case can make it available on your desk as well.
 
 After updating the Mac, open Plugins in ChatGPT, choose your existing Dot Link connection, open Settings and select Update tools. Finish any work in progress, then restart that same Dot from its chat menu. This lets it continue a reply in chat and read a shared Mac notification individually.
+
+If you share Mac notifications and are updating from 0.5.3 or earlier, grant Dot Link Accessibility access once after installation. Open System Settings → Privacy &amp; Security → Accessibility, remove the old Dot Link entry, add the installed Dot Link.app again and turn it on.
 </description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.5-127/Dot-Link-0.5.5-127-arm64.zip" sparkle:installationType="application" sparkle:edSignature="o4gdhPfd4cZM+Qh1TGKFSnlkqeHOIDzHOylBFHqEdUF1kZeQZboazjX0f74kaqZmxZzce02+Rqi2H7yoBUSLAg==" length="69900866" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 8arxGoDuQNF0ljJ1m5qOFqtCvMqUH0mzDDSAJM/EzdqX8fBdSa9L1pRbrvtBxHSal1VvCwC5D2Gdb0MFflJhDQ==
-length: 1843
+edSignature: pSsQVOa8XpNJ4Nsk579MnYLtKol27bCCEqu8AsB/sWUE+SwmN6MoQMWsr5edoxzdr0pNab+w04AHBooxqX4ZBg==
+length: 2127
 -->
