@@ -17,11 +17,11 @@ async function fixture(t) {
     const trace = join(directory, 'trace');
     await writeFile(trace, '');
     const child = spawnSync(process.execPath, ['--experimental-test-module-mocks', '--import', preload, helper, action], {
-      env: {...process.env, HOME: directory, ...env}, input: '{}\n', encoding: 'utf8', timeout: 15_000,
+      env: {...process.env, HOME: directory, ...env}, input: '{}\n', encoding: 'utf8', timeout: 15_000, killSignal:'SIGKILL',
     });
     assert.ifError(child.error);
     assert.ok(child.stdout.trim(), child.stderr);
-    return {value: JSON.parse(child.stdout), status: child.status, trace: (await readFile(trace, 'utf8')).trim().split('\n')};
+    return {value: JSON.parse(child.stdout), status: child.status, signal: child.signal, trace: (await readFile(trace, 'utf8')).trim().split('\n')};
   }
   return {directory, managed, run};
 }
@@ -40,9 +40,11 @@ test('first launch and refresh offer Prepare without querying Tailscale or servi
 
 test('a stalled discovery returns a shareable error before recovery; retry can proceed', async t => {
   const f = await fixture(t);
+  // Unlike an unresolved Promise, opening a pipe with no writer holds a real OS read.
+  assert.equal(spawnSync('mkfifo', [join(f.directory, 'blocked-read')]).status, 0);
   const failed = await f.run('update-recover', {DOTLINK_TEST_STALL_DISCOVERY:'1'});
-  assert.equal(failed.status, 1);
   assert.deepEqual(failed.value, {kind:'error', code:'STARTUP_DISCOVERY_TIMEOUT'});
+  assert.equal(failed.signal, 'SIGTERM');
   assert.deepEqual(failed.trace, ['discover']);
   assert.equal((await f.run()).value.step, 'install');
 });

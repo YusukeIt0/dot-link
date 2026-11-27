@@ -161,6 +161,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         updater.retryStartupRecovery = { [weak self] in
             guard let self, !self.busy, self.appUpdater?.blocksActions != true else { return }
+            guard self.appLocationReady else { self.locateApp(); return }
             self.appUpdater?.beginStartupRecovery(); self.perform("update-recover")
         }
         updater.restartHost = { [weak self] token, reply in

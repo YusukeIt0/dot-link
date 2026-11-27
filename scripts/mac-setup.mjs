@@ -19,7 +19,8 @@ import { setupStage, setupFailure, runSetupInstall, activateRelay, saveSetupFail
 const payload = fileURLToPath(new URL('..', import.meta.url));
 const action = process.argv[2] ?? 'inspect';
 const appBundle = resolve(payload, '../../..');
-const emit = value => process.stdout.write(JSON.stringify(value) + '\n');
+const discoveryTimeout = new Error('STARTUP_DISCOVERY_TIMEOUT');
+const emit = (value, flushed) => process.stdout.write(JSON.stringify(value) + '\n', flushed);
 let activationDirectory;
 let inputText = '';
 for await (const chunk of process.stdin) {
@@ -38,7 +39,7 @@ async function discoverAtStartup() {
     return await Promise.race([
       discoverInstallation(),
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error('STARTUP_DISCOVERY_TIMEOUT')), 60_000);
+        timer = setTimeout(() => reject(discoveryTimeout), 60_000);
       }),
     ]);
   } finally {
@@ -255,10 +256,10 @@ try {
     emit({ kind: 'error', code: failure.code, failure, diagnosticSaved }); process.exitCode = 1;
   } else {
     const safe = typeof error.message === 'string' && /^[A-Z_]{3,60}$/.test(error.message) ? error.message : 'SETUP_FAILED';
-    if (safe === 'STARTUP_DISCOVERY_TIMEOUT') {
-      // A filesystem read may still be pending. Flush the safe error and exit
-      // this helper before a retry. No recovery operation was started.
-      process.stdout.write(JSON.stringify({kind:'error', code:safe}) + '\n', () => process.exit(1));
+    if (error === discoveryTimeout) {
+      // Normal Node shutdown waits for blocked filesystem workers. Terminate
+      // only this read-only helper after its error reaches the GUI.
+      emit({kind:'error', code:safe}, () => process.kill(process.pid, 'SIGTERM'));
     } else {
       emit({ kind: 'error', code: safe }); process.exitCode = 1;
     }

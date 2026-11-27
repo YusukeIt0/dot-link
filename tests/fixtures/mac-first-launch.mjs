@@ -1,4 +1,5 @@
 import { appendFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { mock } from 'node:test';
@@ -26,8 +27,9 @@ mock.module(lib('mac-install.mjs'), {namedExports: {
     trace('discover');
     if (process.env.DOTLINK_TEST_STALL_DISCOVERY === '1') {
       mock.timers.enable({apis: ['setTimeout']});
+      const blockedRead = readFile(join(homedir(), 'blocked-read'));
       queueMicrotask(() => mock.timers.tick(60_000));
-      return new Promise(() => {});
+      return blockedRead;
     }
     return install.discoverInstallation();
   },
