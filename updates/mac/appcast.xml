@@ -2,7 +2,11 @@
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
 --><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.6</title><sparkle:version>128</sparkle:version><sparkle:shortVersionString>0.5.6</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- On a new Mac, “Prepare this Mac” is available before Dot Link checks Tailscale.
 - If Dot Link spends a minute reading your setup, you can try again or quit and reopen the app. A short code in the window identifies the check if you need help.
+
+If you are updating from 0.5.4 or earlier, open Plugins in ChatGPT, choose your existing Dot Link connection, then open Settings and select Update tools. Finish any work in progress and restart the same Dot from its chat menu.
+
+If you share Mac notifications and are updating from 0.5.3 or earlier, grant Dot Link Accessibility access once after installation. Open System Settings → Privacy &amp; Security → Accessibility, remove the old Dot Link entry, add the installed Dot Link.app again and turn it on.
 </description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.6-128/Dot-Link-0.5.6-128-arm64.zip" sparkle:installationType="application" sparkle:edSignature="/fnZvdJH7otnQEVwMmB4X2JFmp9llnrFISMJvmKZtxAknFEmSA027pFHNvNzPubluOFZnUhTDtsTn0B9g/KhBA==" length="69902715" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 1zv5f3lg64sLSasAcSqf8O7PxdjwyZvoYSMDa93FNfhtXLU2mm/7K0+wI05PGfTLjzeSC3j1TENScOxWTPibBw==
-length: 1277
+edSignature: xKow6K9+xs3GiUT1Cotf3CNeSCgqqMnc4Gcf7ACDI8NRIjLyCik6/YzxQX4ypuic/N1YleLnim0/0/FZoCgoBw==
+length: 1789
 -->
