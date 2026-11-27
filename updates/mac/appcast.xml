@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.4</title><sparkle:version>125</sparkle:version><sparkle:shortVersionString>0.5.4</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- Dot can use places, forecasts and walking plans you’ve shared to suggest a saved walk when the rain clears or let you know when a forecast changes your plans.
-- Apple now notarizes Dot Link for Mac. You can open a downloaded copy without choosing Open Anyway.
-- If you share notifications and are updating from the public 0.5.3 release, grant Accessibility access once for the newly signed app. In System Settings → Privacy &amp; Security → Accessibility, remove Dot Link, add it again and turn it on. Later updates keep this permission.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.4-125/Dot-Link-0.5.4-125-arm64.zip" sparkle:installationType="application" sparkle:edSignature="kdHCQkyzor7WxVMdzXZfQBXiKzLNgs+6Sg8MWQCI18evDhUjPJ5bo4ign/PoVariurdv0Iq/RXD6HldDoOlUDQ==" length="69884770" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: FjIp5eCxDWRjuKeayfAjVdpwCqhuR+JE3heENk3Dbl3UUD3eyF9Qpt7sixOx2fm4chYA3Arepx0Zw5yTmD3YBQ==
-length: 1575
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.5</title><sparkle:version>127</sparkle:version><sparkle:shortVersionString>0.5.5</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">Dot can answer a G2 question in your usual ChatGPT Dot chat if you put the glasses in their case before the reply is ready. A question you ask in that chat stays there.
+
+If you use Even companion 0.4.2, you can keep asking questions on G2. Open your usual Dot chat to read the answer. With companion 0.4.4, Dot can send replies and announcements about Mac notifications you already share to your glasses. On a G2 that reports case position reliably, taking it out of the case can make it available on your desk as well.
+
+After updating the Mac, open Plugins in ChatGPT, choose your existing Dot Link connection, open Settings and select Update tools. Finish any work in progress, then restart that same Dot from its chat menu. This lets it continue a reply in chat and read a shared Mac notification individually.
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.5-127/Dot-Link-0.5.5-127-arm64.zip" sparkle:installationType="application" sparkle:edSignature="o4gdhPfd4cZM+Qh1TGKFSnlkqeHOIDzHOylBFHqEdUF1kZeQZboazjX0f74kaqZmxZzce02+Rqi2H7yoBUSLAg==" length="69900866" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: 8arxGoDuQNF0ljJ1m5qOFqtCvMqUH0mzDDSAJM/EzdqX8fBdSa9L1pRbrvtBxHSal1VvCwC5D2Gdb0MFflJhDQ==
+length: 1843
 -->
