@@ -43,6 +43,9 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
         sut.window.isReleasedWhenClosed = false
         sut.contentScroll = SetupWindowLayout.install(in: sut.window)
         sut.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        #if !BASELINE
+        checkInitialDiscoveryTimeout()
+        #endif
         sut.appLocationValidated = true; sut.appLocationReady = true
         sut.state = ["installed": true, "directory": root.appendingPathComponent("data").path,
             "bridge": true, "device": true, "tunnel": true, "subscribed": true, "step": "pair"]
@@ -153,6 +156,28 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
     }
 
     #if !BASELINE
+    func checkInitialDiscoveryTimeout() {
+        let originalLanguage = sut.language
+        sut.appLocationValidated = true
+        sut.appLocationReady = true
+        sut.busy = true
+        sut.currentAction = "update-recover"
+        sut.receive(["kind": "error", "code": "STARTUP_DISCOVERY_TIMEOUT"])
+        precondition(!sut.busy && !sut.appLocationReady && sut.step == "startupCheck")
+        for language in Localization.shared.languages {
+            sut.language = language
+            sut.render()
+            precondition(labels(sut.stack).contains { $0.contains("STARTUP_DISCOVERY_TIMEOUT") })
+            precondition(buttons(sut.stack).contains { $0.title == sut.tr("mac.check_again") && $0.isEnabled })
+        }
+        sut.inspect()
+        precondition(!sut.busy && sut.helper == nil, "A refresh must not skip startup recovery")
+        precondition(sut.terminationReply(for: nil) == .terminateNow && !sut.quitting)
+        sut.language = originalLanguage
+        sut.currentAction = ""
+        sut.messageRecord = nil
+    }
+
     func checkReconnectMenu() {
         let connected = sut.state
         defer { sut.state = connected; sut.busy = false }

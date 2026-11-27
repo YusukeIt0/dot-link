@@ -26,6 +26,8 @@ opens the intended folder.
 
 From Mac 0.5.4, Dot Link is notarized by Apple. When you open a downloaded copy for the first time, macOS asks you to confirm opening an app from the internet; choose **Open**.
 
+From Mac 0.5.6, a fresh installation shows **Prepare this Mac** before checking Tailscale. If a startup check is still running after a minute, the Dot Link window shows a short code. If you see `STARTUP_DISCOVERY_TIMEOUT`, choose **Check again** or quit and reopen Dot Link. For support, the code and the app version identify the check. Keep keys, logs and device details private.
+
 Earlier releases are not notarized. If macOS says it cannot verify the developer and you trust the download, dismiss the warning, then open **System Settings → Privacy & Security → Open Anyway**. Authenticate in the Mac dialog and choose **Open**. A warning that the app is damaged or will harm your computer is different; see [Apple's guidance](https://support.apple.com/en-us/102445).
 
 This guide uses English labels. See [application language](#application-language)

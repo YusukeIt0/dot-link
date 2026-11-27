@@ -161,6 +161,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         updater.retryStartupRecovery = { [weak self] in
             guard let self, !self.busy, self.appUpdater?.blocksActions != true else { return }
+            guard self.appLocationReady else { self.locateApp(); return }
             self.appUpdater?.beginStartupRecovery(); self.perform("update-recover")
         }
         updater.restartHost = { [weak self] token, reply in
@@ -293,8 +294,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         terminationReply(for: NSAppleEventManager.shared().currentAppleEvent)
     }
     func terminationReply(for event: NSAppleEventDescriptor?) -> NSApplication.TerminateReply {
-        // Before location validation this copy must not mutate relay lifecycle.
-        if !appLocationValidated && !busy { return .terminateNow }
+        // Until startup establishes ownership, closing an unverified setup
+        // window must not stop an existing relay.
+        if !busy && (!appLocationValidated || (step == "startupCheck" && lastChecked == nil)) { return .terminateNow }
         if restartingUpdateHost { notifications?.shutdown(); return .terminateNow }
         if appUpdater?.prepared == true {
             if appUpdater?.silentRelaunch == true { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "updateBackgroundRelaunchAt") }
@@ -486,6 +488,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         space()
         if !message.isEmpty {
             let l = label(message); l.textColor = .secondaryLabelColor; stack.addArrangedSubview(l)
+            if step == "startupCheck" { l.isSelectable = true }
             l.widthAnchor.constraint(equalTo: stack.widthAnchor, constant: -64).isActive = true
         }
         if let failure = setupFailure.details, !busy {
@@ -602,6 +605,9 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 row.addArrangedSubview(control); used += (used > 0 ? 12 : 0) + width
             }
             rows.addArrangedSubview(row); stack.addArrangedSubview(rows)
+        case "startupCheck":
+            add(tr("mac.check_setup"), size: 23, bold: true)
+            button(tr("mac.check_again"), primary: true) { [weak self] in self?.locateApp() }
         case "appLocation":
             add(tr("mac.app_location_title"), size: 23, bold: true)
             button(tr("mac.check_again"), primary: true) { [weak self] in self?.locateApp() }
@@ -768,6 +774,16 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let task = Process(); task.executableURL = payload.appendingPathComponent(".runtime/bin/node"); task.arguments = [payload.appendingPathComponent("scripts/mac-setup.mjs").path, action]; task.currentDirectoryURL = payload
         let out = Pipe(), stdin = Pipe(); task.standardOutput = out; task.standardInput = stdin; task.standardError = FileHandle.nullDevice
         helper = task
+        if action == "app-locate" || action == "update-recover" {
+            // Copying the app or restoring an update can legitimately take time.
+            // Identify that operation without interrupting it or exposing helper output.
+            let stage = action == "app-locate" ? "APP_LOCATION_CHECK" : "STARTUP_RECOVERY_CHECK"
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) { [weak self, weak task] in
+                guard let self, let task, self.helper === task, self.busy, let label = self.progressLabel else { return }
+                label.stringValue = self.tr("mac.checking") + " (\(stage))"
+                label.isSelectable = true
+            }
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             var buffer = Data(); var completed = false; var started = false
@@ -914,6 +930,11 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     restoreApp: !QuitFailurePresentation.helperFilesAvailable(at: payload))
                 showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; showingNotifications = false; showingPairing = false
                 render(); showWindow(); return
+            }
+            if currentAction == "update-recover" && code == "STARTUP_DISCOVERY_TIMEOUT" {
+                // Retry the whole startup sequence. A generic inspect could
+                // otherwise expose setup controls before recovery has run.
+                appLocationReady = false; state = ["step": "startupCheck"]
             }
             if currentAction == "app-locate" || ["APP_LOCATION_MISSING", "APP_LOCATION_REPAIR", "APP_LOCATION_OLDER"].contains(code) {
                 appLocationReady = false; state = ["step": "appLocation"]
