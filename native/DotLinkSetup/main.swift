@@ -77,6 +77,8 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var messageRecord: LocalizedMessage?
     var message: String { messageRecord.map { Localization.shared.text($0, language: language) } ?? "" }
     var setupFailure = SetupFailurePresentation()
+    private var startupReportText: String?
+    var startupReportPasteboard: () -> NSPasteboard = { .general }
     var quitFailure: QuitFailurePresentation?
     var notificationSuspensionBeforeStop: Bool?
     var progressLabel: NSTextField?
@@ -607,7 +609,15 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             rows.addArrangedSubview(row); stack.addArrangedSubview(rows)
         case "startupCheck":
             add(tr("mac.check_setup"), size: 23, bold: true)
-            button(tr("mac.check_again"), primary: true) { [weak self] in self?.locateApp() }
+            let retry = ActionButton(tr("mac.check_again")) { [weak self] in self?.locateApp() }
+            retry.controlSize = .large; retry.keyEquivalent = "\r"
+            let actions = NSStackView(views: [retry]); actions.spacing = 12
+            if startupReportText != nil {
+                let copy = NSButton(title: tr("mac.copy_report_code"), target: self, action: #selector(copyStartupReport(_:)))
+                copy.bezelStyle = .rounded; copy.controlSize = .large
+                actions.addArrangedSubview(copy)
+            }
+            stack.addArrangedSubview(actions)
         case "appLocation":
             add(tr("mac.app_location_title"), size: 23, bold: true)
             button(tr("mac.check_again"), primary: true) { [weak self] in self?.locateApp() }
@@ -754,6 +764,12 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
             expiryLabel?.stringValue = tr("mac.expired_create_a_new_pairing_code")
         } else { expiryLabel?.stringValue = tr("mac.seconds_seconds_remaining_one_use", ["seconds": String(seconds)]) }
     }
+    @objc private func copyStartupReport(_ sender: NSButton) {
+        guard !busy, step == "startupCheck", let report = startupReportText else { return }
+        let pasteboard = startupReportPasteboard()
+        pasteboard.clearContents()
+        if pasteboard.setString(report, forType: .string) { sender.title = tr("mac.report_code_copied") }
+    }
     func copySetupDiagnostics() {
         guard let text = setupFailure.details?.copyText(appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String, build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) else { return }
         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string)
@@ -762,6 +778,7 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func perform(_ action: String, input: [String: String] = [:]) {
         guard appLocationReady || action == "app-locate" || (action == "shutdown" && appLocationValidated) else { return }
         guard !busy, action == "app-locate" || appUpdater?.blocksActions != true else { return }; busy = true; currentAction = action; messageRecord = nil
+        startupReportText = nil
         pairingRefreshGeneration += 1
         setupFailure.begin(action)
         if action == "shutdown" { quitFailure = nil }
@@ -931,10 +948,13 @@ final class SetupApp: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 showingDetails = false; showingSpeech = false; showingSpeechOutput = false; showingHealthcare = false; showingNotifications = false; showingPairing = false
                 render(); showWindow(); return
             }
-            if currentAction == "update-recover" && code == "STARTUP_DISCOVERY_TIMEOUT" {
+            if currentAction == "update-recover" && code == StartupDiscoveryReport.code {
                 // Retry the whole startup sequence. A generic inspect could
                 // otherwise expose setup controls before recovery has run.
                 appLocationReady = false; state = ["step": "startupCheck"]
+                startupReportText = StartupDiscoveryReport.text(
+                    version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+                    build: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
             }
             if currentAction == "app-locate" || ["APP_LOCATION_MISSING", "APP_LOCATION_REPAIR", "APP_LOCATION_OLDER"].contains(code) {
                 appLocationReady = false; state = ["step": "appLocation"]

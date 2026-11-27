@@ -367,6 +367,8 @@
   "mac.open_tailscale_dns_settings": "Tailscale DNS 설정 열기",
   "mac.diagnostics_copied": "진단 정보 복사됨",
   "mac.copy_diagnostics": "진단 정보 복사",
+  "mac.copy_report_code": "보고용 코드 복사",
+  "mac.report_code_copied": "보고용 코드가 복사되었습니다",
   "mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation": "실패한 단계, 오류 코드, 앱 버전만 포함합니다. 키나 대화는 포함하지 않습니다.",
   "mac.removing_even_connections": "Even 연결 해제 중…",
   "mac.stopping_dot_link": "Dot Link 중지 중…",

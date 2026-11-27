@@ -158,18 +158,40 @@ final class QuitFixture: NSObject, NSApplicationDelegate {
     #if !BASELINE
     func checkInitialDiscoveryTimeout() {
         let originalLanguage = sut.language
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        sut.startupReportPasteboard = { pasteboard }
+        for step in ["install", "pair", "networkConflict", "appLocation"] {
+            sut.state = ["step": step]
+            sut.render()
+            precondition(!buttons(sut.stack).contains { $0.title == sut.tr("mac.copy_report_code") })
+        }
         sut.appLocationValidated = true
         sut.appLocationReady = true
         sut.busy = true
         sut.currentAction = "update-recover"
-        sut.receive(["kind": "error", "code": "STARTUP_DISCOVERY_TIMEOUT"])
+        sut.receive(["kind": "error", "code": "STARTUP_DISCOVERY_TIMEOUT", "detail": "/Users/example/private"])
         precondition(!sut.busy && !sut.appLocationReady && sut.step == "startupCheck")
         for language in Localization.shared.languages {
+            pasteboard.clearContents()
+            precondition(pasteboard.setString("keep until clicked", forType: .string))
+            let untouched = pasteboard.changeCount
             sut.language = language
             sut.render()
             precondition(labels(sut.stack).contains { $0.contains("STARTUP_DISCOVERY_TIMEOUT") })
-            precondition(buttons(sut.stack).contains { $0.title == sut.tr("mac.check_again") && $0.isEnabled })
+            let controls = buttons(sut.stack)
+            let retry = controls.first { $0.title == sut.tr("mac.check_again") }!
+            let copy = controls.first { $0.title == sut.tr("mac.copy_report_code") }!
+            precondition(retry.isEnabled && retry.keyEquivalent == "\r" && copy.isEnabled && copy.keyEquivalent.isEmpty)
+            let row = retry.superview as! NSStackView
+            precondition(row === copy.superview && row.orientation == .horizontal && row.fittingSize.width <= 580 - 64)
+            precondition(pasteboard.changeCount == untouched)
+            copy.performClick(nil)
+            precondition(pasteboard.string(forType: .string) == "Dot Link 1.2.3 (1) / STARTUP_DISCOVERY_TIMEOUT")
+            precondition(copy.title == sut.tr("mac.report_code_copied") && retry.isEnabled)
         }
+        precondition(StartupDiscoveryReport.text(version: "1.2.3\n", build: "1") == nil)
+        precondition(StartupDiscoveryReport.text(version: "1.2.3", build: "user@example.test") == nil)
         sut.inspect()
         precondition(!sut.busy && sut.helper == nil, "A refresh must not skip startup recovery")
         precondition(sut.terminationReply(for: nil) == .terminateNow && !sut.quitting)

@@ -367,6 +367,8 @@
   "mac.open_tailscale_dns_settings": "TailscaleのDNS設定を開く",
   "mac.diagnostics_copied": "診断情報をコピーしました",
   "mac.copy_diagnostics": "診断情報をコピー",
+  "mac.copy_report_code": "報告用コードをコピー",
+  "mac.report_code_copied": "報告用コードをコピーしました",
   "mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation": "失敗した処理・エラーコード・アプリの版番号のみ。キーや会話は含みません。",
   "mac.removing_even_connections": "Evenの接続を解除しています…",
   "mac.stopping_dot_link": "Dot Linkを停止しています…",

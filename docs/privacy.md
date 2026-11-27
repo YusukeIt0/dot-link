@@ -209,6 +209,8 @@ An uncertain outgoing message has a saved ID and SHA-256 content digest (text an
 
 ## Diagnostics and external services
 
+If the Mac app times out while checking for an existing installation, **Copy report code** copies one line to the clipboard when you click it. The line contains only the app version, build number and fixed timeout code. You choose whether to share it.
+
 A failed Mac relay activation can save its last failed step, a known error code, available command exit/signal information and time in an owner-only local diagnostic file. It is replaced by a later failure and removed after activation completes without an error when file permissions allow. **Copy diagnostics** copies the current error details and app version/build, excluding credentials, hostnames, paths, command output and conversations. Neither the file nor the copied text is uploaded automatically.
 
 Timing logs contain processing IDs, stages, timestamps and durations. Notification diagnostics store permission and monitoring states, the sharing setting, legacy selected app names, counts, synthetic test notification bodies, and detection and forwarding results. Ordinary notification strings are handled in memory for classification and deduplication; their bodies are not stored in the notification diagnostic file or delivery ledger. The ledger stores up to 4,096 notification-identifier hashes, delivery IDs, timestamps, stages and attempt counts. Shared notification text is stored in the relay notification history and sent to Dot. These diagnostic files are not automatically sent to the developer. Review their contents before sharing them for support.

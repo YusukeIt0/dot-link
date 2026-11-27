@@ -367,6 +367,8 @@
   "mac.open_tailscale_dns_settings": "Tailscale-DNS-Einstellungen öffnen",
   "mac.diagnostics_copied": "Diagnosedaten kopiert",
   "mac.copy_diagnostics": "Diagnosedaten kopieren",
+  "mac.copy_report_code": "Supportcode kopieren",
+  "mac.report_code_copied": "Supportcode kopiert",
   "mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation": "Nur der fehlgeschlagene Schritt, Fehlercodes und die App-Version. Keine Schlüssel oder Gespräche.",
   "mac.removing_even_connections": "Even-Verbindungen werden entfernt…",
   "mac.stopping_dot_link": "Dot Link wird gestoppt…",

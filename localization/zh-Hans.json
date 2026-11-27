@@ -367,6 +367,8 @@
   "mac.open_tailscale_dns_settings": "打开 Tailscale DNS 设置",
   "mac.diagnostics_copied": "诊断信息已复制",
   "mac.copy_diagnostics": "复制诊断信息",
+  "mac.copy_report_code": "复制反馈代码",
+  "mac.report_code_copied": "已复制反馈代码",
   "mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation": "仅包含失败步骤、错误代码和应用版本，不含密钥或对话。",
   "mac.removing_even_connections": "正在移除 Even 连接…",
   "mac.stopping_dot_link": "正在停止 Dot Link…",

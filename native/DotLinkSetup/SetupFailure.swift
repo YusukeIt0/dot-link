@@ -1,5 +1,16 @@
 import Foundation
 
+enum StartupDiscoveryReport {
+    static let code = "STARTUP_DISCOVERY_TIMEOUT"
+
+    static func text(version: String?, build: String?) -> String? {
+        guard let version, let build,
+              version.range(of: #"\A[0-9]+(?:\.[0-9]+)*\z"#, options: .regularExpression) != nil,
+              build.range(of: #"\A[0-9]+\z"#, options: .regularExpression) != nil else { return nil }
+        return "Dot Link \(version) (\(build)) / \(code)"
+    }
+}
+
 // A failed Quit never grants termination. Restoration uses the original bundle
 // path; do not search for or execute an arbitrary alternate copy of the helper.
 struct QuitFailurePresentation {
