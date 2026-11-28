@@ -115,11 +115,11 @@ Dot Link retains subscriptions across restarts. On builds that include the 24-ho
 
 The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.
 
-With Mac 0.5.5 and Even 0.4.4, Dot checks the G2 when an answer or suggestion is ready. If the glasses report that you are wearing them, the message goes to G2. If they are in the case, or the companion cannot confirm that G2 is available, Dot can continue in your existing ChatGPT Dot chat. A question asked there stays in that chat. On G2s that report only case status, a connected pair outside its case can receive a message while sitting on a desk. Opening or closing the case does not start a message.
+With Even 0.4.6 and Mac 0.5.10, **Wearing** means the connected G2 reports that it is outside its case. This includes glasses on a desk. Replies go to G2 in this mode, including after reopening Dot Link with the glasses already on. **In case** sends replies to your existing ChatGPT Dot conversation. A question asked in that chat stays there.
 
-The iPhone conversation header shows the Even app version alongside the connected Mac client version. Older Mac clients show a dash. On the next line, a check means connected, a cross means disconnected and a dash means the connection is still unknown. G2 shows the case position reported by the glasses or **Unknown** when they provide no reading.
+If the case state is **Unknown** or the phone switches networks, the Mac holds the reply for up to ten seconds and checks again. A fresh **Wearing** or **In case** reading selects the destination immediately. At the deadline the reply goes to the existing Dot chat once. Reconnecting later does not repeat that answer on G2.
 
-If your G2 reports only case status and the phone loses its network connection or Dot Link reopens, Dot can continue in your usual chat even when the phone shows **Out of case**. To receive messages on G2 again, take the glasses out of the case once more or touch a glasses temple.
+The iPhone header shows the Even app version next to the connected Mac version. Below it are the Mac and Dot connections and the G2 state. A check means connected, a cross means disconnected, and a dash means the connection is still unknown. An older Mac may show a dash for its version.
 
 If your Mac updates first and you still have Even 0.4.2, you can keep asking questions from G2. Open your usual Dot chat for the answer. The glasses show a short cue in the question's history and finish waiting. Updating the companion enables G2 delivery when the glasses are available.
 

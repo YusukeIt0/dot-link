@@ -13,6 +13,7 @@ import { PhotoStore } from './photo-store.ts';
 import { BridgeResponseError } from './bridge-response-error.ts';
 import type { SharingActivation } from './sharing-activation.ts';
 import type { DeliveryRouting } from './delivery-routing.ts';
+import { commitDelivery } from './g2-availability.ts';
 import { ToolRejection } from './tool-response.ts';
 
 const SESSION = 'personal-g2';
@@ -340,9 +341,9 @@ export class Bridge {
     const firstChat = original && routing?.find('question', original.id);
     const storedAnswer = (firstAnswer && original && (original.reply !== undefined || firstChat)) || repeatsInitialG2(original) ||
       (firstChat && routing?.sameContent(firstChat, delivery) && (firstChat.messageId === p.utterance_id || !routing.sameSource(firstChat, source)));
-    const observation = routed && !this.hasStoredMessage(p.message_id) && !storedAnswer
+    const reading = routed && !this.hasStoredMessage(p.message_id) && !storedAnswer
       ? await routing.availability.check(owner) : undefined;
-    return this.serial(async () => {
+    return commitDelivery(reading, action => this.serial(action), observation => {
       if (stillAllowed && !stillAllowed()) throw new Error('Message context is no longer valid');
       checkAccess();
       const existing = this.state.outbound.find(m => m.message_id === p.message_id);

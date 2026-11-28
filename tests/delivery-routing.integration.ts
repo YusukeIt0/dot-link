@@ -13,7 +13,7 @@ import {bridgeServer} from '../server/http.ts';
 import {deviceServer} from '../server/device.ts';
 import {NotificationInbox} from '../server/notifications.ts';
 import {WebhookSender} from '../server/webhook.ts';
-import type {DeliveryAvailability} from '../src/g2-availability.ts';
+import {GlassesAvailability, type DeliveryAvailability} from '../src/g2-availability.ts';
 import {CHAT_HANDOFF_MEDIA_TYPE} from '../src/relay-connection.ts';
 import {message} from '../src/i18n.ts';
 
@@ -21,7 +21,7 @@ const owner = 'a'.repeat(64), otherOwner = 'b'.repeat(64), runtime = 'c'.repeat(
 const deviceHeaders = {'X-G2-Location-Owner': owner, 'X-G2-Paired-Runtime': runtime};
 const scope = {session_id: 'personal-g2'};
 
-async function fixture(t: TestContext, allowedOwner = owner) {
+async function fixture(t: TestContext, allowedOwner = owner, holdMs = 1500) {
   const directory = mkdtempSync(join(tmpdir(), 'dot-delivery-'));
   const path = join(directory, 'chat-handoffs.json');
   let now = Date.now(), currentRuntime = runtime;
@@ -34,7 +34,7 @@ async function fixture(t: TestContext, allowedOwner = owner) {
     events.push(event);
     return {status: 202, body: '{}'};
   });
-  const mac = new G2DeliveryAvailability((subject, id) => subject === allowedOwner && id === currentRuntime, () => now, 1200);
+  const mac = new G2DeliveryAvailability((subject, id) => subject === allowedOwner && id === currentRuntime, () => performance.now(), 1200, holdMs, 50);
   const routing = new DeliveryRouting(path, mac, subject => subject === allowedOwner);
   const bridge = new Bridge(join(directory, 'bridge.json'), sender, hosts, undefined, {now: () => now, routing});
   const notifications = new NotificationInbox(join(directory, 'notifications.json'), sender, hosts, () => now, routing);
@@ -50,9 +50,9 @@ async function fixture(t: TestContext, allowedOwner = owner) {
     await new Promise<void>(resolve => server.close(() => resolve()));
     rmSync(directory, {recursive: true, force: true});
   });
-  async function http(path: string, key: keyof typeof tokens, body?: unknown, headers: Record<string,string> = {}) {
+  async function http(path: string, key: keyof typeof tokens, body?: unknown, headers: Record<string,string> = {}, signal?: AbortSignal) {
     const response = await fetch(base + path, {method: body === undefined ? 'GET' : 'POST',
-      headers: {Authorization: 'Bearer ' + tokens[key], 'Content-Type': 'application/json', ...headers},
+      headers: {Authorization: 'Bearer ' + tokens[key], 'Content-Type': 'application/json', ...headers}, signal,
       ...(body === undefined ? {} : {body: JSON.stringify(body)})});
     return {status: response.status, data: await response.json()};
   }
@@ -73,7 +73,15 @@ async function fixture(t: TestContext, allowedOwner = owner) {
   };
   await subscribe('utterance.created');
   await subscribe('notification.created');
-  const fetchUpdates = (headers: Record<string,string> = deviceHeaders) => http('/api/updates', 'device', undefined, headers);
+  const fetchUpdates = (headers: Record<string,string> = deviceHeaders, signal?: AbortSignal) => http('/api/updates', 'device', undefined, headers, signal);
+  async function nextChallenge(headers = deviceHeaders) {
+    const signal = AbortSignal.timeout(6000);
+    let snapshot = (await fetchUpdates(headers, signal)).data;
+    while (!snapshot.availabilityChallenge) {
+      snapshot = (await fetchUpdates({...headers, 'X-G2-Revision': snapshot.revision}, signal)).data;
+    }
+    return snapshot.availabilityChallenge as {id: string};
+  }
   const history = async (subject = owner) => (await http('/api/messages', 'device', undefined, {'X-G2-Location-Owner': subject})).data;
   async function decide(send: () => Promise<any>, state: DeliveryAvailability, beforeReply?: () => Promise<void>) {
     await fetchUpdates();
@@ -105,7 +113,7 @@ async function fixture(t: TestContext, allowedOwner = owner) {
     return {notification_id: id, recipient_receipt: signedEvent.data.recipient_receipt};
   }
   return {path, directory, base, deviceToken:tokens.device, mac, routing, bridge, events, http, rpc, tool, result, subscribe, fetchUpdates,
-    history, decide, question, notification, advance(ms: number) {now += ms;}, replaceRuntime() {currentRuntime = 'e'.repeat(64);}};
+    history, decide, question, notification, nextChallenge, advance(ms: number) {now += ms;}, replaceRuntime() {currentRuntime = 'e'.repeat(64);}};
 }
 
 test('the published Even companion finishes a handed-off question without announcing the answer on G2', async t => {
@@ -215,6 +223,73 @@ test('an answer follows its original G2 question at send time, including removal
   assert.equal(transferred.reply, undefined);
   assert.equal(rows.length, 2);
   assert.equal((await f.http('/api/utterances', 'device', first, {'X-G2-Location-Owner': otherOwner})).status, 400);
+});
+
+test('a typed question survives loss of the phone and a reopened companion selects the fresh case position', {timeout: 12_000}, async t => {
+  for (const inCase of [false, true]) {
+    const f = await fixture(t, owner, 5000);
+    const original = await f.question();
+    const args = {utterance_id: original.id, text: 'A reply for the original question.'};
+    const pending = f.result('reply_to_g2', args);
+    const retry = f.result('reply_to_g2', args);
+    // Initially no companion is connected. Its first poll recovers the check,
+    // but the glasses still have no reading during the network transition.
+    const interrupted = await f.nextChallenge();
+    assert.equal((await f.http('/api/g2-availability','device',{...interrupted,state:'unknown'},deviceHeaders)).status, 200);
+    assert.equal((await f.history())[0].reply, undefined);
+    f.replaceRuntime();
+    const headers = {...deviceHeaders, 'X-G2-Paired-Runtime':'e'.repeat(64)};
+    const offer = await f.nextChallenge(headers);
+    assert.notEqual(offer.id, interrupted.id);
+    assert.equal((await f.http('/api/g2-availability','device',{...interrupted,state:'available'},deviceHeaders)).status, 409);
+    const reopened = new GlassesAvailability();
+    await reopened.answer(offer, () => reopened.read({callEvenApp:async () => ({model:'g2',
+      status:{connectType:'connected', isInCase:inCase, isWearing:false, isCharging:inCase}})}),
+      () => true, async (id, state) => {
+        assert.equal(reopened.reportedCasePosition, inCase ? 'inside' : 'outside');
+        assert.equal((await f.http('/api/g2-availability','device',{id,state},headers)).status, 200);
+      });
+    const [answer, repeated] = await Promise.all([pending, retry]);
+    assert.deepEqual(repeated, answer);
+    if (inCase) {
+      assert.equal(answer.destination, 'owner_chat');
+      assert.equal(answer.stored_for_g2, false);
+      assert.equal((await f.result('claim_owner_chat_delivery', {receipt:answer.receipt})).action, 'send_once_in_existing_owner_chat');
+      assert.equal((await f.history())[0].reply, undefined);
+    } else {
+      assert.equal(answer.delivered_to_bridge, true);
+      assert.deepEqual((await f.history()).map((row: any) => [row.id,row.reply]), [[original.id,args.text]]);
+    }
+  }
+});
+
+test('expiry hands the answer to the original chat once, even if G2 reconnects and the Dot retries', async t => {
+  const f = await fixture(t);
+  const q = await f.question(), args = {utterance_id:q.id, text:'A single reply.'};
+  const pending = f.result('reply_to_g2', args);
+  const offer = await f.nextChallenge();
+  const answer = await pending;
+  assert.equal(answer.destination, 'owner_chat');
+  assert.equal(answer.stored_for_g2, false);
+  assert.equal((await f.http('/api/g2-availability','device',{...offer,state:'available'},deviceHeaders)).status, 409);
+  const firstClaim = await f.result('claim_owner_chat_delivery', {receipt: answer.receipt});
+  assert.equal(firstClaim.action, 'send_once_in_existing_owner_chat');
+  assert.equal((await f.result('reply_to_g2', args)).action, 'do_not_resend');
+  assert.equal((await f.result('claim_owner_chat_delivery', {receipt: answer.receipt})).action, 'do_not_resend');
+  assert.deepEqual((await f.history()).map((row: any) => [row.id,row.status,row.reply]), [[q.id,'chat_handoff',undefined]]);
+});
+
+test('the same phone can recover on another network without a runtime restart or a gesture', {timeout: 8000}, async t => {
+  const f = await fixture(t, owner, 5000);
+  const q = await f.question();
+  const send = f.result('reply_to_g2', {utterance_id:q.id, text:'Recovered reply.'});
+  const first = await f.nextChallenge();
+  assert.equal((await f.http('/api/g2-availability','device',{...first,state:'unknown'},deviceHeaders)).status, 200);
+  const next = await f.nextChallenge();
+  assert.notEqual(first.id, next.id);
+  assert.equal((await f.http('/api/g2-availability','device',{...next,state:'available'},deviceHeaders)).status, 200);
+  assert.equal((await send).delivered_to_bridge, true);
+  assert.deepEqual((await f.history()).map((row: any) => row.reply), ['Recovered reply.']);
 });
 
 test('a signed notification selects one recipient, respects silence/defer and records no receipt on an ordinary history fetch', async t => {

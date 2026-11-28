@@ -1,8 +1,8 @@
 {
   "even.case_inside": "盒內",
-  "even.case_outside": "盒外",
+  "even.case_outside": "配戴中",
   "even.case_unknown": "未知",
-  "even.case_description": "G2 眼鏡盒狀態，{position}",
+  "even.case_description": "G2 狀態，{position}",
   "even.link_connected": "{device} 已連線",
   "even.link_disconnected": "{device} 已中斷連線",
   "even.link_unknown": "{device} 連線狀態未知",

@@ -8,6 +8,7 @@ import { ChangeSignal } from './changes.ts';
 import { WebhookSender } from './webhook.ts';
 import { NotificationResponseError } from './notification-response-error.ts';
 import type { DeliveryRouting } from './delivery-routing.ts';
+import { commitDelivery } from './g2-availability.ts';
 
 const session = 'personal-g2';
 const eventName = 'notification.created';
@@ -320,9 +321,9 @@ export class NotificationInbox {
     };
     const routed = this.routing && original?.audience;
     if (routed) this.routing!.requireAvailable();
-    const observation = routed && allowed() && original.announcement === undefined && !this.routing!.find('notification',original.id)
+    const reading = routed && allowed() && original.announcement === undefined && !this.routing!.find('notification',original.id)
       ? await this.routing!.availability.check() : undefined;
-    return this.serial(async () => {
+    return commitDelivery(reading, action => this.serial(action), observation => {
       const n = this.state.notifications.find(n => n.id === p.notification_id);
       if (!n || !this.permitted(n,p.recipient_receipt,p.notification_id)) throw new NotificationResponseError('notification_unknown');
       if (n.disposition === 'silent') throw new NotificationResponseError('notification_silent');

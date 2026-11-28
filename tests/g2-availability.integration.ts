@@ -83,7 +83,7 @@ test('paired companion answers the Mac long-poll challenge, with fresh hardware,
   await call('/api/updates', nextHeaders);
   assert.equal((await call('/api/g2-availability', nextHeaders, {...challenge, state:'available'})).status, 409);
   const reopened = new GlassesAvailability();
-  for (const [inCase, expected] of [[true, 'unavailable'], [false, 'unknown']] as const) {
+  for (const [inCase, expected] of [[true, 'unavailable'], [false, 'available']] as const) {
     const pending = mac.check();
     const offered = (await call('/api/updates', nextHeaders)).value.availabilityChallenge;
     await reopened.answer(offered, () => reopened.read({callEvenApp: async () => ({
