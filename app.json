@@ -8,7 +8,7 @@
   "permissions": [
     {
       "name": "network",
-      "desc": "Connect to your Mac for pairing, messages, voice, selected photos, optional location, sharing and history controls. When Dot has a message, send whether your G2 can receive it, using its connection, wear and case status.",
+      "desc": "Connect to your Mac for pairing, messages, voice, selected photos, optional location, sharing and history controls. When Dot has a message, send whether the connected G2 can receive it based on its case state.",
       "whitelist": []
     },
     {

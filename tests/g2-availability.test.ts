@@ -98,6 +98,26 @@ test('late native reads and abandoned companion requests cannot revive an old st
   assert.equal(posts, 1);
 });
 
+test('a paired insertion conflicting with the getter stays unknown through the entire reply hold', async t => {
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  const device = new GlassesAvailability();
+  const outside = {sn:'glasses', connectType:'connected', isInCase:false, isCharging:false};
+  const native = {callEvenApp:async () => ({model:'g2', sn:'glasses', status:outside})};
+  assert.equal(await device.read(native), 'available');
+  device.statusChanged(native, {...outside, isInCase:true, isCharging:true});
+  assert.equal(await device.read(native), 'unknown');
+  device.cancelReading(); // A phone-network change retires the old challenge.
+  now += 11_000;
+  device.statusChanged(native, {sn:'glasses', connectType:'connected'});
+  device.statusChanged(native, {...outside, sn:'ring'});
+  assert.equal(await device.read(native), 'unknown');
+  assert.equal(device.reportedCasePosition, 'unknown');
+  device.statusChanged(native, outside);
+  assert.equal(await device.read(native), 'available');
+  assert.equal(device.reportedCasePosition, 'outside');
+});
+
 test('only the current G2 contributes in-flight events, independent of accessory arrival order', async () => {
   const outside = {connectType:'connected', isInCase:false, isCharging:false, isWearing:false};
   const removed = {...outside, sn:'glasses'};

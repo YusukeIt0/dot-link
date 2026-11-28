@@ -18,7 +18,7 @@ export class GlassesAvailability {
   private serial?: string;
   private revision = 0;
   private lastEvent?: string;
-  private readonly hints = new Map<string, {disconnected: boolean; until: number}>();
+  private readonly hints = new Map<string, {disconnected: boolean; inCase: boolean; until: number}>();
   private lastChallenge?: AvailabilityChallenge;
   private readonly caseChanged?: () => void;
 
@@ -28,6 +28,7 @@ export class GlassesAvailability {
   private showCase(position: CasePosition): void {
     if (this.reportedCase === position) return;
     this.reportedCase = position;
+    this.lastEvent = undefined;
     this.caseChanged?.();
   }
 
@@ -56,7 +57,10 @@ export class GlassesAvailability {
     // other accessories and never make the user repeat a missed transition.
     let conflict = false;
     for (const [source, hint] of this.hints) {
-      if (hint.until <= performance.now()) { this.hints.delete(source); continue; }
+      // A confirmed insertion event from this G2 cannot turn into evidence
+      // of removal just because the getter disagreed for several seconds.
+      const pairedInsertion = !!source && source === this.serial && hint.inCase;
+      if (!pairedInsertion && hint.until <= performance.now()) { this.hints.delete(source); continue; }
       if (source && this.serial && source !== this.serial) continue;
       if (hint.disconnected) return 'unknown';
       if (status.isInCase === true) this.hints.delete(source);
@@ -92,13 +96,14 @@ export class GlassesAvailability {
     if (caution) {
       if (this.hints.size >= 8 && !this.hints.has(source)) {
         for (const [id, hint] of this.hints) {
-          if (hint.until <= performance.now() || (this.serial && id && id !== this.serial)) this.hints.delete(id);
+          if (id !== this.serial && (hint.until <= performance.now() || (this.serial && id))) this.hints.delete(id);
         }
         if (this.hints.size >= 8) { this.invalidate(); return; }
       }
-      this.hints.set(source, {disconnected: status.connectType !== 'connected', until: performance.now() + 2500});
+      const inCase = status.isInCase === true || this.hints.get(source)?.inCase === true;
+      this.hints.set(source, {disconnected: status.connectType !== 'connected', inCase, until: performance.now() + 2500});
       if (status.connectType !== 'connected' && source === this.serial) this.showCase('unknown');
-    } else {
+    } else if (!this.hints.get(source)?.inCase || (status.isInCase === false && status.isCharging === false)) {
       this.hints.delete(source);
     }
     if (key === this.lastEvent) return;

@@ -1430,8 +1430,10 @@ window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreR
 } });
 window.addEventListener('offline', () => {
   if (exited || !session.token) return;
-  glassesAvailability.invalidate();
-  if (bridge && pageActive) glassesAvailability.refreshCase(bridge);
+  if (bridge && pageActive) {
+    glassesAvailability.cancelReading();
+    glassesAvailability.refreshCase(bridge);
+  } else glassesAvailability.invalidate();
   progress.connectionFailure = 'phone'; progress.connection = 'offline'; updateRuntime();
 });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });
