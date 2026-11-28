@@ -29,7 +29,7 @@ async function fixture(t: TestContext, conversationTtlMs?: number, route = false
     if (p.type === 'verification') return {status: 200, body: JSON.stringify({challenge: p.challenge})};
     await block; return {status: 202, body: '{}'};
   });
-  const routing = route ? new DeliveryRouting(join(dir, 'handoffs.json'), new G2DeliveryAvailability(() => false),
+  const routing = route ? new DeliveryRouting(join(dir, 'handoffs.json'), new G2DeliveryAvailability(() => false, undefined, 10, 25),
     subject => authorized && subject === owner) : undefined;
   const bridge = new Bridge(join(dir, 'bridge.json'), sender, ['callback.example.test'], undefined, {now: () => now, routing});
   const acquisition = new MobilityAcquisition(() => ({walking: {plan: async () => {throw Error('not requested');}},

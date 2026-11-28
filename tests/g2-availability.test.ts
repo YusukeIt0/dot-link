@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { DeviceInfo, EvenAppMethod } from '@evenrealities/even_hub_sdk';
 import { GlassesAvailability } from '../src/g2-availability.ts';
-import { G2DeliveryAvailability } from '../server/g2-availability.ts';
+import { commitDelivery, G2DeliveryAvailability } from '../server/g2-availability.ts';
 
-test('a settled closed case cannot assert availability; positive wear distinguishes a desk', async () => {
+test('only the connected G2 case flag selects Wearing or In case, including on a fresh launch', async () => {
   const device = new GlassesAvailability();
   const sample = (flags: Record<string, unknown>, model = 'g2', connectType = 'connected') =>
     device.read({callEvenApp: async method => {
@@ -13,28 +13,28 @@ test('a settled closed case cannot assert availability; positive wear distinguis
   assert.equal(DeviceInfo.fromJson({model:'g2', status:{connectType:'connected'}}).status.isInCase, false);
   assert.equal(await sample({}), 'unknown');
   assert.equal(await sample({isInCase: 'false'}), 'unknown');
-  assert.equal(await sample({isInCase: false, isWearing: 'true'}), 'unknown');
+  assert.equal(await sample({isWearing: true}), 'unknown');
+  assert.equal(await sample({isInCase: false, isWearing: 'true'}), 'available');
   assert.equal(await sample({isInCase: false, isWearing: true}, 'ring1'), 'unknown');
-  assert.equal(await sample({isInCase: false, isWearing: false}), 'unknown');
+  assert.equal(await sample({isInCase: false, isWearing: false}), 'available');
   assert.equal(await sample({isInCase: true, isWearing: false, isCharging: false}), 'unavailable');
-  assert.equal(await sample({isInCase: false, isWearing: false, isCharging: false}), 'unknown');
-  assert.equal(await sample({isInCase: false, isWearing: true, isCharging: true}), 'unavailable');
-  assert.equal(await sample({isInCase: false, isWearing: true, isCharging: 'false'}), 'unknown');
+  assert.equal(await sample({isInCase: false, isWearing: false, isCharging: false}), 'available');
+  assert.equal(await sample({isInCase: false, isWearing: true, isCharging: true}), 'unknown');
   assert.equal(await sample({isInCase: true, isWearing: true}), 'unavailable');
   assert.equal(await sample({isInCase: false, isWearing: true}), 'available');
   device.cancelReading(); // A system menu leaves the same G2 connected.
-  assert.equal(await sample({isInCase: false, isWearing: false}), 'unavailable');
-  assert.equal(await sample({isInCase: false}), 'unknown');
+  assert.equal(await sample({isInCase: false, isWearing: false}), 'available');
+  assert.equal(await sample({isInCase: false}), 'available');
   assert.equal(await sample({isInCase: false, isWearing: true}, 'g2', 'disconnected'), 'unknown');
-  assert.equal(await sample({isInCase: false}), 'unknown');
+  assert.equal(await sample({isInCase: false}), 'available');
 });
 
 test('the phone follows the raw case field across conflicting signals, unreadable samples and disconnection', async () => {
   const device = new GlassesAvailability(() => {});
   const sample = (status: Record<string, unknown>) => ({model: 'g2', sn: 'glasses', status: {connectType: 'connected', ...status}});
   const read = (status: Record<string, unknown>) => device.read({callEvenApp: async () => sample(status)});
-  assert.equal(await read({isInCase: false, isCharging: true}), 'unavailable');
-  assert.equal(device.reportedCasePosition, 'outside');
+  assert.equal(await read({isInCase: false, isCharging: true}), 'unknown');
+  assert.equal(device.reportedCasePosition, 'unknown');
   await read({isWearing: true});
   assert.equal(device.reportedCasePosition, 'unknown');
   await read({isInCase: true});
@@ -45,6 +45,7 @@ test('the phone follows the raw case field across conflicting signals, unreadabl
   finish(sample({isInCase: false}));
   await new Promise<void>(resolve => setImmediate(resolve)); // Finish the event read before sampling a reconnected G2.
   assert.equal(device.reportedCasePosition, 'unknown');
+  device.statusChanged({callEvenApp: async () => sample({isInCase: false})}, {sn: 'glasses', connectType: 'connected'});
   await read({isInCase: false});
   assert.equal(device.reportedCasePosition, 'outside');
   await device.read({callEvenApp: async () => {throw new Error('Host unavailable');}});
@@ -70,10 +71,10 @@ test('a delivery-time getter can confirm an overlapping removal event without bo
   const second = new Promise(resolve => {finishAgain = resolve;});
   availability.statusChanged({callEvenApp: () => second}, event);
   assert.equal(await read(true), 'unavailable');
-  assert.equal(await read(false), 'unknown');
+  assert.equal(await read(false), 'available');
   finishAgain(sample(false));
   await second;
-  assert.equal(await read(false), 'unknown');
+  assert.equal(await read(false), 'available');
 });
 
 test('late native reads and abandoned companion requests cannot revive an old state', async () => {
@@ -97,6 +98,26 @@ test('late native reads and abandoned companion requests cannot revive an old st
   assert.equal(posts, 1);
 });
 
+test('a paired insertion conflicting with the getter stays unknown through the entire reply hold', async t => {
+  let now = 0;
+  t.mock.method(performance, 'now', () => now);
+  const device = new GlassesAvailability();
+  const outside = {sn:'glasses', connectType:'connected', isInCase:false, isCharging:false};
+  const native = {callEvenApp:async () => ({model:'g2', sn:'glasses', status:outside})};
+  assert.equal(await device.read(native), 'available');
+  device.statusChanged(native, {...outside, isInCase:true, isCharging:true});
+  assert.equal(await device.read(native), 'unknown');
+  device.cancelReading(); // A phone-network change retires the old challenge.
+  now += 11_000;
+  device.statusChanged(native, {sn:'glasses', connectType:'connected'});
+  device.statusChanged(native, {...outside, sn:'ring'});
+  assert.equal(await device.read(native), 'unknown');
+  assert.equal(device.reportedCasePosition, 'unknown');
+  device.statusChanged(native, outside);
+  assert.equal(await device.read(native), 'available');
+  assert.equal(device.reportedCasePosition, 'outside');
+});
+
 test('only the current G2 contributes in-flight events, independent of accessory arrival order', async () => {
   const outside = {connectType:'connected', isInCase:false, isCharging:false, isWearing:false};
   const removed = {...outside, sn:'glasses'};
@@ -107,9 +128,9 @@ test('only the current G2 contributes in-flight events, independent of accessory
     [[removed,ring], 'available'], [[ring,removed], 'available'],
     [[removed,chargingRing], 'available'], [[chargingRing,removed], 'available'],
     [[removed,{...ring,connectType:'disconnected'}], 'available'],
-    [[removed,chargingRing,closing], 'unavailable'], [[closing,ring,removed], 'available'],
-    [[removed,{...closing,sn:''}], 'unavailable'],
-    [[removed,...Array.from({length:8}, (_, i) => ({...ring,sn:'accessory-'+i}))], 'unknown'],
+    [[removed,chargingRing,closing], 'unknown'], [[closing,ring,removed], 'available'],
+    [[removed,{...closing,sn:''}], 'unknown'],
+    [[removed,...Array.from({length:8}, (_, i) => ({...chargingRing,sn:'accessory-'+i}))], 'available'],
   ] as const) {
     const device = new GlassesAvailability();
     const inside = {model:'g2', sn:'glasses', status:closing};
@@ -147,8 +168,12 @@ test('routing observes only an unexpired challenge of one current owner and runt
   assert.equal(paired.state(), 'unknown');
   permitted.set('first','session-new');
   mac.observe('first','session-new');
-  assert.equal((await replacement).state(), 'unknown');
   assert.equal(mac.respond('first','session-a',{...old,state:'available'}), false);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const recovered = mac.challenge('first', 'session-new');
+  assert.ok(recovered && recovered.id !== old.id);
+  assert.equal(mac.respond('first','session-new',{...recovered,state:'unavailable'}), true);
+  assert.equal((await replacement).state(), 'unavailable');
   const absent = mac.check('first');
   const late = mac.challenge('first','session-new')!;
   now += 2500;
@@ -160,9 +185,32 @@ test('routing observes only an unexpired challenge of one current owner and runt
 });
 
 test('a sleeping or older companion cannot prolong the send by holding the long poll', async () => {
-  const mac = new G2DeliveryAvailability(() => true, () => performance.now(), 10);
+  const mac = new G2DeliveryAvailability(() => true, () => performance.now(), 10, 60, 5);
   mac.observe('paired', 'older');
   assert.equal((await mac.check()).state(), 'unknown');
   assert.equal(mac.challenge('paired','older'), undefined);
   mac.close();
+});
+
+test('a reply held in the write queue rechecks the same glasses before choosing a destination', async t => {
+  let now = 0;
+  const mac = new G2DeliveryAvailability(() => true, () => now);
+  t.after(() => mac.close());
+  mac.observe('owner', 'phone');
+  const first = mac.check('owner');
+  const outside = mac.challenge('owner', 'phone')!;
+  assert.ok(mac.respond('owner', 'phone', {...outside, state:'available'}));
+  const confirmed = await first;
+  assert.equal(confirmed.state(), 'available');
+  now += 2600; // The first reading expired while an earlier write was in the queue.
+  let changed!: () => void;
+  const ready = new Promise<void>(resolve => { changed = resolve; });
+  const stop = mac.changes.subscribe(changed);
+  t.after(stop);
+  const pending = commitDelivery(confirmed, action => action(), observation => observation?.state());
+  await ready;
+  const again = mac.challenge('owner','phone')!;
+  assert.notEqual(again.id, outside.id);
+  assert.ok(mac.respond('owner','phone',{...again,state:'unavailable'}));
+  assert.equal(await pending, 'unavailable');
 });

@@ -1,8 +1,8 @@
 {
   "even.case_inside": "케이스 안",
-  "even.case_outside": "케이스 밖",
+  "even.case_outside": "착용 중",
   "even.case_unknown": "알 수 없음",
-  "even.case_description": "G2 케이스 상태, {position}",
+  "even.case_description": "G2 상태, {position}",
   "even.link_connected": "{device} 연결됨",
   "even.link_disconnected": "{device} 연결 끊김",
   "even.link_unknown": "{device} 연결 상태 알 수 없음",

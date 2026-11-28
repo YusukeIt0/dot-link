@@ -5,7 +5,7 @@ import { WeatherSharing, type WeatherStatus } from './weather-sharing.ts';
 import { DisconnectJournal, DisconnectRetry } from './disconnect-journal.ts';
 import { RuntimeNative } from './runtime-native.ts';
 import { GlassesAvailability, type AvailabilityChallenge } from './g2-availability.ts';
-import { AudioInputSource, CreateStartUpPageContainer, EventSourceType, ImuReportPace, OsEventTypeList, TextContainerProperty,
+import { AudioInputSource, CreateStartUpPageContainer, ImuReportPace, OsEventTypeList, TextContainerProperty,
   TextContainerUpgrade, waitForEvenAppBridge, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
 import { readSTTProvider, speechDevice, speechStatus, type STTProvider } from './speech-status.ts';
 import { sttErrorMessage } from './stt-errors.ts';
@@ -1304,9 +1304,6 @@ async function connect(): Promise<void> {
     const isGesture = isSingle || [OsEventTypeList.DOUBLE_CLICK_EVENT, OsEventTypeList.SCROLL_TOP_EVENT,
       OsEventTypeList.SCROLL_BOTTOM_EVENT, OsEventTypeList.LONG_PRESS_EVENT, OsEventTypeList.LONG_PRESS_RELEASE_EVENT].includes(eventType!);
     if (!isGesture) return;
-    const source = event.sysEvent?.eventSource;
-    if (source === EventSourceType.TOUCH_EVENT_FROM_GLASSES_L || source === EventSourceType.TOUCH_EVENT_FROM_GLASSES_R)
-      glassesAvailability.templeInput(appBridge);
     // Ignore both edges before waking the display or touching any recording.
     if ((eventType === OsEventTypeList.LONG_PRESS_EVENT || eventType === OsEventTypeList.LONG_PRESS_RELEASE_EVENT)
       && (!operationPreferencesReady || operationPreferences.disableHoldRecording)) return;
@@ -1433,8 +1430,10 @@ window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreR
 } });
 window.addEventListener('offline', () => {
   if (exited || !session.token) return;
-  glassesAvailability.invalidate();
-  if (bridge && pageActive) glassesAvailability.refreshCase(bridge);
+  if (bridge && pageActive) {
+    glassesAvailability.cancelReading();
+    glassesAvailability.refreshCase(bridge);
+  } else glassesAvailability.invalidate();
   progress.connectionFailure = 'phone'; progress.connection = 'offline'; updateRuntime();
 });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });

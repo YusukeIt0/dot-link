@@ -159,7 +159,7 @@ const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
 
-test('phone header shows reported case and paired versions without turning raw case data into delivery evidence', async t => {
+test('phone header and delivery use the same fresh case position on first launch', async t => {
   let flags = {isInCase: false, isCharging: false, isWearing: false};
   const replies = [];
   const app = await launch({skipInitialUpdate: true, savedLanguage: 'ja',
@@ -175,14 +175,14 @@ test('phone header shows reported case and paired versions without turning raw c
   const value = id => app.element(id).textContent;
   assert.equal(value('mac-status'), '—');
   assert.equal(value('dot-status'), '—');
-  assert.equal(value('case-status'), 'ケース外');
+  assert.equal(value('case-status'), '着用中');
   const snapshot = app.snapshot();
   await app.deliver({...snapshot, availabilityChallenge: {id: 'fresh-start'},
     status: {...snapshot.status, clientVersion: '0.5.8 Beta', subscribed: false}});
-  assert.deepEqual(replies.at(-1), {id: 'fresh-start', state: 'unknown'});
+  assert.deepEqual(replies.at(-1), {id: 'fresh-start', state: 'available'});
   assert.equal(value('mac-version'), 'v0.5.8 Beta');
   assert.equal(value('mac-status'), '✓'); assert.equal(value('dot-status'), '×');
-  assert.match(value('header-status-text'), /Mac 接続済み.*Dot 未接続.*ケース外/);
+  assert.match(value('header-status-text'), /Mac 接続済み.*Dot 未接続.*着用中/);
   await app.deliver(snapshot); // Older Mac omits the optional field.
   assert.equal(value('mac-version'), '—'); assert.equal(value('dot-status'), '✓');
   flags = {isInCase: true};
@@ -194,6 +194,19 @@ test('phone header shows reported case and paired versions without turning raw c
   await app.browserEvent('offline');
   assert.equal(value('mac-status'), '×'); assert.equal(value('dot-status'), '—');
   assert.equal(value('case-status'), '不明');
+});
+
+test('the Wearing label appears in the visible and accessible header in every supported language', async t => {
+  for (const [language, catalog] of Object.entries(catalogs)) {
+    const app = await launch({savedLanguage:language, glassesInfo:() => ({
+      model:'g2', status:{connectType:'connected',isInCase:false},
+    })});
+    t.after(app.close);
+    const wearing = catalog['even.case_outside'];
+    assert.equal(app.element('case-status').textContent, wearing, language);
+    const description = catalog['even.case_description'].replace('{position}',wearing);
+    assert.ok(app.element('header-status-text').textContent.includes(description), language);
+  }
 });
 
 test('a running Even WebView answers while the phone is hidden and invalidates readings on unload', async t => {
@@ -213,11 +226,11 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   await deliver('hidden-in-case');
   assert.deepEqual(responses.at(-1), {id: 'hidden-in-case', state: 'unavailable'});
   inCase = false;
-  await deliver('unconfirmed-open');
-  assert.deepEqual(responses.at(-1), {id:'unconfirmed-open', state:'unknown'});
+  await deliver('outside-before-event');
+  assert.deepEqual(responses.at(-1), {id:'outside-before-event', state:'available'});
   await app.deviceStatus({...status(), sn:'fixture-ring'});
   await deliver('unrelated-event');
-  assert.deepEqual(responses.at(-1), {id:'unrelated-event', state:'unknown'});
+  assert.deepEqual(responses.at(-1), {id:'unrelated-event', state:'available'});
   await app.deviceStatus(status());
   await deliver('removed-on-desk');
   assert.deepEqual(responses.at(-1), {id:'removed-on-desk', state:'available'});
@@ -236,10 +249,10 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   await app.browserEvent('pagehide'); await deliver('unloaded');
   assert.deepEqual(responses.at(-1), {id:'unloaded', state:'unknown'});
   await app.browserEvent('pageshow'); await deliver('fresh-after-return');
-  assert.deepEqual(responses.at(-1), {id:'fresh-after-return', state:'unknown'});
+  assert.deepEqual(responses.at(-1), {id:'fresh-after-return', state:'available'});
   await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_RING}});
   await deliver('ring-input');
-  assert.deepEqual(responses.at(-1), {id:'ring-input', state:'unknown'});
+  assert.deepEqual(responses.at(-1), {id:'ring-input', state:'available'});
   await app.emit({sysEvent:{eventType:sdk.OsEventTypeList.CLICK_EVENT, eventSource:sdk.EventSourceType.TOUCH_EVENT_FROM_GLASSES_L}});
   await deliver('temple-input');
   assert.deepEqual(responses.at(-1), {id:'temple-input', state:'available'});
@@ -247,7 +260,7 @@ test('a running Even WebView answers while the phone is hidden and invalidates r
   await app.failUpdate();
   await app.browserEvent('online');
   await deliver('network-restored');
-  assert.deepEqual(responses.at(-1), {id:'network-restored', state:'unknown'});
+  assert.deepEqual(responses.at(-1), {id:'network-restored', state:'available'});
   inCase = true;
   await deliver('back-in-case');
   assert.deepEqual(responses.at(-1), {id:'back-in-case', state:'unavailable'});

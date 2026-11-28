@@ -4,6 +4,13 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 Even Hub accepts at most 500 characters of change notes, including the review note.
 
+## 0.4.6
+
+- See **Wearing** when G2 is outside its case. Get replies on G2 after reopening Dot Link with your glasses on.
+- With the updated Mac app, replies wait briefly while your phone reconnects. If the glasses are in their case or remain unreachable, find the reply in your usual Dot chat.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.5
 
 - See your app and Mac versions together, with Mac and Dot connections and the glasses’ reported case position above the conversation.

@@ -1,8 +1,8 @@
 {
   "even.case_inside": "Dans l’étui",
-  "even.case_outside": "Hors de l’étui",
+  "even.case_outside": "Portées",
   "even.case_unknown": "Inconnu",
-  "even.case_description": "État de l’étui des G2, {position}",
+  "even.case_description": "État des lunettes G2, {position}",
   "even.link_connected": "{device} connecté",
   "even.link_disconnected": "{device} déconnecté",
   "even.link_unknown": "Connexion à {device} inconnue",
