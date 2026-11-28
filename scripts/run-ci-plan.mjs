@@ -11,6 +11,7 @@ if (head && head !== actual) throw new Error('Check out the planned head before 
 execFileSync('git', ['diff', '--exit-code', 'HEAD', '--'], {stdio: ['ignore', 'pipe', 'pipe']});
 // Recompute from Git: never trust a hand-edited plan or an output naming fewer tests.
 const selected = plan(base, head || actual);
+const started = Date.now();
 let reused = null;
 if (process.env.CI_REUSE_RUN) {
   if (!selected.checks.includes('product')) throw new Error('Reuse is only for full product execution.');
@@ -28,9 +29,13 @@ const tests = (...files) => {
   run(process.execPath, ['--test', ...files]);
 };
 console.log(JSON.stringify(selected));
-const started = Date.now();
 let result = 'failed';
 try {
+  if (reused?.readmeOnly) {
+    checkDocs(['README.md']);
+    run(process.execPath, ['--test', '--test-name-pattern=^README provides the single-line latest-release installer command$',
+      'tests/mac-installer.test.mjs']);
+  }
   for (const check of selected.checks) {
     if (check === 'product' && !reused) run('sh', ['scripts/run-ci-tests.sh']);
     if (check === 'docs') {
@@ -43,9 +48,11 @@ try {
   result = 'passed';
 } finally {
   const seconds = ((Date.now() - started) / 1000).toFixed(2);
-  const summary = `Validation ${result}: ${selected.checks.join(', ')} in ${seconds}s (execution only).`;
+  const executed = selected.checks.filter(check => check !== 'product' || !reused);
+  if (reused?.readmeOnly) executed.push('README links, conflict markers and installer command');
+  const summary = `Validation ${result}: ${executed.join(', ') || 'reuse verification'} in ${seconds}s (execution only).`;
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n${summary}\n`);
   if (reused && process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
-    `\nProduct execution reused from [run ${reused.run}, attempt ${reused.attempt}](${reused.url}), source ${reused.source}, tree ${reused.tree}. Avoided npm install, product/HTTP tests, build and native suites (${reused.productSeconds}s source execution; not queue time). Current-head workflow, ancestry and review gates remain independent.\n`);
+    `\nProduct execution reused from [run ${reused.run}, attempt ${reused.attempt}](${reused.url}), source ${reused.source}, current tree ${reused.tree}. ${reused.readmeOnly ? 'Only the root README changed.' : 'The entire tree matched.'} Avoided npm install, product/HTTP tests, build and native suites (${reused.productSeconds}s source execution; not queue time). Current-head workflow, ancestry and review gates remain independent.\n`);
 }

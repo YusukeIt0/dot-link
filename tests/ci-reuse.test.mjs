@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync, rmSync, writeFileSync} from 'node:fs';
+import {mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {discoverReuse, verifyReuse, reuseContext, sourceRunEligible, fullProductEvidence,
-  fullProductStep, reuseMaxAgeMs, gitTreeProof} from '../scripts/ci-reuse.mjs';
+  fullProductStep, reuseMaxAgeMs, gitTreeProof, readmeTreeProof} from '../scripts/ci-reuse.mjs';
+import {ciHeadReceipt, ciPath, ciRepository} from '../scripts/ci-evidence.mjs';
 
 const head = 'a'.repeat(40), source = 'b'.repeat(40), tree = 'c'.repeat(40);
 const now = Date.parse('2026-11-10T12:00:00Z');
@@ -113,5 +114,99 @@ test('Git proof supports a revert and child merge, excludes changed content and 
     git(['switch', '--orphan', 'unrelated']); writeFileSync(join(dir, 'file'), 'accepted');
     git(['add', '.']); git(['commit', '-m', 'same bytes, unrelated']);
     assert.equal(gitTreeProof(accepted, git(['rev-parse', 'HEAD']), dir), null);
+  } finally { rmSync(dir, {recursive: true, force: true}); }
+});
+
+test('README reuse requires two trusted same-PR receipts, the live base and actual full execution', async () => {
+  const base = 'd'.repeat(40);
+  const target = {number: 7, headRef: 'feature', baseRef: 'main', base};
+  const candidate = {...run, workflow_id: 12, display_title: ciHeadReceipt({...target, head: source})};
+  const current = {...candidate, id: context.runId, head_sha: head, status: 'in_progress',
+    conclusion: null, display_title: ciHeadReceipt({...target, head})};
+  const pr = {number: target.number, state: 'open', head: {sha: head, ref: 'feature', repo: {full_name: ciRepository}},
+    base: {sha: base, ref: 'main', repo: {full_name: ciRepository}}};
+  const ref = {ref: 'refs/heads/main', object: {type: 'commit', sha: base}};
+  const noTree = () => null;
+  const readme = (previous, next, targetBase) => previous === source && next === head && targetBase === base ? tree : null;
+  function reader({previous = candidate, running = current, pull = pr, branch = ref, rows = jobs, fresh = previous} = {}) {
+    const history = api({candidate: previous, jobRows: rows, fresh});
+    return path => {
+      if (path === 'actions/runs/' + current.id) return running;
+      if (path === 'pulls/' + target.number) return pull;
+      if (path === 'git/ref/heads/main') return branch;
+      return history(path);
+    };
+  }
+  const ctx = {...context, target};
+  const expected = {run: candidate.id, attempt: 1, source, tree, readmeOnly: true,
+    url: 'https://github.com/YusukeIt0/dot-link/actions/runs/100/attempts/1', productSeconds: 180};
+  assert.deepEqual(await discoverReuse(ctx, reader(), noTree, readme), expected);
+  assert.deepEqual(await verifyReuse(candidate.id, ctx, reader(), noTree, readme), expected);
+  for (const change of [
+    {previous: {...candidate, display_title: ciHeadReceipt({...target, number: 8, head: source})}},
+    {previous: {...candidate, display_title: ciHeadReceipt({...target, base: head, head: source})}},
+    {previous: {...candidate, event: 'push', head_branch: 'main'}},
+    {previous: {...candidate, head_branch: 'another-branch'}},
+    {previous: {...candidate, triggering_actor: {...actor, id: 1}}},
+    {running: {...current, id: 99}}, {running: {...current, run_attempt: 2}},
+    {running: {...current, workflow_id: 13}}, {running: {...current, actor: {...actor, id: 1}}},
+    {running: {...current, head_sha: source}}, {running: {...current, display_title: ''}},
+    {pull: {...pr, state: 'closed'}}, {pull: {...pr, base: {...pr.base, sha: source}}},
+    {pull: {...pr, head: {...pr.head, ref: 'changed'}}},
+    {pull: {...pr, head: {...pr.head, repo: {full_name: 'other/repo'}}}},
+    {branch: {...ref, object: {...ref.object, sha: source}}},
+    {rows: [jobs[0], {...jobs[1], steps: []}]},
+    {fresh: {...candidate, display_title: 'changed'}}]) {
+    assert.equal(await verifyReuse(candidate.id, ctx, reader(change), noTree, readme), null, JSON.stringify(change));
+  }
+  assert.equal(await discoverReuse(context, reader(), noTree, readme), null);
+  assert.equal(await discoverReuse(ctx, reader(), noTree, () => null), null);
+});
+
+test('only a same-repository pull_request event supplies a README target', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'dot-ci-event-'));
+  const path = join(directory, 'event.json'), base = 'd'.repeat(40), repo = {full_name: ciRepository};
+  const env = {GITHUB_ACTIONS: 'true', GITHUB_REPOSITORY: ciRepository, GITHUB_RUN_ID: '200',
+    GITHUB_RUN_ATTEMPT: '1', CI_HEAD: head, GITHUB_EVENT_NAME: 'pull_request', GITHUB_EVENT_PATH: path};
+  const pr = {number: 7, head: {ref: 'feature', sha: head, repo}, base: {ref: 'main', sha: base, repo}};
+  try {
+    writeFileSync(path, JSON.stringify({pull_request: pr}));
+    assert.deepEqual(reuseContext(env, now).target, {number: 7, headRef: 'feature', baseRef: 'main', base});
+    assert.equal(reuseContext({...env, GITHUB_EVENT_NAME: 'push'}, now).target, undefined);
+    for (const patch of [{head: {...pr.head, sha: source}}, {head: {...pr.head, repo: {full_name: 'fork/repo'}}},
+      {base: {...pr.base, ref: 'other'}}, {number: 0}]) {
+      writeFileSync(path, JSON.stringify({pull_request: {...pr, ...patch}}));
+      assert.equal(reuseContext(env, now).target, undefined);
+    }
+    writeFileSync(path, 'invalid');
+    assert.equal(reuseContext(env, now).target, undefined);
+  } finally { rmSync(directory, {recursive: true, force: true}); }
+});
+
+test('immutable Git proof permits exactly a regular README content edit under the integrated workflow', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'dot-ci-readme-'));
+  const git = (...args) => execFileSync('git', args, {cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
+  const put = (file, text) => writeFileSync(join(dir, file), text);
+  const commit = message => { git('add', '-A'); git('commit', '-m', message); return git('rev-parse', 'HEAD'); };
+  try {
+    git('init', '-b', 'main'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'Test');
+    mkdirSync(join(dir, '.github/workflows'), {recursive: true}); put(ciPath, 'workflow'); put('README.md', 'start');
+    const base = commit('base');
+    put('runtime.js', 'feature'); const source = commit('product');
+    put('README.md', 'guide'); const head = commit('guide');
+    assert.equal(readmeTreeProof(source, head, base, dir), git('rev-parse', head + '^{tree}'));
+    assert.equal(readmeTreeProof(source, head, head, dir), null);
+    assert.equal(readmeTreeProof(head, source, base, dir), null);
+    put('runtime.js', 'more'); assert.equal(readmeTreeProof(source, commit('runtime'), base, dir), null);
+    git('switch', '--detach', head); put(ciPath, 'other'); const workflow = commit('workflow');
+    assert.equal(readmeTreeProof(source, workflow, base, dir), null);
+    put('README.md', 'again'); assert.equal(readmeTreeProof(workflow, commit('later README'), base, dir), null);
+    git('switch', '--detach', source); git('mv', 'README.md', 'renamed.md');
+    assert.equal(readmeTreeProof(source, commit('rename'), base, dir), null);
+    git('switch', '--detach', source); git('rm', 'README.md');
+    const removed = commit('remove'); assert.equal(readmeTreeProof(source, removed, base, dir), null);
+    put('README.md', 'created'); assert.equal(readmeTreeProof(removed, commit('add'), base, dir), null);
+    git('rm', 'README.md'); symlinkSync('runtime.js', join(dir, 'README.md'));
+    assert.equal(readmeTreeProof(source, commit('symlink'), base, dir), null);
   } finally { rmSync(dir, {recursive: true, force: true}); }
 });

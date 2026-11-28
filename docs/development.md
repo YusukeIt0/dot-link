@@ -456,6 +456,17 @@ runs cannot supply coverage; reuse chains are prohibited. No run artifacts or lo
 are downloaded or executed. Branch CI may consume this evidence but cannot supply
 it or replace the current PR's required CI.
 
+A root README follow-up can also use a previous full run on the same trusted PR.
+Both GitHub run receipts must identify the same target commit on `main`, the
+same head branch and the same workflow. CI checks the live PR and target ref.
+Git must show that the previous head contains that base, the new head descends
+from it, and the entire difference is a content edit to the regular root
+`README.md`. The workflow file must match the integrated base. The new job checks
+the current README for broken local links and conflict markers and runs the
+installer-command assertion. Its summary names these checks and the earlier
+macOS execution. A new base, another changed path or missing proof requires
+full validation.
+
 Preflight searches at most 100 recent Tests runs and verifies at most five matching
 candidates. It also checks that the source has no newer run/attempt, and the consuming
 job verifies the source again. Missing evidence or API failure during planning keeps
