@@ -174,7 +174,7 @@ Recovery after sleep, network loss and extended use is still being validated. Re
 
 ## Contributing
 
-Bug reports, ideas and pull requests are welcome—you do not need to be a developer to contribute. Start with [Contributing](CONTRIBUTING.md) or [building and testing](docs/development.md). [Even release notes](docs/even-release-notes.md) · [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
+Bug reports, ideas and pull requests are welcome—you do not need to be a developer to contribute. See [Contributing](CONTRIBUTING.md), [building and testing](docs/development.md), or [how CI selects checks for your change](docs/development.md#verification-by-change-impact). [Even release notes](docs/even-release-notes.md) · [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
 
 ## License
 
