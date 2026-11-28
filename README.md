@@ -108,9 +108,19 @@ Optional:
 
 - **[Polar](https://www.polar.com/en) device** synced with Polar Flow, for [health context](docs/setup.md#polar-health-context). Tested with [Polar Loop](https://www.polar.com/en/loop).
 
-## Quickstart
+## Agent-ready Software Design
 
-You can give your usual assistant this repository URL and ask “Set up Dot Link on my Mac” or “Help me fix my connection.” The [setup and recovery guide](docs/setup.md#setup-and-recovery-with-your-assistant) ([plain text](docs/setup.md?raw=true)) covers the official installer, a read-only check for an existing installation and a conversation test.
+Dot Link is designed to work with the AI assistant you already use.
+
+Simply share this repository URL with your agent and ask it to install Dot Link or help troubleshoot an existing connection.
+
+Your agent can understand the setup state, guide you through the necessary steps, and help diagnose and resolve problems.
+
+No dedicated AI integration is required. You remain in control of your agent, permissions, and data.
+
+[Setup and recovery with your assistant](docs/setup.md#setup-and-recovery-with-your-assistant) ([plain text](docs/setup.md?raw=true))
+
+## Quickstart
 
 ### 1. Install on your Mac
 
