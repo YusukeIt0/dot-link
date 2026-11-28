@@ -4,7 +4,7 @@ The entry point coordinates the existing user experience. A module boundary shou
 
 | Owner | Responsibility | Does not decide |
 | --- | --- | --- |
-| `src/g2-availability.ts` | One on-demand SDK reading for the current Mac challenge, including wear or case fallback | Whether Dot initiates a message or which conversation receives it |
+| `src/g2-availability.ts` | Reads the connected G2’s case position for the phone header and each Mac delivery check | Whether Dot initiates a message or which conversation receives it |
 | `src/photo-attachments.ts` | SDK camera/library selection and bounded pixel re-encoding into one photo format | Draft UI, send policy or relay retention |
 | `src/main.ts` | UI bindings, application startup/exit, execution of conversation decisions alongside input and standby | Transport queue internals or playback completion bookkeeping |
 | `src/conversation-state.ts` | History, selection, unread replies, announcement bookkeeping, and pending display decisions | DOM, speech synthesis, timers, recording eligibility, or connection policy |
@@ -23,6 +23,8 @@ The paired Mac requests a fresh observation when a message is ready. An active i
 The companion reads the connected G2’s explicit `isInCase` from the native `getGlassesInfo` response, before SDK defaults are applied. The same observation drives the header and the answer to the Mac. Outside means **Wearing** and selects G2, even on a fresh launch or when the wear sensor reads false. Inside selects the existing Dot chat. Missing case information, disconnection, or a charging indication inconsistent with an outside reading leaves the state unknown. Device events trigger a fresh reading and an accessory cannot confirm delivery.
 
 If a case insertion reported by the same G2 conflicts with an outside reading, the companion keeps the state unknown until the readings agree or the session ends. A fresh launch can use a consistent outside reading immediately.
+
+During private testing on Even 0.4.6 Beta, the first launch after updating showed **Wearing** while the owner reported that the glasses were in the case. The header later showed **In case**. A reply sent then reached the existing Dot chat once. Opening the app again with the glasses still in the case showed **In case** on the first observed screen. The initial discrepancy had cleared before a reply was sent, so its effect on routing is unverified.
 
 The Mac holds a pending reply for up to ten seconds across unknown readings, missed checks, and companion restarts. It asks the same pairing again when it reconnects. Each check expires within 2.5 seconds. A confirmed case position ends the wait. The deadline hands the answer to the original Dot conversation through its single-use receipt. A later connection cannot replay the answer to G2. Bridge storage and physical display are separate outcomes.
 
