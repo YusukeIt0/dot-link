@@ -115,7 +115,7 @@ Dot Link retains subscriptions across restarts. On builds that include the 24-ho
 
 The first answer is shown with its question. Follow-up answers appear on separate pages. Independent messages initiated by Dot appear without a question; they are not attached to a nearby conversation just because they arrived close together.
 
-With Even 0.4.6 and Mac 0.5.10, **Wearing** means the connected G2 reports that it is outside its case. This includes glasses on a desk. Replies go to G2 in this mode, including after reopening Dot Link with the glasses already on. **In case** sends replies to your existing ChatGPT Dot conversation. A question asked in that chat stays there.
+With Even 0.4.7 and Mac 0.5.11, **Wearing** means the connected G2 reports that it is outside its case. This includes glasses on a desk. Replies go to G2 in this mode, including after reopening Dot Link with the glasses already on. **In case** sends replies to your existing ChatGPT Dot conversation. A question asked in that chat stays there.
 
 If the case state is **Unknown** or the phone switches networks, the Mac holds the reply for up to ten seconds and checks again. A fresh **Wearing** or **In case** reading selects the destination immediately. At the deadline the reply goes to the existing Dot chat once. Reconnecting later does not repeat that answer on G2.
 

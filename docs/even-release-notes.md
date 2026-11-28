@@ -4,6 +4,13 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 Even Hub accepts at most 500 characters of change notes, including the review note.
 
+## 0.4.7
+
+- See the Dot Link and Mac versions together, plus Mac, Dot and G2 status.
+- With the updated Mac app, get replies on G2 when it shows Wearing, even after reopening Dot Link. If G2 is in its case or stays offline after a short wait, the reply goes to your usual Dot chat. This also applies to Mac notifications your Dot chooses to share.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.6
 
 - See **Wearing** when G2 is outside its case. Get replies on G2 after reopening Dot Link with your glasses on.
