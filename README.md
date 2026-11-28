@@ -110,7 +110,7 @@ Optional:
 
 ## Quickstart
 
-You can give your usual assistant this repository URL and ask “Set up Dot Link on my Mac” or “Help me fix my connection.” Start with [setup and recovery with your assistant](docs/setup.md#setup-and-recovery-with-your-assistant). It includes the official installer, a read-only check for an existing installation and a test using your own Dot and G2.
+You can give your usual assistant this repository URL and ask “Set up Dot Link on my Mac” or “Help me fix my connection.” The [setup and recovery guide](docs/setup.md#setup-and-recovery-with-your-assistant) ([plain text](docs/setup.md?raw=true)) covers the official installer, a read-only check for an existing installation and a conversation test.
 
 ### 1. Install on your Mac
 
@@ -121,6 +121,8 @@ curl -fsS https://raw.githubusercontent.com/YusukeIt0/dot-link/main/install.sh |
 Installs the latest stable release in `~/Applications` and opens it. Choose **Prepare this Mac** and follow the app's Tailscale setup. The first run downloads about 490 MB for local speech recognition.
 
 From Mac 0.5.4, the app is signed with a Developer ID and notarized by Apple, and the installer checks that the signature belongs to this project's developer. If macOS blocks an earlier release, see [Open Anyway](docs/setup.md#first-launch). Prefer a ZIP? See [manual installation](docs/setup.md#manual-installation).
+
+For a rehearsal on a second Mac, stop after **Prepare this Mac** and leave the tunnel fields empty. Check your existing Dot connection on the Mac you normally use.
 
 ### 2. Connect your Dot
 
