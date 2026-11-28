@@ -35,7 +35,7 @@ function earlierCompanionMessage(entry: unknown, locale: Language): unknown {
 
 export function deviceServer(options: { token: string; origin: string; directory: string;
   transcribe: (wav: Buffer, signal?: AbortSignal) => Promise<string>; bridgeURL?: string; latency?: LatencyLog; deviceName?: string;
-  pairing?: PairingAuthority; appOrigins?: string[]; updateActivity?: UpdateActivity;
+  clientVersion?: string; pairing?: PairingAuthority; appOrigins?: string[]; updateActivity?: UpdateActivity;
   sttProvider?: () => Promise<STTProvider> }) {
   const origin = new URL(options.origin);
   if (origin.origin !== options.origin || options.token.length < 32) throw new Error('Invalid device configuration');
@@ -255,17 +255,17 @@ export function deviceServer(options: { token: string; origin: string; directory
               data = data.map((entry: unknown) => earlierCompanionMessage(entry, locale));
             else if (path === '/api/utterances') data = earlierCompanionMessage(data, locale);
           }
-          if (result.ok && options.deviceName) {
-            if (path === '/api/status') data.deviceName = options.deviceName;
-            if (path === '/api/updates') data.status.deviceName = options.deviceName;
-          }
-          if (result.ok && options.sttProvider && ['/api/status', '/api/updates'].includes(path)) {
-            // Read the choice only. Status/typed messages must never read keys or contact an STT service.
-            let provider: STTProvider | null = null;
-            try { const selected = await options.sttProvider(); if (readSTTProvider(selected)) provider = selected; } catch { /* Show unknown, never guess. */ }
+          if (result.ok && (path === '/api/status' || path === '/api/updates')) {
             const target = path === '/api/status' ? data : data.status;
-            target.sttProvider = provider;
-            target.sttModel = provider ? STT_PROVIDERS[provider].model : null;
+            if (options.deviceName) target.deviceName = options.deviceName;
+            if (options.clientVersion) target.clientVersion = options.clientVersion;
+            if (options.sttProvider) {
+              // Read the choice only. Status/typed messages must never read keys or contact an STT service.
+              let provider: STTProvider | null = null;
+              try { const selected = await options.sttProvider(); if (readSTTProvider(selected)) provider = selected; } catch { /* Show unknown, never guess. */ }
+              target.sttProvider = provider;
+              target.sttModel = provider ? STT_PROVIDERS[provider].model : null;
+            }
           }
           if (!legacy && !paired()) { json(401, { error: 'Pairing required' }); return; }
           json(result.status, data); return;

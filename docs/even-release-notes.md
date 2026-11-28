@@ -4,6 +4,12 @@ Version history describes app changes. Check Even Hub for the version currently 
 
 Even Hub accepts at most 500 characters of change notes, including the review note.
 
+## 0.4.5
+
+- See your app and Mac versions together, with Mac and Dot connections and the glasses’ reported case position above the conversation.
+
+Review note: The `location` permission is used for optional phone location sharing via the Even SDK (`startAppLocationUpdates()` and `getAppLocation()`).
+
 ## 0.4.4
 
 - Ask on G2 and Dot can answer in your usual Dot chat if you put the glasses away. Dot can also choose where to tell you about a Mac notification you already share.

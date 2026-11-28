@@ -1,6 +1,7 @@
 import { EvenAppMethod, type EvenAppBridge } from '@evenrealities/even_hub_sdk';
 
 export type DeliveryAvailability = 'available' | 'unavailable' | 'unknown';
+type CasePosition = 'inside' | 'outside' | 'unknown';
 export interface AvailabilityChallenge { id: string }
 type NativeBridge = Pick<EvenAppBridge, 'callEvenApp'>;
 interface StatusEvent { connectType: string; isWearing?: boolean; isInCase?: boolean; isCharging?: boolean; sn?: string }
@@ -13,16 +14,59 @@ function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
+function reportedPosition(value: unknown): CasePosition {
+  return value === true ? 'inside' : value === false ? 'outside' : 'unknown';
+}
+
+function pairedReading(device: unknown, pending: Iterable<StatusEvent>) {
+  if (!object(device) || device.model !== 'g2' || !object(device.status) || device.status.connectType !== 'connected') return;
+  const serial = device.sn || device.status.sn;
+  const events = [...pending].filter(status => typeof serial !== 'string' || !serial || !status.sn || status.sn === serial);
+  return { status: device.status, serial, events, disconnected: events.some(status => status.connectType !== 'connected') };
+}
+
 /** The SDK maps absent wear and case fields to false. Read the published host
  * fields before that normalization. Keep only evidence for the current connection. */
 export class GlassesAvailability {
   private observedWear = false;
-  private casePosition: 'unknown' | 'inside' | 'outside' = 'unknown';
+  private casePosition: CasePosition = 'unknown'; // Corroborated evidence for delivery.
+  private reportedCase: CasePosition = 'unknown';
+  private reportedSerial?: string;
+  private caseRevision = 0;
+  private readonly caseChanged?: () => void;
   private revision = 0;
   private eventState?: string;
   private readonly pendingEvents = new Map<string, StatusEvent>();
   private pendingTemple = false;
   private lastChallenge?: AvailabilityChallenge;
+
+  constructor(caseChanged?: () => void) { this.caseChanged = caseChanged; }
+  get reportedCasePosition(): CasePosition { return this.reportedCase; }
+
+  private showCase(position: CasePosition): void {
+    if (this.reportedCase === position) return;
+    this.reportedCase = position;
+    this.caseChanged?.();
+  }
+
+  private async sample(bridge: NativeBridge, events: Iterable<StatusEvent>) {
+    const revision = ++this.caseRevision;
+    let reading: ReturnType<typeof pairedReading>;
+    try {
+      reading = pairedReading(await bridge.callEvenApp(EvenAppMethod.GetGlassesInfo), events);
+      return reading;
+    } finally {
+      // The phone shows the host's explicit case flag, even when delivery needs more evidence.
+      if (revision === this.caseRevision) {
+        this.reportedSerial = typeof reading?.serial === 'string' ? reading.serial : undefined;
+        this.showCase(reportedPosition(reading?.disconnected ? undefined : reading?.status.isInCase));
+      }
+    }
+  }
+
+  refreshCase(bridge: NativeBridge, events: StatusEvent[] = []): void {
+    if (this.caseChanged) void this.sample(bridge, events).catch(() => { /* A failed read already cleared the label. */ });
+  }
 
   private clearInputs(): void {
     this.pendingEvents.clear();
@@ -31,6 +75,7 @@ export class GlassesAvailability {
 
   cancelReading(): void {
     this.revision++;
+    this.caseRevision++;
     this.eventState = undefined;
     this.clearInputs();
     this.lastChallenge = undefined;
@@ -39,6 +84,8 @@ export class GlassesAvailability {
   invalidate(): void {
     this.cancelReading();
     this.forgetDevice();
+    this.reportedSerial = undefined;
+    this.showCase('unknown');
   }
 
   private forgetDevice(): void {
@@ -47,24 +94,17 @@ export class GlassesAvailability {
     this.clearInputs();
   }
 
-  private interpret(device: unknown): DeliveryAvailability {
-    if (!object(device) || device.model !== 'g2' || !object(device.status)) {
+  private interpret(reading: ReturnType<typeof pairedReading>): DeliveryAvailability {
+    if (!reading) {
       this.forgetDevice();
       return 'unknown';
     }
-    const { connectType, isInCase, isWearing, isCharging } = device.status;
-    if (connectType !== 'connected') {
-      this.forgetDevice();
-      return 'unknown';
-    }
-    const serial = device.sn || device.status.sn;
+    const { status: {isInCase, isWearing, isCharging}, serial, events } = reading;
     // Accessory events can arrive before the native getter finishes. Use the
     // latest event for each source. An unidentified negative event is a veto.
-    const events = [...this.pendingEvents.values()].filter(status =>
-      typeof serial !== 'string' || !serial || !status.sn || status.sn === serial);
     const lastEvent = events.at(-1);
     if (lastEvent) this.eventState = eventKey(lastEvent);
-    if (events.some(status => status.connectType !== 'connected')) {
+    if (reading.disconnected) {
       this.forgetDevice();
       return 'unknown';
     }
@@ -110,11 +150,11 @@ export class GlassesAvailability {
       this.pendingEvents.set(key, evidence);
     }
     try {
-      const device: unknown = await bridge.callEvenApp(EvenAppMethod.GetGlassesInfo);
+      const reading = await this.sample(bridge, this.pendingEvents.values());
       if (this.revision !== revision) return 'unknown';
       // A send may start its own fresh getter before the event's getter
       // returns. Only the newest reading may consume the outstanding input.
-      return this.interpret(device);
+      return this.interpret(reading);
     } catch {
       if (this.revision === revision) this.forgetDevice();
       return 'unknown';
@@ -129,6 +169,10 @@ export class GlassesAvailability {
 
   statusChanged(bridge: NativeBridge, status: StatusEvent): void {
     if (status.connectType !== 'connected' && !status.sn) { this.invalidate(); return; }
+    if (status.connectType !== 'connected' && status.sn === this.reportedSerial) {
+      this.caseRevision++;
+      this.showCase('unknown');
+    }
     const key = eventKey(status);
     const removal = this.casePosition === 'inside' && status.isInCase === false && status.isCharging === false;
     const pending = this.pendingEvents.size > 0 || this.pendingTemple;
@@ -138,7 +182,11 @@ export class GlassesAvailability {
     if (status.connectType !== 'connected' || status.isInCase === true || status.isCharging === true ||
         pending || removal || (status.isWearing === true && !this.observedWear)) {
       void this.read(bridge, status);
-    } else this.eventState = key;
+    } else {
+      this.eventState = key;
+      // An ordinary case change can need a new phone label without qualifying as delivery evidence.
+      this.refreshCase(bridge, [status]);
+    }
   }
 
   async answer(challenge: AvailabilityChallenge, read: () => Promise<DeliveryAvailability>,

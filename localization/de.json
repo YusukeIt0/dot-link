@@ -1,4 +1,12 @@
 {
+  "even.case_inside": "Im Etui",
+  "even.case_outside": "Nicht im Etui",
+  "even.case_unknown": "Unbekannt",
+  "even.case_description": "G2-Etuistatus, {position}",
+  "even.link_connected": "{device} verbunden",
+  "even.link_disconnected": "{device} getrennt",
+  "even.link_unknown": "Verbindung mit {device} unbekannt",
+  "even.version_unknown": "Version unbekannt",
   "even.stopped_on_this_device_removal_on_your_mac_will_complete": "Auf diesem Gerät gestoppt. Die Entfernung auf Ihrem Mac wird automatisch abgeschlossen, sobald er erreichbar ist.",
   "even.stopped_on_this_device_but_the_disconnect_could_not_be": "Auf diesem Gerät gestoppt. Die Trennung konnte jedoch nicht gespeichert werden. Beim erneuten Öffnen könnte die Verbindung wiederhergestellt werden. Lassen Sie die App geöffnet.",
   "even.could_not_verify_saved_connection_settings_retrying_before_restoring_the": "Die gespeicherten Verbindungseinstellungen konnten nicht geprüft werden. Vor dem Wiederherstellen der Verbindung wird es erneut versucht.",

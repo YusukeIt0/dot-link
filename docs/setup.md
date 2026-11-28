@@ -117,7 +117,9 @@ The first answer is shown with its question. Follow-up answers appear on separat
 
 With Mac 0.5.5 and Even 0.4.4, Dot checks the G2 when an answer or suggestion is ready. If the glasses report that you are wearing them, the message goes to G2. If they are in the case, or the companion cannot confirm that G2 is available, Dot can continue in your existing ChatGPT Dot chat. A question asked there stays in that chat. On G2s that report only case status, a connected pair outside its case can receive a message while sitting on a desk. Opening or closing the case does not start a message.
 
-If your G2 reports only case status and the phone loses its network connection or Dot Link reopens, Dot can continue in your usual chat. To receive messages on G2 again, take the glasses out of the case once more or touch a glasses temple.
+The iPhone conversation header shows the Even app version alongside the connected Mac client version. Older Mac clients show a dash. On the next line, a check means connected, a cross means disconnected and a dash means the connection is still unknown. G2 shows the case position reported by the glasses or **Unknown** when they provide no reading.
+
+If your G2 reports only case status and the phone loses its network connection or Dot Link reopens, Dot can continue in your usual chat even when the phone shows **Out of case**. To receive messages on G2 again, take the glasses out of the case once more or touch a glasses temple.
 
 If your Mac updates first and you still have Even 0.4.2, you can keep asking questions from G2. Open your usual Dot chat for the answer. The glasses show a short cue in the question's history and finish waiting. Updating the companion enables G2 delivery when the glasses are available.
 

@@ -1,4 +1,12 @@
 {
+  "even.case_inside": "Dans l’étui",
+  "even.case_outside": "Hors de l’étui",
+  "even.case_unknown": "Inconnu",
+  "even.case_description": "État de l’étui des G2, {position}",
+  "even.link_connected": "{device} connecté",
+  "even.link_disconnected": "{device} déconnecté",
+  "even.link_unknown": "Connexion à {device} inconnue",
+  "even.version_unknown": "Version inconnue",
   "even.stopped_on_this_device_removal_on_your_mac_will_complete": "Arrêté sur cet appareil. La suppression sur votre Mac se terminera automatiquement dès qu’il sera joignable.",
   "even.stopped_on_this_device_but_the_disconnect_could_not_be": "Arrêté sur cet appareil, mais la demande de déconnexion n’a pas pu être enregistrée. La connexion pourrait se rétablir à la réouverture. Gardez l’app ouverte.",
   "even.could_not_verify_saved_connection_settings_retrying_before_restoring_the": "Impossible de vérifier les réglages de connexion enregistrés. Nouvelle tentative avant de rétablir la connexion.",

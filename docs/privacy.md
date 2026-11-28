@@ -26,7 +26,7 @@ The local conversation relay retains its latest 16 subscription changes or faile
 
 ## Choosing where Dot replies
 
-When a message is ready, the Mac can ask the current paired companion whether G2 can receive it. The companion reads connection, wear and case status through the Even SDK. It sends only an availability result and the ID of the current request to the Mac. The reading expires within seconds. Dot Link keeps no history of wearing, removal or case changes. The companion uses its existing network permission.
+When a message is ready, the Mac can ask the current paired companion whether G2 can receive it. The companion reads connection, wear and case status through the Even SDK. The phone displays the current case reading locally. It sends only an availability result and the ID of the current request to the Mac. The reading expires within seconds. Dot Link keeps no history of wearing, removal or case changes. The paired Mac reports its app version to the phone over their existing connection.
 
 If the message belongs in the existing Dot chat, the Mac briefly holds its approved text and rechecks the source before authorizing a single native chat send. The Mac separately retains up to 1,000 routing records each for questions, independent or follow-up messages, and notification announcements. A record contains opaque IDs, a digest and whether the handoff was claimed. The chat-only answer does not enter the glasses history. OpenAI handles the resulting chat message. A claim does not confirm that a native message was sent, displayed or read.
 

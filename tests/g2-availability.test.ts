@@ -29,6 +29,28 @@ test('a settled closed case cannot assert availability; positive wear distinguis
   assert.equal(await sample({isInCase: false}), 'unknown');
 });
 
+test('the phone follows the raw case field across conflicting signals, unreadable samples and disconnection', async () => {
+  const device = new GlassesAvailability(() => {});
+  const sample = (status: Record<string, unknown>) => ({model: 'g2', sn: 'glasses', status: {connectType: 'connected', ...status}});
+  const read = (status: Record<string, unknown>) => device.read({callEvenApp: async () => sample(status)});
+  assert.equal(await read({isInCase: false, isCharging: true}), 'unavailable');
+  assert.equal(device.reportedCasePosition, 'outside');
+  await read({isWearing: true});
+  assert.equal(device.reportedCasePosition, 'unknown');
+  await read({isInCase: true});
+  let finish!: (value: unknown) => void;
+  const pending = new Promise(resolve => {finish = resolve;});
+  device.statusChanged({callEvenApp: () => pending}, {sn: 'glasses', connectType: 'disconnected'});
+  assert.equal(device.reportedCasePosition, 'unknown');
+  finish(sample({isInCase: false}));
+  await new Promise<void>(resolve => setImmediate(resolve)); // Finish the event read before sampling a reconnected G2.
+  assert.equal(device.reportedCasePosition, 'unknown');
+  await read({isInCase: false});
+  assert.equal(device.reportedCasePosition, 'outside');
+  await device.read({callEvenApp: async () => {throw new Error('Host unavailable');}});
+  assert.equal(device.reportedCasePosition, 'unknown');
+});
+
 test('a delivery-time getter can confirm an overlapping removal event without borrowing an old case reading', async () => {
   const availability = new GlassesAvailability();
   const sample = (inside: boolean) => ({model: 'g2', sn: 'fixture', status: {connectType: 'connected', isInCase: inside, isCharging: inside, isWearing: false}});
@@ -63,10 +85,12 @@ test('late native reads and abandoned companion requests cannot revive an old st
   assert.equal(await device.read({callEvenApp: async () => nowInCase}), 'unavailable');
   finish({model:'g2', status:{connectType:'connected', isInCase:false, isWearing:true}});
   assert.equal(await pending, 'unknown');
+  assert.equal(device.reportedCasePosition, 'inside');
   let posts = 0, onRead!: () => void;
   const delayed = new Promise<'available'>(resolve => {onRead = () => resolve('available');});
   const task = device.answer({id:'first'}, () => delayed, () => true, async () => {posts++;});
   device.invalidate(); onRead(); await task;
+  assert.equal(device.reportedCasePosition, 'unknown');
   assert.equal(posts, 0);
   for (let i = 0; i < 2; i++)
     await device.answer({id:'fresh'}, async () => 'unknown', () => true, async () => {posts++;});

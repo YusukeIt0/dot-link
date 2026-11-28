@@ -6,7 +6,18 @@ body { margin: 0; }
 main { position: fixed; top: 0; left: 0; right: 0; width: 100%; max-width: 680px; height: 100%; margin: 0 auto; padding: 32px 24px max(32px, env(safe-area-inset-bottom)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 header > p:first-child { font-size: 12px; letter-spacing: .2em; color: #aebdaf; }
 h1 { font-size: 44px; margin: 8px 0; font-weight: 500; }
+.header-versions, .header-status { display: flex; flex-wrap: wrap; align-items: baseline; font-size: .9375rem; line-height: 1.5; }
+.header-versions { gap: .2em .65em; margin-top: .4em; color: #b7c9b7; }
+.header-versions b, .header-status b { font-weight: 500; }
+.header-versions b { color: #ebeee9; }
+.header-status { margin-top: .5em; gap: .25em 0; }
+.header-status > [aria-hidden] + [aria-hidden] { margin-inline-start: .8em; padding-inline-start: .8em; border-inline-start: 1px solid #829185; }
+.header-status b { color: #b6d6b2; }
+.header-status b[data-link=connected] { color: #9de591; }
+.header-status b[data-link=disconnected] { color: #eba99e; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 #connection { color: #bec5bf; }
+#connection:empty, #hud-state:empty { display: none; }
 .glass { margin: 28px 0; padding: 20px; background: #070d09; border: 1px solid #344637; border-radius: 16px; color: #9de591; }
 #hud-state { font-size: 13px; border-bottom: 1px solid #344637; padding-bottom: 14px; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: inherit; min-height: 132px; font-size: 18px; line-height: 1.65; }
@@ -30,8 +41,7 @@ code, #pair-destination { overflow-wrap: anywhere; }
 #pair-destination:empty { display: none; }
 footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid #344637; }
 #show-diagnostics { display: block; padding: 8px 0; border: 0; font-size: 13px; }
-body[data-pair-state=unpaired] #conversation-controls,
-body[data-pair-state=unpaired] #dot-status { display: none; }
+body[data-pair-state=unpaired] #conversation-controls { display: none; }
 .pair-diagnostics { border-left: 2px solid #435446; padding: 0 12px; margin: 16px 0; }
 .pair-diagnostics p:empty { display: none; }
 body[data-pair-state=unpaired] .glass { display: none; }
