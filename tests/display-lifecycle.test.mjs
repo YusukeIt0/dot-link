@@ -159,6 +159,43 @@ const doubleTap = {textEvent: {eventType: sdk.OsEventTypeList.DOUBLE_CLICK_EVENT
 const singleTap = {textEvent: {}}; // zero enum omitted by the native host
 const proactive = id => ({id, text: '', reply: `Synthetic message ${id}`, status: 'replied', kind: 'proactive'});
 
+test('phone header shows reported case and paired versions without turning raw case data into delivery evidence', async t => {
+  let flags = {isInCase: false, isCharging: false, isWearing: false};
+  const replies = [];
+  const app = await launch({skipInitialUpdate: true, savedLanguage: 'ja',
+    glassesInfo: () => ({model: 'g2', sn: 'test-g2', status: {connectType: 'connected', ...flags}}),
+    request: (url, init) => {
+      if (url.endsWith('/api/g2-availability')) {
+        replies.push(JSON.parse(init.body));
+        return Promise.resolve({ok: true, status: 200});
+      }
+    },
+  });
+  t.after(app.close);
+  const value = id => app.element(id).textContent;
+  assert.equal(value('mac-status'), '—');
+  assert.equal(value('dot-status'), '—');
+  assert.equal(value('case-status'), 'ケース外');
+  const snapshot = app.snapshot();
+  await app.deliver({...snapshot, availabilityChallenge: {id: 'fresh-start'},
+    status: {...snapshot.status, clientVersion: '0.5.8 Beta', subscribed: false}});
+  assert.deepEqual(replies.at(-1), {id: 'fresh-start', state: 'unknown'});
+  assert.equal(value('mac-version'), 'v0.5.8 Beta');
+  assert.equal(value('mac-status'), '✓'); assert.equal(value('dot-status'), '×');
+  assert.match(value('header-status-text'), /Mac 接続済み.*Dot 未接続.*ケース外/);
+  await app.deliver(snapshot); // Older Mac omits the optional field.
+  assert.equal(value('mac-version'), '—'); assert.equal(value('dot-status'), '✓');
+  flags = {isInCase: true};
+  await app.deviceStatus({connectType: 'connected', sn: 'test-g2', ...flags});
+  assert.equal(value('case-status'), 'ケース内');
+  flags = {isWearing: true}; // A normalized SDK event can still supply a default false.
+  await app.deviceStatus({connectType: 'connected', sn: 'test-g2', isInCase: false, ...flags});
+  assert.equal(value('case-status'), '不明');
+  await app.browserEvent('offline');
+  assert.equal(value('mac-status'), '×'); assert.equal(value('dot-status'), '—');
+  assert.equal(value('case-status'), '不明');
+});
+
 test('a running Even WebView answers while the phone is hidden and invalidates readings on unload', async t => {
   const responses = [];
   let inCase = true;
@@ -477,7 +514,7 @@ test('full app restores native pairing into empty updated WebView and resumes it
   assert.equal(app.calls.filter(c=>c[0]==='resume').length,1);
   assert.equal(JSON.parse(app.saved.get('dot-relay-v1')).appOrigin,'http://127.0.0.1:57157');
   assert.equal(JSON.parse(app.nativeSaved.get('dot-relay-native-v1')).token,'n'.repeat(43));
-  assert.equal(app.element('dot-status').textContent,'Test Mac · Dot接続済み');
+  assert.equal(app.element('dot-status').textContent,'✓');
   await app.deliver(app.snapshot([proactive('after-update')]));
   assert.match(app.physical.get(2),/after-update/);
 });
@@ -490,7 +527,7 @@ test('temporary recovery failure preserves credentials and retries without askin
   await new Promise(resolve=>setTimeout(resolve,1100)); await flush();
   assert.equal(app.calls.filter(c=>c[0]==='resume').length,2);
   await app.deliver(app.snapshot());
-  assert.equal(app.element('dot-status').textContent,'Test Mac · Dot接続済み');
+  assert.equal(app.element('dot-status').textContent,'✓');
 });
 
 test('IMU reports without coordinates and unknown system events are not user activity', async t => {
@@ -1236,7 +1273,8 @@ test('full app retires a superseded runtime without changing shared pairing, con
   assert.deepEqual([...app.nativeSaved], native); assert.deepEqual([...app.saved], local);
   assert.equal(app.element('transcript').value, 'Unsent draft'); assert.equal(app.element('transcript').readOnly, true);
   assert.equal(app.element('record').disabled, true);
-  assert.match(app.element('dot-status').textContent, /引き継ぎ/);
+  assert.match(app.element('connection').textContent, /引き継ぎ/);
+  assert.equal(app.element('dot-status').textContent, '—');
   assert.equal(app.calls.slice(count).some(c => ['mic', 'imu', 'text', 'location-stop', 'location-api'].includes(c[0])), false);
   await app.emit(doubleTap); await app.advance(30000); await app.close();
   assert.equal(app.calls.slice(count).some(c => ['mic', 'imu', 'text', 'location-stop', 'location-api', 'exit'].includes(c[0])), false);

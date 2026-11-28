@@ -9,6 +9,7 @@ import { httpTranscriber } from './stt-http.ts';
 import { sttSelection, sttMicrosoftEndpoint, keychainSTTKey } from './stt-settings.ts';
 import { LatencyLog } from './latency.ts';
 import { deviceName } from './device-name.ts';
+import { macClientVersion } from './mac-client-version.ts';
 import { PairingAuthority } from './pairing-authority.ts';
 
 const origin = process.env.G2_DEVICE_ORIGIN;
@@ -23,6 +24,7 @@ const transcribe = selectableTranscriber({
       endpoint: () => sttMicrosoftEndpoint(resolve('.runtime'))})])),
 });
 const server = deviceServer({ origin, directory: process.env.DOT_LINK_APP_RUNTIME === '1' ? fileURLToPath(new URL('../dist', import.meta.url)) : resolve('dist'), deviceName: await deviceName(),
+  clientVersion: credentialApp ? await macClientVersion(new URL('../../../Info.plist', import.meta.url)) : undefined,
   updateActivity, sttProvider: () => sttSelection(resolve('.runtime')),
   pairing: new PairingAuthority(resolve('.runtime/pairing')),
   appOrigins: (process.env.G2_APP_ORIGINS ?? '').split(',').map(value => value.trim()).filter(Boolean),

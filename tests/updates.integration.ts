@@ -41,7 +41,7 @@ test('waiting device receives voice replies, notifications and proactive message
   inner.listen(0, '127.0.0.1'); await once(inner, 'listening');
   const address = inner.address(); assert(address && typeof address !== 'string');
   const innerURL = `http://127.0.0.1:${address.port}`;
-  const outer = deviceServer({ origin: 'http://g2.example', directory: dir, token: tokens.device, bridgeURL: innerURL, deviceName: '別のMac', transcribe: async () => 'unused' });
+  const outer = deviceServer({ origin: 'http://g2.example', directory: dir, token: tokens.device, bridgeURL: innerURL, deviceName: '別のMac', clientVersion: '0.5.8 Beta', transcribe: async () => 'unused' });
   outer.listen(0, '127.0.0.1'); await once(outer, 'listening');
   const oa = outer.address(); assert(oa && typeof oa !== 'string');
   const base = `http://127.0.0.1:${oa.port}`;
@@ -56,11 +56,13 @@ test('waiting device receives voice replies, notifications and proactive message
   assert.equal((await fetch(base + '/api/status', { headers: { ...headers, Authorization: 'Bearer invalid' } })).status, 401);
   const named = await (await fetch(base + '/api/status', { headers })).json();
   assert.equal(named.deviceName, '別のMac');
+  assert.equal(named.clientVersion, '0.5.8 Beta');
   assert.equal((await get('bad cursor')).status, 400);
   let state = await (await get()).json();
   assert.deepEqual(state.messages, []);
   assert.equal(state.status.subscribed, false);
   assert.equal(state.status.deviceName, '別のMac');
+  assert.equal(state.status.clientVersion, named.clientVersion);
   const delivery = { mode: 'webhook', url: 'https://callback.example/events', secret: 'whsec_' + randomBytes(32).toString('base64') };
   await bridge.subscribe({ name: 'utterance.created', arguments: { session_id: 'personal-g2' }, delivery });
   const id = randomUUID(); await bridge.submit({ id, text: 'fixture voice' });

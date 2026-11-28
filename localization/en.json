@@ -1,4 +1,12 @@
 {
+  "even.case_inside": "In case",
+  "even.case_outside": "Out of case",
+  "even.case_unknown": "Unknown",
+  "even.case_description": "G2 case position, {position}",
+  "even.link_connected": "{device} connected",
+  "even.link_disconnected": "{device} disconnected",
+  "even.link_unknown": "{device} connection unknown",
+  "even.version_unknown": "Version unknown",
   "even.stopped_on_this_device_removal_on_your_mac_will_complete": "Stopped on this device. Removal on your Mac will complete automatically when it is reachable.",
   "even.stopped_on_this_device_but_the_disconnect_could_not_be": "Stopped on this device, but the disconnect could not be saved. Reopening may restore the connection. Keep the app open.",
   "even.could_not_verify_saved_connection_settings_retrying_before_restoring_the": "Could not verify saved connection settings. Retrying before restoring the connection.",

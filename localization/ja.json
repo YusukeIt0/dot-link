@@ -1,4 +1,12 @@
 {
+  "even.case_inside": "ケース内",
+  "even.case_outside": "ケース外",
+  "even.case_unknown": "不明",
+  "even.case_description": "G2のケース状態、{position}",
+  "even.link_connected": "{device} 接続済み",
+  "even.link_disconnected": "{device} 未接続",
+  "even.link_unknown": "{device} 接続状態不明",
+  "even.version_unknown": "バージョン不明",
   "even.stopped_on_this_device_removal_on_your_mac_will_complete": "この端末では停止しました。Mac側の解除は、接続でき次第自動で完了します。",
   "even.stopped_on_this_device_but_the_disconnect_could_not_be": "この端末では停止しましたが、解除を保存できません。開き直すと接続が戻る場合があります。アプリを開いたままにしてください。",
   "even.could_not_verify_saved_connection_settings_retrying_before_restoring_the": "接続設定を確認できません。復元せずに再確認しています。",

@@ -150,7 +150,7 @@ let pendingDelivery = new PendingUtterance(() => localStorage, session.credentia
 let exited = false;
 let relayRestored = !session.credentials?.resumeToken;
 let glassesReady = false;
-const glassesAvailability = new GlassesAvailability();
+const glassesAvailability = new GlassesAvailability(renderConnectionHeader);
 let availabilityMenuOpen = false;
 let stopAvailabilityEvents: (() => void) | undefined;
 let startupStage: 'bridge' | 'page' | 'ready' = 'bridge';
@@ -194,6 +194,8 @@ const progress = new InteractionStatus();
 progress.connection = session.token ? 'connecting' : 'unpaired';
 let hostName = t('even.relay');
 let namedHost = false;
+let clientVersion: string | undefined;
+let hasCurrentMacStatus = false;
 let baseStatus = t('even.hold_to_speak');
 let renderBaseStatus: () => string = () => t('even.hold_to_speak');
 let statusTimer: ReturnType<typeof setInterval> | undefined;
@@ -385,7 +387,8 @@ const connectionTransitions = new ConnectionTransitions({
     if (clearRetry) { pendingId = undefined; pendingText = undefined; clearPhotos(); }
   },
   resetConnectionInfo: () => {
-    subscribed = false; photosSupported = false; progress.dotConnected = false;
+    subscribed = undefined; clientVersion = undefined; hasCurrentMacStatus = false;
+    photosSupported = false; progress.dotConnected = false;
     hostName = t('even.relay'); namedHost = false; selectedSTT = readSTTProvider(undefined); selectedSTTModel = undefined;
   },
 });
@@ -395,12 +398,11 @@ function forgetPairing(message: string, persist = true): void {
   showSetup(true);
   progress.connection = 'unpaired'; syncRuntimeEffects();
   display(() => t('even.reconnect_your_mac'), message);
-  el('dot-status').textContent = t('even.reconnect_your_mac');
   notice.textContent = ''; pairingNotice.textContent = message;
   setupPanel.open = true;
 }
 let busy = false;
-let subscribed = false;
+let subscribed: boolean | undefined;
 // Packaged origins can retain stale local ON values; wait for native restore.
 let tts = false;
 renderReadAloudControl();
@@ -504,7 +506,7 @@ function showMessage(): void {
 function currentReceipt(): string { return receiptCaption(conversation.visible); }
 function currentNewReplies(): string { return newReplyCaption(conversation.unreadCount); }
 
-interface Snapshot { revision: string; availabilityChallenge?: AvailabilityChallenge; status: { subscribed: boolean; photoAttachments?: number; factorHistoryProtocol?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
+interface Snapshot { revision: string; availabilityChallenge?: AvailabilityChallenge; status: { subscribed: boolean; clientVersion?: string; photoAttachments?: number; factorHistoryProtocol?: number; deviceName?: string; sttProvider?: unknown; sttModel?: unknown } & LocationRelayStatus & HistoryStatus & WeatherStatus & HealthStatus; messages: Message[]; }
 function receiveUpdate(snapshot: Snapshot, initial = false, resumed = false): void {
   if (exited) return;
   if (snapshot.availabilityChallenge) {
@@ -525,11 +527,14 @@ function receiveUpdate(snapshot: Snapshot, initial = false, resumed = false): vo
     void archiveSettings.refresh();
   renderArchiveSettings();
   locationSharing.receive(snapshot.status);
-  subscribed = snapshot.status.subscribed;
+  subscribed = typeof snapshot.status.subscribed === 'boolean' ? snapshot.status.subscribed : undefined;
+  const version = snapshot.status.clientVersion;
+  hasCurrentMacStatus = pageActive;
+  clientVersion = typeof version === 'string' && /^\d{1,6}\.\d{1,6}\.\d{1,6}(?: Beta)?$/.test(version) ? version : undefined;
   photosSupported = snapshot.status.photoAttachments === 1;
   selectedSTT = readSTTProvider(snapshot.status.sttProvider);
   selectedSTTModel = snapshot.status.sttModel;
-  progress.connection = 'online'; progress.dotConnected = subscribed; attachLocation();
+  progress.connection = 'online'; progress.dotConnected = subscribed === true; attachLocation();
   if (snapshot.status.deviceName) { hostName = snapshot.status.deviceName; namedHost = true; }
   const update = conversation.receive(snapshot.messages, initial, message => locationSharing.acceptsAnnouncement(message));
   for (const message of snapshot.messages) {
@@ -547,7 +552,6 @@ function receiveUpdate(snapshot: Snapshot, initial = false, resumed = false): vo
     }
   }
   if (update.waiting) progress.restoreWaiting(update.waiting.id, update.waiting.createdAt, Date.now());
-  el('dot-status').textContent = `${hostName} · ${subscribed ? t('even.dot_connected') : t('even.dot_disconnected')}`;
   flushPendingDisplay();
   updateRuntime();
 }
@@ -727,6 +731,7 @@ let renderG2Text: () => string = () => withoutMessageUrls(renderDisplayText());
 
 function syncRuntimeEffects(): void {
   runtimeEffects.sync();
+  renderConnectionHeader();
   renderConnectionHint();
   const disabled = exited || busy || recorder.state !== 'idle' || !bridge || !session.token || !relayRestored;
   el<HTMLButtonElement>('camera').disabled = disabled;
@@ -739,7 +744,35 @@ function renderConnectionHint(): void {
   const hint = el('reconnect-hint');
   hint.hidden = !offline;
   hint.textContent = offline ? connectionFailureHint(progress.connectionFailure) : '';
-  if (offline) el('dot-status').textContent = `${hostName} · ${connectionFailureCaption(progress.connectionFailure)}`;
+}
+
+function headerText(id: string, value: string): void {
+  const field = el(id);
+  if (field.textContent !== value) field.textContent = value;
+}
+
+function renderLink(id: string, device: string, connected: boolean | undefined): string {
+  const state = connected === undefined ? 'unknown' : connected ? 'connected' : 'disconnected';
+  headerText(id, {unknown: '—', connected: '✓', disconnected: '×'}[state]);
+  el(id).dataset.link = state;
+  return t(({unknown: 'even.link_unknown', connected: 'even.link_connected', disconnected: 'even.link_disconnected'} as const)[state], {device});
+}
+
+function renderConnectionHeader(): void {
+  const awaitingStatus = progress.connection === 'online' && !hasCurrentMacStatus;
+  const restoringPair = progress.connection === 'unpaired' && !disconnectRestoreReady;
+  const connection = exited || !pageActive || awaitingStatus || restoringPair ? 'connecting' : progress.connection;
+  const mac = connection === 'connecting' ? undefined : connection === 'online';
+  const version = mac ? clientVersion : undefined;
+  headerText('mac-version', version ? `v${version}` : '—');
+  el('missing-version').hidden = !!version;
+  el('mac-version').setAttribute('aria-hidden', String(!version));
+  const macText = renderLink('mac-status', 'Mac', mac);
+  const dotText = renderLink('dot-status', 'Dot', mac ? subscribed : undefined);
+  const reported = exited || !pageActive ? 'unknown' : glassesAvailability.reportedCasePosition;
+  const position = t(({inside: 'even.case_inside', outside: 'even.case_outside', unknown: 'even.case_unknown'} as const)[reported]);
+  headerText('case-status', position);
+  headerText('header-status-text', [macText, dotText, t('even.case_description', {position})].join(' · '));
 }
 function updateRuntime(sendToG2 = true): void {
   syncRuntimeEffects(); renderWeatherStatus(); refreshStatus(sendToG2);
@@ -839,7 +872,11 @@ function refreshStatus(sendToG2 = true): void {
   const caption = hudCaption();
   const speech = speechCaption();
   el('speech-status').textContent = speech;
-  el('hud-state').textContent = caption;
+  // Connection failures have dedicated phone guidance. The glasses keep their own status caption.
+  const repeated = caption === t('even.g2_connected') || caption === t('even.dot_disconnected') ||
+    caption === connectionFailureCaption(progress.connectionFailure);
+  const visible = conversation.visible;
+  el('hud-state').textContent = repeated ? (visible ? `${conversation.position(visible.id)}/${conversation.count}` : '') : caption;
   el('hud-state').dataset.state = progress.state;
   const ticking = (progress.ticking || progress.protectWaiting) && !standby?.hidden;
   if (ticking && !statusTimer) statusTimer = setInterval(() => refreshStatus(), 1000);
@@ -881,7 +918,7 @@ function applyLanguage(): void {
   renderWakeState(); renderOperationSettings();
   renderReadAloudControl();
   if (!namedHost) hostName = t('even.relay');
-  el('dot-status').textContent = `${hostName} · ${progress.connection === 'online' ? (subscribed ? t('even.dot_connected') : t('even.dot_disconnected')) : progress.connection === 'unpaired' ? t('even.pair_with_your_mac') : t('even.reconnecting')}`;
+  renderConnectionHeader();
   renderConnectionHint();
   baseStatus = renderBaseStatus(); lastDisplayText = renderDisplayText();
   el('hud-content').textContent = lastDisplayText;
@@ -974,7 +1011,7 @@ const recorder = new VoiceInput({
 });
 
 const runtimeEffects = new RuntimeEffects({
-  state: () => ({exited, tts, ready: glassesReady && relayRestored, paired: !!session.token, subscribed,
+  state: () => ({exited, tts, ready: glassesReady && relayRestored, paired: !!session.token, subscribed: subscribed === true,
     online: progress.connection === 'online', busy, recording: recorder.state !== 'idle',
     draft: !!transcript.value.trim(), playbackBlocks: playback.blocksInput,
     phaseProtect: ['recognizing', 'sending'].includes(progress.phase), waitingMs: progress.waitingProtectionMs}),
@@ -1115,13 +1152,17 @@ discardButton.onclick = () => {
 };
 // A hidden phone page is not an explicit glasses-app exit. Keep the receiver
 // and app-level standby alive; physical display power remains OS-owned.
-window.addEventListener('pagehide', () => { exitDiagnostics.record('pagehide'); pageActive = false; glassesAvailability.invalidate(); updateRuntime(false); });
+window.addEventListener('pagehide', () => {
+  exitDiagnostics.record('pagehide'); pageActive = false; hasCurrentMacStatus = false;
+  glassesAvailability.invalidate(); updateRuntime(false);
+});
 function stopSession(): void {
   if (exited) return;
   exitDiagnostics.record('stop-session');
   stopAvailabilityEvents?.(); glassesAvailability.invalidate();
   void locationSharing.stop();
   exited = true; pageActive = false; session.stop(); clearPhotos(); pendingText = undefined;
+  renderConnectionHeader();
   disconnectRetry.stop(); clearTimeout(disconnectRestoreTimer);
   updates.stop(); if (statusTimer) clearInterval(statusTimer); statusTimer = undefined;
   standby?.stop(); void syncHeadRaise();
@@ -1143,7 +1184,8 @@ function retireSupersededRuntime(): void {
   // Keep an unsent text draft selectable; stop controls in the retained page.
   for (const control of document.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button, input, select')) control.disabled = true;
   for (const field of document.querySelectorAll<HTMLTextAreaElement>('textarea')) field.readOnly = true;
-  el('dot-status').textContent = t('even.connection_moved_to_the_new_view');
+  renderConnectionHeader();
+  connection.textContent = t('even.connection_moved_to_the_new_view');
   notice.textContent = t('even.this_view_has_stopped_continue_in_the_newly_opened_dot');
 }
 let locationAttached = false;
@@ -1189,8 +1231,8 @@ async function connect(): Promise<void> {
   startupStage = 'ready'; glassesReady = true; syncRuntimeEffects();
   try {
     stopAvailabilityEvents = appBridge.onDeviceStatusChanged(status => glassesAvailability.statusChanged(appBridge, status));
-    void glassesAvailability.read(appBridge);
   } catch { /* Older Even hosts can still use ordinary conversation. */ }
+  void glassesAvailability.read(appBridge);
   void readAloudPreferences.attach(nativeStorage).then(() => {
     if (exited) return;
     const wasEnabled = tts;
@@ -1226,7 +1268,7 @@ async function connect(): Promise<void> {
   });
   el('g2-diagnostic').textContent = 'G2_READY';
   g2Display.invalidate();
-  connection.textContent = t('even.even_hub_connected');
+  connection.textContent = '';
   notice.textContent = '';
   renderOperationSettings();
   // History may finish loading before the Even bridge is ready. Repaint it
@@ -1377,7 +1419,14 @@ renderLocationStatus();
 showSetup(!session.token);
 if (session.token && !session.credentials?.resumeToken) updates.start(true);
 updateRuntime(false);
-window.addEventListener('pageshow', event => { exitDiagnostics.record('pageshow'); if (exited) return; pageActive = true; standby?.check(); updateRuntime(); if (event.persisted && session.token && relayRestored) updates.start(); });
+window.addEventListener('pageshow', event => {
+  exitDiagnostics.record('pageshow');
+  if (exited) return;
+  pageActive = true; standby?.check(); updateRuntime();
+  if (!event.persisted) return;
+  if (bridge) glassesAvailability.refreshCase(bridge);
+  if (session.token && relayRestored) updates.start();
+});
 window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); } if (session.token && relayRestored && !exited) {
   if (progress.connection === 'offline') { progress.connectionFailure = 'unreachable'; updateRuntime(); }
   updates.start();
@@ -1385,6 +1434,7 @@ window.addEventListener('online', () => { if (!exited) { if (!disconnectRestoreR
 window.addEventListener('offline', () => {
   if (exited || !session.token) return;
   glassesAvailability.invalidate();
+  if (bridge && pageActive) glassesAvailability.refreshCase(bridge);
   progress.connectionFailure = 'phone'; progress.connection = 'offline'; updateRuntime();
 });
 document.addEventListener('visibilitychange', () => { exitDiagnostics.record(document.hidden ? 'hidden' : 'visible'); if (exited) return; standby?.check(); updateRuntime(); if (!document.hidden) { if (!disconnectRestoreReady && bridge) void restoreRelay(bridge); else if (disconnectJournal.pending.length) void disconnectRetry.run(); if (session.token && relayRestored) updates.start(); } });
