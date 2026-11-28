@@ -2,6 +2,51 @@
 
 [Quickstart](https://github.com/YusukeIt0/dot-link#quickstart) · [Installation](#manual-installation) · [Dot connection](#dot-connection) · [Speech](#speech) · [Notifications](#mac-notifications) · [Location](#location-sharing) · [Updates](#updates) · [Troubleshooting](#troubleshooting)
 
+## Setup and recovery with your assistant
+
+Give your assistant the [Dot Link repository](https://github.com/YusukeIt0/dot-link) and describe what you want to do. It can use the terminal, browser and Mac controls already available to it. A browser-only assistant can guide you through the same screens. You choose when to share the status with it. This works with your existing account and requires no assistant plugin registration.
+
+### Start on the Mac
+
+- **First install.** Check the [Mac, iPhone, account and glasses requirements](https://github.com/YusukeIt0/dot-link#requirements). Use the [official Mac installer](https://github.com/YusukeIt0/dot-link#1-install-on-your-mac) or [manual ZIP installation](#manual-installation). Choose **Prepare this Mac** to download the local speech model. An assistant with access to your Mac can carry out the installer and operate the setup window within your request.
+- **Already installed or recovering.** Start with the installed copy and its own setup guide. Finder's **Go → Go to Folder** accepts `~/Applications/Dot Link.app/Contents/Resources/payload/docs`. The setup and privacy guides in that folder describe the installed version. In the setup window, choose **Refresh status** after each change. An existing tunnel, Dot plugin or saved Even connection can be reused.
+- **Trying a second Mac.** `savedTunnel: absent` and `savedEvenPairing: absent` describe the Mac you inspected. For a rehearsal, prepare the second Mac and leave its tunnel fields empty. Use the working Mac, its existing Dot plugin and the already-paired Even companion for a live check. Before a temporary switch, agree on how to restore the original tunnel, the plugin selection and subscription in the same Dot, and the original Even pairing. Afterward, verify that the connection works and the original pairing can still open its earlier conversation history.
+- **App closed or relay offline.** Builds that include the read-only support command can check saved setup without opening the app or resuming a paused relay. The following checks the expected signed app and the presence of the command before running it. With an older official build, use its bundled guide and the ordinary Mac window. If verification fails, use the [official app replacement guidance](#manual-installation) and preserve the saved data.
+
+```sh
+app="$HOME/Applications/Dot Link.app"
+if /usr/bin/codesign --verify --deep --strict -R '=anchor apple generic and identifier "app.tripsurf.dotlink.mac" and certificate leaf[subject.OU] = "27K9A27SGR" and certificate leaf[field.1.2.840.113635.100.6.1.13] exists' "$app" &&
+   test -f "$app/Contents/Resources/payload/scripts/support-status.mjs"; then
+  "$app/Contents/MacOS/DotLink" --support-status
+fi
+```
+
+### Read the result and continue
+
+In the Mac setup window, choose the gear at the bottom (**Advanced settings**), then **Setup support status**. The **Dot Link menu bar icon → Setup support status** also works during a setup operation. **Copy** copies exactly the text shown. In a browser-only conversation, you choose whether to share this snapshot and use the indicated Mac control yourself. Make changes in the setup window so it can coordinate them with any operation or update in progress. If your installed version has no support status item, use its ordinary setup window and any error code it shows.
+
+For the exact button names, open the [English](../localization/en.json), [German](../localization/de.json), [French](../localization/fr.json), [Japanese](../localization/ja.json), [Korean](../localization/ko.json), [Simplified Chinese](../localization/zh-Hans.json) or [Traditional Chinese](../localization/zh-Hant.json) file that matches the Mac app's selected language. Use the values of `mac.advanced_settings` → `mac.setup_support_status` for the path above. On the startup timeout screen, use `mac.check_again` and `mac.copy_report_code`. The bundled guide links to the files shipped in that app.
+
+| What the report can establish | How to continue |
+| --- | --- |
+| `source: saved-on-mac` reports the saved tunnel configuration and Even pairing. `installation: detected` means the Mac found an existing installation. `relayIntent` distinguishes **Pause** (`paused`) and **Quit** (`quit`). | Confirm before resuming a paused relay. After a normal quit, open the Mac window to see the current setup step. Reopening a configured Mac can resume its services. |
+| The Mac window reports `installation: incomplete` when required components are missing, including after an interrupted speech model download. It reports `prepared` once it finds the components. | Use the indicated preparation control and check the status again. Keep the existing settings and pairing. |
+| `source: mac-window` reports the last Mac check. `failed` records a response that failed the check. `unknown` means the app could not establish that fact. | Read `next` and the localized `macControl` when present. After a change, refresh the window and read a new snapshot. An update in progress or conflicting installations need attention in the Mac app first. |
+| The local relay or tunnel responds, or the Mac can reach its own private route. | Continue to the existing Dot in ChatGPT and choose **Check connection to Dot** on the Mac. Check the iPhone's connection separately. |
+| Dot has an active subscription. Even pairing is `saved`, `absent` or `unknown`. | For **saved**, use the existing companion. For **absent**, the owner can connect Even. For **unknown**, refresh the status and review **Even connection settings** before considering a new pairing. |
+
+The conversation can use any language. `macControl` uses the Mac app's selected language. The iPhone can use a different language. Its actual control labels are in the signed app's `payload/localization/<language>.json` under `even.*`, for example `even.send_to_dot`. Check the language selected on each device. Where local controls are unavailable, identify the screen, its actual button and what the person should see after pressing it.
+
+### Verify a conversation or recover it
+
+Keep the Mac awake. In ChatGPT, open the existing Dot you intend to use and confirm the plugin for this Mac is selected. The test word stays in that Dot's chat. A successful G2 exchange also saves the question and reply in the Mac's conversation history. If an assistant will run the check for you, it should explain this and get your agreement before sending the word.
+
+Give that Dot a fresh, harmless word in its chat. With Dot Link open on the paired glasses, ask **from G2** for the test word, leaving the word out of the question. Confirm that the chosen word appears in the reply **on those glasses**. That checks both the intended Dot and the return path. A saved pairing, a local health check and a reply in the browser each establish only their own step.
+
+If an existing setup fails, follow the first observed failure in [Troubleshooting](#troubleshooting). Use the app's **Check connection to Dot** for a returning Dot or **Retry recovery** when offered for an interrupted update. Check the same state again and repeat the G2 message after recovery. Keep the existing pairing, history and sharing choices. Mac notification access is optional for conversation.
+
+Enter keys in the trusted app or service yourself and transfer pairing codes directly from the Mac app to Even. Pause screen sharing or assistant observation while either is visible. Review account sign-in, network or permission changes and any costs yourself. For a persistent problem, search [existing issues](https://github.com/YusukeIt0/dot-link/issues). A report draft can include the app version/build, the failed check or product error code, what you tried and the result. Review its exact text before authorizing a post. Keep conversation text, account details, keys and personal logs private.
+
 ## Manual installation
 
 Mac releases using Node 26 require macOS 13.5 or later. On macOS 13.0–13.4,

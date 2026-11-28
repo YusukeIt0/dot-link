@@ -45,6 +45,14 @@ test('bootstrap moves only service executables into bundle; recovery retains dat
  assert.deepEqual(await finishUpdate(f.directory,f),{recovered:true,stopped:false});assert.equal(f.loaded.size,4);assert.equal(f.disabled.size,0);
  assert.equal(await readFile(join(f.runtime,'device-key'),'utf8'),'fixture-secret');assert.equal(await readFile(join(f.runtime,'bridge-state.json'),'utf8'),before);
 });
+test('an unspecified stop flag keeps the existing update and recovery behavior', async t => {
+ const f = await fixture(t);
+ await writeFile(join(f.runtime, 'lifecycle.json'), '{}');
+ assert.deepEqual(await prepareUpdate(f.directory, {...f, bootstrap:true}), {prepared:true});
+ const journal = JSON.parse(await readFile(join(f.runtime, 'app-update.json'), 'utf8'));
+ assert.equal(journal.stopped, false);
+ assert.deepEqual(await finishUpdate(f.directory, f), {recovered:true, stopped:false});
+});
 test('paused state survives update; abort restores original service files',async t=>{
  const f=await fixture(t);await writeFile(join(f.runtime,'lifecycle.json'),JSON.stringify({stopped:true,reason:'pause'}));
  const original=await readFile(f.plists.bridge,'utf8');await prepareUpdate(f.directory,f);await finishUpdate(f.directory,{...f,rollback:true});

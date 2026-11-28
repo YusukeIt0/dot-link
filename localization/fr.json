@@ -367,6 +367,7 @@
   "mac.open_tailscale_dns_settings": "Ouvrir les réglages DNS de Tailscale",
   "mac.diagnostics_copied": "Diagnostic copié",
   "mac.copy_diagnostics": "Copier le diagnostic",
+  "mac.setup_support_status": "État de l’assistance à la configuration",
   "mac.copy_report_code": "Copier le code pour l’assistance",
   "mac.report_code_copied": "Code pour l’assistance copié",
   "mac.only_the_failed_step_error_codes_and_app_version_no_keys_or_conversation": "Uniquement l’étape en échec, les codes d’erreur et la version de l’app. Aucune clé ni conversation.",
