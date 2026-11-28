@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?><!-- sparkle-sign-warning:
 IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
---><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.8</title><sparkle:version>130</sparkle:version><sparkle:shortVersionString>0.5.8</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- You can give your usual AI assistant the Dot Link repository to help you install Dot Link or continue a setup that stopped. The Mac app includes a guide that matches your installed version.
-- Open Advanced settings and choose Setup support status to see what your Mac has checked and which step to take next. You can also open it from the Dot Link menu bar icon. Choose Copy if you want to share the report with your assistant.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0"><channel><title>Dot Link for Mac</title><item><title>Dot Link 0.5.11</title><sparkle:version>133</sparkle:version><sparkle:shortVersionString>0.5.11</sparkle:shortVersionString><sparkle:minimumSystemVersion>13.5</sparkle:minimumSystemVersion><description sparkle:format="plain-text">- With the updated Even app, replies go to your G2 when it is outside the case, including after you reopen Dot Link. Put the glasses away and replies go to your usual Dot chat. If your phone briefly loses its connection, your Mac waits up to ten seconds for it to reconnect before using chat.
+- See which Mac client version is connected in the updated iPhone companion. While Even 0.4.2 is installed, look for replies in your usual Dot chat.
 
 If you are updating from 0.5.4 or earlier, open Plugins on the ChatGPT website, choose your existing Dot Link connection, then open Settings and select Update tools. Finish any work in progress and restart your usual Dot from its chat menu.
 
 If you share Mac notifications and are updating from 0.5.3 or earlier, grant Dot Link Accessibility access once after installation. Open System Settings, choose Privacy &amp; Security, then Accessibility. Remove Dot Link, add the installed Dot Link.app again, and turn it on.
-</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.8-130/Dot-Link-0.5.8-130-arm64.zip" sparkle:installationType="application" sparkle:edSignature="URtqIglUGhMKnD7F2f+/9y9opaiF8Pd6XFv933rFifOXhZYflY+D0SJztToqyYzgLtuavzXS4TQ36L8d8Oj4DQ==" length="69916278" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
-edSignature: 179zL6NkCjnPbBTNsUnifwAhVeCEv94fUY82hTCpMEQ4WgcJNKkFH3xfBt0JGm7jX+Qq4/+3SABvQ6C0DdKGDw==
-length: 1978
+</description><enclosure url="https://github.com/YusukeIt0/dot-link-app/releases/download/mac-v0.5.11-133/Dot-Link-0.5.11-133-arm64.zip" sparkle:installationType="application" sparkle:edSignature="EqexMgAHsFgUWo2EI4leVtFTwrC7k6dS7xpFB4y7EkrtTEaw7jEbW1EfFbYBmmlzbjc8bmylqB78Dtiq8080CQ==" length="69927236" type="application/octet-stream"></enclosure></item></channel></rss><!-- sparkle-signatures:
+edSignature: +pwh9L188H1KCn25cG2D170zpJzJTmNjb5n4rjBo5+DAF2X/LZaYwM1WNmwaMxxueKIKdm/rzT0WFDJuQ7BADQ==
+length: 1994
 -->
