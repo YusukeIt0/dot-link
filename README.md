@@ -154,7 +154,9 @@ Local Whisper transcribes speech on your Mac. Choosing an external speech-recogn
 
 Your phone shares location with your Mac. Nearby map data is downloaded from Overture Maps. Optional walking, terrain and weather features use external services under their separate sharing controls. Those services receive connection information and location-related queries. Your Mac stores conversations and settings; stopping sharing does not erase information already received by Dot. See [data handling](docs/privacy.md) for what is sent, retained and deleted.
 
-Use **Check for updates** in the Mac app; automatic updates are currently paused. Updates preserve settings, pairing and history. Update the Even companion through Even Hub separately. See [update instructions](docs/setup.md#updates), including refreshing Dot's tools when an update changes them.
+Use **Check for updates** in the Mac app; automatic updates are currently paused. Updates preserve settings, pairing and history. Update the Even companion through Even Hub separately.
+
+Some new features may require these steps after a Dot Link update. On the ChatGPT website, select **Update tools** for your existing Dot Link plugin. Then return to your usual Dot conversation and select **Restart** from its action menu. See the [update instructions](docs/setup.md#updates).
 
 Dependencies receive security updates and relevant checks. See [dependencies](docs/dependencies.md) and [Mac releases](https://github.com/YusukeIt0/dot-link/releases).
 
