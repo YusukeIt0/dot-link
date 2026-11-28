@@ -5,36 +5,43 @@ import { ownedService, serviceNames } from './service-management.mjs';
 import { run } from './setup.mjs';
 
 export const exists = path => access(path).then(() => true, () => false);
-export async function projectIdentity(directory) {
+export async function projectIdentity(directory, { verifyAccess = false } = {}) {
   try {
     const stat = await lstat(directory);
     if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
     const pkg = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'));
     return pkg.name === 'even-g2-dot';
-  } catch { return false; }
+  } catch (error) {
+    if (verifyAccess && !['ENOENT', 'ENOTDIR'].includes(error.code)) throw error;
+    return false;
+  }
 }
 
 /** Only known Dot Link locations and its exact service labels are inspected. */
-export async function discoverInstallation({ home = homedir(), execute = run } = {}) {
+export async function discoverInstallation({ home = homedir(), execute = run, verifyAccess = false } = {}) {
+  const present = verifyAccess ? async path => {
+    try { await lstat(path); return true; }
+    catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+  } : exists;
   const managed = join(home, 'Library/Application Support/Dot Link');
   const configured = new Set(); let serviceRoot;
   for (const name of serviceNames) {
     const plistPath = join(home, 'Library/LaunchAgents', `local.even-g2-dot.${name}.plist`);
-    if (!await exists(plistPath)) continue;
+    if (!await present(plistPath)) continue;
     let plist;
     try { plist = JSON.parse(await execute('/usr/bin/plutil', ['-convert', 'json', '-o', '-', plistPath])); }
     catch { throw new Error('EXISTING_SERVICE_UNREADABLE'); }
     const directory = plist.WorkingDirectory;
-    if (typeof directory !== 'string' || !ownedService(plist, directory, name, {home}) || !await projectIdentity(directory)) throw new Error('EXISTING_SERVICE_CONFLICT');
+    if (typeof directory !== 'string' || !ownedService(plist, directory, name, {home}) || !await projectIdentity(directory, {verifyAccess})) throw new Error('EXISTING_SERVICE_CONFLICT');
     if (serviceRoot && directory !== serviceRoot) throw new Error('MULTIPLE_INSTALLATIONS');
     serviceRoot = directory; configured.add(directory);
   }
   for (const directory of [managed, join(home, 'even-g2-dot'), join(home, 'Desktop/even-g2-dot')]) {
-    if (await projectIdentity(directory) && (await exists(join(directory, '.runtime/device-key')) || await exists(join(directory, '.runtime/install.json')))) configured.add(directory);
+    if (await projectIdentity(directory, {verifyAccess}) && (await present(join(directory, '.runtime/device-key')) || await present(join(directory, '.runtime/install.json')))) configured.add(directory);
   }
   if (configured.size > 1) throw new Error('MULTIPLE_INSTALLATIONS');
   const directory = serviceRoot ?? [...configured][0] ?? managed;
-  if (!configured.size && await exists(managed)) {
+  if (!configured.size && await present(managed)) {
     // A folder belonging to another app or an unknown partial install is not replaced.
     throw new Error('INSTALL_FOLDER_OCCUPIED');
   }
